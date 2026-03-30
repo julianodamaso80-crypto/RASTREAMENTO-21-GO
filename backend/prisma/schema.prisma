@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum VehicleStatus {
+  ACTIVE
+  INACTIVE
+  DEFAULTING
+  BLOCKED
+}
+
+model Tenant {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String   @unique
+  document     String?  @unique
+  logoUrl      String?  @map("logo_url")
+  primaryColor String   @default("#10b981") @map("primary_color")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  users      User[]
+  vehicles   Vehicle[]
+  associates Associate[]
+
+  @@map("tenants")
+}
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  password      String
+  name          String
+  role          Role     @default(VIEWER)
+  active        Boolean  @default(true)
+  traccarUserId Int?     @map("traccar_user_id")
+  tenantId      String   @map("tenant_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("users")
+}
+
+model Vehicle {
+  id              String        @id @default(uuid()) @db.Uuid
+  plate           String
+  brand           String?
+  model           String?
+  year            Int?
+  color           String?
+  chassi          String?
+  renavam         String?
+  uniqueId        String        @unique @map("unique_id")
+  traccarDeviceId Int?          @map("traccar_device_id")
+  status          VehicleStatus @default(ACTIVE)
+  tenantId        String        @map("tenant_id") @db.Uuid
+  associateId     String?       @map("associate_id") @db.Uuid
+  hinovaCode      String?       @map("hinova_code")
+  lastSync        DateTime?     @map("last_sync")
+  deletedAt       DateTime?     @map("deleted_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  associate Associate? @relation(fields: [associateId], references: [id])
+
+  @@unique([plate, tenantId])
+  @@map("vehicles")
+}
+
+model Associate {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String
+  cpf        String
+  rg         String?
+  birthDate  DateTime? @map("birth_date")
+  phone      String?
+  email      String?
+  tenantId   String    @map("tenant_id") @db.Uuid
+  hinovaCode String?   @map("hinova_code")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  vehicles Vehicle[]
+
+  @@map("associates")
+}

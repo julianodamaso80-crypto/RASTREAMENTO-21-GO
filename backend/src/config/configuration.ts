@@ -1,0 +1,24 @@
+export default () => ({
+  port: parseInt(process.env.PORT || '3001', 10),
+  database: {
+    url: process.env.DATABASE_URL,
+  },
+  redis: {
+    url: process.env.REDIS_URL,
+  },
+  jwt: {
+    secret: process.env.JWT_SECRET || 'dev-secret',
+    expiration: process.env.JWT_EXPIRATION || '24h',
+  },
+  traccar: {
+    url: process.env.TRACCAR_URL || 'http://localhost:8082',
+    apiUrl: process.env.TRACCAR_API_URL || 'http://localhost:8082/api',
+    adminEmail: process.env.TRACCAR_ADMIN_EMAIL || 'admin@rastreamento21go.com.br',
+    adminPassword: process.env.TRACCAR_ADMIN_PASSWORD || 'admin123',
+  },
+  hinova: {
+    baseUrl: process.env.HINOVA_BASE_URL,
+    mock: process.env.HINOVA_MOCK === 'true',
+    syncInterval: parseInt(process.env.HINOVA_SYNC_INTERVAL || '21600000', 10),
+  },
+});
