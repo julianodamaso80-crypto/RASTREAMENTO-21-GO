@@ -3,6 +3,7 @@ import type { LoginRequest, LoginResponse, User } from '@/types/auth';
 import type { Vehicle } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
+import type { Trip, Stop } from '@/types/report';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 
 const api = axios.create({
@@ -96,6 +97,31 @@ export const alertsApi = {
   },
   markAllAsRead: async (): Promise<void> => {
     await api.post('/alerts/read-all');
+  },
+};
+
+export const reportsApi = {
+  getPositions: async (deviceId: number, from: string, to: string): Promise<TraccarPosition[]> => {
+    const res = await api.get<ApiResponse<TraccarPosition[]>>('/reports/positions', {
+      params: { deviceId, from, to },
+    });
+    return res.data.data;
+  },
+  getTrips: async (deviceId: number, from: string, to: string): Promise<Trip[]> => {
+    const res = await api.get<ApiResponse<Trip[]>>('/reports/trips', {
+      params: { deviceId, from, to },
+    });
+    return res.data.data;
+  },
+  getStops: async (deviceId: number, from: string, to: string): Promise<Stop[]> => {
+    const res = await api.get<ApiResponse<Stop[]>>('/reports/stops', {
+      params: { deviceId, from, to },
+    });
+    return res.data.data;
+  },
+  getExportUrl: (type: string, deviceId: number, from: string, to: string, format: string): string => {
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    return `${base}/api/v1/reports/export?type=${type}&deviceId=${deviceId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&format=${format}`;
   },
 };
 

@@ -27,7 +27,7 @@ const navItems = [
   { href: '/', label: 'Mapa', icon: Map },
   { href: '/vehicles', label: 'Veículos', icon: Car },
   { href: '/alerts', label: 'Alertas', icon: Bell },
-  { href: '#', label: 'Relatórios', icon: BarChart3, disabled: true },
+  { href: '/reports', label: 'Relatórios', icon: BarChart3 },
   { href: '#', label: 'Geofencing', icon: Hexagon, disabled: true },
   { href: '#', label: 'Configurações', icon: Settings, disabled: true },
 ];
