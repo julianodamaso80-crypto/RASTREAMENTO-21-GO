@@ -29,7 +29,7 @@ const navItems = [
   { href: '/alerts', label: 'Alertas', icon: Bell },
   { href: '/reports', label: 'Relatórios', icon: BarChart3 },
   { href: '/geofencing', label: 'Geofencing', icon: Hexagon },
-  { href: '#', label: 'Configurações', icon: Settings, disabled: true },
+  { href: '/settings', label: 'Configurações', icon: Settings, disabled: true },
 ];
 
 function NavContent({ collapsed }: { collapsed: boolean }) {
@@ -41,34 +41,38 @@ function NavContent({ collapsed }: { collapsed: boolean }) {
         const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
         const ItemIcon = item.icon;
 
-        const link = (
-          <Link
-            key={item.href}
-            href={item.disabled ? '#' : item.href}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
-              isActive
-                ? 'bg-emerald-500/10 text-emerald-400 border-l-2 border-emerald-400'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-              item.disabled && 'opacity-40 pointer-events-none',
-              collapsed && 'justify-center px-2',
-            )}
-          >
+        const classes = cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+          isActive
+            ? 'bg-emerald-500/10 text-emerald-400 border-l-2 border-emerald-400'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+          item.disabled && 'opacity-40 cursor-not-allowed',
+          collapsed && 'justify-center px-2',
+        );
+
+        const content = (
+          <>
             <ItemIcon className="h-5 w-5 shrink-0" />
             {!collapsed && <span>{item.label}</span>}
-          </Link>
+          </>
+        );
+
+        const element = item.disabled ? (
+          <span key={item.label} className={classes}>{content}</span>
+        ) : (
+          <Link key={item.label} href={item.href} className={classes}>{content}</Link>
         );
 
         if (collapsed) {
           return (
-            <Tooltip key={item.href}>
-              <TooltipTrigger render={<div />}>{link}</TooltipTrigger>
+            <Tooltip key={item.label}>
+              <TooltipTrigger render={<div />}>{element}</TooltipTrigger>
               <TooltipContent side="right">{item.label}</TooltipContent>
             </Tooltip>
           );
         }
 
-        return link;
+        return element;
       })}
     </nav>
   );
