@@ -21,6 +21,17 @@ enum VehicleStatus {
   BLOCKED
 }
 
+enum AlertType {
+  SPEED
+  IGNITION_ON
+  IGNITION_OFF
+  SOS
+  BATTERY_LOW
+  OFFLINE
+  GEOFENCE_IN
+  GEOFENCE_OUT
+}
+
 model Tenant {
   id           String   @id @default(uuid()) @db.Uuid
   name         String
@@ -35,6 +46,7 @@ model Tenant {
   users      User[]
   vehicles   Vehicle[]
   associates Associate[]
+  alerts     Alert[]
 
   @@map("tenants")
 }
@@ -78,6 +90,7 @@ model Vehicle {
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   associate Associate? @relation(fields: [associateId], references: [id])
+  alerts    Alert[]
 
   @@unique([plate, tenantId])
   @@map("vehicles")
@@ -100,4 +113,21 @@ model Associate {
   vehicles Vehicle[]
 
   @@map("associates")
+}
+
+model Alert {
+  id        String    @id @default(uuid()) @db.Uuid
+  type      AlertType
+  message   String
+  data      Json?
+  read      Boolean   @default(false)
+  vehicleId String    @map("vehicle_id") @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("alerts")
 }

@@ -3,17 +3,20 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { TraccarPosition, TraccarDevice } from '@/types/traccar';
+import type { Alert } from '@/types/alert';
 
 interface UseTraccarSocketOptions {
   token: string | null;
   onPositionUpdate?: (position: TraccarPosition) => void;
   onDeviceUpdate?: (device: TraccarDevice) => void;
+  onAlert?: (alert: Alert) => void;
 }
 
 export function useTraccarSocket({
   token,
   onPositionUpdate,
   onDeviceUpdate,
+  onAlert,
 }: UseTraccarSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
@@ -52,6 +55,10 @@ export function useTraccarSocket({
 
     socket.on('device:update', (data: TraccarDevice) => {
       onDeviceUpdate?.(data);
+    });
+
+    socket.on('alert:new', (data: Alert) => {
+      onAlert?.(data);
     });
 
     return () => {

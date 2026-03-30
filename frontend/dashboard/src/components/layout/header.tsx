@@ -1,7 +1,8 @@
 'use client';
 
-import { Bell, LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { AlertsDropdown } from '@/components/alerts/alerts-dropdown';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,13 +24,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Notificações (placeholder) */}
-        <Button variant="ghost" size="icon" className="relative text-muted-foreground">
-          <Bell className="h-5 w-5" />
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center">
-            0
-          </span>
-        </Button>
+        <AlertsDropdown />
 
         {/* User dropdown */}
         <DropdownMenu>

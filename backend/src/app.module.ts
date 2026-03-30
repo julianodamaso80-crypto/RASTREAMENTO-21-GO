@@ -11,6 +11,7 @@ import { TraccarModule } from './modules/traccar/traccar.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { HinovaModule } from './modules/hinova/hinova.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -39,6 +40,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     VehiclesModule,
     TenantsModule,
     HinovaModule,
+    AlertsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

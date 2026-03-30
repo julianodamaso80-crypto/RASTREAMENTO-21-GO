@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { LoginRequest, LoginResponse, User } from '@/types/auth';
 import type { Vehicle } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
+import type { Alert } from '@/types/alert';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 
 const api = axios.create({
@@ -78,6 +79,23 @@ export const traccarApi = {
       { params: { from, to } },
     );
     return res.data.data;
+  },
+};
+
+export const alertsApi = {
+  getAll: async (params?: Record<string, string | number | boolean>): Promise<PaginatedResponse<Alert>> => {
+    const res = await api.get<PaginatedResponse<Alert>>('/alerts', { params });
+    return res.data;
+  },
+  getUnreadCount: async (): Promise<number> => {
+    const res = await api.get<ApiResponse<{ count: number }>>('/alerts/unread-count');
+    return res.data.data.count;
+  },
+  markAsRead: async (id: string): Promise<void> => {
+    await api.patch(`/alerts/${id}/read`);
+  },
+  markAllAsRead: async (): Promise<void> => {
+    await api.post('/alerts/read-all');
   },
 };
 

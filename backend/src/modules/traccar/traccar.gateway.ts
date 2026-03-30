@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import WebSocket from 'ws';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from './traccar.service';
+import { AlertsService } from '../alerts/alerts.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -25,18 +26,26 @@ export class TraccarGateway
 
   private readonly logger = new Logger(TraccarGateway.name);
   private traccarWs: WebSocket | null = null;
-  // Cache: traccarDeviceId -> tenantId
+  // Cache: traccarDeviceId -> { tenantId, vehicleId }
   private deviceTenantMap = new Map<number, string>();
+  private deviceVehicleMap = new Map<number, string>();
 
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService,
     private prisma: PrismaService,
     private traccarService: TraccarService,
+    private alertsService: AlertsService,
   ) {}
 
   async afterInit() {
     this.logger.log('WebSocket Gateway inicializado');
+
+    // Configurar emitter de alertas para WebSocket
+    this.alertsService.setEmitter((tenantId, alert) => {
+      this.server.to(`tenant:${tenantId}`).emit('alert:new', alert);
+    });
+
     await this.refreshDeviceMapping();
     this.connectToTraccar();
   }
@@ -76,13 +85,15 @@ export class TraccarGateway
     try {
       const vehicles = await this.prisma.vehicle.findMany({
         where: { traccarDeviceId: { not: null }, deletedAt: null },
-        select: { traccarDeviceId: true, tenantId: true },
+        select: { traccarDeviceId: true, tenantId: true, id: true },
       });
 
       this.deviceTenantMap.clear();
+      this.deviceVehicleMap.clear();
       for (const v of vehicles) {
         if (v.traccarDeviceId) {
           this.deviceTenantMap.set(v.traccarDeviceId, v.tenantId);
+          this.deviceVehicleMap.set(v.traccarDeviceId, v.id);
         }
       }
 
@@ -137,6 +148,14 @@ export class TraccarGateway
         const tenantId = this.deviceTenantMap.get(position.deviceId);
         if (tenantId) {
           this.server.to(`tenant:${tenantId}`).emit('position:update', position);
+
+          // Processar alertas
+          const vehicleId = this.deviceVehicleMap.get(position.deviceId);
+          if (vehicleId) {
+            this.alertsService
+              .processPosition(position as any, vehicleId, tenantId)
+              .catch((err) => this.logger.error(`Erro ao processar alerta: ${err}`));
+          }
         }
       }
     }

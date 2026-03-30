@@ -11,8 +11,10 @@ import {
 } from 'react';
 import type { Vehicle, VehicleWithTracking, DisplayStatus } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
-import { vehiclesApi, traccarApi } from '@/lib/api';
+import type { Alert } from '@/types/alert';
+import { vehiclesApi, traccarApi, alertsApi } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { toast } from 'sonner';
 import { useTraccarSocket } from '@/hooks/use-traccar-socket';
 import { getDisplayStatus } from '@/lib/utils';
 import { mockVehicles, mockDevices, mockPositions } from '@/lib/mock-data';
@@ -37,6 +39,10 @@ interface TrackingContextType {
   statusCounts: StatusCounts;
   isSocketConnected: boolean;
   isLoading: boolean;
+  alerts: Alert[];
+  unreadCount: number;
+  markAlertRead: (id: string) => void;
+  markAllAlertsRead: () => void;
 }
 
 const TrackingContext = createContext<TrackingContextType | null>(null);
@@ -48,6 +54,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [positionMap, setPositionMap] = useState<Map<number, TraccarPosition>>(new Map());
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [statusFilter, setStatusFilter] = useState<'all' | DisplayStatus>('all');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,11 +63,16 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadData() {
       try {
-        const [vehiclesRes, devices, positions] = await Promise.all([
+        const [vehiclesRes, devices, positions, alertsRes, unread] = await Promise.all([
           vehiclesApi.getAll({ perPage: 200 }),
           traccarApi.getDevices(),
           traccarApi.getPositions(),
+          alertsApi.getAll({ perPage: 50 }),
+          alertsApi.getUnreadCount(),
         ]);
+
+        setAlerts(alertsRes.data);
+        setUnreadCount(unread);
 
         const vMap = new Map<string, Vehicle>();
         vehiclesRes.data.forEach((v) => vMap.set(v.id, v));
@@ -111,10 +124,19 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const handleAlert = useCallback((alert: Alert) => {
+    setAlerts((prev) => [alert, ...prev].slice(0, 100));
+    setUnreadCount((prev) => prev + 1);
+    toast.warning(`${alert.vehicle?.plate || 'Veículo'}: ${alert.message}`, {
+      duration: 5000,
+    });
+  }, []);
+
   const { isConnected } = useTraccarSocket({
     token,
     onPositionUpdate: handlePositionUpdate,
     onDeviceUpdate: handleDeviceUpdate,
+    onAlert: handleAlert,
   });
 
   // Merge vehicles + devices + positions
@@ -182,6 +204,18 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     setSelectedVehicleId(id);
   }, []);
 
+  const markAlertRead = useCallback(async (id: string) => {
+    await alertsApi.markAsRead(id);
+    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, read: true } : a)));
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+  }, []);
+
+  const markAllAlertsRead = useCallback(async () => {
+    await alertsApi.markAllAsRead();
+    setAlerts((prev) => prev.map((a) => ({ ...a, read: true })));
+    setUnreadCount(0);
+  }, []);
+
   return (
     <TrackingContext.Provider
       value={{
@@ -196,6 +230,10 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         statusCounts,
         isSocketConnected: isConnected,
         isLoading,
+        alerts,
+        unreadCount,
+        markAlertRead,
+        markAllAlertsRead,
       }}
     >
       {children}
