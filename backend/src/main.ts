@@ -13,7 +13,12 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
 
   // Segurança
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // Desabilitado em dev — frontend é cross-origin
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.enableCors({
     origin: ['http://localhost:3000', 'http://localhost:80'],
     credentials: true,

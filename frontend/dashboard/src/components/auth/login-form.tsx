@@ -19,9 +19,11 @@ export function LoginForm() {
     setLoading(true);
     try {
       await login(email, password);
-      router.push('/');
-    } catch {
-      toast.error('Credenciais inválidas');
+      window.location.href = '/';
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error('Login error:', err);
+      toast.error(`Falha no login: ${message}`);
     } finally {
       setLoading(false);
     }
