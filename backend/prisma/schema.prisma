@@ -21,6 +21,11 @@ enum VehicleStatus {
   BLOCKED
 }
 
+enum GeofenceType {
+  POLYGON
+  CIRCLE
+}
+
 enum AlertType {
   SPEED
   IGNITION_ON
@@ -47,6 +52,7 @@ model Tenant {
   vehicles   Vehicle[]
   associates Associate[]
   alerts     Alert[]
+  geofences  Geofence[]
 
   @@map("tenants")
 }
@@ -88,9 +94,10 @@ model Vehicle {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  associate Associate? @relation(fields: [associateId], references: [id])
-  alerts    Alert[]
+  tenant           Tenant             @relation(fields: [tenantId], references: [id])
+  associate        Associate?         @relation(fields: [associateId], references: [id])
+  alerts           Alert[]
+  geofenceVehicles GeofenceVehicle[]
 
   @@unique([plate, tenantId])
   @@map("vehicles")
@@ -130,4 +137,36 @@ model Alert {
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@map("alerts")
+}
+
+model Geofence {
+  id              String           @id @default(uuid()) @db.Uuid
+  name            String
+  description     String?
+  type            GeofenceType
+  coordinates     Json
+  color           String           @default("#3b82f6")
+  active          Boolean          @default(true)
+  traccarGeofenceId Int?           @map("traccar_geofence_id")
+  tenantId        String           @map("tenant_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  geofenceVehicles GeofenceVehicle[]
+
+  @@map("geofences")
+}
+
+model GeofenceVehicle {
+  id          String   @id @default(uuid()) @db.Uuid
+  geofenceId  String   @map("geofence_id") @db.Uuid
+  vehicleId   String   @map("vehicle_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  geofence Geofence @relation(fields: [geofenceId], references: [id], onDelete: Cascade)
+  vehicle  Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([geofenceId, vehicleId])
+  @@map("geofence_vehicles")
 }

@@ -185,6 +185,47 @@ export class TraccarService implements OnModuleInit {
     });
   }
 
+  // === Geofences ===
+
+  async createGeofence(
+    name: string,
+    area: string,
+  ): Promise<TraccarGeofence> {
+    return this.withRetry(async () => {
+      const { data } = await this.client.post('/geofences', { name, area });
+      return data;
+    });
+  }
+
+  async updateGeofence(
+    id: number,
+    name: string,
+    area: string,
+  ): Promise<TraccarGeofence> {
+    return this.withRetry(async () => {
+      const { data } = await this.client.put(`/geofences/${id}`, { id, name, area });
+      return data;
+    });
+  }
+
+  async deleteGeofence(id: number): Promise<void> {
+    return this.withRetry(async () => {
+      await this.client.delete(`/geofences/${id}`);
+    });
+  }
+
+  async linkDeviceGeofence(deviceId: number, geofenceId: number): Promise<void> {
+    return this.withRetry(async () => {
+      await this.client.post('/permissions', { deviceId, geofenceId });
+    });
+  }
+
+  async unlinkDeviceGeofence(deviceId: number, geofenceId: number): Promise<void> {
+    return this.withRetry(async () => {
+      await this.client.delete('/permissions', { data: { deviceId, geofenceId } });
+    });
+  }
+
   getSessionCookie(): string | null {
     return this.sessionCookie;
   }
@@ -235,4 +276,11 @@ export interface TraccarUser {
   name: string;
   email: string;
   administrator: boolean;
+}
+
+export interface TraccarGeofence {
+  id: number;
+  name: string;
+  area: string;
+  attributes: Record<string, unknown>;
 }

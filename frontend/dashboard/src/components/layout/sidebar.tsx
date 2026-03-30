@@ -28,7 +28,7 @@ const navItems = [
   { href: '/vehicles', label: 'Veículos', icon: Car },
   { href: '/alerts', label: 'Alertas', icon: Bell },
   { href: '/reports', label: 'Relatórios', icon: BarChart3 },
-  { href: '#', label: 'Geofencing', icon: Hexagon, disabled: true },
+  { href: '/geofencing', label: 'Geofencing', icon: Hexagon },
   { href: '#', label: 'Configurações', icon: Settings, disabled: true },
 ];
 

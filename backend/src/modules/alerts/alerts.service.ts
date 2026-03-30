@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AlertType, Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { GeofencesService } from '../geofences/geofences.service';
 import type { FilterAlertsDto } from './dto/filter-alerts.dto';
 import type { TraccarPosition } from '../traccar/traccar.service';
 
@@ -12,6 +13,8 @@ export class AlertsService {
   private readonly logger = new Logger(AlertsService.name);
   // Cache do último estado de ignição por deviceId
   private ignitionState = new Map<number, boolean>();
+  // Cache de geofences que o veículo está dentro (deviceId -> Set<geofenceId>)
+  private geofenceState = new Map<number, Set<string>>();
   private emitter: AlertEmitter | null = null;
 
   // Velocidade máxima em knots (120 km/h ≈ 65 knots)
@@ -22,7 +25,10 @@ export class AlertsService {
     return (this.prisma as any).alert;
   }
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private geofencesService: GeofencesService,
+  ) {}
 
   setEmitter(emitter: AlertEmitter) {
     this.emitter = emitter;
@@ -73,6 +79,59 @@ export class AlertsService {
       }
 
       this.ignitionState.set(position.deviceId, ignition);
+    }
+
+    // Regras: geofencing
+    await this.checkGeofences(position, vehicleId, tenantId);
+  }
+
+  private async checkGeofences(
+    position: TraccarPosition,
+    vehicleId: string,
+    tenantId: string,
+  ) {
+    try {
+      const geofences = await this.geofencesService.getVehicleGeofences(vehicleId, tenantId);
+      if (geofences.length === 0) return;
+
+      const previousInside = this.geofenceState.get(position.deviceId) || new Set<string>();
+      const currentInside = new Set<string>();
+
+      for (const geofence of geofences) {
+        const inside = this.geofencesService.isPointInGeofence(
+          position.latitude,
+          position.longitude,
+          geofence,
+        );
+
+        if (inside) currentInside.add(geofence.id);
+
+        // Entrou na cerca
+        if (inside && !previousInside.has(geofence.id)) {
+          await this.createAlert(
+            AlertType.GEOFENCE_IN,
+            vehicleId,
+            tenantId,
+            `Entrou na cerca "${geofence.name}"`,
+            { geofenceId: geofence.id, geofenceName: geofence.name, latitude: position.latitude, longitude: position.longitude },
+          );
+        }
+
+        // Saiu da cerca
+        if (!inside && previousInside.has(geofence.id)) {
+          await this.createAlert(
+            AlertType.GEOFENCE_OUT,
+            vehicleId,
+            tenantId,
+            `Saiu da cerca "${geofence.name}"`,
+            { geofenceId: geofence.id, geofenceName: geofence.name, latitude: position.latitude, longitude: position.longitude },
+          );
+        }
+      }
+
+      this.geofenceState.set(position.deviceId, currentInside);
+    } catch (error) {
+      this.logger.error(`Erro ao verificar geofences: ${error}`);
     }
   }
 

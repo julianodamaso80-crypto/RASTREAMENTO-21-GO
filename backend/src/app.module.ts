@@ -13,6 +13,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { HinovaModule } from './modules/hinova/hinova.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { GeofencesModule } from './modules/geofences/geofences.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -43,6 +44,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     HinovaModule,
     AlertsModule,
     ReportsModule,
+    GeofencesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

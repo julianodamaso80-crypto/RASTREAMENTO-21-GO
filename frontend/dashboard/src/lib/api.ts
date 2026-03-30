@@ -4,6 +4,7 @@ import type { Vehicle } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
 import type { Trip, Stop } from '@/types/report';
+import type { Geofence, CreateGeofencePayload } from '@/types/geofence';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 
 const api = axios.create({
@@ -122,6 +123,32 @@ export const reportsApi = {
   getExportUrl: (type: string, deviceId: number, from: string, to: string, format: string): string => {
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
     return `${base}/api/v1/reports/export?type=${type}&deviceId=${deviceId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&format=${format}`;
+  },
+};
+
+export const geofencesApi = {
+  getAll: async (params?: Record<string, string | number>): Promise<PaginatedResponse<Geofence>> => {
+    const res = await api.get<PaginatedResponse<Geofence>>('/geofences', { params });
+    return res.data;
+  },
+  getById: async (id: string): Promise<Geofence> => {
+    const res = await api.get<ApiResponse<Geofence>>(`/geofences/${id}`);
+    return res.data.data;
+  },
+  create: async (data: CreateGeofencePayload): Promise<Geofence> => {
+    const res = await api.post<ApiResponse<Geofence>>('/geofences', data);
+    return res.data.data;
+  },
+  update: async (id: string, data: Partial<CreateGeofencePayload>): Promise<Geofence> => {
+    const res = await api.patch<ApiResponse<Geofence>>(`/geofences/${id}`, data);
+    return res.data.data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/geofences/${id}`);
+  },
+  linkVehicles: async (id: string, vehicleIds: string[]): Promise<Geofence> => {
+    const res = await api.post<ApiResponse<Geofence>>(`/geofences/${id}/vehicles`, { vehicleIds });
+    return res.data.data;
   },
 };
 
