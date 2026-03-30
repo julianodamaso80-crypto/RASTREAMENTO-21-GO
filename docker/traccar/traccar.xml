@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='UTF-8'?>
+
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+
+<properties>
+
+    <!-- Servidor Web -->
+    <entry key='web.port'>8082</entry>
+    <entry key='web.path'>./modern</entry>
+
+    <!-- Banco de Dados PostgreSQL -->
+    <entry key='database.driver'>org.postgresql.Driver</entry>
+    <entry key='database.url'>jdbc:postgresql://postgres:5432/traccar</entry>
+    <entry key='database.user'>postgres</entry>
+    <entry key='database.password'>postgres</entry>
+
+    <!-- API REST -->
+    <entry key='api.enable'>true</entry>
+
+    <!-- WebSocket -->
+    <entry key='web.socket'>true</entry>
+
+    <!-- Registração aberta (desenvolvimento) -->
+    <entry key='registration.enable'>true</entry>
+
+    <!-- Protocolo OsmAnd (para testes com app) -->
+    <entry key='osmand.port'>5055</entry>
+
+    <!-- Geocodificação reversa -->
+    <entry key='geocoder.enable'>true</entry>
+    <entry key='geocoder.type'>nominatim</entry>
+    <entry key='geocoder.url'>https://nominatim.openstreetmap.org/reverse</entry>
+
+    <!-- Logs -->
+    <entry key='logger.enable'>true</entry>
+    <entry key='logger.level'>info</entry>
+    <entry key='logger.file'>/opt/traccar/data/tracker-server.log</entry>
+
+    <!-- Filtros de posição -->
+    <entry key='filter.enable'>true</entry>
+    <entry key='filter.duplicate'>true</entry>
+    <entry key='filter.zero'>true</entry>
+    <entry key='filter.distance'>10</entry>
+
+</properties>

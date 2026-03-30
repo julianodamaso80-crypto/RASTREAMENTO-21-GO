@@ -1,0 +1,21 @@
+{
+  "name": "rastreamento-21-go",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma de rastreamento veicular - 21 GO Rastreamento",
+  "workspaces": [
+    "backend",
+    "frontend/dashboard"
+  ],
+  "scripts": {
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f docker/docker-compose.yml logs -f",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend/dashboard && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
