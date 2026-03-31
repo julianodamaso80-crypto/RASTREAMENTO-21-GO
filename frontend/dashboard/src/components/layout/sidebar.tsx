@@ -9,6 +9,7 @@ import {
   Bell,
   BarChart3,
   Hexagon,
+  Radio,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -23,13 +24,14 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-const navItems = [
+const navItems: { href: string; label: string; icon: any; disabled?: boolean }[] = [
   { href: '/', label: 'Mapa', icon: Map },
   { href: '/vehicles', label: 'Veículos', icon: Car },
   { href: '/alerts', label: 'Alertas', icon: Bell },
   { href: '/reports', label: 'Relatórios', icon: BarChart3 },
   { href: '/geofencing', label: 'Geofencing', icon: Hexagon },
-  { href: '/settings', label: 'Configurações', icon: Settings, disabled: true },
+  { href: '/dispositivos', label: 'Dispositivos', icon: Radio },
+  { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 function NavContent({ collapsed }: { collapsed: boolean }) {

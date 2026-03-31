@@ -5,6 +5,7 @@ import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
 import type { Trip, Stop } from '@/types/report';
 import type { Geofence, CreateGeofencePayload } from '@/types/geofence';
+import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, ServerInfo } from '@/types/device';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 
 const api = axios.create({
@@ -152,4 +153,96 @@ export const geofencesApi = {
   },
 };
 
+export const devicesApi = {
+  getAll: async (params?: Record<string, string | number>): Promise<PaginatedResponse<Device>> => {
+    const res = await api.get<PaginatedResponse<Device>>('/devices', { params });
+    return res.data;
+  },
+  getById: async (id: string): Promise<Device> => {
+    const res = await api.get<ApiResponse<Device>>(`/devices/${id}`);
+    return res.data.data;
+  },
+  create: async (data: Partial<Device>): Promise<Device> => {
+    const res = await api.post<ApiResponse<Device>>('/devices', data);
+    return res.data.data;
+  },
+  update: async (id: string, data: Partial<Device>): Promise<Device> => {
+    const res = await api.patch<ApiResponse<Device>>(`/devices/${id}`, data);
+    return res.data.data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/devices/${id}`);
+  },
+  linkVehicle: async (id: string, vehicleId: string): Promise<Device> => {
+    const res = await api.post<ApiResponse<Device>>(`/devices/${id}/link-vehicle/${vehicleId}`);
+    return res.data.data;
+  },
+  unlinkVehicle: async (id: string): Promise<Device> => {
+    const res = await api.post<ApiResponse<Device>>(`/devices/${id}/unlink-vehicle`);
+    return res.data.data;
+  },
+  linkChip: async (id: string, chipId: string): Promise<Device> => {
+    const res = await api.post<ApiResponse<Device>>(`/devices/${id}/link-chip/${chipId}`);
+    return res.data.data;
+  },
+  unlinkChip: async (id: string): Promise<Device> => {
+    const res = await api.post<ApiResponse<Device>>(`/devices/${id}/unlink-chip`);
+    return res.data.data;
+  },
+  getConnectionStatus: async (id: string): Promise<any> => {
+    const res = await api.get<ApiResponse<any>>(`/devices/${id}/connection-status`);
+    return res.data.data;
+  },
+  generateCommands: async (id: string): Promise<GeneratedCommandsResponse> => {
+    const res = await api.post<ApiResponse<GeneratedCommandsResponse>>(`/devices/${id}/commands/generate`);
+    return res.data.data;
+  },
+  sendCommand: async (id: string, type: string, customCommand?: string): Promise<SmsCommand> => {
+    const res = await api.post<ApiResponse<SmsCommand>>(`/devices/${id}/commands/send`, { type, customCommand });
+    return res.data.data;
+  },
+  getCommands: async (id: string, params?: Record<string, string | number>): Promise<PaginatedResponse<SmsCommand>> => {
+    const res = await api.get<PaginatedResponse<SmsCommand>>(`/devices/${id}/commands`, { params });
+    return res.data;
+  },
+};
+
+export const chipsApi = {
+  getAll: async (params?: Record<string, string | number>): Promise<PaginatedResponse<Chip>> => {
+    const res = await api.get<PaginatedResponse<Chip>>('/chips', { params });
+    return res.data;
+  },
+  getById: async (id: string): Promise<Chip> => {
+    const res = await api.get<ApiResponse<Chip>>(`/chips/${id}`);
+    return res.data.data;
+  },
+  create: async (data: Partial<Chip>): Promise<Chip> => {
+    const res = await api.post<ApiResponse<Chip>>('/chips', data);
+    return res.data.data;
+  },
+  update: async (id: string, data: Partial<Chip>): Promise<Chip> => {
+    const res = await api.patch<ApiResponse<Chip>>(`/chips/${id}`, data);
+    return res.data.data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/chips/${id}`);
+  },
+  getOperators: async (): Promise<OperatorApn[]> => {
+    const res = await api.get<ApiResponse<OperatorApn[]>>('/chips/operators');
+    return res.data.data;
+  },
+  getProviders: async (): Promise<string[]> => {
+    const res = await api.get<ApiResponse<string[]>>('/chips/providers');
+    return res.data.data;
+  },
+};
+
+export const serverApi = {
+  getInfo: async (): Promise<ServerInfo> => {
+    const res = await api.get<ApiResponse<ServerInfo>>('/server/info');
+    return res.data.data;
+  },
+};
+
 export default api;
+
