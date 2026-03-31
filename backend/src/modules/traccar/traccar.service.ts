@@ -86,6 +86,15 @@ export class TraccarService implements OnModuleInit {
     throw new Error('Retries exhausted');
   }
 
+  // === Server ===
+
+  async getServer(): Promise<any> {
+    return this.withRetry(async () => {
+      const { data } = await this.client.get('/server');
+      return data;
+    });
+  }
+
   // === Devices ===
 
   async getDevices(): Promise<TraccarDevice[]> {

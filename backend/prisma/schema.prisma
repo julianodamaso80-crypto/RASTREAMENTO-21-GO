@@ -26,6 +26,82 @@ enum GeofenceType {
   CIRCLE
 }
 
+enum DeviceModel {
+  GT06N
+  GT06
+  ST310U
+  ST340
+  ST350
+  J16
+  J16_PRO
+  CRX3
+  CRX3_NANO
+  CRX_PRO_4G
+  TK103
+  TK303
+  FMB920
+  FMB120
+  COBAN_GPS103
+  CONCOX_GT06N
+  SINOTRACK_ST901
+  SINOTRACK_ST905
+  OTHER
+}
+
+enum DeviceStatus {
+  PENDING_INSTALL
+  INSTALLED
+  CONFIGURING
+  ONLINE
+  OFFLINE
+  MAINTENANCE
+  DEACTIVATED
+}
+
+enum ChipOperator {
+  VIVO
+  CLARO
+  TIM
+  OI
+  MULTI_OPERATOR
+}
+
+enum ApnType {
+  PUBLIC
+  PRIVATE
+}
+
+enum ChipStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  BLOCKED
+  CANCELLED
+}
+
+enum CommandType {
+  SET_SERVER_IP
+  SET_APN
+  SET_TIMER
+  SET_TIMEZONE
+  BLOCK
+  UNBLOCK
+  RESTART
+  GET_LOCATION
+  GET_PARAMS
+  GET_IMEI
+  FACTORY_RESET
+  CUSTOM
+}
+
+enum CommandStatus {
+  PENDING
+  SENT
+  DELIVERED
+  RESPONDED
+  FAILED
+}
+
 enum AlertType {
   SPEED
   IGNITION_ON
@@ -53,6 +129,8 @@ model Tenant {
   associates Associate[]
   alerts     Alert[]
   geofences  Geofence[]
+  devices    Device[]
+  chips      Chip[]
 
   @@map("tenants")
 }
@@ -98,6 +176,7 @@ model Vehicle {
   associate        Associate?         @relation(fields: [associateId], references: [id])
   alerts           Alert[]
   geofenceVehicles GeofenceVehicle[]
+  device           Device?
 
   @@unique([plate, tenantId])
   @@map("vehicles")
@@ -169,4 +248,76 @@ model GeofenceVehicle {
 
   @@unique([geofenceId, vehicleId])
   @@map("geofence_vehicles")
+}
+
+model Device {
+  id              String       @id @default(uuid()) @db.Uuid
+  imei            String       @unique
+  model           DeviceModel
+  brand           String?
+  firmwareVersion String?      @map("firmware_version")
+  serialNumber    String?      @map("serial_number")
+  traccarDeviceId Int?         @map("traccar_device_id")
+  status          DeviceStatus @default(PENDING_INSTALL)
+  chipId          String?      @unique @map("chip_id") @db.Uuid
+  chip            Chip?        @relation(fields: [chipId], references: [id])
+  vehicleId       String?      @unique @map("vehicle_id") @db.Uuid
+  vehicle         Vehicle?     @relation(fields: [vehicleId], references: [id])
+  tenantId        String       @map("tenant_id") @db.Uuid
+  tenant          Tenant       @relation(fields: [tenantId], references: [id])
+  installedAt     DateTime?    @map("installed_at")
+  installedBy     String?      @map("installed_by")
+  lastConnection  DateTime?    @map("last_connection")
+  notes           String?
+  deletedAt       DateTime?    @map("deleted_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  smsCommands SmsCommand[]
+
+  @@index([tenantId, status])
+  @@map("devices")
+}
+
+model Chip {
+  id          String       @id @default(uuid()) @db.Uuid
+  iccid       String       @unique
+  phoneNumber String?      @map("phone_number")
+  operator    ChipOperator
+  apn         String
+  apnUser     String?      @map("apn_user")
+  apnPassword String?      @map("apn_password")
+  apnType     ApnType      @default(PRIVATE) @map("apn_type")
+  dataPlanMb  Int          @default(50) @map("data_plan_mb")
+  provider    String?
+  status      ChipStatus   @default(ACTIVE)
+  activatedAt DateTime?    @map("activated_at")
+  expiresAt   DateTime?    @map("expires_at")
+  device      Device?
+  tenantId    String       @map("tenant_id") @db.Uuid
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  deletedAt   DateTime?    @map("deleted_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@map("chips")
+}
+
+model SmsCommand {
+  id          String        @id @default(uuid()) @db.Uuid
+  deviceId    String        @map("device_id") @db.Uuid
+  device      Device        @relation(fields: [deviceId], references: [id])
+  command     String
+  type        CommandType
+  status      CommandStatus @default(PENDING)
+  sentAt      DateTime?     @map("sent_at")
+  response    String?
+  respondedAt DateTime?     @map("responded_at")
+  sentBy      String        @map("sent_by")
+  tenantId    String        @map("tenant_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@index([deviceId, createdAt(sort: Desc)])
+  @@map("sms_commands")
 }

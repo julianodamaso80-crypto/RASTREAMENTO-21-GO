@@ -14,6 +14,10 @@ import { HinovaModule } from './modules/hinova/hinova.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { GeofencesModule } from './modules/geofences/geofences.module';
+import { DevicesModule } from './modules/devices/devices.module';
+import { ChipsModule } from './modules/chips/chips.module';
+import { SmsCommandsModule } from './modules/sms-commands/sms-commands.module';
+import { ServerInfoModule } from './modules/server-info/server-info.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -45,6 +49,10 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     AlertsModule,
     ReportsModule,
     GeofencesModule,
+    DevicesModule,
+    ChipsModule,
+    SmsCommandsModule,
+    ServerInfoModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
