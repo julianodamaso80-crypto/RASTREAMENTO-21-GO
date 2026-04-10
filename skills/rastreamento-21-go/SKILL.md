@@ -912,3 +912,117 @@ npx prisma generate
 | `NEXT_PUBLIC_API_URL` | URL do backend | `http://localhost:3001` |
 | `NEXT_PUBLIC_WS_URL` | URL do WebSocket | `http://localhost:3001` |
 | `NEXT_PUBLIC_TRACCAR_URL` | URL do Traccar (UI) | `http://localhost:8082` |
+
+---
+
+## 11. Apps Mobile (Planejado)
+
+> Documentação completa em `docs/mobile-app-research.md`, `docs/mobile-app-architecture.md` e `docs/mobile-app-roadmap.md`.
+
+### Decisão Técnica
+
+**Framework:** React Native + Expo SDK 53 (RN 0.79, React 19)
+
+**Razões:** Compartilhamento de 60-70% de código com dashboard Next.js (tipos, API client, validação, utils); mesmo TypeScript do backend e frontend; MapLibre React Native alinhado com MapLibre GL JS do dashboard web.
+
+### Dois Apps via Build Flavors
+
+| App | Bundle ID | Público | Roles |
+|-----|-----------|---------|-------|
+| **21 GO Admin** | `com.r21go.admin` | Empresa 21 GO e técnicos | SUPER_ADMIN, ADMIN, OPERATOR |
+| **21 GO Rastreamento** | `com.r21go.client` | Donos de veículos (loja) | VIEWER |
+
+### Stack Mobile
+
+| Camada | Tecnologia |
+|--------|-----------|
+| Framework | Expo SDK 53 (React Native 0.79) |
+| Mapas | @maplibre/maplibre-react-native v11 |
+| Real-time | socket.io-client v4.8 |
+| Navegação | expo-router v4 |
+| Push | @react-native-firebase/messaging + firebase-admin |
+| Estilos | NativeWind v4 (Tailwind) |
+| Estado | Zustand |
+| Auth Storage | expo-secure-store |
+| KV Storage | react-native-mmkv |
+| Offline DB | WatermelonDB |
+| Biometria | expo-local-authentication |
+| QR Scanner | expo-camera |
+| Bluetooth | react-native-ble-plx |
+| Monorepo | Turborepo |
+
+### Estrutura no Monorepo
+
+```
+rastreamento-21-go/
+├── apps/
+│   ├── backend/        # NestJS (existente)
+│   ├── dashboard/      # Next.js (existente)
+│   └── mobile/         # Expo React Native (novo)
+├── packages/
+│   ├── shared-types/   # TypeScript interfaces
+│   ├── api-client/     # HTTP client tipado
+│   ├── validation/     # Zod schemas
+│   └── utils/          # Funções utilitárias
+└── turbo.json
+```
+
+### Features por App
+
+**App Admin:**
+- Mapa com TODOS os veículos em tempo real
+- Bloqueio remoto
+- QR Scanner para IMEI de rastreadores
+- Comandos SMS para rastreadores
+- Gestão de chips M2M
+- BLE diagnóstico de rastreadores
+- Relatórios e histórico completo
+- CRUD geofences
+- Alertas operacionais
+
+**App Cliente:**
+- Mapa com APENAS seus veículos
+- Histórico de rotas
+- Alertas personalizados
+- Botão de resgate / modo pânico
+- Compartilhar localização com familiares
+- Boletos e pagamentos (futuro: Hinova)
+- Notificações push
+
+### Endpoints Backend Necessários para Mobile
+
+Endpoints existentes que o mobile consome:
+
+| Módulo | Endpoints | Mobile |
+|--------|-----------|--------|
+| Auth | `/auth/login`, `/auth/me` | Ambos apps |
+| Vehicles | `/vehicles`, `/vehicles/:id`, `/vehicles/:id/block` | Admin (CRUD), Cliente (read) |
+| Traccar | `/traccar/positions`, `/traccar/positions/:id/history` | Ambos apps |
+| Alerts | `/alerts`, `/alerts/:id/read`, `/alerts/read-all` | Ambos apps |
+| Geofences | `/geofences`, `/geofences/:id` | Admin (CRUD), Cliente (read) |
+| Reports | `/reports/trips`, `/reports/stops`, `/reports/positions` | Admin |
+
+Endpoints novos necessários:
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/auth/refresh` | POST | Refresh token (mobile precisa) |
+| `/notifications/register` | POST | Registrar device token FCM |
+| `/notifications/preferences` | GET/PATCH | Preferências de push por tipo |
+| `/panic` | POST | Acionar modo pânico / SOS |
+| `/vehicles/:id/share` | POST | Gerar link de compartilhamento |
+
+### Timeline
+
+- **Fase 0 (2 sem):** Setup monorepo + Expo
+- **Fase 1 (8 sem):** App Cliente MVP
+- **Fase 2 (6 sem):** App Admin MVP
+- **Total: ~16 semanas**
+
+### Variáveis de Ambiente Mobile
+
+| Variável | Descrição | Exemplo |
+|----------|-----------|---------|
+| `EXPO_PUBLIC_API_URL` | URL do backend | `https://api.trackgo.site` |
+| `EXPO_PUBLIC_WS_URL` | URL do WebSocket | `wss://api.trackgo.site` |
+| `EXPO_PUBLIC_MAP_STYLE_URL` | URL do estilo MapLibre | `https://api.maptiler.com/maps/streets-v2/style.json?key=KEY` |
