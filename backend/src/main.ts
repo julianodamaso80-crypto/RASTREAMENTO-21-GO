@@ -19,8 +19,11 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
+    : ['http://localhost:3000', 'http://localhost:80'];
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:80'],
+    origin: corsOrigins,
     credentials: true,
   });
 
