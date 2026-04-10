@@ -41,11 +41,12 @@ interface CommandTemplate {
 const COMMAND_TEMPLATES: Record<string, CommandTemplate[]> = {
   // GT06/GT06N/Concox/J16/CRX (protocolo similar)
   gt06: [
-    { type: 'SET_TIMEZONE', label: 'Configurar Fuso Horário', template: 'GMT,W,3,0#', step: 1 },
+    { type: 'SET_TIMEZONE', label: 'Configurar Fuso Horário', template: 'GMT,W,0,0#', step: 1 },
     { type: 'SET_APN', label: 'Configurar APN', template: 'APN,{apn},{apnUser},{apnPass}#', step: 2 },
-    { type: 'SET_SERVER_IP', label: 'Configurar IP do Servidor', template: 'SERVER,1,{ip},{port},0#', step: 3 },
-    { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: 'TIMER,30,3600#', step: 4 },
-    { type: 'RESTART', label: 'Reiniciar Rastreador', template: 'RESET#', step: 5 },
+    { type: 'SET_SERVER_IP', label: 'Configurar IP Primário', template: 'SERVER,1,{ip},{port},0#', step: 3 },
+    { type: 'SET_SECONDARY_IP', label: 'Configurar IP Secundário', template: 'SERVER,2,{secondaryIp},{port},0#', step: 4 },
+    { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: 'TIMER,30,3600#', step: 5 },
+    { type: 'RESTART', label: 'Reiniciar Rastreador', template: 'RESET#', step: 6 },
     { type: 'BLOCK', label: 'Bloquear Veículo', template: 'RELAY,1#', step: 0 },
     { type: 'UNBLOCK', label: 'Desbloquear Veículo', template: 'RELAY,0#', step: 0 },
     { type: 'GET_PARAMS', label: 'Ver Configurações Atuais', template: 'PARAM#', step: 0 },
@@ -130,7 +131,15 @@ export class SmsCommandsService {
   constructor(private prisma: PrismaService) {}
 
   getServerIp(): string {
-    return process.env.SERVER_PUBLIC_IP || '0.0.0.0';
+    return process.env.SERVER_PRIMARY_IP || '0.0.0.0';
+  }
+
+  getSecondaryIp(): string {
+    return process.env.SERVER_SECONDARY_IP || '0.0.0.0';
+  }
+
+  getMaintenanceIp(): string {
+    return process.env.SERVER_MAINTENANCE_IP || '0.0.0.0';
   }
 
   getPortForModel(model: string): { port: number; protocol: string } {
@@ -151,6 +160,8 @@ export class SmsCommandsService {
     const family = this.getTemplateFamily(device.model);
     const portInfo = this.getPortForModel(device.model);
     const ip = this.getServerIp();
+    const secondaryIp = this.getSecondaryIp();
+    const maintenanceIp = this.getMaintenanceIp();
 
     let templates = COMMAND_TEMPLATES[family] || COMMAND_TEMPLATES.gt06;
 
@@ -169,6 +180,7 @@ export class SmsCommandsService {
     const commands = templates.map((t) => {
       let command = t.template
         .replace('{ip}', ip)
+        .replace('{secondaryIp}', secondaryIp)
         .replace('{port}', String(portInfo.port))
         .replace('{apn}', apn)
         .replace('{apnUser}', apnUser)
@@ -186,14 +198,20 @@ export class SmsCommandsService {
       };
     });
 
+    // Verifica se o modelo suporta múltiplos IPs (J16/GT06 family)
+    const supportsMultiIp = ['gt06'].includes(family);
+
     return {
       device: { id: device.id, imei: device.imei, model: device.model },
       chip: device.chip
         ? { id: device.chip.id, phoneNumber, operator: device.chip.operator, apn }
         : null,
       serverIp: ip,
+      secondaryIp,
+      maintenanceIp,
       serverPort: portInfo.port,
       protocol: portInfo.protocol,
+      supportsMultiIp,
       commands,
     };
   }

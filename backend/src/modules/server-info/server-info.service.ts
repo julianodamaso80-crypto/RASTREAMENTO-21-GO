@@ -18,7 +18,9 @@ export class ServerInfoService {
   constructor(private traccarService: TraccarService) {}
 
   async getServerInfo() {
-    const ip = process.env.SERVER_PUBLIC_IP || '0.0.0.0';
+    const primaryIp = process.env.SERVER_PRIMARY_IP || '0.0.0.0';
+    const secondaryIp = process.env.SERVER_SECONDARY_IP || '0.0.0.0';
+    const maintenanceIp = process.env.SERVER_MAINTENANCE_IP || '0.0.0.0';
 
     let traccarInfo = null;
     try {
@@ -54,7 +56,10 @@ export class ServerInfoService {
       .sort((a, b) => a.port - b.port);
 
     return {
-      ip,
+      ip: primaryIp,
+      primaryIp,
+      secondaryIp,
+      maintenanceIp,
       traccar: traccarInfo,
       ports,
     };

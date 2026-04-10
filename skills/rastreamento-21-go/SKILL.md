@@ -382,6 +382,42 @@ Integração com o sistema Hinova SGA para sincronização de associados e veíc
 
 ---
 
+### 4.9 Arquitetura de 3 IPs (Multi-Server)
+
+O sistema suporta 3 IPs de servidor para atender requisitos de redundância e manutenção:
+
+| IP | Variável de Ambiente | Finalidade |
+|----|---------------------|------------|
+| **Primário** | `SERVER_PRIMARY_IP` | Servidor principal do Traccar — onde os rastreadores enviam dados |
+| **Secundário** | `SERVER_SECONDARY_IP` | Backup/failover — rastreadores J16/GT06 usam como fallback |
+| **Manutenção** | `SERVER_MAINTENANCE_IP` | Acesso técnico remoto para manutenção de dispositivos |
+
+**Módulos envolvidos:**
+
+- **ServerInfoService** (`/api/v1/server/info`): Retorna os 3 IPs no endpoint GET
+- **SmsCommandsService**: Gera comandos SMS com SERVER,1 (primário) e SERVER,2 (secundário) para rastreadores que suportam multi-IP
+- **Frontend /configuracoes**: Card "Servidores" com os 3 IPs, status e botão copiar
+- **Frontend /dispositivos/[id]**: Exibe os 3 IPs quando o modelo suporta (J16, GT06), senão só o primário
+
+**Modelos com suporte a multi-IP (protocolo GT06):**
+
+GT06, GT06N, Concox GT06N, J16, J16 Pro — todos aceitam `SERVER,1` (primário) e `SERVER,2` (secundário) via SMS.
+
+**Sequência de comandos SMS para J16/GT06:**
+
+```
+1. GMT,W,0,0#                           → Fuso horário
+2. APN,{apn},{user},{pass}#             → APN do chip
+3. SERVER,1,{primary_ip},5023,0#        → IP primário
+4. SERVER,2,{secondary_ip},5023,0#      → IP secundário (backup)
+5. TIMER,30,3600#                       → Intervalo de envio
+6. RESET#                               → Reiniciar rastreador
+```
+
+**Outros modelos** (Suntech, Teltonika, H02, GPS103, CRX): recebem apenas o IP primário via seus respectivos comandos de configuração.
+
+---
+
 ## 5. Componentes do Frontend
 
 ### 5.1 Layout
@@ -865,6 +901,9 @@ npx prisma generate
 | `HINOVA_BASE_URL` | URL base da API Hinova SGA | `https://api.hinova.com.br/api/sga/v2` |
 | `HINOVA_MOCK` | Usar mock da Hinova (true/false) | `true` |
 | `HINOVA_SYNC_INTERVAL` | Intervalo de sync em ms (padrão 6h) | `21600000` |
+| `SERVER_PRIMARY_IP` | IP primário do servidor Traccar | `0.0.0.0` |
+| `SERVER_SECONDARY_IP` | IP secundário (backup/failover) | `0.0.0.0` |
+| `SERVER_MAINTENANCE_IP` | IP de manutenção (acesso técnico) | `0.0.0.0` |
 
 ### Frontend
 

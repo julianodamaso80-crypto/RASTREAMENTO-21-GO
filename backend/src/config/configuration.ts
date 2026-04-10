@@ -21,4 +21,9 @@ export default () => ({
     mock: process.env.HINOVA_MOCK === 'true',
     syncInterval: parseInt(process.env.HINOVA_SYNC_INTERVAL || '21600000', 10),
   },
+  server: {
+    primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',
+    secondaryIp: process.env.SERVER_SECONDARY_IP || '0.0.0.0',
+    maintenanceIp: process.env.SERVER_MAINTENANCE_IP || '0.0.0.0',
+  },
 });

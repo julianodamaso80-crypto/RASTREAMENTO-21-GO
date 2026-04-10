@@ -91,8 +91,11 @@ export interface GeneratedCommandsResponse {
   device: { id: string; imei: string; model: string };
   chip: { id: string; phoneNumber: string; operator: string; apn: string } | null;
   serverIp: string;
+  secondaryIp: string;
+  maintenanceIp: string;
   serverPort: number;
   protocol: string;
+  supportsMultiIp: boolean;
   commands: GeneratedCommand[];
 }
 
@@ -103,6 +106,9 @@ export interface OperatorApn {
 
 export interface ServerInfo {
   ip: string;
+  primaryIp: string;
+  secondaryIp: string;
+  maintenanceIp: string;
   traccar: { version: string; status: string };
   ports: { port: number; protocol: string; models: string[]; status: string }[];
 }

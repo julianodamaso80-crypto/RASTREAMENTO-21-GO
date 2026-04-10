@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Settings, Server, Radio, Copy, Check, Wifi, WifiOff, Globe,
+  Settings, Server, Radio, Copy, Check, Wifi, WifiOff, Globe, Shield, Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -48,41 +48,57 @@ export default function ConfiguracoesPage() {
         <p className="text-sm text-muted-foreground">Servidor de rastreamento e referências</p>
       </div>
 
-      {/* Server Info */}
+      {/* Servidores (3 IPs) */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
             <Server className="h-4 w-4 text-emerald-400" />
-            Informações do Servidor
+            Servidores
           </CardTitle>
         </CardHeader>
         <CardContent>
           {serverInfo ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <InfoCard
-                label="IP do Servidor"
-                value={serverInfo.ip}
-                mono
-                copyable
-              />
-              <InfoCard
-                label="Status Traccar"
-                value={serverInfo.traccar.status === 'online' ? 'Online' : 'Offline'}
-                icon={serverInfo.traccar.status === 'online' ? (
-                  <Wifi className="h-4 w-4 text-emerald-400" />
-                ) : (
-                  <WifiOff className="h-4 w-4 text-red-400" />
-                )}
-              />
-              <InfoCard
-                label="Versão Traccar"
-                value={serverInfo.traccar.version}
-              />
-              <InfoCard
-                label="Protocolos Ativos"
-                value={`${serverInfo.ports.length} protocolos`}
-                icon={<Globe className="h-4 w-4 text-blue-400" />}
-              />
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <ServerIpCard
+                  label="IP Primário"
+                  description="Servidor principal do Traccar"
+                  ip={serverInfo.primaryIp}
+                  icon={<Server className="h-4 w-4 text-emerald-400" />}
+                />
+                <ServerIpCard
+                  label="IP Secundário"
+                  description="Backup / failover"
+                  ip={serverInfo.secondaryIp}
+                  icon={<Shield className="h-4 w-4 text-blue-400" />}
+                />
+                <ServerIpCard
+                  label="IP Manutenção"
+                  description="Acesso técnico remoto"
+                  ip={serverInfo.maintenanceIp}
+                  icon={<Wrench className="h-4 w-4 text-orange-400" />}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <InfoCard
+                  label="Status Traccar"
+                  value={serverInfo.traccar.status === 'online' ? 'Online' : 'Offline'}
+                  icon={serverInfo.traccar.status === 'online' ? (
+                    <Wifi className="h-4 w-4 text-emerald-400" />
+                  ) : (
+                    <WifiOff className="h-4 w-4 text-red-400" />
+                  )}
+                />
+                <InfoCard
+                  label="Versão Traccar"
+                  value={serverInfo.traccar.version}
+                />
+                <InfoCard
+                  label="Protocolos Ativos"
+                  value={`${serverInfo.ports.length} protocolos`}
+                  icon={<Globe className="h-4 w-4 text-blue-400" />}
+                />
+              </div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Não foi possível obter informações do servidor</p>
@@ -250,5 +266,32 @@ function CopyButton({ text }: { text: string }) {
     <Button variant="ghost" size="icon-xs" onClick={copy}>
       {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
     </Button>
+  );
+}
+
+function ServerIpCard({
+  label, description, ip, icon,
+}: {
+  label: string; description: string; ip: string; icon: React.ReactNode;
+}) {
+  const isConfigured = ip && ip !== '0.0.0.0';
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
+      <div className="flex items-center gap-2">
+        {icon}
+        <p className="text-xs font-medium">{label}</p>
+        <Badge className={cn(
+          'ml-auto text-[10px]',
+          isConfigured
+            ? 'bg-emerald-500/20 text-emerald-400'
+            : 'bg-slate-500/20 text-slate-400',
+        )}>
+          {isConfigured ? 'Configurado' : 'Não configurado'}
+        </Badge>
+      </div>
+      <p className="text-[11px] text-muted-foreground">{description}</p>
+      <CopyableText value={ip} mono large />
+    </div>
   );
 }

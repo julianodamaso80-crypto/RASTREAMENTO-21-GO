@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Copy, Check, Radio, Wifi, WifiOff, Smartphone, Server,
   Lock, Unlock, MapPin, RotateCcw, FileText, Send, AlertTriangle,
+  Shield, Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -196,11 +197,34 @@ export default function DeviceDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-2">
-            <InfoRow label="IP do Servidor" value={commands.serverIp} mono copyable onCopy={copyToClipboard} />
+            <InfoRow
+              label={commands.supportsMultiIp ? 'IP Primário' : 'IP do Servidor'}
+              value={commands.serverIp}
+              mono copyable onCopy={copyToClipboard}
+              icon={<Server className="h-3 w-3 text-emerald-400" />}
+            />
+            {commands.supportsMultiIp && (
+              <>
+                <InfoRow
+                  label="IP Secundário"
+                  value={commands.secondaryIp}
+                  mono copyable onCopy={copyToClipboard}
+                  icon={<Shield className="h-3 w-3 text-blue-400" />}
+                />
+                <InfoRow
+                  label="IP Manutenção"
+                  value={commands.maintenanceIp}
+                  mono copyable onCopy={copyToClipboard}
+                  icon={<Wrench className="h-3 w-3 text-orange-400" />}
+                />
+              </>
+            )}
             <InfoRow label="Porta" value={String(commands.serverPort)} mono copyable onCopy={copyToClipboard} />
             <InfoRow label="Protocolo" value={commands.protocol.toUpperCase()} />
             <p className="text-xs text-muted-foreground mt-2">
-              Configure seu rastreador para enviar dados para este endereço
+              {commands.supportsMultiIp
+                ? 'Este rastreador suporta múltiplos servidores (primário + backup)'
+                : 'Configure seu rastreador para enviar dados para este endereço'}
             </p>
           </CardContent>
         </Card>
@@ -373,13 +397,16 @@ function CommandCard({
 }
 
 function InfoRow({
-  label, value, mono, copyable, onCopy,
+  label, value, mono, copyable, onCopy, icon,
 }: {
-  label: string; value: string; mono?: boolean; copyable?: boolean; onCopy?: (v: string) => void;
+  label: string; value: string; mono?: boolean; copyable?: boolean; onCopy?: (v: string) => void; icon?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between py-1">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground flex items-center gap-1.5">
+        {icon}
+        {label}
+      </span>
       <span className={cn('flex items-center gap-1', mono && 'font-mono text-xs')}>
         {value}
         {copyable && onCopy && (
