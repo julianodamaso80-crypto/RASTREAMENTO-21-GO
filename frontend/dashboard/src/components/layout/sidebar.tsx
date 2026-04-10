@@ -26,8 +26,8 @@ import {
 
 const navItems: { href: string; label: string; icon: any; disabled?: boolean }[] = [
   { href: '/', label: 'Mapa / Veículos', icon: Map },
-  { href: '/alerts', label: 'Alertas', icon: Bell },
-  { href: '/reports', label: 'Relatórios', icon: BarChart3 },
+  { href: '/alertas', label: 'Alertas', icon: Bell },
+  { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/geofencing', label: 'Geofencing', icon: Hexagon },
   { href: '/dispositivos', label: 'Dispositivos', icon: Radio },
   { href: '/chips', label: 'Chips M2M', icon: Smartphone },

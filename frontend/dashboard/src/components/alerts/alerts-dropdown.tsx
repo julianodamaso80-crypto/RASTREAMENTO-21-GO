@@ -77,7 +77,7 @@ export function AlertsDropdown() {
 
         <DropdownMenuSeparator />
         <DropdownMenuItem className="justify-center">
-          <Link href="/alerts" className="text-xs text-emerald-400 hover:underline">
+          <Link href="/alertas" className="text-xs text-emerald-400 hover:underline">
             Ver todos os alertas
           </Link>
         </DropdownMenuItem>
