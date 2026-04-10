@@ -90,6 +90,9 @@ export interface GeneratedCommand {
 export interface GeneratedCommandsResponse {
   device: { id: string; imei: string; model: string };
   chip: { id: string; phoneNumber: string; operator: string; apn: string } | null;
+  serverHostname: string;
+  backupHostname: string;
+  maintenanceHostname: string;
   serverIp: string;
   secondaryIp: string;
   maintenanceIp: string;
@@ -105,6 +108,9 @@ export interface OperatorApn {
 }
 
 export interface ServerInfo {
+  hostname: string;
+  backupHostname: string;
+  maintenanceHostname: string;
   ip: string;
   primaryIp: string;
   secondaryIp: string;

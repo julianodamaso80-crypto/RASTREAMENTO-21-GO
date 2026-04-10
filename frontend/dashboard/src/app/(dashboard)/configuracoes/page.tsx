@@ -48,36 +48,46 @@ export default function ConfiguracoesPage() {
         <p className="text-sm text-muted-foreground">Servidor de rastreamento e referências</p>
       </div>
 
-      {/* Servidores (3 IPs) */}
+      {/* Servidores (Hostnames DNS + IPs) */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
             <Server className="h-4 w-4 text-emerald-400" />
-            Servidores
+            Servidores GPS
           </CardTitle>
         </CardHeader>
         <CardContent>
           {serverInfo ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <ServerIpCard
-                  label="IP Primário"
-                  description="Servidor principal do Traccar"
-                  ip={serverInfo.primaryIp}
-                  icon={<Server className="h-4 w-4 text-emerald-400" />}
-                />
-                <ServerIpCard
-                  label="IP Secundário"
-                  description="Backup / failover"
-                  ip={serverInfo.secondaryIp}
-                  icon={<Shield className="h-4 w-4 text-blue-400" />}
-                />
-                <ServerIpCard
-                  label="IP Manutenção"
-                  description="Acesso técnico remoto"
-                  ip={serverInfo.maintenanceIp}
-                  icon={<Wrench className="h-4 w-4 text-orange-400" />}
-                />
+              {/* Hostnames DNS (principal) */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                  <Globe className="h-3 w-3" />
+                  Hostnames DNS (usado nos comandos SMS)
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <ServerAddressCard
+                    label="Hostname Primário"
+                    description="Servidor principal do Traccar"
+                    hostname={serverInfo.hostname}
+                    ip={serverInfo.primaryIp}
+                    icon={<Server className="h-4 w-4 text-emerald-400" />}
+                  />
+                  <ServerAddressCard
+                    label="Hostname Backup"
+                    description="Failover automático"
+                    hostname={serverInfo.backupHostname}
+                    ip={serverInfo.secondaryIp}
+                    icon={<Shield className="h-4 w-4 text-blue-400" />}
+                  />
+                  <ServerAddressCard
+                    label="Hostname Manutenção"
+                    description="Acesso técnico remoto"
+                    hostname={serverInfo.maintenanceHostname}
+                    ip={serverInfo.maintenanceIp}
+                    icon={<Wrench className="h-4 w-4 text-orange-400" />}
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <InfoCard
@@ -269,12 +279,14 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function ServerIpCard({
-  label, description, ip, icon,
+function ServerAddressCard({
+  label, description, hostname, ip, icon,
 }: {
-  label: string; description: string; ip: string; icon: React.ReactNode;
+  label: string; description: string; hostname: string; ip: string; icon: React.ReactNode;
 }) {
-  const isConfigured = ip && ip !== '0.0.0.0';
+  const hasHostname = !!hostname;
+  const hasIp = ip && ip !== '0.0.0.0';
+  const isConfigured = hasHostname || hasIp;
 
   return (
     <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
@@ -284,14 +296,22 @@ function ServerIpCard({
         <Badge className={cn(
           'ml-auto text-[10px]',
           isConfigured
-            ? 'bg-emerald-500/20 text-emerald-400'
+            ? hasHostname
+              ? 'bg-emerald-500/20 text-emerald-400'
+              : 'bg-yellow-500/20 text-yellow-400'
             : 'bg-slate-500/20 text-slate-400',
         )}>
-          {isConfigured ? 'Configurado' : 'Não configurado'}
+          {isConfigured ? (hasHostname ? 'DNS' : 'Só IP') : 'Não configurado'}
         </Badge>
       </div>
       <p className="text-[11px] text-muted-foreground">{description}</p>
-      <CopyableText value={ip} mono large />
+      {hasHostname && <CopyableText value={hostname} mono large />}
+      {hasIp && (
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-muted-foreground">IP:</span>
+          <CopyableText value={ip} mono />
+        </div>
+      )}
     </div>
   );
 }

@@ -197,11 +197,29 @@ export default function DeviceDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-2">
+            {/* Hostname DNS (principal) */}
+            {commands.serverHostname && (
+              <InfoRow
+                label={commands.supportsMultiIp ? 'Hostname Primário' : 'Hostname GPS'}
+                value={commands.serverHostname}
+                mono copyable onCopy={copyToClipboard}
+                icon={<Server className="h-3 w-3 text-emerald-400" />}
+              />
+            )}
+            {commands.supportsMultiIp && commands.backupHostname && (
+              <InfoRow
+                label="Hostname Backup"
+                value={commands.backupHostname}
+                mono copyable onCopy={copyToClipboard}
+                icon={<Shield className="h-3 w-3 text-blue-400" />}
+              />
+            )}
+            {/* IPs (fallback) */}
             <InfoRow
               label={commands.supportsMultiIp ? 'IP Primário' : 'IP do Servidor'}
               value={commands.serverIp}
               mono copyable onCopy={copyToClipboard}
-              icon={<Server className="h-3 w-3 text-emerald-400" />}
+              icon={<Server className="h-3 w-3 text-muted-foreground" />}
             />
             {commands.supportsMultiIp && (
               <>
@@ -209,22 +227,24 @@ export default function DeviceDetailPage() {
                   label="IP Secundário"
                   value={commands.secondaryIp}
                   mono copyable onCopy={copyToClipboard}
-                  icon={<Shield className="h-3 w-3 text-blue-400" />}
+                  icon={<Shield className="h-3 w-3 text-muted-foreground" />}
                 />
                 <InfoRow
                   label="IP Manutenção"
                   value={commands.maintenanceIp}
                   mono copyable onCopy={copyToClipboard}
-                  icon={<Wrench className="h-3 w-3 text-orange-400" />}
+                  icon={<Wrench className="h-3 w-3 text-muted-foreground" />}
                 />
               </>
             )}
             <InfoRow label="Porta" value={String(commands.serverPort)} mono copyable onCopy={copyToClipboard} />
             <InfoRow label="Protocolo" value={commands.protocol.toUpperCase()} />
             <p className="text-xs text-muted-foreground mt-2">
-              {commands.supportsMultiIp
-                ? 'Este rastreador suporta múltiplos servidores (primário + backup)'
-                : 'Configure seu rastreador para enviar dados para este endereço'}
+              {commands.serverHostname
+                ? 'Comandos SMS usam hostname DNS — mudanças de IP não quebram rastreadores no campo'
+                : commands.supportsMultiIp
+                  ? 'Este rastreador suporta múltiplos servidores (primário + backup)'
+                  : 'Configure seu rastreador para enviar dados para este endereço'}
             </p>
           </CardContent>
         </Card>

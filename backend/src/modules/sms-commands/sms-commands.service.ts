@@ -43,8 +43,8 @@ const COMMAND_TEMPLATES: Record<string, CommandTemplate[]> = {
   gt06: [
     { type: 'SET_TIMEZONE', label: 'Configurar Fuso Horário', template: 'GMT,W,0,0#', step: 1 },
     { type: 'SET_APN', label: 'Configurar APN', template: 'APN,{apn},{apnUser},{apnPass}#', step: 2 },
-    { type: 'SET_SERVER_IP', label: 'Configurar IP Primário', template: 'SERVER,1,{ip},{port},0#', step: 3 },
-    { type: 'SET_SECONDARY_IP', label: 'Configurar IP Secundário', template: 'SERVER,2,{secondaryIp},{port},0#', step: 4 },
+    { type: 'SET_SERVER_IP', label: 'Configurar Servidor Primário', template: 'SERVER,1,{ip},{port},0#', step: 3 },
+    { type: 'SET_SECONDARY_IP', label: 'Configurar Servidor Secundário', template: 'SERVER,2,{secondaryIp},{port},0#', step: 4 },
     { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: 'TIMER,30,3600#', step: 5 },
     { type: 'RESTART', label: 'Reiniciar Rastreador', template: 'RESET#', step: 6 },
     { type: 'BLOCK', label: 'Bloquear Veículo', template: 'RELAY,1#', step: 0 },
@@ -55,7 +55,7 @@ const COMMAND_TEMPLATES: Record<string, CommandTemplate[]> = {
   // CRX3/CRX3 NANO/CRX PRO
   crx: [
     { type: 'SET_APN', label: 'Configurar APN', template: 'APN#{apn},{apnUser},{apnPass}', step: 1 },
-    { type: 'SET_SERVER_IP', label: 'Configurar IP do Servidor', template: 'IP#{ip}:{port}', step: 2 },
+    { type: 'SET_SERVER_IP', label: 'Configurar Servidor', template: 'IP#{ip}:{port}', step: 2 },
     { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: 'TIMER#30,3600', step: 3 },
     { type: 'RESTART', label: 'Reiniciar Rastreador', template: 'RESET#', step: 4 },
     { type: 'BLOCK', label: 'Bloquear Veículo', template: 'OUT1#ON', step: 0 },
@@ -130,6 +130,20 @@ export class SmsCommandsService {
 
   constructor(private prisma: PrismaService) {}
 
+  // DNS hostnames (preferencial — rastreadores modernos)
+  getServerHostname(): string {
+    return process.env.SERVER_HOSTNAME || '';
+  }
+
+  getBackupHostname(): string {
+    return process.env.SERVER_HOSTNAME_BACKUP || '';
+  }
+
+  getMaintenanceHostname(): string {
+    return process.env.SERVER_HOSTNAME_MAINTENANCE || '';
+  }
+
+  // IPs (fallback — rastreadores antigos que não suportam DNS)
   getServerIp(): string {
     return process.env.SERVER_PRIMARY_IP || '0.0.0.0';
   }
@@ -140,6 +154,19 @@ export class SmsCommandsService {
 
   getMaintenanceIp(): string {
     return process.env.SERVER_MAINTENANCE_IP || '0.0.0.0';
+  }
+
+  // Retorna hostname se disponível, senão IP (usado nos templates SMS)
+  getServerAddress(): string {
+    return this.getServerHostname() || this.getServerIp();
+  }
+
+  getSecondaryAddress(): string {
+    return this.getBackupHostname() || this.getSecondaryIp();
+  }
+
+  getMaintenanceAddress(): string {
+    return this.getMaintenanceHostname() || this.getMaintenanceIp();
   }
 
   getPortForModel(model: string): { port: number; protocol: string } {
@@ -159,9 +186,10 @@ export class SmsCommandsService {
 
     const family = this.getTemplateFamily(device.model);
     const portInfo = this.getPortForModel(device.model);
-    const ip = this.getServerIp();
-    const secondaryIp = this.getSecondaryIp();
-    const maintenanceIp = this.getMaintenanceIp();
+    // Usa hostname DNS quando disponível (preferencial)
+    const ip = this.getServerAddress();
+    const secondaryIp = this.getSecondaryAddress();
+    const maintenanceIp = this.getMaintenanceAddress();
 
     let templates = COMMAND_TEMPLATES[family] || COMMAND_TEMPLATES.gt06;
 
@@ -206,9 +234,12 @@ export class SmsCommandsService {
       chip: device.chip
         ? { id: device.chip.id, phoneNumber, operator: device.chip.operator, apn }
         : null,
-      serverIp: ip,
-      secondaryIp,
-      maintenanceIp,
+      serverHostname: this.getServerHostname(),
+      backupHostname: this.getBackupHostname(),
+      maintenanceHostname: this.getMaintenanceHostname(),
+      serverIp: this.getServerIp(),
+      secondaryIp: this.getSecondaryIp(),
+      maintenanceIp: this.getMaintenanceIp(),
       serverPort: portInfo.port,
       protocol: portInfo.protocol,
       supportsMultiIp,
