@@ -36,9 +36,14 @@ export function LoginForm() {
     try {
       await login(values.email, values.password);
       window.location.href = '/dashboard';
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido';
-      toast.error(`Falha no login: ${message}`);
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
+      const status = e.response?.status;
+      let message = e.response?.data?.message || e.message || 'Erro desconhecido';
+      if (status === 401) message = 'Email ou senha incorretos';
+      else if (status === 429) message = 'Muitas tentativas. Aguarde alguns minutos.';
+      else if (status && status >= 500) message = 'Servidor indisponível. Tente novamente.';
+      toast.error(message);
       setSubmitting(false);
     }
   };
@@ -55,7 +60,7 @@ export function LoginForm() {
           autoComplete="email"
           placeholder="seu@email.com"
           aria-invalid={!!errors.email}
-          className="bg-slate-900/50 border-slate-800 focus:border-emerald-500"
+          className="bg-slate-900/50 border-slate-800 focus:border-brand-orange-500"
           {...register('email')}
         />
         {errors.email && (
@@ -70,7 +75,7 @@ export function LoginForm() {
           </label>
           <Link
             href="/forgot-password"
-            className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+            className="text-xs text-brand-orange-500 hover:text-brand-orange-400 transition-colors"
           >
             Esqueci minha senha
           </Link>
@@ -81,7 +86,7 @@ export function LoginForm() {
           autoComplete="current-password"
           placeholder="••••••••"
           aria-invalid={!!errors.password}
-          className="bg-slate-900/50 border-slate-800 focus:border-emerald-500"
+          className="bg-slate-900/50 border-slate-800 focus:border-brand-orange-500"
           {...register('password')}
         />
         {errors.password && (
@@ -92,7 +97,7 @@ export function LoginForm() {
       <Button
         type="submit"
         disabled={submitting}
-        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+        className="w-full bg-brand-orange-500 hover:bg-brand-orange-600 text-slate-950 font-semibold"
       >
         {submitting ? (
           <>
