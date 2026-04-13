@@ -106,14 +106,14 @@ export function VehicleDetailPanel() {
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2 bg-muted/20 rounded-lg p-2.5">
-              <Gauge className="h-4 w-4 text-emerald-400" />
+              <Gauge className="h-4 w-4 text-brand-green-500" />
               <div>
                 <p className="text-xs text-muted-foreground">Velocidade</p>
                 <p className="font-bold text-sm">{formatSpeed(vehicle.speed)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 bg-muted/20 rounded-lg p-2.5">
-              <Power className={cn('h-4 w-4', vehicle.ignition ? 'text-emerald-400' : 'text-gray-500')} />
+              <Power className={cn('h-4 w-4', vehicle.ignition ? 'text-brand-green-500' : 'text-gray-500')} />
               <div>
                 <p className="text-xs text-muted-foreground">Ignição</p>
                 <p className="font-bold text-sm">{vehicle.ignition ? 'Ligada' : 'Desligada'}</p>

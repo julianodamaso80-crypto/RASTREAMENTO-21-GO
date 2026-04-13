@@ -19,7 +19,7 @@ export function Header() {
     <header className="h-14 glass-light flex items-center justify-between px-4 md:px-6">
       <div className="flex items-center gap-3">
         <span className="hidden md:block text-sm text-muted-foreground">
-          {user?.tenant?.name || 'Rastreamento 21 GO'}
+          {user?.tenant?.name || '21Go! Proteção Veicular'}
         </span>
       </div>
 

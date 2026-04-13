@@ -46,11 +46,11 @@ const REFRESH_MS = 60_000;
 const PERIOD_KEY = 'dashboard.period';
 
 const CHART_COLORS = {
-  online: '#10b981',
+  online: '#bfd741',
   offline: '#64748b',
   alerta: '#ef4444',
-  line: '#3b82f6',
-  bar: '#10b981',
+  line: '#5b7ac4',
+  bar: '#f7963d',
 };
 
 function readStoredPeriod(): DashboardPeriod {
@@ -487,7 +487,7 @@ function EmptyRow({ label, positive }: { label: string; positive?: boolean }) {
     <div
       className={cn(
         'p-6 text-center text-xs',
-        positive ? 'text-emerald-400' : 'text-muted-foreground',
+        positive ? 'text-brand-green-500' : 'text-muted-foreground',
       )}
     >
       {label}

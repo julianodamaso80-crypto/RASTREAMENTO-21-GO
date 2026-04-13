@@ -49,7 +49,7 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
         </span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {vehicle.displayStatus === 'moving' && (
-            <span className="text-emerald-400">{formatSpeed(vehicle.speed)}</span>
+            <span className="text-brand-green-500">{formatSpeed(vehicle.speed)}</span>
           )}
           <span>{formatRelativeTime(vehicle.lastUpdate)}</span>
         </div>

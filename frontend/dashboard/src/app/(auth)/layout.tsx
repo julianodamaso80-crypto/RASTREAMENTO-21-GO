@@ -10,32 +10,41 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Hero panel (direita) — hidden em mobile */}
-      <div className="hidden lg:flex relative flex-col justify-between p-12 bg-gradient-to-br from-emerald-900/30 via-slate-900 to-slate-950 overflow-hidden">
+      <div className="hidden lg:flex relative flex-col justify-between p-12 bg-gradient-to-br from-[#375191]/40 via-slate-900 to-slate-950 overflow-hidden">
         {/* Grid decorativo */}
         <div
           className="absolute inset-0 opacity-20"
           style={{
             backgroundImage:
-              'linear-gradient(rgba(16,185,129,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.15) 1px, transparent 1px)',
+              'linear-gradient(rgba(91,122,196,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(91,122,196,0.18) 1px, transparent 1px)',
             backgroundSize: '40px 40px',
             maskImage: 'radial-gradient(circle at center, black 30%, transparent 70%)',
           }}
         />
-        {/* Glow verde */}
+        {/* Glow azul brand */}
         <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-25"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-30"
           style={{
-            background: 'radial-gradient(circle, rgba(16,185,129,0.5) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(55,81,145,0.55) 0%, transparent 70%)',
+          }}
+        />
+        {/* Glow laranja secundário */}
+        <div
+          className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full opacity-20"
+          style={{
+            background: 'radial-gradient(circle, rgba(247,150,61,0.5) 0%, transparent 70%)',
           }}
         />
 
         {/* Header */}
         <div className="relative">
           <div className="flex items-center gap-3 mb-2">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
-              <span className="text-lg font-bold text-emerald-400">21</span>
+            <div className="flex items-center justify-center px-3 h-10 rounded-xl bg-[#375191] border border-brand-orange-500/30">
+              <span className="text-lg font-extrabold tracking-tight text-slate-50">
+                21<span className="text-brand-orange-500">Go!</span>
+              </span>
             </div>
-            <span className="text-lg font-semibold text-slate-100">Rastreamento 21 GO</span>
+            <span className="text-xs font-semibold tracking-[0.15em] text-slate-300 uppercase">Proteção Veicular</span>
           </div>
         </div>
 
@@ -45,7 +54,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             <h2 className="text-4xl font-bold text-slate-50 leading-tight">
               Sua frota sob controle,
               <br />
-              <span className="text-emerald-400">em tempo real.</span>
+              <span className="text-brand-orange-500">em tempo real.</span>
             </h2>
             <p className="mt-4 text-slate-400 text-base leading-relaxed max-w-md">
               Plataforma completa de gestão e rastreamento veicular com integração Traccar,
@@ -79,7 +88,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
         {/* Footer */}
         <div className="relative">
-          <p className="text-xs text-slate-500">© {new Date().getFullYear()} Rastreamento 21 GO · trackgo.site</p>
+          <p className="text-xs text-slate-500">© {new Date().getFullYear()} 21Go! Proteção Veicular · trackgo.site</p>
         </div>
       </div>
     </div>
@@ -97,8 +106,8 @@ function FeatureItem({
 }) {
   return (
     <li className="flex gap-3">
-      <div className="flex items-center justify-center w-10 h-10 shrink-0 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-        <Icon className="h-5 w-5 text-emerald-400" />
+      <div className="flex items-center justify-center w-10 h-10 shrink-0 rounded-lg bg-brand-orange-500/10 border border-brand-orange-500/20">
+        <Icon className="h-5 w-5 text-brand-orange-500" />
       </div>
       <div>
         <p className="font-semibold text-slate-100 text-sm">{title}</p>

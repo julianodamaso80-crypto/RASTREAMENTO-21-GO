@@ -111,7 +111,10 @@ export class DashboardService {
         this.traccar.getReportSummary(traccarIds, from.toISOString(), to.toISOString()).catch(() => []),
       ]);
 
+      // Multi-tenant: só conta posições de devices DESTE tenant (getPositions retorna global)
+      const tenantTraccarIdSet = new Set(traccarIds);
       for (const pos of positions) {
+        if (!tenantTraccarIdSet.has(pos.deviceId)) continue;
         const bat = (pos.attributes as Record<string, unknown> | undefined)?.batteryLevel;
         if (typeof bat === 'number' && bat < 20) lowBattery++;
       }
@@ -145,13 +148,18 @@ export class DashboardService {
     );
     const totalAlerts24h = alertsByType24h.reduce((acc, row) => acc + row._count.type, 0);
 
-    // Veículos que precisam atenção
+    // Veículos que precisam atenção — ordena por mais antigo primeiro (sem comunicação > offline >1h)
     const needsAttention = devices
       .filter((d) => {
         if (!d.vehicle) return false;
         if (!d.lastConnection) return true;
         const ageMs = now.getTime() - new Date(d.lastConnection).getTime();
-        return ageMs > H1; // offline >1h OU sem comm >24h (subset)
+        return ageMs > H1;
+      })
+      .sort((a, b) => {
+        const ta = a.lastConnection ? new Date(a.lastConnection).getTime() : 0;
+        const tb = b.lastConnection ? new Date(b.lastConnection).getTime() : 0;
+        return ta - tb; // mais antigo primeiro; sem lastConnection vai pro topo (ts=0)
       })
       .slice(0, 10)
       .map((d) => {
@@ -178,7 +186,7 @@ export class DashboardService {
     // Fleet status pra pizza
     const fleetStatus = {
       online: onlineNow,
-      offline: Math.max(devices.length - onlineNow - (totalAlerts24h > 0 ? 0 : 0), 0),
+      offline: Math.max(devices.length - onlineNow, 0),
       alerta: totalAlerts24h > 0 ? Math.min(totalAlerts24h, devices.length) : 0,
     };
 

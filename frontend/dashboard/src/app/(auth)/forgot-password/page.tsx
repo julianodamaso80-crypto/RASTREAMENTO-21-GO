@@ -56,15 +56,17 @@ export default function ForgotPasswordPage() {
       <div>
         <div className="mb-8 lg:hidden">
           <div className="inline-flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
-              <span className="text-lg font-bold text-emerald-400">21</span>
+            <div className="flex items-center justify-center px-3 h-10 rounded-xl bg-[#375191] border border-brand-orange-500/30">
+              <span className="text-lg font-extrabold tracking-tight text-slate-50">
+                21<span className="text-brand-orange-500">Go!</span>
+              </span>
             </div>
-            <span className="text-lg font-semibold text-slate-100">Rastreamento 21 GO</span>
+            <span className="text-xs font-semibold tracking-[0.15em] text-slate-300 uppercase">Proteção Veicular</span>
           </div>
         </div>
 
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-6">
-          <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-brand-green-500/10 border border-brand-green-500/20 mb-6">
+          <CheckCircle2 className="h-6 w-6 text-brand-green-500" />
         </div>
 
         <h1 className="text-2xl font-bold text-slate-50">Verifique seu email</h1>
@@ -83,7 +85,7 @@ export default function ForgotPasswordPage() {
 
         <Link
           href="/login"
-          className="mt-6 inline-flex items-center gap-2 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+          className="mt-6 inline-flex items-center gap-2 text-sm text-brand-orange-500 hover:text-brand-orange-400 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           Voltar para o login
@@ -103,8 +105,8 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-6">
-        <Mail className="h-6 w-6 text-emerald-400" />
+      <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-brand-orange-500/10 border border-brand-orange-500/20 mb-6">
+        <Mail className="h-6 w-6 text-brand-orange-500" />
       </div>
 
       <h1 className="text-2xl font-bold text-slate-50">Esqueceu sua senha?</h1>
@@ -124,7 +126,7 @@ export default function ForgotPasswordPage() {
             autoFocus
             placeholder="seu@email.com"
             aria-invalid={!!errors.email}
-            className="bg-slate-900/50 border-slate-800 focus:border-emerald-500"
+            className="bg-slate-900/50 border-slate-800 focus:border-brand-orange-500"
             {...register('email')}
           />
           {errors.email && <p className="text-xs text-red-400">{errors.email.message}</p>}
@@ -133,7 +135,7 @@ export default function ForgotPasswordPage() {
         <Button
           type="submit"
           disabled={submitting}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+          className="w-full bg-brand-orange-500 hover:bg-brand-orange-600 text-slate-950 font-semibold"
         >
           {submitting ? (
             <>
@@ -148,7 +150,7 @@ export default function ForgotPasswordPage() {
 
       <Link
         href="/login"
-        className="mt-6 inline-flex items-center gap-2 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+        className="mt-6 inline-flex items-center gap-2 text-sm text-brand-orange-500 hover:text-brand-orange-400 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         Voltar para o login

@@ -49,7 +49,7 @@ function NavContent({ collapsed }: { collapsed: boolean }) {
         const classes = cn(
           'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
           isActive
-            ? 'bg-emerald-500/10 text-emerald-400 border-l-2 border-emerald-400'
+            ? 'bg-brand-orange-500/10 text-brand-orange-500 border-l-2 border-brand-orange-500'
             : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
           item.disabled && 'opacity-40 cursor-not-allowed',
           collapsed && 'justify-center px-2',
@@ -95,12 +95,21 @@ export function Sidebar() {
           collapsed ? 'w-16' : 'w-[280px]',
         )}
       >
-        <div className={cn('flex items-center gap-2 px-4 h-14', collapsed && 'justify-center px-2')}>
+        <div className={cn('flex items-center gap-3 px-4 h-14', collapsed && 'justify-center px-2')}>
           {!collapsed && (
-            <span className="text-lg font-bold text-emerald-400">21 GO</span>
+            <div className="flex flex-col leading-none">
+              <span className="text-xl font-extrabold tracking-tight text-slate-50">
+                21<span className="text-brand-orange-500">Go!</span>
+              </span>
+              <span className="text-[10px] font-semibold tracking-[0.15em] text-slate-400 uppercase">
+                Proteção Veicular
+              </span>
+            </div>
           )}
           {collapsed && (
-            <span className="text-sm font-bold text-emerald-400">21</span>
+            <span className="text-base font-extrabold tracking-tight text-slate-50">
+              21<span className="text-brand-orange-500">!</span>
+            </span>
           )}
         </div>
         <div className="flex-1 py-2">
@@ -125,7 +134,14 @@ export function Sidebar() {
         </SheetTrigger>
         <SheetContent side="left" className="w-[280px] glass p-0">
           <div className="flex items-center gap-2 px-4 h-14 border-b border-border/50">
-            <span className="text-lg font-bold text-emerald-400">21 GO Rastreamento</span>
+            <div className="flex flex-col leading-none">
+              <span className="text-xl font-extrabold tracking-tight text-slate-50">
+                21<span className="text-brand-orange-500">Go!</span>
+              </span>
+              <span className="text-[10px] font-semibold tracking-[0.15em] text-slate-400 uppercase">
+                Proteção Veicular
+              </span>
+            </div>
           </div>
           <div className="py-4">
             <NavContent collapsed={false} />

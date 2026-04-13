@@ -7,7 +7,7 @@ export const CARTO_DARK_MATTER_URL =
   'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 export const STATUS_COLORS: Record<DisplayStatus, string> = {
-  moving: '#10b981',   // emerald-500
+  moving: '#bfd741',   // brand-green
   stopped: '#eab308',  // yellow-500
   alert: '#ef4444',    // red-500
   offline: '#6b7280',  // gray-500

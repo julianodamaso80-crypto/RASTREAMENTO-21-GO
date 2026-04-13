@@ -138,7 +138,7 @@ export const DEVICE_STATUS_COLORS: Record<DeviceStatus, string> = {
   PENDING_INSTALL: 'bg-slate-500/20 text-slate-400',
   INSTALLED: 'bg-blue-500/20 text-blue-400',
   CONFIGURING: 'bg-yellow-500/20 text-yellow-400',
-  ONLINE: 'bg-emerald-500/20 text-emerald-400',
+  ONLINE: 'bg-brand-green-500/20 text-brand-green-500',
   OFFLINE: 'bg-red-500/20 text-red-400',
   MAINTENANCE: 'bg-orange-500/20 text-orange-400',
   DEACTIVATED: 'bg-gray-500/20 text-gray-400',
@@ -150,7 +150,7 @@ export const CHIP_STATUS_LABELS: Record<ChipStatus, string> = {
 };
 
 export const CHIP_STATUS_COLORS: Record<ChipStatus, string> = {
-  ACTIVE: 'bg-emerald-500/20 text-emerald-400',
+  ACTIVE: 'bg-brand-green-500/20 text-brand-green-500',
   SUSPENDED: 'bg-yellow-500/20 text-yellow-400',
   EXPIRED: 'bg-orange-500/20 text-orange-400',
   BLOCKED: 'bg-red-500/20 text-red-400',
