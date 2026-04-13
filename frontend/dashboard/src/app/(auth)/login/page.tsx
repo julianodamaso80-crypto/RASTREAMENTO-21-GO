@@ -2,18 +2,23 @@ import { LoginForm } from '@/components/auth/login-form';
 
 export default function LoginPage() {
   return (
-    <div className="glass rounded-2xl p-8 w-full max-w-md mx-4 shadow-2xl">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
-          <span className="text-2xl font-bold text-emerald-400">21</span>
+    <div>
+      <div className="mb-8 lg:hidden">
+        <div className="inline-flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+            <span className="text-lg font-bold text-emerald-400">21</span>
+          </div>
+          <span className="text-lg font-semibold text-slate-100">Rastreamento 21 GO</span>
         </div>
-        <h1 className="text-2xl font-bold text-foreground">
-          21 GO Rastreamento
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Plataforma de rastreamento veicular
+      </div>
+
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-slate-50">Entrar na plataforma</h1>
+        <p className="mt-2 text-sm text-slate-400">
+          Acesse o painel de gestão da sua frota.
         </p>
       </div>
+
       <LoginForm />
     </div>
   );
