@@ -39,7 +39,8 @@ export default function ConfiguracoesPage() {
   }
 
   return (
-    <div className="flex flex-col h-full p-4 md:p-8 gap-6 overflow-auto max-w-6xl mx-auto w-full">
+    <div className="h-full overflow-auto">
+      <div className="p-4 md:p-8 space-y-6 max-w-6xl mx-auto w-full pb-12">
       {/* Page header */}
       <div className="flex items-center gap-3">
         <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-brand-orange-500/10 border border-brand-orange-500/20">
@@ -208,6 +209,7 @@ export default function ConfiguracoesPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
