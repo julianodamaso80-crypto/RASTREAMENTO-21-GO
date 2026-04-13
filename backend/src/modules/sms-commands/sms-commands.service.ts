@@ -139,10 +139,6 @@ export class SmsCommandsService {
     return process.env.SERVER_HOSTNAME_BACKUP || '';
   }
 
-  getMaintenanceHostname(): string {
-    return process.env.SERVER_HOSTNAME_MAINTENANCE || '';
-  }
-
   // IPs (fallback — rastreadores antigos que não suportam DNS)
   getServerIp(): string {
     return process.env.SERVER_PRIMARY_IP || '0.0.0.0';
@@ -152,10 +148,6 @@ export class SmsCommandsService {
     return process.env.SERVER_SECONDARY_IP || '0.0.0.0';
   }
 
-  getMaintenanceIp(): string {
-    return process.env.SERVER_MAINTENANCE_IP || '0.0.0.0';
-  }
-
   // Retorna hostname se disponível, senão IP (usado nos templates SMS)
   getServerAddress(): string {
     return this.getServerHostname() || this.getServerIp();
@@ -163,10 +155,6 @@ export class SmsCommandsService {
 
   getSecondaryAddress(): string {
     return this.getBackupHostname() || this.getSecondaryIp();
-  }
-
-  getMaintenanceAddress(): string {
-    return this.getMaintenanceHostname() || this.getMaintenanceIp();
   }
 
   getPortForModel(model: string): { port: number; protocol: string } {
@@ -189,7 +177,6 @@ export class SmsCommandsService {
     // Usa hostname DNS quando disponível (preferencial)
     const ip = this.getServerAddress();
     const secondaryIp = this.getSecondaryAddress();
-    const maintenanceIp = this.getMaintenanceAddress();
 
     let templates = COMMAND_TEMPLATES[family] || COMMAND_TEMPLATES.gt06;
 
@@ -236,10 +223,8 @@ export class SmsCommandsService {
         : null,
       serverHostname: this.getServerHostname(),
       backupHostname: this.getBackupHostname(),
-      maintenanceHostname: this.getMaintenanceHostname(),
       serverIp: this.getServerIp(),
       secondaryIp: this.getSecondaryIp(),
-      maintenanceIp: this.getMaintenanceIp(),
       serverPort: portInfo.port,
       protocol: portInfo.protocol,
       supportsMultiIp,

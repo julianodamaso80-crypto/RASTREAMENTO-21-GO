@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Settings, Server, Radio, Copy, Check, Wifi, WifiOff, Globe, Shield, Wrench,
+  Settings, Server, Radio, Copy, Check, Wifi, WifiOff, Globe, Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -63,29 +63,22 @@ export default function ConfiguracoesPage() {
               <div>
                 <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
                   <Globe className="h-3 w-3" />
-                  Hostnames DNS (usado nos comandos SMS)
+                  2 servidores ativos com failover automático no rastreador
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <ServerAddressCard
-                    label="Hostname Primário"
-                    description="Servidor principal do Traccar"
+                    label="Servidor Primário"
+                    description="SERVER,1 nos rastreadores"
                     hostname={serverInfo.hostname}
                     ip={serverInfo.primaryIp}
                     icon={<Server className="h-4 w-4 text-emerald-400" />}
                   />
                   <ServerAddressCard
-                    label="Hostname Backup"
-                    description="Failover automático"
+                    label="Servidor Backup"
+                    description="SERVER,2 — failover automático"
                     hostname={serverInfo.backupHostname}
                     ip={serverInfo.secondaryIp}
                     icon={<Shield className="h-4 w-4 text-blue-400" />}
-                  />
-                  <ServerAddressCard
-                    label="Hostname Manutenção"
-                    description="Acesso técnico remoto"
-                    hostname={serverInfo.maintenanceHostname}
-                    ip={serverInfo.maintenanceIp}
-                    icon={<Wrench className="h-4 w-4 text-orange-400" />}
                   />
                 </div>
               </div>

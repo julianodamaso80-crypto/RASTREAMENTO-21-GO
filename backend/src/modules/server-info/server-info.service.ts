@@ -21,12 +21,10 @@ export class ServerInfoService {
     // Hostnames DNS (campo principal)
     const hostname = process.env.SERVER_HOSTNAME || '';
     const backupHostname = process.env.SERVER_HOSTNAME_BACKUP || '';
-    const maintenanceHostname = process.env.SERVER_HOSTNAME_MAINTENANCE || '';
 
     // IPs (fallback pra rastreadores antigos)
     const primaryIp = process.env.SERVER_PRIMARY_IP || '0.0.0.0';
     const secondaryIp = process.env.SERVER_SECONDARY_IP || '0.0.0.0';
-    const maintenanceIp = process.env.SERVER_MAINTENANCE_IP || '0.0.0.0';
 
     let traccarInfo = null;
     try {
@@ -64,11 +62,9 @@ export class ServerInfoService {
     return {
       hostname,
       backupHostname,
-      maintenanceHostname,
       ip: primaryIp,
       primaryIp,
       secondaryIp,
-      maintenanceIp,
       traccar: traccarInfo,
       ports,
     };

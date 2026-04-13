@@ -92,10 +92,8 @@ export interface GeneratedCommandsResponse {
   chip: { id: string; phoneNumber: string; operator: string; apn: string } | null;
   serverHostname: string;
   backupHostname: string;
-  maintenanceHostname: string;
   serverIp: string;
   secondaryIp: string;
-  maintenanceIp: string;
   serverPort: number;
   protocol: string;
   supportsMultiIp: boolean;
@@ -110,11 +108,9 @@ export interface OperatorApn {
 export interface ServerInfo {
   hostname: string;
   backupHostname: string;
-  maintenanceHostname: string;
   ip: string;
   primaryIp: string;
   secondaryIp: string;
-  maintenanceIp: string;
   traccar: { version: string; status: string };
   ports: { port: number; protocol: string; models: string[]; status: string }[];
 }

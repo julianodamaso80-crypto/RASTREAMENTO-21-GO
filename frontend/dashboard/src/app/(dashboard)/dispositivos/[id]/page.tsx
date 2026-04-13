@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Copy, Check, Radio, Wifi, WifiOff, Smartphone, Server,
+  ArrowLeft, Copy, Check, Radio, Smartphone, Server,
   Lock, Unlock, MapPin, RotateCcw, FileText, Send, AlertTriangle,
-  Shield, Wrench,
+  Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -222,20 +222,12 @@ export default function DeviceDetailPage() {
               icon={<Server className="h-3 w-3 text-muted-foreground" />}
             />
             {commands.supportsMultiIp && (
-              <>
-                <InfoRow
-                  label="IP Secundário"
-                  value={commands.secondaryIp}
-                  mono copyable onCopy={copyToClipboard}
-                  icon={<Shield className="h-3 w-3 text-muted-foreground" />}
-                />
-                <InfoRow
-                  label="IP Manutenção"
-                  value={commands.maintenanceIp}
-                  mono copyable onCopy={copyToClipboard}
-                  icon={<Wrench className="h-3 w-3 text-muted-foreground" />}
-                />
-              </>
+              <InfoRow
+                label="IP Secundário"
+                value={commands.secondaryIp}
+                mono copyable onCopy={copyToClipboard}
+                icon={<Shield className="h-3 w-3 text-muted-foreground" />}
+              />
             )}
             <InfoRow label="Porta" value={String(commands.serverPort)} mono copyable onCopy={copyToClipboard} />
             <InfoRow label="Protocolo" value={commands.protocol.toUpperCase()} />

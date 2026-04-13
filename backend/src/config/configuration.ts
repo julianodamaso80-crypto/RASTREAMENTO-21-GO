@@ -24,6 +24,5 @@ export default () => ({
   server: {
     primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',
     secondaryIp: process.env.SERVER_SECONDARY_IP || '0.0.0.0',
-    maintenanceIp: process.env.SERVER_MAINTENANCE_IP || '0.0.0.0',
   },
 });
