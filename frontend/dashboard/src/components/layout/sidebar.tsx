@@ -27,7 +27,7 @@ import {
 
 const navItems: { href: string; label: string; icon: any; disabled?: boolean }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/', label: 'Mapa / Veículos', icon: Map },
+  { href: '/mapa', label: 'Mapa / Veículos', icon: Map },
   { href: '/alertas', label: 'Alertas', icon: Bell },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/geofencing', label: 'Geofencing', icon: Hexagon },
@@ -42,7 +42,8 @@ function NavContent({ collapsed }: { collapsed: boolean }) {
   return (
     <nav className="flex flex-col gap-1 px-2">
       {navItems.map((item) => {
-        const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+        const isActive =
+          item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href);
         const ItemIcon = item.icon;
 
         const classes = cn(

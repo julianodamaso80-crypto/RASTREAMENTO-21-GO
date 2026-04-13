@@ -160,6 +160,25 @@ export class TraccarService implements OnModuleInit {
     });
   }
 
+  async getReportSummary(
+    deviceIds: number[],
+    from: string,
+    to: string,
+  ): Promise<TraccarReportSummary[]> {
+    if (deviceIds.length === 0) return [];
+    return this.withRetry(async () => {
+      const params = new URLSearchParams();
+      for (const id of deviceIds) params.append('deviceId', String(id));
+      params.append('from', from);
+      params.append('to', to);
+      params.append('daily', 'false');
+      const { data } = await this.client.get(`/reports/summary?${params.toString()}`, {
+        headers: { Accept: 'application/json' },
+      });
+      return data;
+    });
+  }
+
   // === Commands ===
 
   async sendCommand(
@@ -292,4 +311,18 @@ export interface TraccarGeofence {
   name: string;
   area: string;
   attributes: Record<string, unknown>;
+}
+
+export interface TraccarReportSummary {
+  deviceId: number;
+  deviceName: string;
+  startTime: string;
+  endTime: string;
+  distance: number; // metros
+  averageSpeed: number; // knots
+  maxSpeed: number; // knots
+  spentFuel: number;
+  startOdometer: number;
+  endOdometer: number;
+  engineHours: number;
 }

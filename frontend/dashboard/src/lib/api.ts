@@ -6,6 +6,7 @@ import type { Alert } from '@/types/alert';
 import type { Trip, Stop } from '@/types/report';
 import type { Geofence, CreateGeofencePayload } from '@/types/geofence';
 import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, ServerInfo } from '@/types/device';
+import type { DashboardOverview, DashboardPeriod } from '@/types/dashboard';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 
 const api = axios.create({
@@ -233,6 +234,15 @@ export const chipsApi = {
   },
   getProviders: async (): Promise<string[]> => {
     const res = await api.get<ApiResponse<string[]>>('/chips/providers');
+    return res.data.data;
+  },
+};
+
+export const dashboardApi = {
+  getOverview: async (period: DashboardPeriod): Promise<DashboardOverview> => {
+    const res = await api.get<ApiResponse<DashboardOverview>>('/dashboard/overview', {
+      params: { period },
+    });
     return res.data.data;
   },
 };

@@ -18,6 +18,7 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { ChipsModule } from './modules/chips/chips.module';
 import { SmsCommandsModule } from './modules/sms-commands/sms-commands.module';
 import { ServerInfoModule } from './modules/server-info/server-info.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -53,6 +54,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     ChipsModule,
     SmsCommandsModule,
     ServerInfoModule,
+    DashboardModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
