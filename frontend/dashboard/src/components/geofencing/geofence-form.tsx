@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { SelectNative } from '@/components/ui/select-native';
 import {
   Dialog,
   DialogContent,
@@ -53,45 +55,45 @@ export function GeofenceForm({ open, onClose, onSubmit }: GeofenceFormProps) {
           <DialogTitle>Nova Cerca Geográfica</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm text-muted-foreground">Nome</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Ex: Centro Goiânia" />
+          <div className="space-y-1.5">
+            <Label htmlFor="gf-name" required>Nome</Label>
+            <Input id="gf-name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Ex: Centro Goiânia" />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm text-muted-foreground">Descrição (opcional)</label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição da cerca" />
+          <div className="space-y-1.5">
+            <Label htmlFor="gf-desc">Descrição</Label>
+            <Input id="gf-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descrição da cerca" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Tipo</label>
-              <select
+            <div className="space-y-1.5">
+              <Label htmlFor="gf-type">Tipo</Label>
+              <SelectNative
+                id="gf-type"
                 value={type}
                 onChange={(e) => setType(e.target.value as GeofenceType)}
-                className="w-full h-9 px-3 rounded-md border border-border bg-slate-900 text-slate-100 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 <option value="CIRCLE">Círculo</option>
                 <option value="POLYGON">Polígono</option>
-              </select>
+              </SelectNative>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Cor</label>
-              <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 p-1" />
+            <div className="space-y-1.5">
+              <Label htmlFor="gf-color">Cor</Label>
+              <Input id="gf-color" type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 p-1 cursor-pointer" />
             </div>
           </div>
 
           {type === 'CIRCLE' && (
             <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">Latitude</label>
-                <Input type="number" step="any" value={latitude} onChange={(e) => setLatitude(e.target.value)} required />
+              <div className="space-y-1.5">
+                <Label htmlFor="gf-lat" required>Latitude</Label>
+                <Input id="gf-lat" type="number" step="any" value={latitude} onChange={(e) => setLatitude(e.target.value)} required />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">Longitude</label>
-                <Input type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} required />
+              <div className="space-y-1.5">
+                <Label htmlFor="gf-lng" required>Longitude</Label>
+                <Input id="gf-lng" type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} required />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">Raio (m)</label>
-                <Input type="number" value={radius} onChange={(e) => setRadius(e.target.value)} required />
+              <div className="space-y-1.5">
+                <Label htmlFor="gf-radius" required>Raio (m)</Label>
+                <Input id="gf-radius" type="number" value={radius} onChange={(e) => setRadius(e.target.value)} required />
               </div>
             </div>
           )}
@@ -105,7 +107,7 @@ export function GeofenceForm({ open, onClose, onSubmit }: GeofenceFormProps) {
 
           <DialogFooter>
             <Button variant="outline" type="button" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button type="submit" disabled={loading}>
               {loading ? 'Criando...' : 'Criar Cerca'}
             </Button>
           </DialogFooter>

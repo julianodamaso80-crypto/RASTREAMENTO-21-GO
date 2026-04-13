@@ -10,6 +10,8 @@ import { formatRelativeTime } from '@/lib/utils';
 import { chipsApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { SelectNative } from '@/components/ui/select-native';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -126,35 +128,31 @@ export default function ChipsPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Buscar por ICCID..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8"
+            className="pl-9"
           />
         </div>
-        <select
-          value={operatorFilter}
-          onChange={(e) => setOperatorFilter(e.target.value)}
-          className="h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
-        >
-          <option value="">Todas operadoras</option>
-          {OPERATORS.map((op) => (
-            <option key={op} value={op}>{OPERATOR_LABELS[op]}</option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
-        >
-          <option value="">Todos status</option>
-          <option value="ACTIVE">Ativo</option>
-          <option value="SUSPENDED">Suspenso</option>
-          <option value="EXPIRED">Expirado</option>
-          <option value="BLOCKED">Bloqueado</option>
-        </select>
+        <div className="sm:w-48">
+          <SelectNative value={operatorFilter} onChange={(e) => setOperatorFilter(e.target.value)}>
+            <option value="">Todas operadoras</option>
+            {OPERATORS.map((op) => (
+              <option key={op} value={op}>{OPERATOR_LABELS[op]}</option>
+            ))}
+          </SelectNative>
+        </div>
+        <div className="sm:w-44">
+          <SelectNative value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">Todos status</option>
+            <option value="ACTIVE">Ativo</option>
+            <option value="SUSPENDED">Suspenso</option>
+            <option value="EXPIRED">Expirado</option>
+            <option value="BLOCKED">Bloqueado</option>
+          </SelectNative>
+        </div>
       </div>
 
       {/* Table */}
@@ -179,88 +177,89 @@ export default function ChipsPage() {
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo Chip M2M</DialogTitle>
+            <DialogTitle className="text-lg">Novo Chip M2M</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">ICCID *</label>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="chip-iccid" required>ICCID</Label>
               <Input
+                id="chip-iccid"
                 placeholder="89550110000000000012"
                 value={formIccid}
                 onChange={(e) => setFormIccid(e.target.value.replace(/\D/g, '').slice(0, 20))}
                 className="font-mono"
               />
-              <p className="text-xs text-muted-foreground mt-1">{formIccid.length}/20 dígitos</p>
+              <p className="text-xs text-muted-foreground">{formIccid.length}/20 dígitos</p>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Telefone</label>
-              <Input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="11999887766" />
+            <div className="space-y-1.5">
+              <Label htmlFor="chip-phone">Telefone</Label>
+              <Input id="chip-phone" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} placeholder="11999887766" />
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Operadora *</label>
-              <select
+            <div className="space-y-1.5">
+              <Label htmlFor="chip-operator" required>Operadora</Label>
+              <SelectNative
+                id="chip-operator"
                 value={formOperator}
                 onChange={(e) => handleOperatorChange(e.target.value as ChipOperator)}
-                className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 {OPERATORS.map((op) => (
                   <option key={op} value={op}>{OPERATOR_LABELS[op]}</option>
                 ))}
-              </select>
+              </SelectNative>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">APN *</label>
-              <Input value={formApn} onChange={(e) => setFormApn(e.target.value)} className="font-mono text-xs" />
+            <div className="space-y-1.5">
+              <Label htmlFor="chip-apn" required>APN</Label>
+              <Input id="chip-apn" value={formApn} onChange={(e) => setFormApn(e.target.value)} className="font-mono" />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-muted-foreground">Usuário APN</label>
-                <Input value={formApnUser} onChange={(e) => setFormApnUser(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="chip-apn-user">Usuário APN</Label>
+                <Input id="chip-apn-user" value={formApnUser} onChange={(e) => setFormApnUser(e.target.value)} />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Senha APN</label>
-                <Input value={formApnPass} onChange={(e) => setFormApnPass(e.target.value)} />
+              <div className="space-y-1.5">
+                <Label htmlFor="chip-apn-pass">Senha APN</Label>
+                <Input id="chip-apn-pass" value={formApnPass} onChange={(e) => setFormApnPass(e.target.value)} />
               </div>
             </div>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="apnType" value="PRIVATE" checked={formApnType === 'PRIVATE'} onChange={() => setFormApnType('PRIVATE')} />
+            <div className="flex gap-4 text-sm text-foreground">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="apnType" value="PRIVATE" checked={formApnType === 'PRIVATE'} onChange={() => setFormApnType('PRIVATE')} className="accent-brand-orange-500" />
                 APN Privada
               </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="apnType" value="PUBLIC" checked={formApnType === 'PUBLIC'} onChange={() => setFormApnType('PUBLIC')} />
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="apnType" value="PUBLIC" checked={formApnType === 'PUBLIC'} onChange={() => setFormApnType('PUBLIC')} className="accent-brand-orange-500" />
                 APN Pública
               </label>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-muted-foreground">Plano de Dados (MB)</label>
-                <Input type="number" value={formDataPlan} onChange={(e) => setFormDataPlan(Number(e.target.value))} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="chip-dataplan">Plano (MB)</Label>
+                <Input id="chip-dataplan" type="number" value={formDataPlan} onChange={(e) => setFormDataPlan(Number(e.target.value))} />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Fornecedor</label>
-                <select
+              <div className="space-y-1.5">
+                <Label htmlFor="chip-provider">Fornecedor</Label>
+                <SelectNative
+                  id="chip-provider"
                   value={formProvider}
                   onChange={(e) => setFormProvider(e.target.value)}
-                  className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
                 >
                   <option value="">Selecionar...</option>
                   {PROVIDERS.map((p) => (
                     <option key={p} value={p}>{p}</option>
                   ))}
-                </select>
+                </SelectNative>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-muted-foreground">Data Ativação</label>
-                <Input type="date" value={formActivatedAt} onChange={(e) => setFormActivatedAt(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="chip-activated">Data Ativação</Label>
+                <Input id="chip-activated" type="date" value={formActivatedAt} onChange={(e) => setFormActivatedAt(e.target.value)} />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Data Vencimento</label>
-                <Input type="date" value={formExpiresAt} onChange={(e) => setFormExpiresAt(e.target.value)} />
+              <div className="space-y-1.5">
+                <Label htmlFor="chip-expires">Data Vencimento</Label>
+                <Input id="chip-expires" type="date" value={formExpiresAt} onChange={(e) => setFormExpiresAt(e.target.value)} />
               </div>
             </div>
           </div>

@@ -11,6 +11,9 @@ import { formatRelativeTime } from '@/lib/utils';
 import { devicesApi, chipsApi, vehiclesApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { SelectNative } from '@/components/ui/select-native';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -142,34 +145,30 @@ export default function DispositivosPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Buscar por IMEI ou placa..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8"
+            className="pl-9"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
-        >
-          <option value="">Todos os status</option>
-          {statuses.map((s) => (
-            <option key={s} value={s}>{DEVICE_STATUS_LABELS[s]}</option>
-          ))}
-        </select>
-        <select
-          value={modelFilter}
-          onChange={(e) => setModelFilter(e.target.value)}
-          className="h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
-        >
-          <option value="">Todos os modelos</option>
-          {DEVICE_MODELS.map((m) => (
-            <option key={m} value={m}>{DEVICE_MODEL_LABELS[m]}</option>
-          ))}
-        </select>
+        <div className="sm:w-48">
+          <SelectNative value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">Todos os status</option>
+            {statuses.map((s) => (
+              <option key={s} value={s}>{DEVICE_STATUS_LABELS[s]}</option>
+            ))}
+          </SelectNative>
+        </div>
+        <div className="sm:w-48">
+          <SelectNative value={modelFilter} onChange={(e) => setModelFilter(e.target.value)}>
+            <option value="">Todos os modelos</option>
+            {DEVICE_MODELS.map((m) => (
+              <option key={m} value={m}>{DEVICE_MODEL_LABELS[m]}</option>
+            ))}
+          </SelectNative>
+        </div>
       </div>
 
       {/* Table / Cards */}
@@ -198,75 +197,79 @@ export default function DispositivosPage() {
 
       {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Novo Dispositivo</DialogTitle>
+            <DialogTitle className="text-lg">Novo Dispositivo</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">IMEI *</label>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="dev-imei" required>IMEI</Label>
               <Input
+                id="dev-imei"
                 placeholder="000000000000000"
                 value={formImei}
                 onChange={(e) => setFormImei(e.target.value.replace(/\D/g, '').slice(0, 15))}
                 className="font-mono"
                 maxLength={15}
               />
-              <p className="text-xs text-muted-foreground mt-1">{formImei.length}/15 dígitos</p>
+              <p className="text-xs text-muted-foreground">{formImei.length}/15 dígitos</p>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Modelo *</label>
-              <select
+            <div className="space-y-1.5">
+              <Label htmlFor="dev-model" required>Modelo</Label>
+              <SelectNative
+                id="dev-model"
                 value={formModel}
                 onChange={(e) => setFormModel(e.target.value as DeviceModel)}
-                className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 {DEVICE_MODELS.map((m) => (
                   <option key={m} value={m}>{DEVICE_MODEL_LABELS[m]}</option>
                 ))}
-              </select>
+              </SelectNative>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Marca</label>
-              <Input value={formBrand} onChange={(e) => setFormBrand(e.target.value)} placeholder="Concox, Suntech..." />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="dev-brand">Marca</Label>
+                <Input id="dev-brand" value={formBrand} onChange={(e) => setFormBrand(e.target.value)} placeholder="Concox, Suntech..." />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dev-serial">Nº de Série</Label>
+                <Input id="dev-serial" value={formSerial} onChange={(e) => setFormSerial(e.target.value)} />
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Número de Série</label>
-              <Input value={formSerial} onChange={(e) => setFormSerial(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Vincular a Veículo</label>
-              <select
+            <div className="space-y-1.5">
+              <Label htmlFor="dev-vehicle">Vincular a Veículo</Label>
+              <SelectNative
+                id="dev-vehicle"
                 value={formVehicleId}
                 onChange={(e) => setFormVehicleId(e.target.value)}
-                className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 <option value="">Nenhum</option>
                 {availableVehicles.map((v) => (
                   <option key={v.id} value={v.id}>{v.plate} - {v.brand} {v.model}</option>
                 ))}
-              </select>
+              </SelectNative>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Vincular Chip</label>
-              <select
+            <div className="space-y-1.5">
+              <Label htmlFor="dev-chip">Vincular Chip</Label>
+              <SelectNative
+                id="dev-chip"
                 value={formChipId}
                 onChange={(e) => setFormChipId(e.target.value)}
-                className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 <option value="">Nenhum</option>
                 {availableChips.map((c) => (
                   <option key={c.id} value={c.id}>{c.iccid} ({OPERATOR_LABELS[c.operator]})</option>
                 ))}
-              </select>
+              </SelectNative>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Notas</label>
-              <textarea
+            <div className="space-y-1.5">
+              <Label htmlFor="dev-notes">Notas</Label>
+              <Textarea
+                id="dev-notes"
                 value={formNotes}
                 onChange={(e) => setFormNotes(e.target.value)}
-                className="w-full rounded-lg border border-border bg-slate-900 text-slate-100 p-2 text-sm min-h-[60px] focus:outline-none focus:border-brand-orange-500"
                 placeholder="Observações..."
+                rows={3}
               />
             </div>
           </div>

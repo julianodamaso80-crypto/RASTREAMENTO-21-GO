@@ -63,25 +63,25 @@
   --color-brand-green-400: #d1e26a;
 }
 
-/* Dark-first: variáveis escuras como padrão */
+/* Dark-first: variáveis escuras como padrão — contraste WCAG AA */
 :root {
   --background: oklch(0.13 0.01 260);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.18 0.005 260);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.18 0.005 260);
-  --popover-foreground: oklch(0.95 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.19 0.005 260);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.20 0.005 260);
+  --popover-foreground: oklch(0.985 0 0);
   --primary: #f7963d;
   --primary-foreground: #1a1a1a;
-  --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.22 0.01 260);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.65 0.2 25);
-  --border: oklch(0.28 0.01 260);
-  --input: oklch(0.25 0.01 260);
+  --secondary: oklch(0.24 0.01 260);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.24 0.01 260);
+  --muted-foreground: oklch(0.78 0.01 260);
+  --accent: oklch(0.24 0.01 260);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.68 0.22 25);
+  --border: oklch(0.38 0.01 260);
+  --input: oklch(0.22 0.01 260);
   --ring: #f7963d;
   --chart-1: #f7963d;
   --chart-2: #bfd741;
