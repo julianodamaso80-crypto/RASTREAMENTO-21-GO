@@ -67,7 +67,7 @@ export function GeofenceForm({ open, onClose, onSubmit }: GeofenceFormProps) {
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as GeofenceType)}
-                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm"
+                className="w-full h-9 px-3 rounded-md border border-border bg-slate-900 text-slate-100 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 <option value="CIRCLE">Círculo</option>
                 <option value="POLYGON">Polígono</option>

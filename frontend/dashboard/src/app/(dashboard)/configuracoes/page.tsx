@@ -288,13 +288,13 @@ function ServerAddressCard({
   const isConfigured = hasHostname || hasIp;
 
   return (
-    <div className="rounded-xl border border-border/40 bg-muted/10 p-4 hover:border-brand-orange-500/30 transition-colors">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2 min-w-0">
-          {icon}
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground leading-tight">{label}</p>
-            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{description}</p>
+    <div className="rounded-xl border border-border/40 bg-muted/10 p-5 hover:border-brand-orange-500/30 transition-colors">
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+          <div className="shrink-0 mt-0.5">{icon}</div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground leading-snug">{label}</p>
+            <p className="text-[11px] text-muted-foreground leading-snug mt-1">{description}</p>
           </div>
         </div>
         <Badge className={cn(
@@ -308,15 +308,15 @@ function ServerAddressCard({
           {isConfigured ? (hasHostname ? 'DNS' : 'Só IP') : 'Não configurado'}
         </Badge>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {hasHostname && (
-          <div className="rounded-md bg-background/40 px-3 py-2 border border-border/30">
+          <div className="rounded-lg bg-background/50 px-4 py-3 border border-border/30 overflow-hidden">
             <CopyableText value={hostname} mono large />
           </div>
         )}
         {hasIp && (
-          <div className="flex items-center gap-2 px-1">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">IP</span>
+          <div className="flex items-center gap-2 px-1 overflow-hidden">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold shrink-0">IP</span>
             <CopyableText value={ip} mono />
           </div>
         )}

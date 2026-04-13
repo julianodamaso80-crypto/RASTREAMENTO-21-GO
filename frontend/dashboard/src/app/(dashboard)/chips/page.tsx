@@ -137,7 +137,7 @@ export default function ChipsPage() {
         <select
           value={operatorFilter}
           onChange={(e) => setOperatorFilter(e.target.value)}
-          className="h-8 rounded-lg border bg-transparent px-3 text-sm"
+          className="h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
         >
           <option value="">Todas operadoras</option>
           {OPERATORS.map((op) => (
@@ -147,7 +147,7 @@ export default function ChipsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-8 rounded-lg border bg-transparent px-3 text-sm"
+          className="h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
         >
           <option value="">Todos status</option>
           <option value="ACTIVE">Ativo</option>
@@ -203,7 +203,7 @@ export default function ChipsPage() {
               <select
                 value={formOperator}
                 onChange={(e) => handleOperatorChange(e.target.value as ChipOperator)}
-                className="w-full h-8 rounded-lg border bg-transparent px-3 text-sm"
+                className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 {OPERATORS.map((op) => (
                   <option key={op} value={op}>{OPERATOR_LABELS[op]}</option>
@@ -244,7 +244,7 @@ export default function ChipsPage() {
                 <select
                   value={formProvider}
                   onChange={(e) => setFormProvider(e.target.value)}
-                  className="w-full h-8 rounded-lg border bg-transparent px-3 text-sm"
+                  className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
                 >
                   <option value="">Selecionar...</option>
                   {PROVIDERS.map((p) => (

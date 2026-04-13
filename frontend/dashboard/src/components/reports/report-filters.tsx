@@ -66,7 +66,7 @@ export function ReportFilters({ onGenerate, loading, selectedVehicle }: ReportFi
             <select
               value={vehicleId}
               onChange={(e) => setVehicleId(e.target.value)}
-              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm text-foreground appearance-none cursor-pointer"
+              className="w-full h-9 px-3 rounded-md border border-border bg-slate-900 text-slate-100 text-sm appearance-none cursor-pointer focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
             >
               <option value="">Selecione um veículo</option>
               {filteredVehicles.map((v) => (

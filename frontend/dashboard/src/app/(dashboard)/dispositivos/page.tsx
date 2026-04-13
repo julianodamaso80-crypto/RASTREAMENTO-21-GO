@@ -153,7 +153,7 @@ export default function DispositivosPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-8 rounded-lg border bg-transparent px-3 text-sm"
+          className="h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
         >
           <option value="">Todos os status</option>
           {statuses.map((s) => (
@@ -163,7 +163,7 @@ export default function DispositivosPage() {
         <select
           value={modelFilter}
           onChange={(e) => setModelFilter(e.target.value)}
-          className="h-8 rounded-lg border bg-transparent px-3 text-sm"
+          className="h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
         >
           <option value="">Todos os modelos</option>
           {DEVICE_MODELS.map((m) => (
@@ -219,7 +219,7 @@ export default function DispositivosPage() {
               <select
                 value={formModel}
                 onChange={(e) => setFormModel(e.target.value as DeviceModel)}
-                className="w-full h-8 rounded-lg border bg-transparent px-3 text-sm"
+                className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 {DEVICE_MODELS.map((m) => (
                   <option key={m} value={m}>{DEVICE_MODEL_LABELS[m]}</option>
@@ -239,7 +239,7 @@ export default function DispositivosPage() {
               <select
                 value={formVehicleId}
                 onChange={(e) => setFormVehicleId(e.target.value)}
-                className="w-full h-8 rounded-lg border bg-transparent px-3 text-sm"
+                className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 <option value="">Nenhum</option>
                 {availableVehicles.map((v) => (
@@ -252,7 +252,7 @@ export default function DispositivosPage() {
               <select
                 value={formChipId}
                 onChange={(e) => setFormChipId(e.target.value)}
-                className="w-full h-8 rounded-lg border bg-transparent px-3 text-sm"
+                className="w-full h-8 rounded-lg border border-border bg-slate-900 text-slate-100 px-3 text-sm focus:outline-none focus:border-brand-orange-500 [&>option]:bg-slate-900 [&>option]:text-slate-100"
               >
                 <option value="">Nenhum</option>
                 {availableChips.map((c) => (
@@ -265,7 +265,7 @@ export default function DispositivosPage() {
               <textarea
                 value={formNotes}
                 onChange={(e) => setFormNotes(e.target.value)}
-                className="w-full rounded-lg border bg-transparent p-2 text-sm min-h-[60px]"
+                className="w-full rounded-lg border border-border bg-slate-900 text-slate-100 p-2 text-sm min-h-[60px] focus:outline-none focus:border-brand-orange-500"
                 placeholder="Observações..."
               />
             </div>
