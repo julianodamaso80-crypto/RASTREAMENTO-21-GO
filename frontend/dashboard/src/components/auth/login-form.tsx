@@ -19,7 +19,7 @@ export function LoginForm() {
     setLoading(true);
     try {
       await login(email, password);
-      window.location.href = '/';
+      window.location.href = '/dashboard';
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro desconhecido';
       console.error('Login error:', err);

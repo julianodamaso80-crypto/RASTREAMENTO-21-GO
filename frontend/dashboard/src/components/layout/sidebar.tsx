@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  LayoutDashboard,
   Map,
   Smartphone,
   Bell,
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/tooltip';
 
 const navItems: { href: string; label: string; icon: any; disabled?: boolean }[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/', label: 'Mapa / Veículos', icon: Map },
   { href: '/alertas', label: 'Alertas', icon: Bell },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
