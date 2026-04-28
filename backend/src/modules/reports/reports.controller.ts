@@ -1,4 +1,11 @@
-import { Controller, Get, Query, Req, Res, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Req,
+  Res,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,21 +35,34 @@ export class ReportsController {
 
   @Get('positions')
   @ApiOperation({ summary: 'Histórico de posições' })
-  async getPositions(@Query() query: ReportQueryDto, @Req() req: AuthenticatedRequest) {
+  async getPositions(
+    @Query() query: ReportQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     await this.validateDevice(query.deviceId, req.tenantId);
-    return this.reportsService.getPositions(query.deviceId, query.from, query.to);
+    return this.reportsService.getPositions(
+      query.deviceId,
+      query.from,
+      query.to,
+    );
   }
 
   @Get('trips')
   @ApiOperation({ summary: 'Relatório de viagens' })
-  async getTrips(@Query() query: ReportQueryDto, @Req() req: AuthenticatedRequest) {
+  async getTrips(
+    @Query() query: ReportQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     await this.validateDevice(query.deviceId, req.tenantId);
     return this.reportsService.getTrips(query.deviceId, query.from, query.to);
   }
 
   @Get('stops')
   @ApiOperation({ summary: 'Relatório de paradas' })
-  async getStops(@Query() query: ReportQueryDto, @Req() req: AuthenticatedRequest) {
+  async getStops(
+    @Query() query: ReportQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     await this.validateDevice(query.deviceId, req.tenantId);
     return this.reportsService.getStops(query.deviceId, query.from, query.to);
   }
@@ -63,13 +83,23 @@ export class ReportsController {
         query.from,
         query.to,
       );
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename=relatorio-${query.type}.xlsx`);
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=relatorio-${query.type}.xlsx`,
+      );
       res.send(buffer);
     } else {
       let csvData: string;
       if (query.type === 'positions') {
-        const positions = await this.reportsService.getPositions(query.deviceId, query.from, query.to);
+        const positions = await this.reportsService.getPositions(
+          query.deviceId,
+          query.from,
+          query.to,
+        );
         csvData = this.reportsService.exportCsv(
           positions.map((p) => ({
             time: p.deviceTime,
@@ -82,20 +112,38 @@ export class ReportsController {
           ['time', 'lat', 'lng', 'speed', 'course', 'address'],
         );
       } else if (query.type === 'trips') {
-        const trips = await this.reportsService.getTrips(query.deviceId, query.from, query.to);
+        const trips = await this.reportsService.getTrips(
+          query.deviceId,
+          query.from,
+          query.to,
+        );
         csvData = this.reportsService.exportCsv(
           trips as unknown as Record<string, unknown>[],
-          ['startTime', 'endTime', 'duration', 'distance', 'avgSpeed', 'maxSpeed'],
+          [
+            'startTime',
+            'endTime',
+            'duration',
+            'distance',
+            'avgSpeed',
+            'maxSpeed',
+          ],
         );
       } else {
-        const stops = await this.reportsService.getStops(query.deviceId, query.from, query.to);
+        const stops = await this.reportsService.getStops(
+          query.deviceId,
+          query.from,
+          query.to,
+        );
         csvData = this.reportsService.exportCsv(
           stops as unknown as Record<string, unknown>[],
           ['address', 'startTime', 'endTime', 'duration'],
         );
       }
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=relatorio-${query.type}.csv`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=relatorio-${query.type}.csv`,
+      );
       res.send(csvData);
     }
   }

@@ -10,7 +10,10 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateChipDto {
-  @ApiProperty({ example: '8955011234567890123', description: 'ICCID do chip (19-20 dígitos)' })
+  @ApiProperty({
+    example: '8955011234567890123',
+    description: 'ICCID do chip (19-20 dígitos)',
+  })
   @IsString()
   @Matches(/^\d{19,20}$/, { message: 'ICCID deve conter 19 ou 20 dígitos' })
   iccid: string;

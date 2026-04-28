@@ -1,4 +1,13 @@
-import { Controller, Post, Get, Body, Req, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Req,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { Role } from '.prisma/client';
@@ -41,11 +50,15 @@ export class AuthController {
   })
   async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
     const ip =
-      (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ||
+      (req.headers['x-forwarded-for'] as string | undefined)
+        ?.split(',')[0]
+        ?.trim() ||
       req.ip ||
       'unknown';
     await this.authService.forgotPassword(dto, ip);
-    return { message: 'Se o email existir, você receberá instruções em breve.' };
+    return {
+      message: 'Se o email existir, você receberá instruções em breve.',
+    };
   }
 
   @Public()
@@ -57,7 +70,9 @@ export class AuthController {
   })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.authService.resetPassword(dto);
-    return { message: 'Senha redefinida com sucesso. Faça login com a nova senha.' };
+    return {
+      message: 'Senha redefinida com sucesso. Faça login com a nova senha.',
+    };
   }
 
   @Get('me')

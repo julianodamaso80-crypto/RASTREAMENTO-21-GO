@@ -9,7 +9,10 @@ import { UpdateChipDto } from './dto/update-chip.dto';
 import { FilterChipsDto } from './dto/filter-chips.dto';
 
 // APNs padrão das operadoras M2M brasileiras
-export const DEFAULT_APNS: Record<string, { apn: string; user: string; pass: string }[]> = {
+export const DEFAULT_APNS: Record<
+  string,
+  { apn: string; user: string; pass: string }[]
+> = {
   VIVO: [
     { apn: 'smart.m2m.vivo.com.br', user: 'vivo', pass: 'vivo' },
     { apn: 'allcom.vivo.com.br', user: 'allcom', pass: 'allcom' },
@@ -59,7 +62,9 @@ export class ChipsService {
       this.chipModel.findMany({
         where,
         include: {
-          device: { select: { id: true, imei: true, model: true, status: true } },
+          device: {
+            select: { id: true, imei: true, model: true, status: true },
+          },
         },
         skip: (page - 1) * perPage,
         take: perPage,
@@ -75,7 +80,15 @@ export class ChipsService {
     const chip = await this.chipModel.findFirst({
       where: { id, tenantId, deletedAt: null },
       include: {
-        device: { select: { id: true, imei: true, model: true, status: true, vehicle: { select: { id: true, plate: true } } } },
+        device: {
+          select: {
+            id: true,
+            imei: true,
+            model: true,
+            status: true,
+            vehicle: { select: { id: true, plate: true } },
+          },
+        },
       },
     });
     if (!chip) throw new NotFoundException('Chip não encontrado');
@@ -83,7 +96,9 @@ export class ChipsService {
   }
 
   async create(dto: CreateChipDto, tenantId: string) {
-    const existing = await this.chipModel.findFirst({ where: { iccid: dto.iccid } });
+    const existing = await this.chipModel.findFirst({
+      where: { iccid: dto.iccid },
+    });
     if (existing) throw new ConflictException('ICCID já cadastrado');
 
     const chip = await this.chipModel.create({
@@ -118,7 +133,8 @@ export class ChipsService {
     if (dto.apnType !== undefined) data.apnType = dto.apnType;
     if (dto.dataPlanMb !== undefined) data.dataPlanMb = dto.dataPlanMb;
     if (dto.provider !== undefined) data.provider = dto.provider;
-    if (dto.activatedAt !== undefined) data.activatedAt = new Date(dto.activatedAt);
+    if (dto.activatedAt !== undefined)
+      data.activatedAt = new Date(dto.activatedAt);
     if (dto.expiresAt !== undefined) data.expiresAt = new Date(dto.expiresAt);
 
     await this.chipModel.update({ where: { id }, data });

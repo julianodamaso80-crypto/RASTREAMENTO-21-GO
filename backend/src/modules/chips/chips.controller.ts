@@ -32,7 +32,10 @@ export class ChipsController {
 
   @Get()
   @ApiOperation({ summary: 'Lista chips M2M (paginado, com filtros)' })
-  async findAll(@Query() filters: FilterChipsDto, @Req() req: AuthenticatedRequest) {
+  async findAll(
+    @Query() filters: FilterChipsDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.chipsService.findAll(req.tenantId, filters);
   }
 
@@ -50,7 +53,10 @@ export class ChipsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhes do chip' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.chipsService.findOne(id, req.tenantId);
   }
 
@@ -78,7 +84,10 @@ export class ChipsController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Remover chip (soft delete)' })
-  async remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.chipsService.remove(id, req.tenantId);
   }
 }

@@ -2,7 +2,9 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class ResetPasswordDto {
-  @ApiProperty({ description: 'Token recebido por email (query param do link)' })
+  @ApiProperty({
+    description: 'Token recebido por email (query param do link)',
+  })
   @IsString()
   @IsNotEmpty()
   token!: string;

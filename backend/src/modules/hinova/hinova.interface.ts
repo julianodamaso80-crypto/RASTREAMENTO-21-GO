@@ -1,4 +1,7 @@
-import type { HinovaVehicleDto, HinovaListResponse } from './dto/hinova-vehicle.dto';
+import type {
+  HinovaVehicleDto,
+  HinovaListResponse,
+} from './dto/hinova-vehicle.dto';
 
 export const HINOVA_CLIENT = 'HINOVA_CLIENT';
 

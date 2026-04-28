@@ -38,7 +38,10 @@ export class ServerInfoService {
     }
 
     // Portas por protocolo únicas
-    const portSet = new Map<number, { protocol: string; name: string; models: string[] }>();
+    const portSet = new Map<
+      number,
+      { protocol: string; name: string; models: string[] }
+    >();
     for (const [, info] of Object.entries(TRACCAR_PORTS)) {
       if (!portSet.has(info.port)) {
         const protoInfo = PROTOCOL_INFO[info.protocol];

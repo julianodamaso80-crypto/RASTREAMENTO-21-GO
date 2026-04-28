@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsObject,
+  IsArray,
+  IsUUID,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateGeofenceDto {
@@ -16,8 +23,9 @@ export class CreateGeofenceDto {
   type: 'POLYGON' | 'CIRCLE';
 
   @ApiProperty({
-    description: 'Coordenadas: CIRCLE={latitude,longitude,radius} ou POLYGON=[[lng,lat],...]',
-    example: { latitude: -16.6799, longitude: -49.2550, radius: 1000 },
+    description:
+      'Coordenadas: CIRCLE={latitude,longitude,radius} ou POLYGON=[[lng,lat],...]',
+    example: { latitude: -16.6799, longitude: -49.255, radius: 1000 },
   })
   @IsObject()
   coordinates: Record<string, unknown>;

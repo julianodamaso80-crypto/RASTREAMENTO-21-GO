@@ -13,7 +13,8 @@ export default () => ({
   traccar: {
     url: process.env.TRACCAR_URL || 'http://localhost:8082',
     apiUrl: process.env.TRACCAR_API_URL || 'http://localhost:8082/api',
-    adminEmail: process.env.TRACCAR_ADMIN_EMAIL || 'admin@rastreamento21go.com.br',
+    adminEmail:
+      process.env.TRACCAR_ADMIN_EMAIL || 'admin@rastreamento21go.com.br',
     adminPassword: process.env.TRACCAR_ADMIN_PASSWORD || 'admin123',
   },
   hinova: {

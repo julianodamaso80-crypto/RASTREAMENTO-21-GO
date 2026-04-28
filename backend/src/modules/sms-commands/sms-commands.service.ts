@@ -8,27 +8,28 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 // Portas Traccar por protocolo/modelo
-export const TRACCAR_PORTS: Record<string, { port: number; protocol: string }> = {
-  GT06N: { port: 5023, protocol: 'gt06' },
-  GT06: { port: 5023, protocol: 'gt06' },
-  CONCOX_GT06N: { port: 5023, protocol: 'gt06' },
-  ST310U: { port: 5011, protocol: 'suntech' },
-  ST340: { port: 5011, protocol: 'suntech' },
-  ST350: { port: 5011, protocol: 'suntech' },
-  J16: { port: 5023, protocol: 'gt06' },
-  J16_PRO: { port: 5023, protocol: 'gt06' },
-  CRX3: { port: 5023, protocol: 'gt06' },
-  CRX3_NANO: { port: 5023, protocol: 'gt06' },
-  CRX_PRO_4G: { port: 5023, protocol: 'gt06' },
-  TK103: { port: 5001, protocol: 'gps103' },
-  TK303: { port: 5001, protocol: 'gps103' },
-  COBAN_GPS103: { port: 5001, protocol: 'gps103' },
-  FMB920: { port: 5027, protocol: 'teltonika' },
-  FMB120: { port: 5027, protocol: 'teltonika' },
-  SINOTRACK_ST901: { port: 5013, protocol: 'h02' },
-  SINOTRACK_ST905: { port: 5013, protocol: 'h02' },
-  OTHER: { port: 5055, protocol: 'osmand' },
-};
+export const TRACCAR_PORTS: Record<string, { port: number; protocol: string }> =
+  {
+    GT06N: { port: 5023, protocol: 'gt06' },
+    GT06: { port: 5023, protocol: 'gt06' },
+    CONCOX_GT06N: { port: 5023, protocol: 'gt06' },
+    ST310U: { port: 5011, protocol: 'suntech' },
+    ST340: { port: 5011, protocol: 'suntech' },
+    ST350: { port: 5011, protocol: 'suntech' },
+    J16: { port: 5023, protocol: 'gt06' },
+    J16_PRO: { port: 5023, protocol: 'gt06' },
+    CRX3: { port: 5023, protocol: 'gt06' },
+    CRX3_NANO: { port: 5023, protocol: 'gt06' },
+    CRX_PRO_4G: { port: 5023, protocol: 'gt06' },
+    TK103: { port: 5001, protocol: 'gps103' },
+    TK303: { port: 5001, protocol: 'gps103' },
+    COBAN_GPS103: { port: 5001, protocol: 'gps103' },
+    FMB920: { port: 5027, protocol: 'teltonika' },
+    FMB120: { port: 5027, protocol: 'teltonika' },
+    SINOTRACK_ST901: { port: 5013, protocol: 'h02' },
+    SINOTRACK_ST905: { port: 5013, protocol: 'h02' },
+    OTHER: { port: 5055, protocol: 'osmand' },
+  };
 
 interface CommandTemplate {
   type: string;
@@ -41,56 +42,206 @@ interface CommandTemplate {
 const COMMAND_TEMPLATES: Record<string, CommandTemplate[]> = {
   // GT06/GT06N/Concox/J16/CRX (protocolo similar)
   gt06: [
-    { type: 'SET_TIMEZONE', label: 'Configurar Fuso Horário', template: 'GMT,W,0,0#', step: 1 },
-    { type: 'SET_APN', label: 'Configurar APN', template: 'APN,{apn},{apnUser},{apnPass}#', step: 2 },
-    { type: 'SET_SERVER_IP', label: 'Configurar Servidor Primário', template: 'SERVER,1,{ip},{port},0#', step: 3 },
-    { type: 'SET_SECONDARY_IP', label: 'Configurar Servidor Secundário', template: 'SERVER,2,{secondaryIp},{port},0#', step: 4 },
-    { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: 'TIMER,30,3600#', step: 5 },
-    { type: 'RESTART', label: 'Reiniciar Rastreador', template: 'RESET#', step: 6 },
+    {
+      type: 'SET_TIMEZONE',
+      label: 'Configurar Fuso Horário',
+      template: 'GMT,W,0,0#',
+      step: 1,
+    },
+    {
+      type: 'SET_APN',
+      label: 'Configurar APN',
+      template: 'APN,{apn},{apnUser},{apnPass}#',
+      step: 2,
+    },
+    {
+      type: 'SET_SERVER_IP',
+      label: 'Configurar Servidor Primário',
+      template: 'SERVER,1,{ip},{port},0#',
+      step: 3,
+    },
+    {
+      type: 'SET_SECONDARY_IP',
+      label: 'Configurar Servidor Secundário',
+      template: 'SERVER,2,{secondaryIp},{port},0#',
+      step: 4,
+    },
+    {
+      type: 'SET_TIMER',
+      label: 'Configurar Intervalo de Envio',
+      template: 'TIMER,30,3600#',
+      step: 5,
+    },
+    {
+      type: 'RESTART',
+      label: 'Reiniciar Rastreador',
+      template: 'RESET#',
+      step: 6,
+    },
     { type: 'BLOCK', label: 'Bloquear Veículo', template: 'RELAY,1#', step: 0 },
-    { type: 'UNBLOCK', label: 'Desbloquear Veículo', template: 'RELAY,0#', step: 0 },
-    { type: 'GET_PARAMS', label: 'Ver Configurações Atuais', template: 'PARAM#', step: 0 },
-    { type: 'GET_LOCATION', label: 'Solicitar Localização', template: 'WHERE#', step: 0 },
+    {
+      type: 'UNBLOCK',
+      label: 'Desbloquear Veículo',
+      template: 'RELAY,0#',
+      step: 0,
+    },
+    {
+      type: 'GET_PARAMS',
+      label: 'Ver Configurações Atuais',
+      template: 'PARAM#',
+      step: 0,
+    },
+    {
+      type: 'GET_LOCATION',
+      label: 'Solicitar Localização',
+      template: 'WHERE#',
+      step: 0,
+    },
   ],
   // CRX3/CRX3 NANO/CRX PRO
   crx: [
-    { type: 'SET_APN', label: 'Configurar APN', template: 'APN#{apn},{apnUser},{apnPass}', step: 1 },
-    { type: 'SET_SERVER_IP', label: 'Configurar Servidor', template: 'IP#{ip}:{port}', step: 2 },
-    { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: 'TIMER#30,3600', step: 3 },
-    { type: 'RESTART', label: 'Reiniciar Rastreador', template: 'RESET#', step: 4 },
+    {
+      type: 'SET_APN',
+      label: 'Configurar APN',
+      template: 'APN#{apn},{apnUser},{apnPass}',
+      step: 1,
+    },
+    {
+      type: 'SET_SERVER_IP',
+      label: 'Configurar Servidor',
+      template: 'IP#{ip}:{port}',
+      step: 2,
+    },
+    {
+      type: 'SET_TIMER',
+      label: 'Configurar Intervalo de Envio',
+      template: 'TIMER#30,3600',
+      step: 3,
+    },
+    {
+      type: 'RESTART',
+      label: 'Reiniciar Rastreador',
+      template: 'RESET#',
+      step: 4,
+    },
     { type: 'BLOCK', label: 'Bloquear Veículo', template: 'OUT1#ON', step: 0 },
-    { type: 'UNBLOCK', label: 'Desbloquear Veículo', template: 'OUT1#OFF', step: 0 },
+    {
+      type: 'UNBLOCK',
+      label: 'Desbloquear Veículo',
+      template: 'OUT1#OFF',
+      step: 0,
+    },
   ],
   // Suntech ST310U/ST340/ST350
   suntech: [
-    { type: 'SET_TIMEZONE', label: 'Configurar Fuso Horário', template: 'SA200TMZ;{imei};-3', step: 1 },
-    { type: 'SET_APN', label: 'Configurar APN', template: 'SA200NTW;{imei};01;{apn};{apnUser};{apnPass}', step: 2 },
-    { type: 'SET_SERVER_IP', label: 'Configurar IP do Servidor', template: 'SA200NTW;{imei};02;{ip};{port}', step: 3 },
-    { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: 'SA200RPT;{imei};30;3600', step: 4 },
+    {
+      type: 'SET_TIMEZONE',
+      label: 'Configurar Fuso Horário',
+      template: 'SA200TMZ;{imei};-3',
+      step: 1,
+    },
+    {
+      type: 'SET_APN',
+      label: 'Configurar APN',
+      template: 'SA200NTW;{imei};01;{apn};{apnUser};{apnPass}',
+      step: 2,
+    },
+    {
+      type: 'SET_SERVER_IP',
+      label: 'Configurar IP do Servidor',
+      template: 'SA200NTW;{imei};02;{ip};{port}',
+      step: 3,
+    },
+    {
+      type: 'SET_TIMER',
+      label: 'Configurar Intervalo de Envio',
+      template: 'SA200RPT;{imei};30;3600',
+      step: 4,
+    },
   ],
   // TK103/TK303/Coban GPS103
   gps103: [
-    { type: 'SET_APN', label: 'Configurar APN', template: 'apn123456 {apn}', step: 1 },
-    { type: 'SET_SERVER_IP', label: 'Configurar IP do Servidor', template: 'adminip123456 {ip} {port}', step: 2 },
-    { type: 'RESTART', label: 'Reiniciar Rastreador', template: 'reset123456', step: 3 },
-    { type: 'BLOCK', label: 'Bloquear Veículo', template: 'stop123456', step: 0 },
-    { type: 'UNBLOCK', label: 'Desbloquear Veículo', template: 'resume123456', step: 0 },
-    { type: 'GET_LOCATION', label: 'Solicitar Localização', template: 'fix030s***n123456', step: 0 },
+    {
+      type: 'SET_APN',
+      label: 'Configurar APN',
+      template: 'apn123456 {apn}',
+      step: 1,
+    },
+    {
+      type: 'SET_SERVER_IP',
+      label: 'Configurar IP do Servidor',
+      template: 'adminip123456 {ip} {port}',
+      step: 2,
+    },
+    {
+      type: 'RESTART',
+      label: 'Reiniciar Rastreador',
+      template: 'reset123456',
+      step: 3,
+    },
+    {
+      type: 'BLOCK',
+      label: 'Bloquear Veículo',
+      template: 'stop123456',
+      step: 0,
+    },
+    {
+      type: 'UNBLOCK',
+      label: 'Desbloquear Veículo',
+      template: 'resume123456',
+      step: 0,
+    },
+    {
+      type: 'GET_LOCATION',
+      label: 'Solicitar Localização',
+      template: 'fix030s***n123456',
+      step: 0,
+    },
   ],
   // Teltonika FMB920/FMB120
   teltonika: [
-    { type: 'SET_APN', label: 'Configurar APN', template: 'setparam 2001:{apn};2002:{apnUser};2003:{apnPass}', step: 1 },
-    { type: 'SET_SERVER_IP', label: 'Configurar IP do Servidor', template: 'setparam 2004:{ip};2005:{port};2006:0', step: 2 },
-    { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: 'setparam 10050:30;10150:30;10250:30', step: 3 },
+    {
+      type: 'SET_APN',
+      label: 'Configurar APN',
+      template: 'setparam 2001:{apn};2002:{apnUser};2003:{apnPass}',
+      step: 1,
+    },
+    {
+      type: 'SET_SERVER_IP',
+      label: 'Configurar IP do Servidor',
+      template: 'setparam 2004:{ip};2005:{port};2006:0',
+      step: 2,
+    },
+    {
+      type: 'SET_TIMER',
+      label: 'Configurar Intervalo de Envio',
+      template: 'setparam 10050:30;10150:30;10250:30',
+      step: 3,
+    },
   ],
   // Sinotrack H02
   h02: [
     { type: 'SET_APN', label: 'Configurar APN', template: '805{apn}', step: 1 },
-    { type: 'SET_SERVER_IP', label: 'Configurar IP do Servidor', template: '804{ip} {port}', step: 2 },
-    { type: 'SET_TIMER', label: 'Configurar Intervalo de Envio', template: '805030', step: 3 },
+    {
+      type: 'SET_SERVER_IP',
+      label: 'Configurar IP do Servidor',
+      template: '804{ip} {port}',
+      step: 2,
+    },
+    {
+      type: 'SET_TIMER',
+      label: 'Configurar Intervalo de Envio',
+      template: '805030',
+      step: 3,
+    },
     { type: 'BLOCK', label: 'Bloquear Veículo', template: '200', step: 0 },
     { type: 'UNBLOCK', label: 'Desbloquear Veículo', template: '201', step: 0 },
-    { type: 'GET_LOCATION', label: 'Solicitar Localização', template: '666', step: 0 },
+    {
+      type: 'GET_LOCATION',
+      label: 'Solicitar Localização',
+      template: '666',
+      step: 0,
+    },
   ],
 };
 
@@ -184,7 +335,9 @@ export class SmsCommandsService {
       templates = templates.filter((t) => t.type === type);
     } else {
       // Apenas comandos de configuração inicial (step > 0)
-      templates = templates.filter((t) => t.step > 0).sort((a, b) => a.step - b.step);
+      templates = templates
+        .filter((t) => t.step > 0)
+        .sort((a, b) => a.step - b.step);
     }
 
     const apn = device.chip?.apn || '';
@@ -193,7 +346,7 @@ export class SmsCommandsService {
     const phoneNumber = device.chip?.phoneNumber || '';
 
     const commands = templates.map((t) => {
-      let command = t.template
+      const command = t.template
         .replace('{ip}', ip)
         .replace('{secondaryIp}', secondaryIp)
         .replace('{port}', String(portInfo.port))
@@ -219,7 +372,12 @@ export class SmsCommandsService {
     return {
       device: { id: device.id, imei: device.imei, model: device.model },
       chip: device.chip
-        ? { id: device.chip.id, phoneNumber, operator: device.chip.operator, apn }
+        ? {
+            id: device.chip.id,
+            phoneNumber,
+            operator: device.chip.operator,
+            apn,
+          }
         : null,
       serverHostname: this.getServerHostname(),
       backupHostname: this.getBackupHostname(),
@@ -241,14 +399,23 @@ export class SmsCommandsService {
     customCommand?: string,
   ) {
     // FACTORY_RESET apenas para ADMIN
-    if (type === 'FACTORY_RESET' && userRole !== 'SUPER_ADMIN' && userRole !== 'ADMIN') {
-      throw new ForbiddenException('Apenas administradores podem executar reset de fábrica');
+    if (
+      type === 'FACTORY_RESET' &&
+      userRole !== 'SUPER_ADMIN' &&
+      userRole !== 'ADMIN'
+    ) {
+      throw new ForbiddenException(
+        'Apenas administradores podem executar reset de fábrica',
+      );
     }
 
     const generated = await this.generateCommands(deviceId, tenantId, type);
     const commandText = customCommand || (generated.commands[0]?.command ?? '');
 
-    if (!commandText) throw new NotFoundException('Template de comando não encontrado para este modelo');
+    if (!commandText)
+      throw new NotFoundException(
+        'Template de comando não encontrado para este modelo',
+      );
 
     const smsCommand = await this.smsModel.create({
       data: {
@@ -268,7 +435,11 @@ export class SmsCommandsService {
     return smsCommand;
   }
 
-  async getHistory(deviceId: string, tenantId: string, query: PaginationQueryDto) {
+  async getHistory(
+    deviceId: string,
+    tenantId: string,
+    query: PaginationQueryDto,
+  ) {
     const { page, perPage } = query;
 
     // Verificar que device pertence ao tenant

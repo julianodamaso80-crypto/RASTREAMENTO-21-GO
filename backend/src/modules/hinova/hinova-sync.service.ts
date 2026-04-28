@@ -20,7 +20,8 @@ export class HinovaSyncService {
   ) {}
 
   getStatus(): SyncStatusDto {
-    const interval = this.configService.get<number>('hinova.syncInterval') || 21600000;
+    const interval =
+      this.configService.get<number>('hinova.syncInterval') || 21600000;
     const nextSync = this.lastSyncTime
       ? new Date(new Date(this.lastSyncTime).getTime() + interval).toISOString()
       : null;
@@ -49,10 +50,17 @@ export class HinovaSyncService {
   async sync(tenantId: string): Promise<SyncResultDto> {
     if (this.isRunning) {
       this.logger.warn('Sync já em execução, ignorando...');
-      return this.lastResult || {
-        created: 0, updated: 0, skipped: 0, errors: 0,
-        duration: '0s', startedAt: '', finishedAt: '',
-      };
+      return (
+        this.lastResult || {
+          created: 0,
+          updated: 0,
+          skipped: 0,
+          errors: 0,
+          duration: '0s',
+          startedAt: '',
+          finishedAt: '',
+        }
+      );
     }
 
     this.isRunning = true;
@@ -92,19 +100,26 @@ export class HinovaSyncService {
           hasMore = page * perPage < response.total;
           page++;
         } catch (error) {
-          this.logger.error(`Erro na página ${page}: ${error instanceof Error ? error.message : error}`);
+          this.logger.error(
+            `Erro na página ${page}: ${error instanceof Error ? error.message : error}`,
+          );
           errors++;
           break;
         }
       }
     } catch (error) {
-      this.logger.error(`Erro na autenticação Hinova: ${error instanceof Error ? error.message : error}`);
+      this.logger.error(
+        `Erro na autenticação Hinova: ${error instanceof Error ? error.message : error}`,
+      );
       errors++;
     }
 
     const finishedAt = new Date();
     const durationMs = finishedAt.getTime() - startedAt.getTime();
-    const duration = durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`;
+    const duration =
+      durationMs < 1000
+        ? `${durationMs}ms`
+        : `${(durationMs / 1000).toFixed(1)}s`;
 
     const result: SyncResultDto = {
       created,
@@ -148,7 +163,9 @@ export class HinovaSyncService {
     if (hinova.associado?.cpf) {
       const associate = await this.prisma.associate.upsert({
         where: {
-          id: existingVehicle?.associateId || '00000000-0000-0000-0000-000000000000',
+          id:
+            existingVehicle?.associateId ||
+            '00000000-0000-0000-0000-000000000000',
         },
         update: {
           name: hinova.associado.nome,

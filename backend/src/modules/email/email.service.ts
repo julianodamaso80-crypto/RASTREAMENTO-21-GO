@@ -17,11 +17,14 @@ export class EmailService {
 
   constructor() {
     const apiKey = process.env.RESEND_API_KEY;
-    this.fromAddress = process.env.EMAIL_FROM || 'Rastreamento 21GO <no-reply@trackgo.site>';
+    this.fromAddress =
+      process.env.EMAIL_FROM || 'Rastreamento 21GO <no-reply@trackgo.site>';
     this.mockMode = !apiKey;
     this.resend = apiKey ? new Resend(apiKey) : null;
     if (this.mockMode) {
-      this.logger.warn('RESEND_API_KEY não configurada — EmailService em modo mock (loga no console)');
+      this.logger.warn(
+        'RESEND_API_KEY não configurada — EmailService em modo mock (loga no console)',
+      );
     }
   }
 
@@ -29,7 +32,11 @@ export class EmailService {
     const { to, name, resetUrl, expiresInMinutes } = args;
     const subject = 'Redefinição de senha - Rastreamento 21GO';
     const html = this.passwordResetTemplate(name, resetUrl, expiresInMinutes);
-    const text = this.passwordResetTextTemplate(name, resetUrl, expiresInMinutes);
+    const text = this.passwordResetTextTemplate(
+      name,
+      resetUrl,
+      expiresInMinutes,
+    );
 
     if (this.mockMode || !this.resend) {
       this.logger.log(`[MOCK EMAIL] to=${to} subject="${subject}"`);
@@ -46,7 +53,9 @@ export class EmailService {
         text,
       });
       if (error) {
-        this.logger.error(`Resend falhou ao enviar reset para ${to}: ${JSON.stringify(error)}`);
+        this.logger.error(
+          `Resend falhou ao enviar reset para ${to}: ${JSON.stringify(error)}`,
+        );
         throw new Error(`Falha ao enviar email: ${error.message}`);
       }
       this.logger.log(`Email de reset enviado para ${to} (id=${data?.id})`);
@@ -57,7 +66,11 @@ export class EmailService {
     }
   }
 
-  private passwordResetTemplate(name: string, resetUrl: string, minutes: number): string {
+  private passwordResetTemplate(
+    name: string,
+    resetUrl: string,
+    minutes: number,
+  ): string {
     return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -115,7 +128,11 @@ export class EmailService {
 </html>`;
   }
 
-  private passwordResetTextTemplate(name: string, resetUrl: string, minutes: number): string {
+  private passwordResetTextTemplate(
+    name: string,
+    resetUrl: string,
+    minutes: number,
+  ): string {
     return `Olá ${name},
 
 Recebemos um pedido pra redefinir sua senha no Rastreamento 21GO.

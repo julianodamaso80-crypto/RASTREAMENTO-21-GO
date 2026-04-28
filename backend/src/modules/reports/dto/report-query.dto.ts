@@ -8,17 +8,26 @@ export class ReportQueryDto {
   @Type(() => Number)
   deviceId: number;
 
-  @ApiProperty({ description: 'Data início (ISO 8601)', example: '2026-03-30T00:00:00Z' })
+  @ApiProperty({
+    description: 'Data início (ISO 8601)',
+    example: '2026-03-30T00:00:00Z',
+  })
   @IsString()
   from: string;
 
-  @ApiProperty({ description: 'Data fim (ISO 8601)', example: '2026-03-30T23:59:59Z' })
+  @ApiProperty({
+    description: 'Data fim (ISO 8601)',
+    example: '2026-03-30T23:59:59Z',
+  })
   @IsString()
   to: string;
 }
 
 export class ExportQueryDto extends ReportQueryDto {
-  @ApiPropertyOptional({ enum: ['positions', 'trips', 'stops'], default: 'positions' })
+  @ApiPropertyOptional({
+    enum: ['positions', 'trips', 'stops'],
+    default: 'positions',
+  })
   @IsOptional()
   @IsEnum(['positions', 'trips', 'stops'])
   type: string = 'positions';

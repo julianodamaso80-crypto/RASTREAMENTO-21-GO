@@ -23,7 +23,9 @@ class SendCommandDto {
   @IsString()
   type: string;
 
-  @ApiPropertyOptional({ description: 'Comando customizado (substitui template)' })
+  @ApiPropertyOptional({
+    description: 'Comando customizado (substitui template)',
+  })
   @IsOptional()
   @IsString()
   customCommand?: string;

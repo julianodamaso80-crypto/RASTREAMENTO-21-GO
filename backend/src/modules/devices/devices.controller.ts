@@ -33,13 +33,19 @@ export class DevicesController {
 
   @Get()
   @ApiOperation({ summary: 'Lista dispositivos (paginado, com filtros)' })
-  async findAll(@Query() filters: FilterDevicesDto, @Req() req: AuthenticatedRequest) {
+  async findAll(
+    @Query() filters: FilterDevicesDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.devicesService.findAll(req.tenantId, filters);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhes do dispositivo com chip e veículo' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.devicesService.findOne(id, req.tenantId);
   }
 
@@ -67,7 +73,10 @@ export class DevicesController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Remover dispositivo (soft delete)' })
-  async remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.devicesService.remove(id, req.tenantId);
   }
 
@@ -87,7 +96,10 @@ export class DevicesController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
   @ApiOperation({ summary: 'Desvincular dispositivo do veículo' })
-  async unlinkVehicle(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  async unlinkVehicle(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.devicesService.unlinkVehicle(id, req.tenantId);
   }
 
@@ -107,13 +119,19 @@ export class DevicesController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
   @ApiOperation({ summary: 'Desvincular chip do dispositivo' })
-  async unlinkChip(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  async unlinkChip(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.devicesService.unlinkChip(id, req.tenantId);
   }
 
   @Get(':id/connection-status')
   @ApiOperation({ summary: 'Status de conexão do dispositivo' })
-  async connectionStatus(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthenticatedRequest) {
+  async connectionStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.devicesService.getConnectionStatus(id, req.tenantId);
   }
 }

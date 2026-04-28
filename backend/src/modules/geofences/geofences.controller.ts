@@ -17,7 +17,11 @@ import { Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { GeofencesService } from './geofences.service';
-import { CreateGeofenceDto, UpdateGeofenceDto, LinkVehiclesDto } from './dto/create-geofence.dto';
+import {
+  CreateGeofenceDto,
+  UpdateGeofenceDto,
+  LinkVehiclesDto,
+} from './dto/create-geofence.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -31,7 +35,10 @@ export class GeofencesController {
 
   @Get()
   @ApiOperation({ summary: 'Lista cercas geográficas' })
-  async findAll(@Query() query: PaginationQueryDto, @Req() req: AuthenticatedRequest) {
+  async findAll(
+    @Query() query: PaginationQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.geofencesService.findAll(req.tenantId, query);
   }
 
@@ -48,7 +55,10 @@ export class GeofencesController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Criar cerca geográfica' })
-  async create(@Body() dto: CreateGeofenceDto, @Req() req: AuthenticatedRequest) {
+  async create(
+    @Body() dto: CreateGeofenceDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.geofencesService.create(dto, req.tenantId);
   }
 

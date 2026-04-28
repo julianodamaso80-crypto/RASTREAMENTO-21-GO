@@ -136,7 +136,10 @@ export class AuthService {
 
     // Rate limit por IP (10/hora) — sempre aplicado antes de qualquer trabalho
     if (!this.checkRateLimit(`ip:${ip}`, IP_LIMIT_PER_HOUR, HOUR_MS)) {
-      throw new HttpException('Muitas tentativas deste IP. Tente novamente em 1 hora.', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'Muitas tentativas deste IP. Tente novamente em 1 hora.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     // Rate limit por email (3/hora)
     if (!this.checkRateLimit(`email:${email}`, EMAIL_LIMIT_PER_HOUR, HOUR_MS)) {
@@ -148,14 +151,18 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email } });
     // Response é sempre 202 independente de existir ou não (não revela enumeração)
     if (!user || !user.active) {
-      this.logger.log(`Forgot-password pra email inexistente ou inativo: ${email}`);
+      this.logger.log(
+        `Forgot-password pra email inexistente ou inativo: ${email}`,
+      );
       return;
     }
 
     // Gera token aleatório 32 bytes → 64 hex chars. Enviado no link.
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = await bcrypt.hash(rawToken, BCRYPT_ROUNDS);
-    const expiresAt = new Date(Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000,
+    );
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -224,7 +231,15 @@ export class AuthService {
         name: true,
         role: true,
         tenantId: true,
-        tenant: { select: { id: true, name: true, slug: true, logoUrl: true, primaryColor: true } },
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            logoUrl: true,
+            primaryColor: true,
+          },
+        },
         createdAt: true,
       },
     });

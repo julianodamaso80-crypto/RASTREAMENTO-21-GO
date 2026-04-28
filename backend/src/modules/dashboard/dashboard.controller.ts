@@ -15,8 +15,16 @@ export class DashboardController {
   constructor(private dashboardService: DashboardService) {}
 
   @Get('overview')
-  @ApiOperation({ summary: 'Overview consolidado com KPIs, charts e tabelas (cache 60s)' })
-  async overview(@Query() query: DashboardQueryDto, @Req() req: AuthenticatedRequest) {
-    return this.dashboardService.getOverview(req.tenantId, query.period ?? 'today');
+  @ApiOperation({
+    summary: 'Overview consolidado com KPIs, charts e tabelas (cache 60s)',
+  })
+  async overview(
+    @Query() query: DashboardQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.dashboardService.getOverview(
+      req.tenantId,
+      query.period ?? 'today',
+    );
   }
 }

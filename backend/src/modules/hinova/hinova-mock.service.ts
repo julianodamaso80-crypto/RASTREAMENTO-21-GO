@@ -1,8 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { IHinovaClient } from './hinova.interface';
-import type { HinovaVehicleDto, HinovaListResponse } from './dto/hinova-vehicle.dto';
+import type {
+  HinovaVehicleDto,
+  HinovaListResponse,
+} from './dto/hinova-vehicle.dto';
 
-const BRANDS = ['Chevrolet', 'Fiat', 'VW', 'Hyundai', 'Toyota', 'Honda', 'Renault', 'Nissan', 'Jeep', 'Ford'];
+const BRANDS = [
+  'Chevrolet',
+  'Fiat',
+  'VW',
+  'Hyundai',
+  'Toyota',
+  'Honda',
+  'Renault',
+  'Nissan',
+  'Jeep',
+  'Ford',
+];
 const MODELS: Record<string, string[]> = {
   Chevrolet: ['Onix', 'Tracker', 'S10', 'Spin', 'Montana'],
   Fiat: ['Strada', 'Argo', 'Mobi', 'Toro', 'Pulse'],
@@ -15,9 +29,90 @@ const MODELS: Record<string, string[]> = {
   Jeep: ['Renegade', 'Compass', 'Commander'],
   Ford: ['Ranger', 'Territory', 'Bronco Sport'],
 };
-const COLORS = ['Branco', 'Prata', 'Preto', 'Cinza', 'Vermelho', 'Azul', 'Marrom', 'Verde'];
-const FIRST_NAMES = ['João', 'Maria', 'Pedro', 'Ana', 'Carlos', 'Lucia', 'Roberto', 'Fernanda', 'Marcos', 'Patricia', 'Thiago', 'Camila', 'Rafael', 'Juliana', 'Bruno', 'Aline', 'Diego', 'Vanessa', 'Lucas', 'Bruna', 'Gabriel', 'Larissa', 'Felipe', 'Amanda', 'Gustavo', 'Beatriz', 'Leonardo', 'Isabela', 'Matheus', 'Carolina', 'Rodrigo', 'Leticia', 'André', 'Mariana', 'Vinícius', 'Natália', 'Eduardo', 'Gabriela', 'Henrique', 'Tatiana', 'Daniel', 'Priscila', 'Fabio', 'Renata', 'Ricardo', 'Sandra', 'Paulo', 'Cristina', 'Marcelo', 'Simone'];
-const LAST_NAMES = ['Silva', 'Santos', 'Oliveira', 'Souza', 'Rodrigues', 'Ferreira', 'Alves', 'Lima', 'Pereira', 'Costa', 'Ribeiro', 'Nunes', 'Martins', 'Gomes', 'Barbosa', 'Cardoso', 'Rocha', 'Dias', 'Freitas', 'Moreira'];
+const COLORS = [
+  'Branco',
+  'Prata',
+  'Preto',
+  'Cinza',
+  'Vermelho',
+  'Azul',
+  'Marrom',
+  'Verde',
+];
+const FIRST_NAMES = [
+  'João',
+  'Maria',
+  'Pedro',
+  'Ana',
+  'Carlos',
+  'Lucia',
+  'Roberto',
+  'Fernanda',
+  'Marcos',
+  'Patricia',
+  'Thiago',
+  'Camila',
+  'Rafael',
+  'Juliana',
+  'Bruno',
+  'Aline',
+  'Diego',
+  'Vanessa',
+  'Lucas',
+  'Bruna',
+  'Gabriel',
+  'Larissa',
+  'Felipe',
+  'Amanda',
+  'Gustavo',
+  'Beatriz',
+  'Leonardo',
+  'Isabela',
+  'Matheus',
+  'Carolina',
+  'Rodrigo',
+  'Leticia',
+  'André',
+  'Mariana',
+  'Vinícius',
+  'Natália',
+  'Eduardo',
+  'Gabriela',
+  'Henrique',
+  'Tatiana',
+  'Daniel',
+  'Priscila',
+  'Fabio',
+  'Renata',
+  'Ricardo',
+  'Sandra',
+  'Paulo',
+  'Cristina',
+  'Marcelo',
+  'Simone',
+];
+const LAST_NAMES = [
+  'Silva',
+  'Santos',
+  'Oliveira',
+  'Souza',
+  'Rodrigues',
+  'Ferreira',
+  'Alves',
+  'Lima',
+  'Pereira',
+  'Costa',
+  'Ribeiro',
+  'Nunes',
+  'Martins',
+  'Gomes',
+  'Barbosa',
+  'Cardoso',
+  'Rocha',
+  'Dias',
+  'Freitas',
+  'Moreira',
+];
 
 function generatePlate(index: number): string {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -32,7 +127,9 @@ function generatePlate(index: number): string {
 }
 
 function generateCpf(): string {
-  const digits = Array.from({ length: 11 }, () => Math.floor(Math.random() * 10));
+  const digits = Array.from({ length: 11 }, () =>
+    Math.floor(Math.random() * 10),
+  );
   return digits.join('');
 }
 
@@ -41,7 +138,18 @@ function generateMockVehicles(): HinovaVehicleDto[] {
     const brand = BRANDS[i % BRANDS.length];
     const models = MODELS[brand];
     const model = models[i % models.length];
-    const statusOptions: Array<'ATIVO' | 'INATIVO' | 'INADIMPLENTE'> = ['ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'ATIVO', 'INATIVO', 'INADIMPLENTE', 'ATIVO'];
+    const statusOptions: Array<'ATIVO' | 'INATIVO' | 'INADIMPLENTE'> = [
+      'ATIVO',
+      'ATIVO',
+      'ATIVO',
+      'ATIVO',
+      'ATIVO',
+      'ATIVO',
+      'ATIVO',
+      'INATIVO',
+      'INADIMPLENTE',
+      'ATIVO',
+    ];
 
     return {
       codigoVeiculo: `HNV${String(i + 1).padStart(6, '0')}`,
@@ -74,7 +182,9 @@ export class HinovaMockService implements IHinovaClient {
 
   constructor() {
     this.vehicles = generateMockVehicles();
-    this.logger.log(`Mock Hinova inicializado com ${this.vehicles.length} veículos`);
+    this.logger.log(
+      `Mock Hinova inicializado com ${this.vehicles.length} veículos`,
+    );
   }
 
   private async simulateLatency(): Promise<void> {
@@ -93,7 +203,10 @@ export class HinovaMockService implements IHinovaClient {
     this.logger.debug('Mock: autenticação simulada');
   }
 
-  async listVehicles(page: number, perPage: number): Promise<HinovaListResponse> {
+  async listVehicles(
+    page: number,
+    perPage: number,
+  ): Promise<HinovaListResponse> {
     await this.simulateLatency();
     this.simulateError();
 

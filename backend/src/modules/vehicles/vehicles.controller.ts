@@ -11,11 +11,7 @@ import {
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Role } from '.prisma/client';
 import { VehiclesService } from './vehicles.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -37,7 +33,10 @@ export class VehiclesController {
 
   @Get()
   @ApiOperation({ summary: 'Lista veículos (paginado, com filtros)' })
-  async findAll(@Query() filters: FilterVehiclesDto, @Req() req: AuthenticatedRequest) {
+  async findAll(
+    @Query() filters: FilterVehiclesDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.vehiclesService.findAll(req.tenantId, filters);
   }
 
@@ -54,7 +53,10 @@ export class VehiclesController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Criar veículo + device no Traccar' })
-  async create(@Body() dto: CreateVehicleDto, @Req() req: AuthenticatedRequest) {
+  async create(
+    @Body() dto: CreateVehicleDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.vehiclesService.create(dto, req.tenantId);
   }
 

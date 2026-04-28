@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { type AxiosInstance } from 'axios';
 import type { IHinovaClient } from './hinova.interface';
-import type { HinovaVehicleDto, HinovaListResponse } from './dto/hinova-vehicle.dto';
+import type {
+  HinovaVehicleDto,
+  HinovaListResponse,
+} from './dto/hinova-vehicle.dto';
 
 @Injectable()
 export class HinovaService implements IHinovaClient {
@@ -26,7 +29,10 @@ export class HinovaService implements IHinovaClient {
     });
   }
 
-  private async withRetry<T>(operation: () => Promise<T>, retries = 3): Promise<T> {
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    retries = 3,
+  ): Promise<T> {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         return await operation();
@@ -39,7 +45,9 @@ export class HinovaService implements IHinovaClient {
         }
         if (attempt === retries) throw error;
         const delay = Math.pow(2, attempt - 1) * 1000;
-        this.logger.warn(`Tentativa ${attempt}/${retries} falhou. Retry em ${delay}ms...`);
+        this.logger.warn(
+          `Tentativa ${attempt}/${retries} falhou. Retry em ${delay}ms...`,
+        );
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -51,15 +59,22 @@ export class HinovaService implements IHinovaClient {
     // TODO: Implementar quando credenciais estiverem disponíveis
     // const { data } = await this.client.post('/auth/login', { usuario, senha });
     // this.token = data.token;
-    throw new Error('Hinova real service: credenciais não configuradas. Use HINOVA_MOCK=true');
+    throw new Error(
+      'Hinova real service: credenciais não configuradas. Use HINOVA_MOCK=true',
+    );
   }
 
-  async listVehicles(page: number, perPage: number): Promise<HinovaListResponse> {
+  async listVehicles(
+    page: number,
+    perPage: number,
+  ): Promise<HinovaListResponse> {
     return this.withRetry(async () => {
       const { data } = await this.client.get('/veiculos', {
         params: { pagina: page, porPagina: perPage },
       });
-      this.logger.debug(`Hinova listVehicles: página ${page}, ${data.data?.length || 0} registros`);
+      this.logger.debug(
+        `Hinova listVehicles: página ${page}, ${data.data?.length || 0} registros`,
+      );
       return data;
     });
   }

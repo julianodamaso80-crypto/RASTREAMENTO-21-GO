@@ -63,7 +63,9 @@ export class DashboardService {
           vehicle: { select: { id: true, plate: true } },
         },
       }),
-      this.prisma.alert.count({ where: { tenantId, createdAt: { gte: from, lte: to } } }),
+      this.prisma.alert.count({
+        where: { tenantId, createdAt: { gte: from, lte: to } },
+      }),
       this.prisma.alert.groupBy({
         by: ['type'],
         where: { tenantId, createdAt: { gte: ago24h } },
@@ -86,20 +88,31 @@ export class DashboardService {
     ]);
 
     // KPIs derivados do array de devices (sem N+1 queries)
-    const onlineNow = devices.filter((d) =>
-      d.lastConnection && now.getTime() - new Date(d.lastConnection).getTime() < ONLINE_THRESHOLD_MS,
+    const onlineNow = devices.filter(
+      (d) =>
+        d.lastConnection &&
+        now.getTime() - new Date(d.lastConnection).getTime() <
+          ONLINE_THRESHOLD_MS,
     ).length;
     const offlineOver1h = devices.filter(
-      (d) => !d.lastConnection || now.getTime() - new Date(d.lastConnection).getTime() > H1,
+      (d) =>
+        !d.lastConnection ||
+        now.getTime() - new Date(d.lastConnection).getTime() > H1,
     ).length;
     const noCommOver24h = devices.filter(
-      (d) => !d.lastConnection || now.getTime() - new Date(d.lastConnection).getTime() > H24,
+      (d) =>
+        !d.lastConnection ||
+        now.getTime() - new Date(d.lastConnection).getTime() > H24,
     ).length;
 
     // KM + bateria + top vehicles vêm do Traccar (best-effort, não bloqueia resposta se falhar)
     let kmInPeriod = 0;
     let lowBattery = 0;
-    let topKmVehicles: { vehicleId: string | null; plate: string; km: number }[] = [];
+    let topKmVehicles: {
+      vehicleId: string | null;
+      plate: string;
+      km: number;
+    }[] = [];
 
     const traccarIds = devices
       .map((d) => d.traccarDeviceId)
@@ -108,21 +121,28 @@ export class DashboardService {
     try {
       const [positions, summary] = await Promise.all([
         this.traccar.getPositions().catch(() => []),
-        this.traccar.getReportSummary(traccarIds, from.toISOString(), to.toISOString()).catch(() => []),
+        this.traccar
+          .getReportSummary(traccarIds, from.toISOString(), to.toISOString())
+          .catch(() => []),
       ]);
 
       // Multi-tenant: só conta posições de devices DESTE tenant (getPositions retorna global)
       const tenantTraccarIdSet = new Set(traccarIds);
       for (const pos of positions) {
         if (!tenantTraccarIdSet.has(pos.deviceId)) continue;
-        const bat = (pos.attributes as Record<string, unknown> | undefined)?.batteryLevel;
+        const bat = (pos.attributes as Record<string, unknown> | undefined)
+          ?.batteryLevel;
         if (typeof bat === 'number' && bat < 20) lowBattery++;
       }
 
       const deviceByTraccarId = new Map(
         devices.map((d) => [d.traccarDeviceId, d]),
       );
-      const distancesByVehicle: { plate: string; vehicleId: string | null; km: number }[] = [];
+      const distancesByVehicle: {
+        plate: string;
+        vehicleId: string | null;
+        km: number;
+      }[] = [];
       for (const row of summary) {
         const km = (row.distance || 0) / 1000;
         kmInPeriod += km;
@@ -139,14 +159,19 @@ export class DashboardService {
         .sort((a, b) => b.km - a.km)
         .slice(0, 10);
     } catch (err) {
-      this.logger.warn(`Traccar indisponível para KPIs de km/bateria: ${String(err)}`);
+      this.logger.warn(
+        `Traccar indisponível para KPIs de km/bateria: ${String(err)}`,
+      );
     }
 
     // Breakdown de alertas nas últimas 24h por tipo
     const alertsByType = Object.fromEntries(
       alertsByType24h.map((row) => [row.type, row._count.type]),
     );
-    const totalAlerts24h = alertsByType24h.reduce((acc, row) => acc + row._count.type, 0);
+    const totalAlerts24h = alertsByType24h.reduce(
+      (acc, row) => acc + row._count.type,
+      0,
+    );
 
     // Veículos que precisam atenção — ordena por mais antigo primeiro (sem comunicação > offline >1h)
     const needsAttention = devices
@@ -180,8 +205,10 @@ export class DashboardService {
         };
       });
 
-    const diffMonth = vehiclesPrevMonth > 0 ? totalVehicles - vehiclesPrevMonth : null;
-    const percentOnline = totalVehicles > 0 ? Math.round((onlineNow / totalVehicles) * 100) : 0;
+    const diffMonth =
+      vehiclesPrevMonth > 0 ? totalVehicles - vehiclesPrevMonth : null;
+    const percentOnline =
+      totalVehicles > 0 ? Math.round((onlineNow / totalVehicles) * 100) : 0;
 
     // Fleet status pra pizza
     const fleetStatus = {
@@ -255,7 +282,9 @@ export class DashboardService {
     bucketBy: 'hour' | 'day',
   ): Promise<TimeSeriesBucket[]> {
     const trunc = bucketBy === 'hour' ? 'hour' : 'day';
-    const rows = await this.prisma.$queryRawUnsafe<{ bucket: Date; count: bigint }[]>(
+    const rows = await this.prisma.$queryRawUnsafe<
+      { bucket: Date; count: bigint }[]
+    >(
       `SELECT date_trunc('${trunc}', created_at) AS bucket, COUNT(*)::bigint AS count
        FROM alerts
        WHERE tenant_id = $1::uuid AND created_at >= $2 AND created_at <= $3

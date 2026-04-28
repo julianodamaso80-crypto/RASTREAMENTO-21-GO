@@ -14,7 +14,9 @@ export class TraccarService implements OnModuleInit {
   constructor(private configService: ConfigService) {
     this.apiUrl = this.configService.get<string>('traccar.apiUrl')!;
     this.adminEmail = this.configService.get<string>('traccar.adminEmail')!;
-    this.adminPassword = this.configService.get<string>('traccar.adminPassword')!;
+    this.adminPassword = this.configService.get<string>(
+      'traccar.adminPassword',
+    )!;
 
     this.client = axios.create({
       baseURL: this.apiUrl,
@@ -111,10 +113,7 @@ export class TraccarService implements OnModuleInit {
     });
   }
 
-  async createDevice(
-    name: string,
-    uniqueId: string,
-  ): Promise<TraccarDevice> {
+  async createDevice(name: string, uniqueId: string): Promise<TraccarDevice> {
     return this.withRetry(async () => {
       const { data } = await this.client.post('/devices', {
         name,
@@ -172,9 +171,12 @@ export class TraccarService implements OnModuleInit {
       params.append('from', from);
       params.append('to', to);
       params.append('daily', 'false');
-      const { data } = await this.client.get(`/reports/summary?${params.toString()}`, {
-        headers: { Accept: 'application/json' },
-      });
+      const { data } = await this.client.get(
+        `/reports/summary?${params.toString()}`,
+        {
+          headers: { Accept: 'application/json' },
+        },
+      );
       return data;
     });
   }
@@ -215,10 +217,7 @@ export class TraccarService implements OnModuleInit {
 
   // === Geofences ===
 
-  async createGeofence(
-    name: string,
-    area: string,
-  ): Promise<TraccarGeofence> {
+  async createGeofence(name: string, area: string): Promise<TraccarGeofence> {
     return this.withRetry(async () => {
       const { data } = await this.client.post('/geofences', { name, area });
       return data;
@@ -231,7 +230,11 @@ export class TraccarService implements OnModuleInit {
     area: string,
   ): Promise<TraccarGeofence> {
     return this.withRetry(async () => {
-      const { data } = await this.client.put(`/geofences/${id}`, { id, name, area });
+      const { data } = await this.client.put(`/geofences/${id}`, {
+        id,
+        name,
+        area,
+      });
       return data;
     });
   }
@@ -242,15 +245,23 @@ export class TraccarService implements OnModuleInit {
     });
   }
 
-  async linkDeviceGeofence(deviceId: number, geofenceId: number): Promise<void> {
+  async linkDeviceGeofence(
+    deviceId: number,
+    geofenceId: number,
+  ): Promise<void> {
     return this.withRetry(async () => {
       await this.client.post('/permissions', { deviceId, geofenceId });
     });
   }
 
-  async unlinkDeviceGeofence(deviceId: number, geofenceId: number): Promise<void> {
+  async unlinkDeviceGeofence(
+    deviceId: number,
+    geofenceId: number,
+  ): Promise<void> {
     return this.withRetry(async () => {
-      await this.client.delete('/permissions', { data: { deviceId, geofenceId } });
+      await this.client.delete('/permissions', {
+        data: { deviceId, geofenceId },
+      });
     });
   }
 

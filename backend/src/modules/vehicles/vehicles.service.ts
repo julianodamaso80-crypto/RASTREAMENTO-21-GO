@@ -42,7 +42,9 @@ export class VehiclesService {
       this.prisma.vehicle.findMany({
         where,
         include: {
-          associate: { select: { id: true, name: true, cpf: true, phone: true } },
+          associate: {
+            select: { id: true, name: true, cpf: true, phone: true },
+          },
         },
         skip: (page - 1) * perPage,
         take: perPage,
@@ -109,7 +111,9 @@ export class VehiclesService {
         where: { id: vehicle.id },
         data: { traccarDeviceId: device.id },
       });
-      this.logger.log(`Device Traccar criado: ${device.id} para veículo ${dto.plate}`);
+      this.logger.log(
+        `Device Traccar criado: ${device.id} para veículo ${dto.plate}`,
+      );
     } catch (error) {
       this.logger.warn(
         `Falha ao criar device no Traccar para ${dto.plate}: ${error instanceof Error ? error.message : error}`,

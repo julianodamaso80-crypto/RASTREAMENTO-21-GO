@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { TraccarService, type TraccarPosition } from '../traccar/traccar.service';
+import {
+  TraccarService,
+  type TraccarPosition,
+} from '../traccar/traccar.service';
 import * as ExcelJS from 'exceljs';
 
 export interface Trip {
@@ -34,7 +37,11 @@ export class ReportsService {
 
   constructor(private traccarService: TraccarService) {}
 
-  async getPositions(deviceId: number, from: string, to: string): Promise<TraccarPosition[]> {
+  async getPositions(
+    deviceId: number,
+    from: string,
+    to: string,
+  ): Promise<TraccarPosition[]> {
     return this.traccarService.getPositions(deviceId, from, to);
   }
 
@@ -62,12 +69,17 @@ export class ReportsService {
       } else if (tripStart && tripPositions.length > 0) {
         // Verificar se parou por tempo suficiente para encerrar viagem
         const lastMoving = tripPositions[tripPositions.length - 1];
-        const gap = new Date(pos.deviceTime).getTime() - new Date(lastMoving.deviceTime).getTime();
+        const gap =
+          new Date(pos.deviceTime).getTime() -
+          new Date(lastMoving.deviceTime).getTime();
 
         if (gap > this.STOP_THRESHOLD_MS) {
           const endPos = lastMoving;
           const distance = this.calculateDistance(tripPositions);
-          const duration = (new Date(endPos.deviceTime).getTime() - new Date(tripStart.deviceTime).getTime()) / 60000;
+          const duration =
+            (new Date(endPos.deviceTime).getTime() -
+              new Date(tripStart.deviceTime).getTime()) /
+            60000;
 
           trips.push({
             startTime: tripStart.deviceTime,
@@ -97,7 +109,10 @@ export class ReportsService {
     if (tripStart && tripPositions.length > 1) {
       const endPos = tripPositions[tripPositions.length - 1];
       const distance = this.calculateDistance(tripPositions);
-      const duration = (new Date(endPos.deviceTime).getTime() - new Date(tripStart.deviceTime).getTime()) / 60000;
+      const duration =
+        (new Date(endPos.deviceTime).getTime() -
+          new Date(tripStart.deviceTime).getTime()) /
+        60000;
 
       trips.push({
         startTime: tripStart.deviceTime,
@@ -131,7 +146,9 @@ export class ReportsService {
       if (isStopped) {
         if (!stopStart) stopStart = pos;
       } else if (stopStart) {
-        const duration = new Date(pos.deviceTime).getTime() - new Date(stopStart.deviceTime).getTime();
+        const duration =
+          new Date(pos.deviceTime).getTime() -
+          new Date(stopStart.deviceTime).getTime();
         if (duration >= this.STOP_THRESHOLD_MS) {
           stops.push({
             latitude: stopStart.latitude,
@@ -149,7 +166,9 @@ export class ReportsService {
     // Fechar última parada
     if (stopStart) {
       const lastPos = positions[positions.length - 1];
-      const duration = new Date(lastPos.deviceTime).getTime() - new Date(stopStart.deviceTime).getTime();
+      const duration =
+        new Date(lastPos.deviceTime).getTime() -
+        new Date(stopStart.deviceTime).getTime();
       if (duration >= this.STOP_THRESHOLD_MS) {
         stops.push({
           latitude: stopStart.latitude,
@@ -205,7 +224,14 @@ export class ReportsService {
         { header: 'Vel. Máx (km/h)', key: 'max', width: 18 },
       ];
       trips.forEach((t) =>
-        sheet.addRow({ start: t.startTime, end: t.endTime, duration: t.duration, distance: t.distance, avg: t.avgSpeed, max: t.maxSpeed }),
+        sheet.addRow({
+          start: t.startTime,
+          end: t.endTime,
+          duration: t.duration,
+          distance: t.distance,
+          avg: t.avgSpeed,
+          max: t.maxSpeed,
+        }),
       );
     } else {
       const stops = await this.getStops(deviceId, from, to);
@@ -216,7 +242,12 @@ export class ReportsService {
         { header: 'Duração (min)', key: 'duration', width: 14 },
       ];
       stops.forEach((s) =>
-        sheet.addRow({ address: s.address, start: s.startTime, end: s.endTime, duration: s.duration }),
+        sheet.addRow({
+          address: s.address,
+          start: s.startTime,
+          end: s.endTime,
+          duration: s.duration,
+        }),
       );
     }
 
@@ -226,10 +257,7 @@ export class ReportsService {
     return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
   }
 
-  exportCsv(
-    rows: Record<string, unknown>[],
-    headers: string[],
-  ): string {
+  exportCsv(rows: Record<string, unknown>[], headers: string[]): string {
     const lines = [headers.join(',')];
     rows.forEach((row) => {
       lines.push(headers.map((h) => `"${String(row[h] ?? '')}"`).join(','));
@@ -250,7 +278,12 @@ export class ReportsService {
     return total;
   }
 
-  private haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  private haversine(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;

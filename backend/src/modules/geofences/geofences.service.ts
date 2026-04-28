@@ -1,24 +1,15 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
-import { CreateGeofenceDto, UpdateGeofenceDto } from './dto/create-geofence.dto';
+import {
+  CreateGeofenceDto,
+  UpdateGeofenceDto,
+} from './dto/create-geofence.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
 export class GeofencesService {
   private readonly logger = new Logger(GeofencesService.name);
-
-  // Acesso ao model geofence/geofenceVehicle (workaround Prisma v7)
-  private get geofenceModel() {
-    return (this.prisma as any).geofence;
-  }
-  private get gvModel() {
-    return (this.prisma as any).geofenceVehicle;
-  }
 
   constructor(
     private prisma: PrismaService,
@@ -30,29 +21,37 @@ export class GeofencesService {
     const where = { tenantId };
 
     const [data, total] = await Promise.all([
-      this.geofenceModel.findMany({
+      this.prisma.geofence.findMany({
         where,
         include: {
           geofenceVehicles: {
-            include: { vehicle: { select: { id: true, plate: true, brand: true, model: true } } },
+            include: {
+              vehicle: {
+                select: { id: true, plate: true, brand: true, model: true },
+              },
+            },
           },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
       }),
-      this.geofenceModel.count({ where }),
+      this.prisma.geofence.count({ where }),
     ]);
 
     return { data, meta: { total, page, perPage } };
   }
 
   async findOne(id: string, tenantId: string) {
-    const geofence = await this.geofenceModel.findFirst({
+    const geofence = await this.prisma.geofence.findFirst({
       where: { id, tenantId },
       include: {
         geofenceVehicles: {
-          include: { vehicle: { select: { id: true, plate: true, brand: true, model: true } } },
+          include: {
+            vehicle: {
+              select: { id: true, plate: true, brand: true, model: true },
+            },
+          },
         },
       },
     });
@@ -61,7 +60,7 @@ export class GeofencesService {
   }
 
   async create(dto: CreateGeofenceDto, tenantId: string) {
-    const geofence = await this.geofenceModel.create({
+    const geofence = await this.prisma.geofence.create({
       data: {
         name: dto.name,
         description: dto.description,
@@ -75,8 +74,11 @@ export class GeofencesService {
     // Sync com Traccar
     try {
       const area = this.coordinatesToTraccarArea(dto.type, dto.coordinates);
-      const traccarGeofence = await this.traccarService.createGeofence(dto.name, area);
-      await this.geofenceModel.update({
+      const traccarGeofence = await this.traccarService.createGeofence(
+        dto.name,
+        area,
+      );
+      await this.prisma.geofence.update({
         where: { id: geofence.id },
         data: { traccarGeofenceId: traccarGeofence.id },
       });
@@ -90,7 +92,7 @@ export class GeofencesService {
   async update(id: string, dto: UpdateGeofenceDto, tenantId: string) {
     const existing = await this.findOne(id, tenantId);
 
-    const updated = await this.geofenceModel.update({
+    const updated = await this.prisma.geofence.update({
       where: { id },
       data: {
         name: dto.name,
@@ -102,7 +104,10 @@ export class GeofencesService {
 
     if (existing.traccarGeofenceId && dto.coordinates) {
       try {
-        const area = this.coordinatesToTraccarArea(existing.type, dto.coordinates);
+        const area = this.coordinatesToTraccarArea(
+          existing.type,
+          dto.coordinates,
+        );
         await this.traccarService.updateGeofence(
           existing.traccarGeofenceId,
           dto.name || existing.name,
@@ -127,16 +132,20 @@ export class GeofencesService {
       }
     }
 
-    await this.gvModel.deleteMany({ where: { geofenceId: id } });
-    await this.geofenceModel.delete({ where: { id } });
+    await this.prisma.geofenceVehicle.deleteMany({ where: { geofenceId: id } });
+    await this.prisma.geofence.delete({ where: { id } });
     return { deleted: true };
   }
 
-  async linkVehicles(geofenceId: string, vehicleIds: string[], tenantId: string) {
+  async linkVehicles(
+    geofenceId: string,
+    vehicleIds: string[],
+    tenantId: string,
+  ) {
     await this.findOne(geofenceId, tenantId);
 
     // Remove existing links
-    await this.gvModel.deleteMany({ where: { geofenceId } });
+    await this.prisma.geofenceVehicle.deleteMany({ where: { geofenceId } });
 
     // Create new links
     const data = vehicleIds.map((vehicleId) => ({
@@ -144,20 +153,23 @@ export class GeofencesService {
       vehicleId,
     }));
 
-    await this.gvModel.createMany({ data, skipDuplicates: true });
+    await this.prisma.geofenceVehicle.createMany({
+      data,
+      skipDuplicates: true,
+    });
 
     return this.findOne(geofenceId, tenantId);
   }
 
   // Buscar geofences de um veículo para checagem de alertas
   async getVehicleGeofences(vehicleId: string, tenantId: string) {
-    const links = await this.gvModel.findMany({
+    const links = await this.prisma.geofenceVehicle.findMany({
       where: { vehicleId },
       include: { geofence: true },
     });
     return links
-      .map((l: any) => l.geofence)
-      .filter((g: any) => g.tenantId === tenantId && g.active);
+      .map((l) => l.geofence)
+      .filter((g) => g.tenantId === tenantId && g.active);
   }
 
   // Point-in-geofence check
@@ -180,31 +192,46 @@ export class GeofencesService {
     return false;
   }
 
-  private haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  private haversineDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
     const R = 6371000; // metros
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
       Math.sin(dLat / 2) ** 2 +
-      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  private pointInPolygon(lat: number, lng: number, polygon: number[][]): boolean {
+  private pointInPolygon(
+    lat: number,
+    lng: number,
+    polygon: number[][],
+  ): boolean {
     let inside = false;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
       const xi = polygon[i][1]; // lat
       const yi = polygon[i][0]; // lng
       const xj = polygon[j][1];
       const yj = polygon[j][0];
-      const intersect = yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+      const intersect =
+        yi > lng !== yj > lng &&
+        lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
       if (intersect) inside = !inside;
     }
     return inside;
   }
 
-  private coordinatesToTraccarArea(type: string, coordinates: Record<string, unknown>): string {
+  private coordinatesToTraccarArea(
+    type: string,
+    coordinates: Record<string, unknown>,
+  ): string {
     if (type === 'CIRCLE') {
       const { latitude, longitude, radius } = coordinates as any;
       return `CIRCLE (${latitude} ${longitude}, ${radius})`;

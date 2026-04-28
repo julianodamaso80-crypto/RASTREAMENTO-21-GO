@@ -1,5 +1,10 @@
 import { Controller, Get, Param, Query, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { TraccarService } from './traccar.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,7 +23,9 @@ export class TraccarController {
   ) {}
 
   @Get('devices')
-  @ApiOperation({ summary: 'Lista dispositivos do Traccar (filtrado por tenant)' })
+  @ApiOperation({
+    summary: 'Lista dispositivos do Traccar (filtrado por tenant)',
+  })
   async getDevices(@Req() req: AuthenticatedRequest) {
     const tenantId = req.tenantId;
     const vehicles = await this.prisma.vehicle.findMany({
@@ -37,7 +44,9 @@ export class TraccarController {
   }
 
   @Get('positions')
-  @ApiOperation({ summary: 'Posições atuais de todos os dispositivos do tenant' })
+  @ApiOperation({
+    summary: 'Posições atuais de todos os dispositivos do tenant',
+  })
   async getPositions(@Req() req: AuthenticatedRequest) {
     const tenantId = req.tenantId;
     const vehicles = await this.prisma.vehicle.findMany({
@@ -57,7 +66,11 @@ export class TraccarController {
 
   @Get('positions/:deviceId/history')
   @ApiOperation({ summary: 'Histórico de posições de um dispositivo' })
-  @ApiQuery({ name: 'from', required: true, description: 'Data início (ISO 8601)' })
+  @ApiQuery({
+    name: 'from',
+    required: true,
+    description: 'Data início (ISO 8601)',
+  })
   @ApiQuery({ name: 'to', required: true, description: 'Data fim (ISO 8601)' })
   async getPositionHistory(
     @Param('deviceId') deviceId: string,
