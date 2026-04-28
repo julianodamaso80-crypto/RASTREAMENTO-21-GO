@@ -10,6 +10,8 @@ import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { FilterDevicesDto } from './dto/filter-devices.dto';
 
+const BLE_MODELS = ['BLE_KTAG', 'BLE_REDTAG', 'BLE_AIRTAG_GENERIC'];
+
 @Injectable()
 export class DevicesService {
   private readonly logger = new Logger(DevicesService.name);
@@ -40,8 +42,19 @@ export class DevicesService {
       this.deviceModel.findMany({
         where,
         include: {
-          chip: { select: { id: true, iccid: true, phoneNumber: true, operator: true, status: true, apn: true } },
-          vehicle: { select: { id: true, plate: true, brand: true, model: true } },
+          chip: {
+            select: {
+              id: true,
+              iccid: true,
+              phoneNumber: true,
+              operator: true,
+              status: true,
+              apn: true,
+            },
+          },
+          vehicle: {
+            select: { id: true, plate: true, brand: true, model: true },
+          },
         },
         skip: (page - 1) * perPage,
         take: perPage,
@@ -58,7 +71,13 @@ export class DevicesService {
       where: { id, tenantId, deletedAt: null },
       include: {
         chip: true,
-        vehicle: { include: { associate: { select: { id: true, name: true, cpf: true, phone: true } } } },
+        vehicle: {
+          include: {
+            associate: {
+              select: { id: true, name: true, cpf: true, phone: true },
+            },
+          },
+        },
         smsCommands: { orderBy: { createdAt: 'desc' }, take: 20 },
       },
     });
@@ -67,7 +86,9 @@ export class DevicesService {
   }
 
   async create(dto: CreateDeviceDto, tenantId: string) {
-    const existing = await this.deviceModel.findFirst({ where: { imei: dto.imei } });
+    const existing = await this.deviceModel.findFirst({
+      where: { imei: dto.imei },
+    });
     if (existing) throw new ConflictException('IMEI já cadastrado');
 
     const data: any = {
@@ -86,16 +107,25 @@ export class DevicesService {
 
     const device = await this.deviceModel.create({ data });
 
-    // Criar device no Traccar
-    try {
-      const traccarDevice = await this.traccarService.createDevice(dto.imei, dto.imei);
-      await this.deviceModel.update({
-        where: { id: device.id },
-        data: { traccarDeviceId: traccarDevice.id },
-      });
-      this.logger.log(`Device Traccar criado: ${traccarDevice.id} para IMEI ${dto.imei}`);
-    } catch (error) {
-      this.logger.warn(`Falha ao criar device no Traccar: ${error instanceof Error ? error.message : error}`);
+    // TAGs BLE não passam pelo Traccar (não são GPS)
+    if (!BLE_MODELS.includes(dto.model)) {
+      try {
+        const traccarDevice = await this.traccarService.createDevice(
+          dto.imei,
+          dto.imei,
+        );
+        await this.deviceModel.update({
+          where: { id: device.id },
+          data: { traccarDeviceId: traccarDevice.id },
+        });
+        this.logger.log(
+          `Device Traccar criado: ${traccarDevice.id} para IMEI ${dto.imei}`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Falha ao criar device no Traccar: ${error instanceof Error ? error.message : error}`,
+        );
+      }
     }
 
     return this.findOne(device.id, tenantId);
@@ -106,8 +136,10 @@ export class DevicesService {
 
     const updateData: any = {};
     if (dto.brand !== undefined) updateData.brand = dto.brand;
-    if (dto.firmwareVersion !== undefined) updateData.firmwareVersion = dto.firmwareVersion;
-    if (dto.serialNumber !== undefined) updateData.serialNumber = dto.serialNumber;
+    if (dto.firmwareVersion !== undefined)
+      updateData.firmwareVersion = dto.firmwareVersion;
+    if (dto.serialNumber !== undefined)
+      updateData.serialNumber = dto.serialNumber;
     if (dto.notes !== undefined) updateData.notes = dto.notes;
     if (dto.installedBy !== undefined) updateData.installedBy = dto.installedBy;
 
@@ -136,13 +168,15 @@ export class DevicesService {
     const existingDevice = await this.deviceModel.findFirst({
       where: { vehicleId, deletedAt: null, id: { not: deviceId } },
     });
-    if (existingDevice) throw new ConflictException('Veículo já possui um dispositivo vinculado');
+    if (existingDevice)
+      throw new ConflictException('Veículo já possui um dispositivo vinculado');
 
     await this.deviceModel.update({
       where: { id: deviceId },
       data: {
         vehicleId,
-        status: device.status === 'PENDING_INSTALL' ? 'INSTALLED' : device.status,
+        status:
+          device.status === 'PENDING_INSTALL' ? 'INSTALLED' : device.status,
         installedAt: device.installedAt || new Date(),
       },
     });
@@ -188,7 +222,8 @@ export class DevicesService {
     const existingDevice = await this.deviceModel.findFirst({
       where: { chipId, deletedAt: null, id: { not: deviceId } },
     });
-    if (existingDevice) throw new ConflictException('Chip já vinculado a outro dispositivo');
+    if (existingDevice)
+      throw new ConflictException('Chip já vinculado a outro dispositivo');
 
     await this.deviceModel.update({
       where: { id: deviceId },
@@ -215,7 +250,9 @@ export class DevicesService {
     let traccarStatus = null;
     if (device.traccarDeviceId) {
       try {
-        traccarStatus = await this.traccarService.getDevice(device.traccarDeviceId);
+        traccarStatus = await this.traccarService.getDevice(
+          device.traccarDeviceId,
+        );
       } catch (error) {
         this.logger.warn(`Falha ao obter status do Traccar: ${error}`);
       }

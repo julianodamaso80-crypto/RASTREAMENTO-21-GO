@@ -12,7 +12,8 @@ import {
 import type { Vehicle, VehicleWithTracking, DisplayStatus } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
-import { vehiclesApi, traccarApi, alertsApi } from '@/lib/api';
+import type { BleTag, BleSightingEvent } from '@/types/ble-tag';
+import { vehiclesApi, traccarApi, alertsApi, bleTagsApi } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import { useTraccarSocket } from '@/hooks/use-traccar-socket';
@@ -43,6 +44,8 @@ interface TrackingContextType {
   unreadCount: number;
   markAlertRead: (id: string) => void;
   markAllAlertsRead: () => void;
+  bleTags: BleTag[];
+  refreshBleTags: () => Promise<void>;
 }
 
 const TrackingContext = createContext<TrackingContextType | null>(null);
@@ -58,6 +61,16 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [statusFilter, setStatusFilter] = useState<'all' | DisplayStatus>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [bleTags, setBleTags] = useState<BleTag[]>([]);
+
+  const refreshBleTags = useCallback(async () => {
+    try {
+      const tags = await bleTagsApi.getAll();
+      setBleTags(tags);
+    } catch {
+      // tenant sem TAGs ou backend offline — silencia
+    }
+  }, []);
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -86,6 +99,11 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         setVehicleMap(vMap);
         setDeviceMap(dMap);
         setPositionMap(pMap);
+        // BLE Tags em paralelo (não-crítico se falhar)
+        bleTagsApi
+          .getAll()
+          .then((tags) => setBleTags(tags))
+          .catch(() => undefined);
       } catch {
         // Fallback para mock data
         const vMap = new Map<string, Vehicle>();
@@ -132,11 +150,25 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const handleBleSighting = useCallback((event: BleSightingEvent) => {
+    setBleTags((prev) =>
+      prev.map((tag) => {
+        if (tag.id !== event.deviceId) return tag;
+        return {
+          ...tag,
+          lastConnection: event.sighting.createdAt,
+          bleSightings: [event.sighting, ...tag.bleSightings].slice(0, 1),
+        };
+      }),
+    );
+  }, []);
+
   const { isConnected } = useTraccarSocket({
     token,
     onPositionUpdate: handlePositionUpdate,
     onDeviceUpdate: handleDeviceUpdate,
     onAlert: handleAlert,
+    onBleSighting: handleBleSighting,
   });
 
   // Merge vehicles + devices + positions
@@ -234,6 +266,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         unreadCount,
         markAlertRead,
         markAllAlertsRead,
+        bleTags,
+        refreshBleTags,
       }}
     >
       {children}

@@ -8,6 +8,7 @@ import type { Geofence, CreateGeofencePayload } from '@/types/geofence';
 import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, ServerInfo } from '@/types/device';
 import type { DashboardOverview, DashboardPeriod } from '@/types/dashboard';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
+import type { BleTag, BleSighting } from '@/types/ble-tag';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
@@ -257,6 +258,21 @@ export const serverApi = {
   getInfo: async (): Promise<ServerInfo> => {
     const res = await api.get<ApiResponse<ServerInfo>>('/server/info');
     return res.data.data;
+  },
+};
+
+export const bleTagsApi = {
+  getAll: async (): Promise<BleTag[]> => {
+    const res = await api.get<ApiResponse<BleTag[]>>('/ble-tags');
+    return res.data.data;
+  },
+  getById: async (id: string): Promise<BleTag> => {
+    const res = await api.get<ApiResponse<BleTag>>(`/ble-tags/${id}`);
+    return res.data.data;
+  },
+  getSightings: async (id: string, params?: { page?: number; perPage?: number }): Promise<PaginatedResponse<BleSighting>> => {
+    const res = await api.get<PaginatedResponse<BleSighting>>(`/ble-tags/${id}/sightings`, { params });
+    return res.data;
   },
 };
 

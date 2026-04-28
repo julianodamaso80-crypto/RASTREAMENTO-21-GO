@@ -15,11 +15,14 @@ import { AlertsModule } from './modules/alerts/alerts.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { GeofencesModule } from './modules/geofences/geofences.module';
 import { DevicesModule } from './modules/devices/devices.module';
+import { BleTagsModule } from './modules/ble-tags/ble-tags.module';
 import { ChipsModule } from './modules/chips/chips.module';
 import { SmsCommandsModule } from './modules/sms-commands/sms-commands.module';
 import { ServerInfoModule } from './modules/server-info/server-info.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { EmailModule } from './modules/email/email.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -52,11 +55,14 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     ReportsModule,
     GeofencesModule,
     DevicesModule,
+    BleTagsModule,
     ChipsModule,
     SmsCommandsModule,
     ServerInfoModule,
     DashboardModule,
     EmailModule,
+    AdminModule,
+    AuditModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

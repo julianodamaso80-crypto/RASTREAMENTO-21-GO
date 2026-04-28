@@ -31,7 +31,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
         error = (resObj.error as string) || error;
       }
     } else {
-      this.logger.error('Unhandled exception', exception);
+      const err = exception as Error;
+      this.logger.error(
+        `Unhandled exception: ${err?.message || 'unknown'}`,
+        err?.stack || JSON.stringify(exception),
+      );
     }
 
     response.status(status).json({

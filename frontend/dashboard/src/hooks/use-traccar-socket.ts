@@ -4,12 +4,14 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { TraccarPosition, TraccarDevice } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
+import type { BleSightingEvent } from '@/types/ble-tag';
 
 interface UseTraccarSocketOptions {
   token: string | null;
   onPositionUpdate?: (position: TraccarPosition) => void;
   onDeviceUpdate?: (device: TraccarDevice) => void;
   onAlert?: (alert: Alert) => void;
+  onBleSighting?: (event: BleSightingEvent) => void;
 }
 
 export function useTraccarSocket({
@@ -17,6 +19,7 @@ export function useTraccarSocket({
   onPositionUpdate,
   onDeviceUpdate,
   onAlert,
+  onBleSighting,
 }: UseTraccarSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
@@ -59,6 +62,10 @@ export function useTraccarSocket({
 
     socket.on('alert:new', (data: Alert) => {
       onAlert?.(data);
+    });
+
+    socket.on('ble:sighting', (data: BleSightingEvent) => {
+      onBleSighting?.(data);
     });
 
     return () => {

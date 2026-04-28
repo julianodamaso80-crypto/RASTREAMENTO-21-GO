@@ -13,6 +13,7 @@ import WebSocket from 'ws';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from './traccar.service';
 import { AlertsService } from '../alerts/alerts.service';
+import { BleTagsService } from '../ble-tags/ble-tags.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -36,6 +37,7 @@ export class TraccarGateway
     private prisma: PrismaService,
     private traccarService: TraccarService,
     private alertsService: AlertsService,
+    private bleTagsService: BleTagsService,
   ) {}
 
   async afterInit() {
@@ -44,6 +46,11 @@ export class TraccarGateway
     // Configurar emitter de alertas para WebSocket
     this.alertsService.setEmitter((tenantId, alert) => {
       this.server.to(`tenant:${tenantId}`).emit('alert:new', alert);
+    });
+
+    // Configurar emitter de detecções BLE (TAGs Apple Find My) para WebSocket
+    this.bleTagsService.setEmitter((tenantId, payload) => {
+      this.server.to(`tenant:${tenantId}`).emit('ble:sighting', payload);
     });
 
     await this.refreshDeviceMapping();
@@ -70,7 +77,9 @@ export class TraccarGateway
       client.data.tenantId = tenantId;
       client.data.userId = payload.sub;
 
-      this.logger.log(`Cliente conectado: ${payload.email} (tenant: ${tenantId})`);
+      this.logger.log(
+        `Cliente conectado: ${payload.email} (tenant: ${tenantId})`,
+      );
     } catch {
       this.logger.warn('Cliente rejeitado: token inválido');
       client.disconnect();
@@ -78,7 +87,9 @@ export class TraccarGateway
   }
 
   handleDisconnect(client: Socket) {
-    this.logger.debug(`Cliente desconectado: ${client.data?.userId || 'unknown'}`);
+    this.logger.debug(
+      `Cliente desconectado: ${client.data?.userId || 'unknown'}`,
+    );
   }
 
   async refreshDeviceMapping() {
@@ -97,7 +108,9 @@ export class TraccarGateway
         }
       }
 
-      this.logger.log(`Device mapping atualizado: ${this.deviceTenantMap.size} devices`);
+      this.logger.log(
+        `Device mapping atualizado: ${this.deviceTenantMap.size} devices`,
+      );
     } catch (error) {
       this.logger.error('Falha ao atualizar device mapping', error);
     }
@@ -108,7 +121,9 @@ export class TraccarGateway
     const cookie = this.traccarService.getSessionCookie();
 
     if (!cookie) {
-      this.logger.warn('Sem sessão Traccar, WebSocket não conectado. Retry em 30s...');
+      this.logger.warn(
+        'Sem sessão Traccar, WebSocket não conectado. Retry em 30s...',
+      );
       setTimeout(() => this.connectToTraccar(), 30000);
       return;
     }
@@ -133,7 +148,9 @@ export class TraccarGateway
     });
 
     this.traccarWs.on('close', () => {
-      this.logger.warn('Traccar WebSocket desconectado. Reconectando em 10s...');
+      this.logger.warn(
+        'Traccar WebSocket desconectado. Reconectando em 10s...',
+      );
       setTimeout(() => this.connectToTraccar(), 10000);
     });
 
@@ -147,14 +164,18 @@ export class TraccarGateway
       for (const position of data.positions) {
         const tenantId = this.deviceTenantMap.get(position.deviceId);
         if (tenantId) {
-          this.server.to(`tenant:${tenantId}`).emit('position:update', position);
+          this.server
+            .to(`tenant:${tenantId}`)
+            .emit('position:update', position);
 
           // Processar alertas
           const vehicleId = this.deviceVehicleMap.get(position.deviceId);
           if (vehicleId) {
             this.alertsService
               .processPosition(position as any, vehicleId, tenantId)
-              .catch((err) => this.logger.error(`Erro ao processar alerta: ${err}`));
+              .catch((err) =>
+                this.logger.error(`Erro ao processar alerta: ${err}`),
+              );
           }
         }
       }

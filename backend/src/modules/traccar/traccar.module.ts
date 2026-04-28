@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { TraccarService } from './traccar.service';
 import { TraccarController } from './traccar.controller';
 import { TraccarGateway } from './traccar.gateway';
+import { BleTagsModule } from '../ble-tags/ble-tags.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { TraccarGateway } from './traccar.gateway';
         secret: config.get<string>('jwt.secret'),
       }),
     }),
+    BleTagsModule,
   ],
   controllers: [TraccarController],
   providers: [TraccarService, TraccarGateway],

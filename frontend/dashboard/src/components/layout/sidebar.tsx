@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ const navItems: { href: string; label: string; icon: any; disabled?: boolean }[]
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/geofencing', label: 'Geofencing', icon: Hexagon },
   { href: '/dispositivos', label: 'Dispositivos', icon: Radio },
+  { href: '/etiquetas-ble', label: 'Etiquetas BLE', icon: Tag },
   { href: '/chips', label: 'Chips M2M', icon: Smartphone },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];

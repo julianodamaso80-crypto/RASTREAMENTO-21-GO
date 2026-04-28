@@ -1,0 +1,23 @@
+services:
+  anisette:
+    image: dadoum/anisette-v3-server:latest
+    container_name: poc-anisette
+    restart: unless-stopped
+    ports:
+      - "6969:6969"
+    volumes:
+      - ./data/anisette:/home/Alcoholic/.config/anisette-v3/lib/
+
+  macless-haystack:
+    image: christld/macless-haystack:latest-dev
+    container_name: poc-macless-haystack
+    restart: unless-stopped
+    depends_on:
+      - anisette
+    ports:
+      - "6176:6176"
+    environment:
+      - TZ=America/Sao_Paulo
+    volumes:
+      - ./keys:/app/endpoint/data
+      - ./data/haystack:/app/endpoint/data/state
