@@ -45,6 +45,9 @@ enum DeviceModel {
   CONCOX_GT06N
   SINOTRACK_ST901
   SINOTRACK_ST905
+  BLE_KTAG
+  BLE_REDTAG
+  BLE_AIRTAG_GENERIC
   OTHER
 }
 
@@ -113,24 +116,54 @@ enum AlertType {
   GEOFENCE_OUT
 }
 
-model Tenant {
-  id           String   @id @default(uuid()) @db.Uuid
-  name         String
-  slug         String   @unique
-  document     String?  @unique
-  logoUrl      String?  @map("logo_url")
-  primaryColor String   @default("#10b981") @map("primary_color")
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+enum AlertStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
 
-  users      User[]
-  vehicles   Vehicle[]
-  associates Associate[]
-  alerts     Alert[]
-  geofences  Geofence[]
-  devices    Device[]
-  chips      Chip[]
+enum AlertHistoryAction {
+  CREATED
+  ASSIGNED
+  UNASSIGNED
+  COMMENTED
+  RESOLVED
+  REOPENED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  RESTORE
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  PASSWORD_RESET
+  COMMAND_SENT
+  OTHER
+}
+
+model Tenant {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String    @unique
+  document     String?   @unique
+  logoUrl      String?   @map("logo_url")
+  primaryColor String    @default("#10b981") @map("primary_color")
+  active       Boolean   @default(true)
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  users         User[]
+  vehicles      Vehicle[]
+  associates    Associate[]
+  alerts        Alert[]
+  geofences     Geofence[]
+  devices       Device[]
+  chips         Chip[]
+  bleSightings  BleSighting[]
 
   @@map("tenants")
 }
@@ -146,11 +179,13 @@ model User {
   tenantId            String    @map("tenant_id") @db.Uuid
   resetTokenHash      String?   @map("reset_token_hash")
   resetTokenExpiresAt DateTime? @map("reset_token_expires_at")
+  deletedAt           DateTime? @map("deleted_at")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
+  @@index([tenantId, deletedAt])
   @@map("users")
 }
 
@@ -174,8 +209,8 @@ model Vehicle {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  tenant           Tenant             @relation(fields: [tenantId], references: [id])
-  associate        Associate?         @relation(fields: [associateId], references: [id])
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  associate        Associate?        @relation(fields: [associateId], references: [id])
   alerts           Alert[]
   geofenceVehicles GeofenceVehicle[]
   device           Device?
@@ -194,56 +229,88 @@ model Associate {
   email      String?
   tenantId   String    @map("tenant_id") @db.Uuid
   hinovaCode String?   @map("hinova_code")
+  deletedAt  DateTime? @map("deleted_at")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   vehicles Vehicle[]
 
+  @@index([tenantId, deletedAt])
   @@map("associates")
 }
 
 model Alert {
-  id        String    @id @default(uuid()) @db.Uuid
-  type      AlertType
-  message   String
-  data      Json?
-  read      Boolean   @default(false)
-  vehicleId String    @map("vehicle_id") @db.Uuid
-  tenantId  String    @map("tenant_id") @db.Uuid
-  createdAt DateTime  @default(now()) @map("created_at")
+  id           String      @id @default(uuid()) @db.Uuid
+  type         AlertType
+  message      String
+  data         Json?
+  read         Boolean     @default(false)
+  status       AlertStatus @default(OPEN)
+  assignedToId String?     @map("assigned_to_id") @db.Uuid
+  assignedAt   DateTime?   @map("assigned_at")
+  resolvedById String?     @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime?   @map("resolved_at")
+  resolution   String?
+  vehicleId    String      @map("vehicle_id") @db.Uuid
+  tenantId     String      @map("tenant_id") @db.Uuid
+  deletedAt    DateTime?   @map("deleted_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
 
-  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  vehicle Vehicle        @relation(fields: [vehicleId], references: [id])
+  tenant  Tenant         @relation(fields: [tenantId], references: [id])
+  history AlertHistory[]
 
   @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, status, createdAt(sort: Desc)])
+  @@index([assignedToId, status])
   @@map("alerts")
 }
 
-model Geofence {
-  id              String           @id @default(uuid()) @db.Uuid
-  name            String
-  description     String?
-  type            GeofenceType
-  coordinates     Json
-  color           String           @default("#3b82f6")
-  active          Boolean          @default(true)
-  traccarGeofenceId Int?           @map("traccar_geofence_id")
-  tenantId        String           @map("tenant_id") @db.Uuid
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+model AlertHistory {
+  id        String             @id @default(uuid()) @db.Uuid
+  alertId   String             @map("alert_id") @db.Uuid
+  userId    String?            @map("user_id") @db.Uuid
+  userEmail String?            @map("user_email")
+  action    AlertHistoryAction
+  comment   String?
+  metadata  Json?
+  createdAt DateTime           @default(now()) @map("created_at")
 
-  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  alert Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId, createdAt(sort: Desc)])
+  @@map("alert_history")
+}
+
+model Geofence {
+  id                String       @id @default(uuid()) @db.Uuid
+  name              String
+  description       String?
+  type              GeofenceType
+  coordinates       Json
+  color             String       @default("#3b82f6")
+  active            Boolean      @default(true)
+  traccarGeofenceId Int?         @map("traccar_geofence_id")
+  tenantId          String       @map("tenant_id") @db.Uuid
+  deletedAt         DateTime?    @map("deleted_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
   geofenceVehicles GeofenceVehicle[]
 
+  @@index([tenantId, deletedAt])
   @@map("geofences")
 }
 
 model GeofenceVehicle {
-  id          String   @id @default(uuid()) @db.Uuid
-  geofenceId  String   @map("geofence_id") @db.Uuid
-  vehicleId   String   @map("vehicle_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid()) @db.Uuid
+  geofenceId String   @map("geofence_id") @db.Uuid
+  vehicleId  String   @map("vehicle_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
 
   geofence Geofence @relation(fields: [geofenceId], references: [id], onDelete: Cascade)
   vehicle  Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -275,10 +342,31 @@ model Device {
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
-  smsCommands SmsCommand[]
+  smsCommands  SmsCommand[]
+  bleSightings BleSighting[]
 
   @@index([tenantId, status])
   @@map("devices")
+}
+
+model BleSighting {
+  id            String   @id @default(uuid()) @db.Uuid
+  deviceId      String   @map("device_id") @db.Uuid
+  device        Device   @relation(fields: [deviceId], references: [id])
+  macAddress    String   @map("mac_address")
+  rssi          Int
+  hashedAdvKey  String?  @map("hashed_adv_key")
+  counterByte   Int?     @map("counter_byte")
+  scannerLat    Float?   @map("scanner_lat")
+  scannerLng    Float?   @map("scanner_lng")
+  scannerSource String?  @map("scanner_source")
+  tenantId      String   @map("tenant_id") @db.Uuid
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([deviceId, createdAt(sort: Desc)])
+  @@map("ble_sightings")
 }
 
 model Chip {
@@ -322,4 +410,27 @@ model SmsCommand {
 
   @@index([deviceId, createdAt(sort: Desc)])
   @@map("sms_commands")
+}
+
+model AuditLog {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String?     @map("tenant_id") @db.Uuid
+  userId     String?     @map("user_id") @db.Uuid
+  userEmail  String?     @map("user_email")
+  action     AuditAction
+  entity     String?
+  entityId   String?     @map("entity_id")
+  method     String
+  path       String
+  statusCode Int         @map("status_code")
+  ip         String?
+  userAgent  String?     @map("user_agent")
+  metadata   Json?
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([entity, entityId])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("audit_logs")
 }
