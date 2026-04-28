@@ -39,3 +39,7 @@ backend/prisma/*.db-journal
 # Misc
 *.tsbuildinfo
 .turbo/
+
+# Claude Code (settings locais e MCP com secrets)
+.claude/
+.mcp.json
