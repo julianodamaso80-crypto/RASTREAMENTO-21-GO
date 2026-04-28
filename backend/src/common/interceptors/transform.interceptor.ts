@@ -17,9 +17,10 @@ export interface TransformedResponse<T> {
 }
 
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, TransformedResponse<T>>
-{
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  TransformedResponse<T>
+> {
   intercept(
     _context: ExecutionContext,
     next: CallHandler,
@@ -27,7 +28,12 @@ export class TransformInterceptor<T>
     return next.handle().pipe(
       map((result) => {
         // Se já tem formato paginado, retorna como está
-        if (result && typeof result === 'object' && 'data' in result && 'meta' in result) {
+        if (
+          result &&
+          typeof result === 'object' &&
+          'data' in result &&
+          'meta' in result
+        ) {
           return result;
         }
         return { data: result };
