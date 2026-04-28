@@ -1,7 +1,13 @@
-import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type, Transform } from 'class-transformer';
-import { AlertType } from '.prisma/client';
+import { Transform } from 'class-transformer';
+import { AlertStatus, AlertType } from '.prisma/client';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 
 export class FilterAlertsDto extends PaginationQueryDto {
@@ -9,6 +15,16 @@ export class FilterAlertsDto extends PaginationQueryDto {
   @IsOptional()
   @IsEnum(AlertType)
   type?: AlertType;
+
+  @ApiPropertyOptional({ enum: AlertStatus })
+  @IsOptional()
+  @IsEnum(AlertStatus)
+  status?: AlertStatus;
+
+  @ApiPropertyOptional({ description: 'UUID do usuário responsável' })
+  @IsOptional()
+  @IsUUID('4')
+  assignedToId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
