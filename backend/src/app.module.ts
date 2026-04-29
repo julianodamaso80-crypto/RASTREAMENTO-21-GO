@@ -19,6 +19,7 @@ import { BleTagsModule } from './modules/ble-tags/ble-tags.module';
 import { ChipsModule } from './modules/chips/chips.module';
 import { SmsCommandsModule } from './modules/sms-commands/sms-commands.module';
 import { ServerInfoModule } from './modules/server-info/server-info.module';
+import { HealthModule } from './modules/health/health.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { EmailModule } from './modules/email/email.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -59,6 +60,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     ChipsModule,
     SmsCommandsModule,
     ServerInfoModule,
+    HealthModule,
     DashboardModule,
     EmailModule,
     AdminModule,
