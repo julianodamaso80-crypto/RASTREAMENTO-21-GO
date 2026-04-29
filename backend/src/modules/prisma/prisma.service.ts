@@ -90,7 +90,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   private readonly ext: ExtendedPrismaClient;
 
   constructor() {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    // Pool size 20 (default 10) suporta ~5-10 operadores simultâneos +
+    // jobs de cron + crud sem saturar. Acima disso (Fase 3, 5k+ ativos)
+    // mover pra Postgres gerenciado com pool externo (PgBouncer).
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 20,
+      idleTimeoutMillis: 30000,
+    });
     const adapter = new PrismaPg(pool);
     this.base = new PrismaClient({ adapter });
     this.ext = createExtendedClient(this.base);

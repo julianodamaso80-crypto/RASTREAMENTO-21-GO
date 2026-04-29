@@ -37,6 +37,11 @@ services:
   traccar:
     image: traccar/traccar:6.5
     container_name: r21go-traccar
+    environment:
+      # Heap default ~256m derruba com >100 devices.
+      # 1500m suporta confortavelmente até alguns milhares; em prod (Fase 3)
+      # subir pra 4g num droplet dedicado.
+      JAVA_OPTS: "-Xms512m -Xmx1500m"
     ports:
       - "8082:8082"
       - "5055:5055/tcp"
