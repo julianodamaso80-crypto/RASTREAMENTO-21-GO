@@ -146,8 +146,17 @@ export class HinovaSyncService {
     hinova: HinovaVehicleDto,
     tenantId: string,
   ): Promise<'created' | 'updated' | 'skipped'> {
+    // `uniqueId` é unique global — um veículo já cadastrado em outro tenant
+    // ou registrado anteriormente neste tenant com placa diferente bate aqui.
+    // Buscamos por (plate+tenant) OU uniqueId pra evitar Unique Constraint.
+    const hinovaUniqueId = `HINOVA-${hinova.codigoVeiculo}`;
     const existingVehicle = await this.prisma.vehicle.findFirst({
-      where: { plate: hinova.placa, tenantId, deletedAt: null },
+      where: {
+        OR: [
+          { plate: hinova.placa, tenantId, deletedAt: null },
+          { uniqueId: hinovaUniqueId, deletedAt: null },
+        ],
+      },
     });
 
     // Mapear status Hinova → VehicleStatus
@@ -213,7 +222,7 @@ export class HinovaSyncService {
     await this.prisma.vehicle.create({
       data: {
         plate: hinova.placa,
-        uniqueId: `HINOVA-${hinova.codigoVeiculo}`,
+        uniqueId: hinovaUniqueId,
         brand: hinova.marca,
         model: hinova.modelo,
         color: hinova.cor,
