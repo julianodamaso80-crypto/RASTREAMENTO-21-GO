@@ -31,6 +31,10 @@ export class TraccarGateway
   // Cache: traccarDeviceId -> { tenantId, vehicleId }
   private deviceTenantMap = new Map<number, string>();
   private deviceVehicleMap = new Map<number, string>();
+  // Backoff exponencial pra reconnect WS Traccar
+  private wsReconnectAttempts = 0;
+  private readonly WS_BACKOFF_MIN_MS = 2_000;
+  private readonly WS_BACKOFF_MAX_MS = 60_000;
 
   constructor(
     private jwtService: JwtService,
@@ -125,15 +129,30 @@ export class TraccarGateway
     await this.refreshDeviceMapping();
   }
 
+  /**
+   * Calcula próximo delay com backoff exponencial + jitter.
+   * Min 2s, máx 60s. Evita thundering herd se Traccar reiniciar.
+   */
+  private nextWsBackoffMs(): number {
+    const exp = Math.min(
+      this.WS_BACKOFF_MAX_MS,
+      this.WS_BACKOFF_MIN_MS * 2 ** this.wsReconnectAttempts,
+    );
+    const jitter = Math.random() * 1000;
+    return Math.floor(exp + jitter);
+  }
+
   private connectToTraccar() {
     const traccarUrl = this.configService.get<string>('traccar.url');
     const cookie = this.traccarService.getSessionCookie();
 
     if (!cookie) {
+      const delay = this.nextWsBackoffMs();
+      this.wsReconnectAttempts++;
       this.logger.warn(
-        'Sem sessão Traccar, WebSocket não conectado. Retry em 30s...',
+        `Sem sessão Traccar, WebSocket não conectado. Retry em ${Math.round(delay / 1000)}s (tentativa #${this.wsReconnectAttempts})...`,
       );
-      setTimeout(() => this.connectToTraccar(), 30000);
+      setTimeout(() => this.connectToTraccar(), delay);
       return;
     }
 
@@ -145,6 +164,7 @@ export class TraccarGateway
 
     this.traccarWs.on('open', () => {
       this.logger.log(`Conectado ao Traccar WebSocket: ${wsUrl}`);
+      this.wsReconnectAttempts = 0; // reset backoff em sucesso
     });
 
     this.traccarWs.on('message', (raw: Buffer) => {
@@ -157,10 +177,12 @@ export class TraccarGateway
     });
 
     this.traccarWs.on('close', () => {
+      const delay = this.nextWsBackoffMs();
+      this.wsReconnectAttempts++;
       this.logger.warn(
-        'Traccar WebSocket desconectado. Reconectando em 10s...',
+        `Traccar WebSocket desconectado. Reconectando em ${Math.round(delay / 1000)}s (tentativa #${this.wsReconnectAttempts})...`,
       );
-      setTimeout(() => this.connectToTraccar(), 10000);
+      setTimeout(() => this.connectToTraccar(), delay);
     });
 
     this.traccarWs.on('error', (error) => {
