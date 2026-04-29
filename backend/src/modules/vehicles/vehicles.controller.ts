@@ -25,6 +25,8 @@ interface AuthenticatedRequest {
   user: { id: string; tenantId: string; role: string };
 }
 
+const isClient = (role: string): boolean => role === Role.CLIENT;
+
 @ApiTags('Veículos')
 @ApiBearerAuth()
 @Controller('vehicles')
@@ -37,7 +39,33 @@ export class VehiclesController {
     @Query() filters: FilterVehiclesDto,
     @Req() req: AuthenticatedRequest,
   ) {
+    // CLIENT só vê os próprios — usa rota /mine para clareza, mas aqui também
+    // forçamos filtro pra evitar leak se um CLIENT chegar nessa rota.
+    if (isClient(req.user.role)) {
+      return this.vehiclesService.findOwnedByUser(
+        req.user.id,
+        req.tenantId,
+        filters,
+      );
+    }
     return this.vehiclesService.findAll(req.tenantId, filters);
+  }
+
+  @Get('mine')
+  @ApiOperation({
+    summary: 'Lista veículos do usuário autenticado (CLIENT)',
+    description:
+      'Retorna veículos vinculados via UserVehicleAccess. Útil pro app/painel do cliente final.',
+  })
+  async findMine(
+    @Query() filters: FilterVehiclesDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.vehiclesService.findOwnedByUser(
+      req.user.id,
+      req.tenantId,
+      filters,
+    );
   }
 
   @Get(':id')
@@ -46,6 +74,13 @@ export class VehiclesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: AuthenticatedRequest,
   ) {
+    if (isClient(req.user.role)) {
+      return this.vehiclesService.findOneOwnedByUser(
+        id,
+        req.user.id,
+        req.tenantId,
+      );
+    }
     return this.vehiclesService.findOne(id, req.tenantId);
   }
 

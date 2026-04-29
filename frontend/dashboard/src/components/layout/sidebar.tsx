@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/contexts/auth-context';
 import {
   LayoutDashboard,
   Map,
@@ -26,24 +27,49 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-const navItems: { href: string; label: string; icon: any; disabled?: boolean }[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: any;
+  disabled?: boolean;
+  // Quando definido, item só aparece pra users cujo role esteja na lista.
+  // Sem `roles`, o item aparece pra todos os roles autenticados.
+  roles?: Array<'SUPER_ADMIN' | 'ADMIN' | 'OPERATOR' | 'VIEWER' | 'CLIENT'>;
+};
+
+// Pra CLIENT (dono do veículo), só fazem sentido: Mapa do(s) próprio(s)
+// veículo(s), Alertas (recebe quando algo acontece com ele), Relatórios.
+// Itens administrativos ficam ocultos.
+const NON_CLIENT_ROLES: NonNullable<NavItem['roles']> = [
+  'SUPER_ADMIN',
+  'ADMIN',
+  'OPERATOR',
+  'VIEWER',
+];
+
+const navItems: NavItem[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: NON_CLIENT_ROLES },
   { href: '/mapa', label: 'Mapa / Veículos', icon: Map },
   { href: '/alertas', label: 'Alertas', icon: Bell },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
-  { href: '/geofencing', label: 'Geofencing', icon: Hexagon },
-  { href: '/dispositivos', label: 'Dispositivos', icon: Radio },
-  { href: '/etiquetas-ble', label: 'Etiquetas BLE', icon: Tag },
-  { href: '/chips', label: 'Chips M2M', icon: Smartphone },
+  { href: '/geofencing', label: 'Geofencing', icon: Hexagon, roles: NON_CLIENT_ROLES },
+  { href: '/dispositivos', label: 'Dispositivos', icon: Radio, roles: NON_CLIENT_ROLES },
+  { href: '/etiquetas-ble', label: 'Etiquetas BLE', icon: Tag, roles: NON_CLIENT_ROLES },
+  { href: '/chips', label: 'Chips M2M', icon: Smartphone, roles: NON_CLIENT_ROLES },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 function NavContent({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const role = user?.role;
+  const visibleItems = navItems.filter(
+    (item) => !item.roles || (role && item.roles.includes(role)),
+  );
 
   return (
     <nav className="flex flex-col gap-1 px-2">
-      {navItems.map((item) => {
+      {visibleItems.map((item) => {
         const isActive =
           item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href);
         const ItemIcon = item.icon;

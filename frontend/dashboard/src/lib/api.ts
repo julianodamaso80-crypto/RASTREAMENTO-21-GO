@@ -61,6 +61,11 @@ export const vehiclesApi = {
     const res = await api.get<PaginatedResponse<Vehicle>>('/vehicles', { params });
     return res.data;
   },
+  // Para role CLIENT: lista apenas veículos vinculados via UserVehicleAccess
+  getMine: async (params?: Record<string, string | number>): Promise<PaginatedResponse<Vehicle>> => {
+    const res = await api.get<PaginatedResponse<Vehicle>>('/vehicles/mine', { params });
+    return res.data;
+  },
   getById: async (id: string): Promise<Vehicle> => {
     const res = await api.get<ApiResponse<Vehicle>>(`/vehicles/${id}`);
     return res.data.data;

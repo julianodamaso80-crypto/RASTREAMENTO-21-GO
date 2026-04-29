@@ -59,6 +59,83 @@ export class VehiclesService {
     };
   }
 
+  /**
+   * Lista veículos vinculados ao userId via UserVehicleAccess (role CLIENT).
+   * Mantém os filtros do findAll mas restringe ao subset que o user possui.
+   */
+  async findOwnedByUser(
+    userId: string,
+    tenantId: string,
+    filters: FilterVehiclesDto,
+  ) {
+    const { page, perPage, status, plate, search } = filters;
+
+    const accesses = await this.prisma.userVehicleAccess.findMany({
+      where: { userId },
+      select: { vehicleId: true },
+    });
+    const allowedIds = accesses.map((a) => a.vehicleId);
+
+    if (allowedIds.length === 0) {
+      return { data: [], meta: { total: 0, page, perPage } };
+    }
+
+    const where: Prisma.VehicleWhereInput = {
+      tenantId,
+      deletedAt: null,
+      id: { in: allowedIds },
+    };
+
+    if (status) where.status = status;
+    if (plate) where.plate = { contains: plate, mode: 'insensitive' };
+    if (search) {
+      where.AND = [
+        {
+          OR: [
+            { plate: { contains: search, mode: 'insensitive' } },
+            { model: { contains: search, mode: 'insensitive' } },
+            { brand: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.vehicle.findMany({
+        where,
+        include: {
+          associate: {
+            select: { id: true, name: true, cpf: true, phone: true },
+          },
+        },
+        skip: (page - 1) * perPage,
+        take: perPage,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.vehicle.count({ where }),
+    ]);
+
+    return { data, meta: { total, page, perPage } };
+  }
+
+  /**
+   * Detalhes de um veículo SE pertencer ao userId (role CLIENT).
+   * Joga 404 (não 403) pra não vazar informação de existência.
+   */
+  async findOneOwnedByUser(
+    id: string,
+    userId: string,
+    tenantId: string,
+  ) {
+    const access = await this.prisma.userVehicleAccess.findUnique({
+      where: { userId_vehicleId: { userId, vehicleId: id } },
+    });
+    if (!access) {
+      throw new NotFoundException('Veículo não encontrado');
+    }
+    return this.findOne(id, tenantId);
+  }
+
   async findOne(id: string, tenantId: string) {
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id, tenantId, deletedAt: null },

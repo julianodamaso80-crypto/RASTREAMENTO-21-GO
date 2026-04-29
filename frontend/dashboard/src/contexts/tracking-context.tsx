@@ -51,7 +51,7 @@ interface TrackingContextType {
 const TrackingContext = createContext<TrackingContextType | null>(null);
 
 export function TrackingProvider({ children }: { children: ReactNode }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [vehicleMap, setVehicleMap] = useState<Map<string, Vehicle>>(new Map());
   const [deviceMap, setDeviceMap] = useState<Map<number, TraccarDevice>>(new Map());
   const [positionMap, setPositionMap] = useState<Map<number, TraccarPosition>>(new Map());
@@ -76,8 +76,15 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadData() {
       try {
+        // CLIENT vê apenas seus veículos via /vehicles/mine; demais roles
+        // veem todos do tenant. /mine é safe pro server forçar isolamento.
+        const isClient = user?.role === 'CLIENT';
+        const vehiclesPromise = isClient
+          ? vehiclesApi.getMine({ perPage: 200 })
+          : vehiclesApi.getAll({ perPage: 200 });
+
         const [vehiclesRes, devices, positions, alertsRes, unread] = await Promise.all([
-          vehiclesApi.getAll({ perPage: 200 }),
+          vehiclesPromise,
           traccarApi.getDevices(),
           traccarApi.getPositions(),
           alertsApi.getAll({ perPage: 50 }),

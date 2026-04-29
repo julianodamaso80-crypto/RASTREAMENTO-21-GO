@@ -12,6 +12,9 @@ enum Role {
   ADMIN
   OPERATOR
   VIEWER
+  // CLIENT = dono do veículo. Vê só os veículos vinculados via UserVehicleAccess.
+  // Não acessa lista global, alertas de outros, geofences, etc.
+  CLIENT
 }
 
 enum VehicleStatus {
@@ -183,10 +186,28 @@ model User {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant         Tenant              @relation(fields: [tenantId], references: [id])
+  vehicleAccess  UserVehicleAccess[]
 
   @@index([tenantId, deletedAt])
   @@map("users")
+}
+
+/// Liga User (geralmente role=CLIENT) aos Vehicles que ele tem permissão de ver.
+/// Modelagem N:N pra suportar família com múltiplos carros + cliente que vendeu
+/// um veículo manter histórico só nos que ainda possui.
+model UserVehicleAccess {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  vehicleId String   @map("vehicle_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vehicleId])
+  @@index([vehicleId])
+  @@map("user_vehicle_access")
 }
 
 model Vehicle {
@@ -209,11 +230,12 @@ model Vehicle {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
-  associate        Associate?        @relation(fields: [associateId], references: [id])
+  tenant           Tenant              @relation(fields: [tenantId], references: [id])
+  associate        Associate?          @relation(fields: [associateId], references: [id])
   alerts           Alert[]
   geofenceVehicles GeofenceVehicle[]
   device           Device?
+  userAccess       UserVehicleAccess[]
 
   @@unique([plate, tenantId])
   @@map("vehicles")

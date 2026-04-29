@@ -153,6 +153,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get bleSighting() {
     return this.base.bleSighting;
   }
+  get userVehicleAccess() {
+    return this.base.userVehicleAccess;
+  }
 
   // Raw queries — sempre pelo base (extension não afeta raw)
   $queryRaw<T = unknown>(
