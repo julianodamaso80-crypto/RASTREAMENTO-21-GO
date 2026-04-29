@@ -113,6 +113,18 @@ export class TraccarService implements OnModuleInit {
     });
   }
 
+  /**
+   * Busca um device pelo `uniqueId` (IMEI). Retorna `null` se não existir.
+   * O Traccar não expõe filtro server-side por uniqueId; fazemos client-side.
+   * Aceitável até ~5k devices; acima disso considerar cache em Redis.
+   */
+  async getDeviceByUniqueId(uniqueId: string): Promise<TraccarDevice | null> {
+    return this.withRetry(async () => {
+      const { data } = await this.client.get<TraccarDevice[]>('/devices');
+      return data.find((d) => d.uniqueId === uniqueId) ?? null;
+    });
+  }
+
   async createDevice(name: string, uniqueId: string): Promise<TraccarDevice> {
     return this.withRetry(async () => {
       const { data } = await this.client.post('/devices', {

@@ -110,20 +110,28 @@ export class DevicesService {
     // TAGs BLE não passam pelo Traccar (não são GPS)
     if (!BLE_MODELS.includes(dto.model)) {
       try {
-        const traccarDevice = await this.traccarService.createDevice(
-          dto.imei,
+        // Reutiliza device existente no Traccar (caso o IMEI já tenha sido
+        // cadastrado pelo fornecedor) em vez de criar duplicado e ficar órfão.
+        const existing = await this.traccarService.getDeviceByUniqueId(
           dto.imei,
         );
+        const traccarDevice = existing
+          ? existing
+          : await this.traccarService.createDevice(dto.imei, dto.imei);
+
         await this.deviceModel.update({
           where: { id: device.id },
           data: { traccarDeviceId: traccarDevice.id },
         });
         this.logger.log(
-          `Device Traccar criado: ${traccarDevice.id} para IMEI ${dto.imei}`,
+          `Device Traccar ${existing ? 'reutilizado' : 'criado'}: ${traccarDevice.id} para IMEI ${dto.imei}`,
         );
       } catch (error) {
-        this.logger.warn(
-          `Falha ao criar device no Traccar: ${error instanceof Error ? error.message : error}`,
+        this.logger.error(
+          `Falha ao resolver device Traccar para IMEI ${dto.imei}: ${error instanceof Error ? error.message : error}`,
+        );
+        throw new ConflictException(
+          'Não foi possível registrar o rastreador no Traccar. Tente novamente em alguns segundos.',
         );
       }
     }

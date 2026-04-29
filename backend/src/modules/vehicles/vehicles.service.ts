@@ -85,7 +85,40 @@ export class VehiclesService {
       throw new ConflictException('Placa já cadastrada nesta empresa');
     }
 
-    // Cria veículo no banco
+    // Resolve o device no Traccar ANTES de criar o Vehicle no nosso banco.
+    // Se o IMEI já existe no Traccar (cadastrado pelo fornecedor do J16, por
+    // exemplo), reaproveita o id em vez de criar duplicado e ficar órfão.
+    let traccarDeviceId: number | null = null;
+    try {
+      const existingTraccar = await this.traccarService.getDeviceByUniqueId(
+        dto.uniqueId,
+      );
+      if (existingTraccar) {
+        traccarDeviceId = existingTraccar.id;
+        this.logger.log(
+          `Device Traccar já existia para uniqueId ${dto.uniqueId}: id=${existingTraccar.id} — reutilizando`,
+        );
+      } else {
+        const created = await this.traccarService.createDevice(
+          dto.plate,
+          dto.uniqueId,
+        );
+        traccarDeviceId = created.id;
+        this.logger.log(
+          `Device Traccar criado: ${created.id} para veículo ${dto.plate}`,
+        );
+      }
+    } catch (error) {
+      // Falha de Traccar agora é exceção: melhor abortar o cadastro do que
+      // criar Vehicle órfão sem traccarDeviceId (invisível no mapa).
+      this.logger.error(
+        `Falha ao resolver device Traccar para ${dto.uniqueId}: ${error instanceof Error ? error.message : error}`,
+      );
+      throw new ConflictException(
+        'Não foi possível registrar o rastreador no Traccar. Tente novamente em alguns segundos.',
+      );
+    }
+
     const vehicle = await this.prisma.vehicle.create({
       data: {
         plate: dto.plate,
@@ -98,27 +131,9 @@ export class VehiclesService {
         renavam: dto.renavam,
         tenantId,
         associateId: dto.associateId,
+        traccarDeviceId,
       },
     });
-
-    // Tenta criar dispositivo no Traccar
-    try {
-      const device = await this.traccarService.createDevice(
-        dto.plate,
-        dto.uniqueId,
-      );
-      await this.prisma.vehicle.update({
-        where: { id: vehicle.id },
-        data: { traccarDeviceId: device.id },
-      });
-      this.logger.log(
-        `Device Traccar criado: ${device.id} para veículo ${dto.plate}`,
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Falha ao criar device no Traccar para ${dto.plate}: ${error instanceof Error ? error.message : error}`,
-      );
-    }
 
     return vehicle;
   }
