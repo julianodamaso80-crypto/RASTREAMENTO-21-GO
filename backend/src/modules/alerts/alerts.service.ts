@@ -220,6 +220,33 @@ export class AlertsService {
     }
   }
 
+  /**
+   * Cria alerta `OFFLINE` para um veículo que parou de comunicar.
+   * Chamado pelo `AlertsCron` periodicamente. Idempotência (evitar
+   * spam de alertas seguidos) é responsabilidade do caller — esse
+   * método só cria.
+   */
+  async notifyOffline(
+    vehicleId: string,
+    tenantId: string,
+    lastUpdate: string | Date,
+  ) {
+    const last =
+      typeof lastUpdate === 'string'
+        ? new Date(lastUpdate)
+        : lastUpdate;
+    const minutesAgo = Math.floor(
+      (Date.now() - last.getTime()) / 60_000,
+    );
+    return this.createAlert(
+      AlertType.OFFLINE,
+      vehicleId,
+      tenantId,
+      `Rastreador sem comunicação há ${minutesAgo} min`,
+      { lastUpdate: last.toISOString(), minutesAgo },
+    );
+  }
+
   async findAll(tenantId: string, filters: FilterAlertsDto) {
     const {
       page,
