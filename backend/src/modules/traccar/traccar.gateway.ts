@@ -6,6 +6,7 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -114,6 +115,14 @@ export class TraccarGateway
     } catch (error) {
       this.logger.error('Falha ao atualizar device mapping', error);
     }
+  }
+
+  // Refresh periódico — evita que veículos novos cadastrados após o boot
+  // fiquem invisíveis no mapping (gateway sem rota de tenant) até restart.
+  // Interval em ms; aceitável para 20k devices porque a query é leve (índice em deletedAt + traccarDeviceId).
+  @Interval(2 * 60 * 1000)
+  async scheduledMappingRefresh() {
+    await this.refreshDeviceMapping();
   }
 
   private connectToTraccar() {
