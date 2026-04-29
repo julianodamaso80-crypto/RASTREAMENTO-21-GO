@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import configuration from './config/configuration';
@@ -26,6 +26,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
+import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
@@ -41,9 +42,16 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
           process.env.NODE_ENV !== 'production'
             ? { target: 'pino-pretty', options: { colorize: true } }
             : undefined,
-        level: process.env.NODE_ENV !== 'production' ? 'debug' : 'info',
+        // Em prod, 'info' loga TODA request HTTP (>500MB/dia em 20k ativos).
+        // 'warn' mantém só erros e warnings — suficiente pra observability + reduz custo.
+        // Override via env LOG_LEVEL pra debug pontual sem rebuild.
+        level:
+          process.env.LOG_LEVEL ||
+          (process.env.NODE_ENV === 'production' ? 'warn' : 'debug'),
       },
     }),
+    // 100 req/min por tenant (operador) ou IP (rotas públicas).
+    // Custom guard em `TenantThrottlerGuard` distingue os dois.
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     ScheduleModule.forRoot(),
     PrismaModule,
@@ -69,7 +77,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: TenantThrottlerGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
   ],
