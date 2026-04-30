@@ -6,6 +6,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: rastreamento21go
+      TZ: America/Sao_Paulo
     ports:
       - "5432:5432"
     volumes:
@@ -41,7 +42,8 @@ services:
       # Heap default ~256m derruba com >100 devices.
       # 1500m suporta confortavelmente até alguns milhares; em prod (Fase 3)
       # subir pra 4g num droplet dedicado.
-      JAVA_OPTS: "-Xms512m -Xmx1500m"
+      JAVA_OPTS: "-Xms512m -Xmx1500m -Duser.timezone=America/Sao_Paulo"
+      TZ: America/Sao_Paulo
     ports:
       - "8082:8082"
       - "5055:5055/tcp"
