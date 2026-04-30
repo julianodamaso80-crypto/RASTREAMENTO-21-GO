@@ -29,6 +29,41 @@ export function formatRelativeTime(isoDate: string): string {
   return `há ${days}d`;
 }
 
+const SP_TZ = 'America/Sao_Paulo';
+
+/**
+ * Formata uma data ISO (UTC do servidor) em horário BR. Independe do fuso
+ * do browser do usuário — sempre mostra horário de São Paulo. Usar pra
+ * datas absolutas (relatórios, logs, expirações).
+ */
+export function formatDateBR(isoDate: string): string {
+  return new Date(isoDate).toLocaleString('pt-BR', {
+    timeZone: SP_TZ,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export function formatDateOnlyBR(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString('pt-BR', {
+    timeZone: SP_TZ,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+export function formatTimeOnlyBR(isoDate: string): string {
+  return new Date(isoDate).toLocaleTimeString('pt-BR', {
+    timeZone: SP_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function getDisplayStatus(
   deviceStatus: string,
   speed: number,

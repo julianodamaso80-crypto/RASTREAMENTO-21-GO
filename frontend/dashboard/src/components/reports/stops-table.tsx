@@ -1,6 +1,7 @@
 'use client';
 
 import type { Stop } from '@/types/report';
+import { formatDateBR } from '@/lib/utils';
 
 interface StopsTableProps {
   stops: Stop[];
@@ -26,8 +27,8 @@ export function StopsTable({ stops }: StopsTableProps) {
           {stops.map((stop, i) => (
             <tr key={i} className="border-b border-border/20 hover:bg-muted/20">
               <td className="py-2 px-3">{stop.address || `${stop.latitude.toFixed(4)}, ${stop.longitude.toFixed(4)}`}</td>
-              <td className="py-2 px-3">{new Date(stop.startTime).toLocaleString('pt-BR')}</td>
-              <td className="py-2 px-3">{new Date(stop.endTime).toLocaleString('pt-BR')}</td>
+              <td className="py-2 px-3">{formatDateBR(stop.startTime)}</td>
+              <td className="py-2 px-3">{formatDateBR(stop.endTime)}</td>
               <td className="py-2 px-3 text-right font-medium text-yellow-400">{stop.duration} min</td>
             </tr>
           ))}
