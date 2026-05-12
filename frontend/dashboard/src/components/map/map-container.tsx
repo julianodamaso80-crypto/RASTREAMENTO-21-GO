@@ -217,7 +217,10 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     // ─────────────────────────────────────────────────────────────────
     const syncDomMarkers = useCallback(() => {
       const map = mapRef.current;
-      if (!map || !sourceLoadedRef.current) return;
+      if (!map) return;
+      // Se o source ainda não foi adicionado (boot inicial), não tenta query.
+      // querySourceFeatures pode lançar se source não existe; melhor proteger.
+      if (!map.getSource(SOURCE_ID)) return;
 
       const features = map.querySourceFeatures(SOURCE_ID, {
         filter: ['!', ['has', 'point_count']],
@@ -289,11 +292,29 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         | undefined;
       if (source) {
         source.setData({ type: 'FeatureCollection', features });
+        // setData é assíncrono no MapLibre — querySourceFeatures imediatamente
+        // pode não ver os features. Dois ticks de rAF dão tempo do tile pipeline
+        // processar o GeoJSON e popular o índice de queries.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => syncDomMarkers());
+        });
       } else {
-        // Source ainda não carregou (load event não disparou). Quando carregar,
-        // sourcedata vai disparar syncDomMarkers naturalmente.
+        // Source ainda não foi criado (load event não disparou). Tenta de novo
+        // em 250ms — o load deve ter disparado até lá.
+        const retry = setTimeout(() => {
+          const s = map.getSource(SOURCE_ID) as
+            | maplibregl.GeoJSONSource
+            | undefined;
+          if (s) {
+            s.setData({ type: 'FeatureCollection', features });
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => syncDomMarkers());
+            });
+          }
+        }, 250);
+        return () => clearTimeout(retry);
       }
-    }, [vehicles]);
+    }, [vehicles, syncDomMarkers]);
 
     return <div ref={mapContainerRef} className="w-full h-full" />;
   },
