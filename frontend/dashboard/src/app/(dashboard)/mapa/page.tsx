@@ -12,6 +12,10 @@ const MapContainer = dynamic(
   { ssr: false, loading: () => <div className="w-full h-full bg-background animate-pulse" /> },
 );
 
+// Zoom 16 = rua nivel cidade (consegue ver carro + ruas vizinhas).
+// 14 era o default — abria demais, usuario nao via o veiculo direito.
+const FOCUS_ZOOM = 16;
+
 export default function MapaPage() {
   const { filteredVehicles, selectedVehicleId, selectVehicle, vehicles } = useTracking();
   const mapRef = useRef<MapContainerRef>(null);
@@ -21,19 +25,20 @@ export default function MapaPage() {
       selectVehicle(vehicleId);
       const v = vehicles.find((veh) => veh.id === vehicleId);
       if (v && v.latitude && v.longitude) {
-        mapRef.current?.flyTo(v.longitude, v.latitude);
+        mapRef.current?.flyTo(v.longitude, v.latitude, FOCUS_ZOOM);
       }
     },
     [selectVehicle, vehicles],
   );
 
+  // Quando seleciona veiculo, da flyTo. Depois disso, segue o veiculo em
+  // tempo real: a cada mudanca em vehicles (WS updates), faz easeTo suave
+  // pra acompanhar o movimento sem desorientar o operador.
   useEffect(() => {
-    if (selectedVehicleId) {
-      const v = vehicles.find((veh) => veh.id === selectedVehicleId);
-      if (v && v.latitude && v.longitude) {
-        mapRef.current?.flyTo(v.longitude, v.latitude);
-      }
-    }
+    if (!selectedVehicleId) return;
+    const v = vehicles.find((veh) => veh.id === selectedVehicleId);
+    if (!v || !v.latitude || !v.longitude) return;
+    mapRef.current?.flyTo(v.longitude, v.latitude, FOCUS_ZOOM);
   }, [selectedVehicleId, vehicles]);
 
   return (
