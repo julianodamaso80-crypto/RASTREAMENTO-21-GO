@@ -12,9 +12,9 @@ const MapContainer = dynamic(
   { ssr: false, loading: () => <div className="w-full h-full bg-background animate-pulse" /> },
 );
 
-// Zoom 16 = rua nivel cidade (consegue ver carro + ruas vizinhas).
-// 14 era o default — abria demais, usuario nao via o veiculo direito.
-const FOCUS_ZOOM = 16;
+// Zoom 17 = vê o carro + nomes das ruas adjacentes claramente.
+// Operador entende em 1s onde o veículo está sem precisar dar zoom manual.
+const FOCUS_ZOOM = 17;
 
 export default function MapaPage() {
   const { filteredVehicles, selectedVehicleId, selectVehicle, vehicles } = useTracking();

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useTracking } from '@/contexts/tracking-context';
 import { cn, maskCPF, formatSpeed, formatRelativeTime } from '@/lib/utils';
 import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants';
+import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { BlockConfirmModal } from './block-confirm-modal';
 import { useState, useMemo } from 'react';
 
@@ -19,10 +20,20 @@ export function VehicleDetailPanel() {
     [vehicles, selectedVehicleId],
   );
 
+  // Reverse geocoding via Nominatim (free) — chamado ANTES do early return
+  // pra respeitar regras de hooks (sempre na mesma ordem).
+  const { address: reverseAddress, loading: addressLoading } = useReverseGeocode(
+    vehicle?.latitude,
+    vehicle?.longitude,
+  );
+
   if (!vehicle) return null;
 
   const color = STATUS_COLORS[vehicle.displayStatus];
   const isBlocked = vehicle.status === 'BLOCKED';
+  // Prioriza endereço do Nominatim; se falhou, usa o do Traccar (que pode
+  // vir vazio se geocoder do servidor estiver lento/rate-limited).
+  const displayAddress = reverseAddress || vehicle.address || null;
 
   return (
     <>
@@ -34,16 +45,60 @@ export function VehicleDetailPanel() {
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border/30">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-            <h2 className="text-lg font-bold">{vehicle.plate}</h2>
-            <Badge variant="outline" style={{ borderColor: color, color }} className="text-xs">
-              {STATUS_LABELS[vehicle.displayStatus]}
-            </Badge>
-          </div>
+          <h2 className="text-lg font-bold">{vehicle.plate}</h2>
           <Button variant="ghost" size="icon" onClick={() => selectVehicle(null)}>
             <X className="h-4 w-4" />
           </Button>
+        </div>
+
+        {/* Banner de status — visual rápido pro operador/cliente entender em 1s */}
+        <div
+          className="p-4 flex items-center gap-3"
+          style={{ backgroundColor: `${color}15`, borderBottom: `1px solid ${color}40` }}
+        >
+          <div
+            className={cn(
+              'w-3 h-3 rounded-full shrink-0',
+              vehicle.displayStatus === 'moving' && 'animate-pulse',
+            )}
+            style={{ backgroundColor: color }}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="text-base font-bold leading-tight" style={{ color }}>
+              {STATUS_LABELS[vehicle.displayStatus]}
+              {vehicle.displayStatus === 'moving' &&
+                ` · ${formatSpeed(vehicle.speed)}`}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {vehicle.ignition ? '🟢 Ignição ligada' : '⚪ Ignição desligada'}
+              {' · '}
+              atualizado {formatRelativeTime(vehicle.lastUpdate)}
+            </div>
+          </div>
+        </div>
+
+        {/* Endereço em destaque — primeira coisa que cliente vê */}
+        <div className="px-4 py-3 border-b border-border/30">
+          <div className="flex items-start gap-2">
+            <MapPin className="h-5 w-5 text-red-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Localização
+              </p>
+              {displayAddress ? (
+                <p className="text-sm font-medium leading-tight mt-1">
+                  {displayAddress}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground italic mt-1">
+                  {addressLoading ? 'Buscando endereço…' : 'Endereço indisponível'}
+                </p>
+              )}
+              <p className="text-[10px] font-mono text-muted-foreground mt-1">
+                {vehicle.latitude.toFixed(5)}, {vehicle.longitude.toFixed(5)}
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Veículo */}
@@ -135,23 +190,6 @@ export function VehicleDetailPanel() {
             </div>
           </div>
 
-          {/* Coordenadas */}
-          <div className="flex items-start gap-2 bg-muted/20 rounded-lg p-2.5">
-            <MapPin className="h-4 w-4 text-red-400 mt-0.5" />
-            <div>
-              <p className="text-xs text-muted-foreground">Localização</p>
-              <p className="text-xs font-mono">
-                {vehicle.latitude.toFixed(6)}, {vehicle.longitude.toFixed(6)}
-              </p>
-              {vehicle.address && (
-                <p className="text-xs text-muted-foreground mt-0.5">{vehicle.address}</p>
-              )}
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground text-right">
-            Atualizado {formatRelativeTime(vehicle.lastUpdate)}
-          </p>
         </div>
 
         <Separator className="opacity-30" />
