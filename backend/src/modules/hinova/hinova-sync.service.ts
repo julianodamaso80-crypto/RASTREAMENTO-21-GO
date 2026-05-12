@@ -36,7 +36,13 @@ export class HinovaSyncService {
 
   @Cron(CronExpression.EVERY_6_HOURS)
   async scheduledSync() {
-    // Pega o primeiro tenant para sync automático
+    // HINOVA_SYNC_ENABLED=false desliga o cron (ex: em prod enquanto a
+    // integração real ainda não tem credenciais, evita poluir o banco com
+    // dados do MockHinovaClient).
+    if (this.configService.get<string>('hinova.syncEnabled') === 'false') {
+      return;
+    }
+
     const tenant = await this.prisma.tenant.findFirst({
       where: { active: true },
       orderBy: { createdAt: 'asc' },

@@ -21,6 +21,9 @@ export default () => ({
     baseUrl: process.env.HINOVA_BASE_URL,
     mock: process.env.HINOVA_MOCK === 'true',
     syncInterval: parseInt(process.env.HINOVA_SYNC_INTERVAL || '21600000', 10),
+    // Em prod: 'false' enquanto não temos credenciais Hinova reais.
+    // Caso contrário o cron do mock cria vehicles/associates fantasmas.
+    syncEnabled: process.env.HINOVA_SYNC_ENABLED || 'true',
   },
   server: {
     primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',
