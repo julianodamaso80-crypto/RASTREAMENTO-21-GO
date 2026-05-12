@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { MAP_CENTER, MAP_ZOOM, CARTO_DARK_MATTER_URL, STATUS_COLORS } from '@/lib/constants';
+import { MAP_CENTER, MAP_ZOOM, MAP_STYLE_URL, STATUS_COLORS } from '@/lib/constants';
 import { formatSpeed, formatRelativeTime } from '@/lib/utils';
 import type { VehicleWithTracking } from '@/types/vehicle';
 
@@ -33,7 +33,16 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
 
     useImperativeHandle(ref, () => ({
       flyTo: (lng: number, lat: number, zoom = 15) => {
-        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 1000 });
+        // Padding right=380 compensa o painel direito (VehicleDetailPanel)
+        // que cobre o lado direito do mapa. Sem isso, o ponto centraliza
+        // no centro geométrico do canvas e fica visualmente escondido
+        // atrás do painel.
+        mapRef.current?.flyTo({
+          center: [lng, lat],
+          zoom,
+          duration: 1000,
+          padding: { top: 0, bottom: 0, left: 0, right: 380 },
+        });
       },
     }));
 
@@ -45,7 +54,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
 
       const map = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: CARTO_DARK_MATTER_URL,
+        style: MAP_STYLE_URL,
         center: MAP_CENTER,
         zoom: MAP_ZOOM,
         attributionControl: false,
@@ -181,11 +190,13 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         const color = STATUS_COLORS[vehicle.displayStatus];
         const isMoving = vehicle.displayStatus === 'moving';
 
+        // Stroke escuro + sombra forte pra setinha ficar bem visível
+        // tanto em mapa claro (Voyager) quanto escuro (Dark Matter).
         el.innerHTML = `
-          ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:32px;height:32px;border-radius:50%;background:${color};opacity:0.3;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
-          <div style="width:32px;height:32px;position:relative;z-index:1;">
-            <svg viewBox="0 0 24 24" width="32" height="32" style="transform:rotate(${vehicle.course}deg);filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
-              <path d="M12 2L4.5 20.3L5.2 21L12 18L18.8 21L19.5 20.3L12 2Z" fill="${color}" stroke="rgba(255,255,255,0.3)" stroke-width="0.5"/>
+          ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:40px;height:40px;border-radius:50%;background:${color};opacity:0.35;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
+          <div style="width:40px;height:40px;position:relative;z-index:1;">
+            <svg viewBox="0 0 24 24" width="40" height="40" style="transform:rotate(${vehicle.course}deg);filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6));">
+              <path d="M12 2L4.5 20.3L5.2 21L12 18L18.8 21L19.5 20.3L12 2Z" fill="${color}" stroke="#1e293b" stroke-width="1.2"/>
             </svg>
           </div>
         `;
