@@ -1,9 +1,20 @@
 'use client';
 
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { MAP_CENTER, MAP_ZOOM, MAP_STYLE_URL, STATUS_COLORS } from '@/lib/constants';
+import {
+  MAP_CENTER,
+  MAP_ZOOM,
+  MAP_STYLE_URL,
+  STATUS_COLORS,
+} from '@/lib/constants';
 import { formatSpeed, formatRelativeTime } from '@/lib/utils';
 import type { VehicleWithTracking } from '@/types/vehicle';
 
@@ -16,27 +27,28 @@ interface MapContainerProps {
   onVehicleClick?: (vehicleId: string) => void;
 }
 
-const SOURCE_ID = 'vehicles-source';
-const CLUSTER_LAYER_ID = 'vehicle-clusters';
-const CLUSTER_COUNT_LAYER_ID = 'vehicle-cluster-count';
-const UNCLUSTERED_LAYER_ID = 'vehicle-unclustered';
-
+/**
+ * Renderiza 1 marker DOM por veículo. Simples e direto.
+ *
+ * Decisão arquitetural: clustering nativo do MapLibre foi removido porque
+ * apresentava bugs de sincronização (DOM marker não aparecia até pan/zoom
+ * manual) e a base de veículos hoje é pequena (≤100 ativos).
+ *
+ * Quando passar de ~500 ativos, adicionar clustering com a lib
+ * `supercluster` (melhor controle que o cluster nativo), mantendo este
+ * componente como fallback pra clientes individuais (visão CLIENT).
+ */
 const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
   function MapContainer({ vehicles, onVehicleClick }, ref) {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
-    // Markers DOM apenas pros pontos NÃO clusterizados (mantém visual de seta direcional).
     const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
-    // Cache do dataset de vehicles pra reagir em sourcedata sem recriar GeoJSON
-    const vehiclesByIdRef = useRef<Map<string, VehicleWithTracking>>(new Map());
-    const sourceLoadedRef = useRef(false);
 
     useImperativeHandle(ref, () => ({
       flyTo: (lng: number, lat: number, zoom = 15) => {
-        // Padding right=380 compensa o painel direito (VehicleDetailPanel)
-        // que cobre o lado direito do mapa. Sem isso, o ponto centraliza
-        // no centro geométrico do canvas e fica visualmente escondido
-        // atrás do painel.
+        // padding.right=380 compensa o painel direito (VehicleDetailPanel)
+        // pra centralizar o ponto na área visualmente útil, não no centro
+        // geométrico do canvas (que ficaria atrás do painel).
         mapRef.current?.flyTo({
           center: [lng, lat],
           zoom,
@@ -47,7 +59,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     }));
 
     // ─────────────────────────────────────────────────────────────────
-    // 1. Inicializa mapa + GeoJSON source com clustering
+    // Inicializa mapa
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
       if (!mapContainerRef.current || mapRef.current) return;
@@ -61,110 +73,10 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       });
 
       map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
-      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
-
-      map.on('load', () => {
-        map.addSource(SOURCE_ID, {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: [] },
-          cluster: true,
-          clusterMaxZoom: 14, // acima desse zoom, expande tudo
-          clusterRadius: 50, // px no viewport
-        });
-
-        // Círculo do cluster
-        map.addLayer({
-          id: CLUSTER_LAYER_ID,
-          type: 'circle',
-          source: SOURCE_ID,
-          filter: ['has', 'point_count'],
-          paint: {
-            'circle-color': [
-              'step',
-              ['get', 'point_count'],
-              '#10b981', // <10 pontos
-              10, '#f59e0b', // 10-50
-              50, '#ef4444', // 50+
-            ],
-            'circle-radius': [
-              'step',
-              ['get', 'point_count'],
-              18,
-              10, 24,
-              50, 32,
-            ],
-            'circle-stroke-width': 2,
-            'circle-stroke-color': 'rgba(255,255,255,0.5)',
-          },
-        });
-
-        // Número dentro do cluster
-        map.addLayer({
-          id: CLUSTER_COUNT_LAYER_ID,
-          type: 'symbol',
-          source: SOURCE_ID,
-          filter: ['has', 'point_count'],
-          layout: {
-            'text-field': ['get', 'point_count_abbreviated'],
-            'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-            'text-size': 14,
-          },
-          paint: {
-            'text-color': '#ffffff',
-          },
-        });
-
-        // Layer invisível pros pontos NÃO clusterizados — usado só como
-        // fonte de eventos. O visual real é DOM Marker (seta direcional).
-        map.addLayer({
-          id: UNCLUSTERED_LAYER_ID,
-          type: 'circle',
-          source: SOURCE_ID,
-          filter: ['!', ['has', 'point_count']],
-          paint: {
-            'circle-radius': 0,
-            'circle-opacity': 0,
-          },
-        });
-
-        // Click no cluster: expand zoom
-        map.on('click', CLUSTER_LAYER_ID, (e) => {
-          const features = map.queryRenderedFeatures(e.point, {
-            layers: [CLUSTER_LAYER_ID],
-          });
-          const feature = features[0];
-          if (!feature) return;
-          const clusterId = feature.properties?.cluster_id;
-          const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource;
-          source.getClusterExpansionZoom(clusterId).then((zoom) => {
-            const geom = feature.geometry as unknown as {
-              coordinates: [number, number];
-            };
-            map.easeTo({
-              center: geom.coordinates,
-              zoom,
-              duration: 600,
-            });
-          });
-        });
-
-        map.on('mouseenter', CLUSTER_LAYER_ID, () => {
-          map.getCanvas().style.cursor = 'pointer';
-        });
-        map.on('mouseleave', CLUSTER_LAYER_ID, () => {
-          map.getCanvas().style.cursor = '';
-        });
-
-        // Mantém os DOM markers em sync com features unclustered visíveis no viewport
-        map.on('moveend', syncDomMarkers);
-        map.on('zoomend', syncDomMarkers);
-        map.on('sourcedata', (ev) => {
-          if (ev.sourceId === SOURCE_ID && ev.isSourceLoaded) {
-            sourceLoadedRef.current = true;
-            syncDomMarkers();
-          }
-        });
-      });
+      map.addControl(
+        new maplibregl.AttributionControl({ compact: true }),
+        'bottom-left',
+      );
 
       mapRef.current = map;
 
@@ -173,13 +85,11 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         markersRef.current.clear();
         map.remove();
         mapRef.current = null;
-        sourceLoadedRef.current = false;
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // ─────────────────────────────────────────────────────────────────
-    // 2. Cria DOM marker (seta direcional) para 1 vehicle
+    // Cria o elemento DOM do marker (seta direcional com cor por status)
     // ─────────────────────────────────────────────────────────────────
     const createMarkerElement = useCallback(
       (vehicle: VehicleWithTracking) => {
@@ -190,10 +100,9 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         const color = STATUS_COLORS[vehicle.displayStatus];
         const isMoving = vehicle.displayStatus === 'moving';
 
-        // Stroke escuro + sombra forte pra setinha ficar bem visível
-        // tanto em mapa claro (Voyager) quanto escuro (Dark Matter).
+        // Stroke escuro + sombra forte: visível em qualquer fundo (claro/escuro).
         el.innerHTML = `
-          ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:40px;height:40px;border-radius:50%;background:${color};opacity:0.35;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
+          ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:48px;height:48px;border-radius:50%;background:${color};opacity:0.35;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
           <div style="width:40px;height:40px;position:relative;z-index:1;">
             <svg viewBox="0 0 24 24" width="40" height="40" style="transform:rotate(${vehicle.course}deg);filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6));">
               <path d="M12 2L4.5 20.3L5.2 21L12 18L18.8 21L19.5 20.3L12 2Z" fill="${color}" stroke="#1e293b" stroke-width="1.2"/>
@@ -201,17 +110,22 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           </div>
         `;
 
+        // Tooltip ao passar o mouse
         const tooltip = document.createElement('div');
         tooltip.style.cssText =
-          'display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding:6px 10px;background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.15);border-radius:6px;white-space:nowrap;font-size:12px;color:#e2e8f0;z-index:10;pointer-events:none;margin-bottom:4px;backdrop-filter:blur(8px);';
+          'display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding:6px 10px;background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.15);border-radius:6px;white-space:nowrap;font-size:12px;color:#e2e8f0;z-index:10;pointer-events:none;margin-bottom:6px;backdrop-filter:blur(8px);';
         tooltip.innerHTML = `
           <div style="font-weight:600;color:${color}">${vehicle.plate}</div>
           <div>${formatSpeed(vehicle.speed)} · ${formatRelativeTime(vehicle.lastUpdate)}</div>
         `;
         el.appendChild(tooltip);
 
-        el.onmouseenter = () => { tooltip.style.display = 'block'; };
-        el.onmouseleave = () => { tooltip.style.display = 'none'; };
+        el.onmouseenter = () => {
+          tooltip.style.display = 'block';
+        };
+        el.onmouseleave = () => {
+          tooltip.style.display = 'none';
+        };
 
         el.onclick = (e) => {
           e.stopPropagation();
@@ -224,108 +138,48 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     );
 
     // ─────────────────────────────────────────────────────────────────
-    // 3. Sincroniza DOM markers com features unclustered visíveis
+    // Sincroniza markers com a lista de vehicles
     // ─────────────────────────────────────────────────────────────────
-    const syncDomMarkers = useCallback(() => {
+    useEffect(() => {
       const map = mapRef.current;
       if (!map) return;
-      // Se o source ainda não foi adicionado (boot inicial), não tenta query.
-      // querySourceFeatures pode lançar se source não existe; melhor proteger.
-      if (!map.getSource(SOURCE_ID)) return;
 
-      const features = map.querySourceFeatures(SOURCE_ID, {
-        filter: ['!', ['has', 'point_count']],
-      });
+      const currentIds = new Set<string>();
 
-      const visibleIds = new Set<string>();
+      for (const vehicle of vehicles) {
+        if (!vehicle.latitude || !vehicle.longitude) continue;
+        currentIds.add(vehicle.id);
 
-      for (const feature of features) {
-        const id = feature.properties?.vehicleId as string | undefined;
-        if (!id) continue;
-        const vehicle = vehiclesByIdRef.current.get(id);
-        if (!vehicle) continue;
-
-        visibleIds.add(id);
-        const existing = markersRef.current.get(id);
+        const existing = markersRef.current.get(vehicle.id);
         const lngLat: [number, number] = [vehicle.longitude, vehicle.latitude];
 
         if (existing) {
           existing.setLngLat(lngLat);
-          // Re-render visual se status/course mudou
+          // Substitui o elemento DOM pra refletir mudança de course/status/etc.
           const newEl = createMarkerElement(vehicle);
-          existing.getElement().replaceWith(newEl);
+          const oldEl = existing.getElement();
+          oldEl.replaceWith(newEl);
+          // Atualiza a referência interna do MapLibre Marker pra apontar pro
+          // novo elemento (caso contrário, eventos como drag deixariam de
+          // funcionar — embora não usemos drag).
           (existing as unknown as { _element: HTMLElement })._element = newEl;
         } else {
           const el = createMarkerElement(vehicle);
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat(lngLat)
             .addTo(map);
-          markersRef.current.set(id, marker);
+          markersRef.current.set(vehicle.id, marker);
         }
       }
 
-      // Remove DOM markers que agora estão dentro de cluster ou fora do viewport
+      // Remove markers que sumiram da lista
       markersRef.current.forEach((marker, id) => {
-        if (!visibleIds.has(id)) {
+        if (!currentIds.has(id)) {
           marker.remove();
           markersRef.current.delete(id);
         }
       });
-    }, [createMarkerElement]);
-
-    // ─────────────────────────────────────────────────────────────────
-    // 4. Atualiza GeoJSON source quando lista de vehicles muda
-    // ─────────────────────────────────────────────────────────────────
-    useEffect(() => {
-      const map = mapRef.current;
-      if (!map) return;
-
-      // Atualiza cache id → vehicle pro syncDomMarkers
-      vehiclesByIdRef.current.clear();
-      for (const v of vehicles) {
-        if (!v.latitude || !v.longitude) continue;
-        vehiclesByIdRef.current.set(v.id, v);
-      }
-
-      const features = vehicles
-        .filter((v) => v.latitude && v.longitude)
-        .map((v) => ({
-          type: 'Feature' as const,
-          properties: { vehicleId: v.id },
-          geometry: {
-            type: 'Point' as const,
-            coordinates: [v.longitude, v.latitude] as [number, number],
-          },
-        }));
-
-      const source = map.getSource(SOURCE_ID) as
-        | maplibregl.GeoJSONSource
-        | undefined;
-      if (source) {
-        source.setData({ type: 'FeatureCollection', features });
-        // setData é assíncrono no MapLibre — querySourceFeatures imediatamente
-        // pode não ver os features. Dois ticks de rAF dão tempo do tile pipeline
-        // processar o GeoJSON e popular o índice de queries.
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => syncDomMarkers());
-        });
-      } else {
-        // Source ainda não foi criado (load event não disparou). Tenta de novo
-        // em 250ms — o load deve ter disparado até lá.
-        const retry = setTimeout(() => {
-          const s = map.getSource(SOURCE_ID) as
-            | maplibregl.GeoJSONSource
-            | undefined;
-          if (s) {
-            s.setData({ type: 'FeatureCollection', features });
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => syncDomMarkers());
-            });
-          }
-        }, 250);
-        return () => clearTimeout(retry);
-      }
-    }, [vehicles, syncDomMarkers]);
+    }, [vehicles, createMarkerElement]);
 
     return <div ref={mapContainerRef} className="w-full h-full" />;
   },
