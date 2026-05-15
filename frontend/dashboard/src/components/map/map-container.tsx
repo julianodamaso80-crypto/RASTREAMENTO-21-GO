@@ -4,6 +4,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useState,
   forwardRef,
   useImperativeHandle,
 } from 'react';
@@ -12,11 +13,13 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import {
   MAP_CENTER,
   MAP_ZOOM,
-  MAP_STYLE_URL,
+  BASEMAPS,
   STATUS_COLORS,
+  type BasemapId,
 } from '@/lib/constants';
 import { formatSpeed, formatRelativeTime } from '@/lib/utils';
 import type { VehicleWithTracking } from '@/types/vehicle';
+import { BasemapToggle } from './basemap-toggle';
 
 export interface MapContainerRef {
   flyTo: (lng: number, lat: number, zoom?: number) => void;
@@ -43,6 +46,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+    const [basemap, setBasemap] = useState<BasemapId>('streets');
 
     useImperativeHandle(ref, () => ({
       flyTo: (lng: number, lat: number, zoom = 15) => {
@@ -59,14 +63,14 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     }));
 
     // ─────────────────────────────────────────────────────────────────
-    // Inicializa mapa
+    // Inicializa mapa (uma vez só — não depende de `basemap`)
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
       if (!mapContainerRef.current || mapRef.current) return;
 
       const map = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: MAP_STYLE_URL,
+        style: BASEMAPS[0].url,
         center: MAP_CENTER,
         zoom: MAP_ZOOM,
         attributionControl: false,
@@ -87,6 +91,18 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         mapRef.current = null;
       };
     }, []);
+
+    // ─────────────────────────────────────────────────────────────────
+    // Troca de basemap (Padrão ↔ Satélite). Markers DOM sobrevivem ao
+    // setStyle — só layers/sources internos do MapLibre são recriados.
+    // ─────────────────────────────────────────────────────────────────
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+      const def = BASEMAPS.find((b) => b.id === basemap);
+      if (!def || !def.url) return;
+      map.setStyle(def.url);
+    }, [basemap]);
 
     // ─────────────────────────────────────────────────────────────────
     // Cria o elemento DOM do marker (seta direcional com cor por status)
@@ -181,7 +197,12 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       });
     }, [vehicles, createMarkerElement]);
 
-    return <div ref={mapContainerRef} className="w-full h-full" />;
+    return (
+      <div className="relative w-full h-full">
+        <div ref={mapContainerRef} className="w-full h-full" />
+        <BasemapToggle current={basemap} onChange={setBasemap} />
+      </div>
+    );
   },
 );
 

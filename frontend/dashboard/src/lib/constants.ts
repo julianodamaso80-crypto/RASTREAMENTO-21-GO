@@ -11,8 +11,47 @@ export const CARTO_DARK_MATTER_URL =
 export const CARTO_VOYAGER_URL =
   'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
 
-// Estilo padrão usado no /mapa. Trocar pra DARK_MATTER se quiser tema escuro.
-export const MAP_STYLE_URL = CARTO_VOYAGER_URL;
+// MapTiler — só ativa quando NEXT_PUBLIC_MAPTILER_KEY estiver setado.
+// Tier free: 100k tile requests/mês. Plano Starter: $25/mês (500k req).
+// https://www.maptiler.com/cloud/plans/
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? '';
+
+export const HAS_MAPTILER = MAPTILER_KEY.length > 0;
+
+const maptilerStyle = (style: string) =>
+  `https://api.maptiler.com/maps/${style}/style.json?key=${MAPTILER_KEY}`;
+
+export type BasemapId = 'streets' | 'satellite';
+
+interface BasemapDef {
+  id: BasemapId;
+  label: string;
+  url: string;
+  /** Quando true, só carrega se HAS_MAPTILER. */
+  requiresKey: boolean;
+}
+
+export const BASEMAPS: BasemapDef[] = [
+  {
+    id: 'streets',
+    label: 'Padrão',
+    // Se tem chave, usa MapTiler Streets v2 (mais detalhado que CARTO).
+    // Sem chave, cai pro CARTO Voyager — mantém comportamento atual.
+    url: HAS_MAPTILER ? maptilerStyle('streets-v2') : CARTO_VOYAGER_URL,
+    requiresKey: false,
+  },
+  {
+    id: 'satellite',
+    label: 'Satélite',
+    // Estilo "hybrid" = imagery aérea + rótulos de ruas e cidades sobrepostos.
+    // É o equivalente ao satélite do Google Maps. Sem chave, não fica disponível.
+    url: HAS_MAPTILER ? maptilerStyle('hybrid') : '',
+    requiresKey: true,
+  },
+];
+
+// Estilo padrão usado no /mapa ao primeiro load.
+export const MAP_STYLE_URL = BASEMAPS[0].url;
 
 export const STATUS_COLORS: Record<DisplayStatus, string> = {
   moving: '#bfd741',   // brand-green
