@@ -9,6 +9,8 @@ import { cn, maskCPF, formatSpeed, formatRelativeTime } from '@/lib/utils';
 import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { BlockConfirmModal } from './block-confirm-modal';
+import Link from 'next/link';
+import { Activity } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 export function VehicleDetailPanel() {
@@ -196,6 +198,12 @@ export function VehicleDetailPanel() {
 
         {/* Ações */}
         <div className="p-4 space-y-2">
+          <Link href={`/veiculos/${vehicle.id}`} className="block">
+            <Button variant="outline" className="w-full">
+              <Activity className="h-4 w-4 mr-2" />
+              Abrir cockpit completo
+            </Button>
+          </Link>
           <Button
             variant={isBlocked ? 'default' : 'destructive'}
             className={cn('w-full', isBlocked && 'bg-emerald-600 hover:bg-emerald-700')}

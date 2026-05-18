@@ -297,6 +297,12 @@ export const alertsApi = {
     const res = await api.get<PaginatedResponse<Alert>>('/alerts', { params });
     return res.data;
   },
+  byVehicle: async (vehicleId: string, perPage = 50): Promise<PaginatedResponse<Alert>> => {
+    const res = await api.get<PaginatedResponse<Alert>>('/alerts', {
+      params: { vehicleId, perPage },
+    });
+    return res.data;
+  },
   getUnreadCount: async (): Promise<number> => {
     const res = await api.get<ApiResponse<{ count: number }>>('/alerts/unread-count');
     return res.data.data.count;
