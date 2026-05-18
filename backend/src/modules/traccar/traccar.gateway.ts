@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from './traccar.service';
 import { AlertsService } from '../alerts/alerts.service';
 import { BleTagsService } from '../ble-tags/ble-tags.service';
+import { PositionsService } from '../positions/positions.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -43,6 +44,7 @@ export class TraccarGateway
     private traccarService: TraccarService,
     private alertsService: AlertsService,
     private bleTagsService: BleTagsService,
+    private positionsService: PositionsService,
   ) {}
 
   async afterInit() {
@@ -199,13 +201,18 @@ export class TraccarGateway
             .to(`tenant:${tenantId}`)
             .emit('position:update', position);
 
-          // Processar alertas
+          // Processar alertas + persistir histórico em paralelo (sem bloquear emit)
           const vehicleId = this.deviceVehicleMap.get(position.deviceId);
           if (vehicleId) {
             this.alertsService
               .processPosition(position as any, vehicleId, tenantId)
               .catch((err) =>
                 this.logger.error(`Erro ao processar alerta: ${err}`),
+              );
+            this.positionsService
+              .persistIfRelevant(position as any, vehicleId, tenantId)
+              .catch((err) =>
+                this.logger.error(`Erro ao persistir posição: ${err}`),
               );
           }
         }

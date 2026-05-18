@@ -13,6 +13,7 @@ const SOFT_DELETE_MODELS = new Set([
   'Geofence',
   'Device',
   'Chip',
+  'MaintenancePlan',
 ]);
 
 const READ_OPERATIONS = new Set([
@@ -61,6 +62,7 @@ function createExtendedClient(base: PrismaClient) {
       geofence: softDeleteModel,
       device: softDeleteModel,
       chip: softDeleteModel,
+      maintenancePlan: softDeleteModel,
     },
     query: {
       $allModels: {
@@ -136,6 +138,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get chip() {
     return this.ext.chip;
   }
+  get maintenancePlan() {
+    return this.ext.maintenancePlan;
+  }
 
   // Models sem soft delete — usam cliente base (tabela de junção / log de comandos / audit)
   get geofenceVehicle() {
@@ -155,6 +160,21 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   }
   get userVehicleAccess() {
     return this.base.userVehicleAccess;
+  }
+  get position() {
+    return this.base.position;
+  }
+  get tenantSettings() {
+    return this.base.tenantSettings;
+  }
+  get vehicleScore() {
+    return this.base.vehicleScore;
+  }
+  get assistantConversation() {
+    return this.base.assistantConversation;
+  }
+  get assistantMessage() {
+    return this.base.assistantMessage;
   }
 
   // Raw queries — sempre pelo base (extension não afeta raw)

@@ -24,6 +24,13 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { EmailModule } from './modules/email/email.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { PositionsModule } from './modules/positions/positions.module';
+import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { VehiclesAnalyticsModule } from './modules/vehicles-analytics/vehicles-analytics.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { ScoringModule } from './modules/scoring/scoring.module';
+import { AssistantModule } from './modules/assistant/assistant.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
@@ -73,6 +80,13 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     EmailModule,
     AdminModule,
     AuditModule,
+    PositionsModule,
+    TenantSettingsModule,
+    NotificationsModule,
+    VehiclesAnalyticsModule,
+    MaintenanceModule,
+    ScoringModule,
+    AssistantModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

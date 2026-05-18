@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
+import type { AlertSeverity, AlertType } from '.prisma/client';
 
 interface SendPasswordResetArgs {
   to: string;
@@ -7,6 +8,41 @@ interface SendPasswordResetArgs {
   resetUrl: string;
   expiresInMinutes: number;
 }
+
+interface AlertEmailPayload {
+  id: string;
+  type: AlertType;
+  severity: AlertSeverity;
+  message: string;
+  vehicle?: { plate: string; brand: string | null; model: string | null };
+  data: Record<string, unknown> | null;
+  createdAt: Date;
+}
+
+interface SendAlertNotificationArgs {
+  to: string[];
+  alert: AlertEmailPayload;
+}
+
+const ALERT_LABELS: Record<AlertType, string> = {
+  SPEED: 'Excesso de velocidade',
+  IGNITION_ON: 'Ignição ligada',
+  IGNITION_OFF: 'Ignição desligada',
+  SOS: 'SOS acionado',
+  BATTERY_LOW: 'Bateria do rastreador baixa',
+  OFFLINE: 'Rastreador sem comunicação',
+  GEOFENCE_IN: 'Entrada em cerca',
+  GEOFENCE_OUT: 'Saída de cerca',
+  POWER_CUT: 'Corte de energia detectado',
+  JAMMING: 'Bloqueador de sinal (jamming)',
+  VEHICLE_BATTERY_LOW: 'Bateria do veículo fraca',
+  HARSH_BRAKE: 'Frenagem brusca',
+  HARSH_ACCEL: 'Aceleração brusca',
+  FUEL_THEFT: 'Possível roubo de combustível',
+  MAINTENANCE_DUE: 'Manutenção pendente',
+  ENGINE_OVERHEATING: 'Motor superaquecendo',
+  COLLISION: 'Possível colisão',
+};
 
 @Injectable()
 export class EmailService {
@@ -64,6 +100,56 @@ export class EmailService {
       // pra não vazar se o email existe. Apenas logamos.
       this.logger.error(`Exceção no envio de email pra ${to}: ${String(err)}`);
     }
+  }
+
+  async sendAlertNotification(args: SendAlertNotificationArgs): Promise<void> {
+    const { to, alert } = args;
+    if (!to.length) return;
+
+    const label = ALERT_LABELS[alert.type] ?? alert.type;
+    const plate = alert.vehicle?.plate ?? '—';
+    const subject = `[${alert.severity}] ${label} — ${plate}`;
+    const html = this.alertTemplate(alert, label, plate);
+    const text = `${label}\nVeículo: ${plate}\n${alert.message}\n`;
+
+    if (this.mockMode || !this.resend) {
+      this.logger.log(`[MOCK ALERT EMAIL] to=${to.join(',')} subject="${subject}"`);
+      return;
+    }
+
+    try {
+      const { error } = await this.resend.emails.send({
+        from: this.fromAddress,
+        to,
+        subject,
+        html,
+        text,
+      });
+      if (error) {
+        this.logger.error(`Resend alert falhou: ${JSON.stringify(error)}`);
+      }
+    } catch (err) {
+      this.logger.error(`Exceção no envio de alerta: ${String(err)}`);
+    }
+  }
+
+  private alertTemplate(alert: AlertEmailPayload, label: string, plate: string): string {
+    const accent = alert.severity === 'CRITICAL' ? '#ef4444' : alert.severity === 'WARNING' ? '#f59e0b' : '#10b981';
+    const safeMsg = this.escapeHtml(alert.message);
+    return `<!doctype html>
+<html lang="pt-BR"><body style="margin:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#e2e8f0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="520" style="max-width:520px;background:#1e293b;border-radius:12px;border:1px solid #334155;">
+<tr><td style="padding:20px 24px;border-bottom:1px solid #334155;">
+<div style="font-size:12px;color:#94a3b8;">Rastreamento 21GO · ${alert.severity}</div>
+<div style="font-size:18px;font-weight:700;color:${accent};margin-top:4px;">${this.escapeHtml(label)}</div>
+</td></tr>
+<tr><td style="padding:20px 24px;">
+<div style="font-size:14px;color:#cbd5e1;">Veículo <strong style="color:#f1f5f9;">${this.escapeHtml(plate)}</strong></div>
+<p style="margin:12px 0 0;font-size:14px;line-height:1.6;color:#cbd5e1;">${safeMsg}</p>
+<p style="margin:16px 0 0;font-size:12px;color:#64748b;">${alert.createdAt.toISOString()}</p>
+</td></tr></table>
+</td></tr></table></body></html>`;
   }
 
   private passwordResetTemplate(

@@ -303,6 +303,52 @@ export interface TraccarDevice {
   attributes: Record<string, unknown>;
 }
 
+/**
+ * Atributos reportados pelo rastreador via Traccar. Disponibilidade varia por protocolo
+ * (GT06, Suntech, Teltonika, etc.) e por firmware. Sempre opcionais — código consumidor
+ * deve checar `undefined` antes de usar. Atributos exóticos caem em `rawAttributes` na
+ * persistência (Position.rawAttributes), preservando dado bruto pra evoluir o dicionário.
+ */
+export interface TraccarPositionAttributes {
+  ignition?: boolean;
+  motion?: boolean;
+  batteryLevel?: number;
+  power?: number;
+  charge?: boolean;
+  charging?: boolean;
+  rpm?: number;
+  fuel?: number;
+  fuelConsumption?: number;
+  temp1?: number;
+  temp2?: number;
+  temperature?: number;
+  odometer?: number;
+  totalDistance?: number;
+  hours?: number;
+  engineHours?: number;
+  sat?: number;
+  satellites?: number;
+  rssi?: number;
+  gsmSignal?: number;
+  hdop?: number;
+  alarm?: string;
+  alarmType?: string;
+  powerCut?: boolean;
+  jamming?: boolean;
+  vibration?: boolean;
+  jarring?: boolean;
+  collision?: boolean;
+  tamper?: boolean;
+  sos?: boolean;
+  blocked?: boolean;
+  door?: boolean;
+  io1?: number;
+  io2?: number;
+  io3?: number;
+  io4?: number;
+  [key: string]: unknown;
+}
+
 export interface TraccarPosition {
   id: number;
   deviceId: number;
@@ -319,7 +365,7 @@ export interface TraccarPosition {
   course: number;
   address: string;
   accuracy: number;
-  attributes: Record<string, unknown>;
+  attributes: TraccarPositionAttributes;
 }
 
 export interface TraccarUser {

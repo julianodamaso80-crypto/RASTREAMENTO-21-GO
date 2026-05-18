@@ -17,6 +17,8 @@ import {
   ChevronRight,
   Menu,
   Tag,
+  Wrench,
+  Trophy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -52,6 +54,8 @@ const navItems: NavItem[] = [
   { href: '/mapa', label: 'Mapa / Veículos', icon: Map },
   { href: '/alertas', label: 'Alertas', icon: Bell },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
+  { href: '/relatorios/condutores', label: 'Ranking de condutores', icon: Trophy, roles: NON_CLIENT_ROLES },
+  { href: '/manutencao', label: 'Manutenção', icon: Wrench, roles: NON_CLIENT_ROLES },
   { href: '/geofencing', label: 'Geofencing', icon: Hexagon, roles: NON_CLIENT_ROLES },
   { href: '/dispositivos', label: 'Dispositivos', icon: Radio, roles: NON_CLIENT_ROLES },
   { href: '/etiquetas-ble', label: 'Etiquetas BLE', icon: Tag, roles: NON_CLIENT_ROLES },

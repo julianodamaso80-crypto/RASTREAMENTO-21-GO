@@ -80,6 +80,200 @@ export const vehiclesApi = {
   },
 };
 
+export type BehaviorPeriod = '24h' | '7d' | '30d';
+
+export interface BehaviorReport {
+  period: BehaviorPeriod;
+  from: string;
+  to: string;
+  ignitionCycles: number;
+  engineMinutes: number;
+  idleMinutes: number;
+  drivingMinutes: number;
+  distanceKm: number;
+  maxSpeedKmh: number;
+  avgSpeedKmh: number;
+  speedExcessCount: number;
+  harshBrakeCount: number;
+  harshAccelCount: number;
+  nightDriveKm: number;
+  hourlyHeatmap: number[][];
+}
+
+export interface TelemetryPoint {
+  deviceTime: string;
+  speed: number;
+  rpm: number | null;
+  fuel: number | null;
+  temperature: number | null;
+  powerVolts: number | null;
+}
+
+export interface ReplayPosition {
+  deviceTime: string;
+  latitude: number;
+  longitude: number;
+  speed: number;
+  course: number | null;
+  ignition: boolean | null;
+}
+
+export interface ReplayEvent {
+  type: string;
+  message: string;
+  createdAt: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export interface VehicleScore {
+  vehicleId: string;
+  periodDays: number;
+  totalScore: number;
+  kmAnalyzed: number;
+  breakdown: Record<string, number>;
+}
+
+export interface RankingRow {
+  vehicleId: string;
+  plate: string;
+  brand: string | null;
+  model: string | null;
+  totalScore: number;
+  kmAnalyzed: number;
+  breakdown: {
+    speed: number;
+    harshBrake: number;
+    harshAccel: number;
+    idle: number;
+    night: number;
+    consistency: number;
+  };
+}
+
+export const scoringApi = {
+  ranking: async (limit = 100): Promise<RankingRow[]> => {
+    const res = await api.get<ApiResponse<RankingRow[]>>('/scores/ranking', {
+      params: { limit },
+    });
+    return res.data.data;
+  },
+};
+
+export const analyticsApi = {
+  getBehavior: async (vehicleId: string, period: BehaviorPeriod = '7d'): Promise<BehaviorReport> => {
+    const res = await api.get<ApiResponse<BehaviorReport>>(`/vehicles/${vehicleId}/behavior`, {
+      params: { period },
+    });
+    return res.data.data;
+  },
+  getTelemetry: async (vehicleId: string, period: BehaviorPeriod = '24h'): Promise<TelemetryPoint[]> => {
+    const res = await api.get<ApiResponse<TelemetryPoint[]>>(`/vehicles/${vehicleId}/telemetry`, {
+      params: { period },
+    });
+    return res.data.data;
+  },
+  getReplay: async (
+    vehicleId: string,
+    from: string,
+    to: string,
+  ): Promise<{ positions: ReplayPosition[]; events: ReplayEvent[] }> => {
+    const res = await api.get<ApiResponse<{ positions: ReplayPosition[]; events: ReplayEvent[] }>>(
+      `/vehicles/${vehicleId}/replay`,
+      { params: { from, to } },
+    );
+    return res.data.data;
+  },
+  getScore: async (vehicleId: string): Promise<VehicleScore> => {
+    const res = await api.get<ApiResponse<VehicleScore>>(`/vehicles/${vehicleId}/score`);
+    return res.data.data;
+  },
+};
+
+export interface TenantSettings {
+  speedThresholdKmh: number;
+  offlineThresholdMinutes: number;
+  batteryDeviceLowThreshold: number;
+  batteryVehicleLowVolts: number;
+  harshBrakeKmhPerSec: number;
+  harshAccelKmhPerSec: number;
+  fuelDropPercentForTheft: number;
+  fuelDropWindowMinutes: number;
+  engineOverheatCelsius: number;
+  idleSpeedKmh: number;
+  autoBlockOnPowerCut: boolean;
+  jammingConfirmReadings: number;
+  notifyChannels: { email: boolean; push: boolean; whatsapp: boolean };
+  notifyTypes: Record<string, boolean> | null;
+}
+
+export const settingsApi = {
+  get: async (): Promise<TenantSettings> => {
+    const res = await api.get<ApiResponse<TenantSettings>>('/settings');
+    return res.data.data;
+  },
+  update: async (patch: Partial<TenantSettings>): Promise<TenantSettings> => {
+    const res = await api.put<ApiResponse<TenantSettings>>('/settings', patch);
+    return res.data.data;
+  },
+};
+
+export interface MaintenancePlan {
+  id: string;
+  vehicleId: string;
+  name: string;
+  type: string;
+  intervalKm: number | null;
+  intervalEngineHours: number | null;
+  intervalMonths: number | null;
+  lastDoneAt: string | null;
+  lastDoneKm: number | null;
+  lastDoneEngineHours: number | null;
+  active: boolean;
+}
+
+export const maintenanceApi = {
+  list: async (vehicleId?: string): Promise<MaintenancePlan[]> => {
+    const res = await api.get<ApiResponse<MaintenancePlan[]>>('/maintenance-plans', {
+      params: vehicleId ? { vehicleId } : {},
+    });
+    return res.data.data;
+  },
+  create: async (payload: Partial<MaintenancePlan>): Promise<MaintenancePlan> => {
+    const res = await api.post<ApiResponse<MaintenancePlan>>('/maintenance-plans', payload);
+    return res.data.data;
+  },
+  update: async (id: string, payload: Partial<MaintenancePlan>): Promise<MaintenancePlan> => {
+    const res = await api.patch<ApiResponse<MaintenancePlan>>(`/maintenance-plans/${id}`, payload);
+    return res.data.data;
+  },
+  markDone: async (id: string): Promise<MaintenancePlan> => {
+    const res = await api.post<ApiResponse<MaintenancePlan>>(`/maintenance-plans/${id}/done`);
+    return res.data.data;
+  },
+};
+
+export interface AssistantMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export const assistantApi = {
+  ask: async (message: string, conversationId?: string): Promise<{ conversationId: string; reply: AssistantMessage }> => {
+    const res = await api.post<ApiResponse<{ conversationId: string; reply: AssistantMessage }>>('/assistant/chat', {
+      message,
+      conversationId,
+    });
+    return res.data.data;
+  },
+  history: async (conversationId: string): Promise<AssistantMessage[]> => {
+    const res = await api.get<ApiResponse<AssistantMessage[]>>(`/assistant/conversations/${conversationId}`);
+    return res.data.data;
+  },
+};
+
 export const traccarApi = {
   getDevices: async (): Promise<TraccarDevice[]> => {
     const res = await api.get<ApiResponse<TraccarDevice[]>>('/traccar/devices');

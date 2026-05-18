@@ -3,6 +3,7 @@
 import { LogOut, User as UserIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AlertsDropdown } from '@/components/alerts/alerts-dropdown';
+import { AssistantDrawer } from '@/components/assistant/assistant-drawer';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +25,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
+        <AssistantDrawer />
         <AlertsDropdown />
 
         {/* User dropdown */}

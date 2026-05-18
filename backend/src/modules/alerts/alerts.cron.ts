@@ -4,6 +4,7 @@ import { AlertType } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
 import { AlertsService } from './alerts.service';
+import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 
 /**
  * Detecta veículos OFFLINE comparando `tc_devices.lastUpdate` (Traccar)
@@ -24,13 +25,13 @@ import { AlertsService } from './alerts.service';
 @Injectable()
 export class AlertsCron {
   private readonly logger = new Logger(AlertsCron.name);
-  private readonly OFFLINE_THRESHOLD_MS = 15 * 60 * 1000;
   private readonly DEDUP_WINDOW_MS = 30 * 60 * 1000;
 
   constructor(
     private prisma: PrismaService,
     private traccarService: TraccarService,
     private alertsService: AlertsService,
+    private settings: TenantSettingsService,
   ) {}
 
   @Interval(60 * 1000)
@@ -81,7 +82,9 @@ export class AlertsCron {
 
         const lastMs = new Date(lastUpdate).getTime();
         const offlineFor = now - lastMs;
-        if (offlineFor < this.OFFLINE_THRESHOLD_MS) continue;
+        const tenantSettings = await this.settings.getForTenant(v.tenantId);
+        const offlineThresholdMs = tenantSettings.offlineThresholdMinutes * 60 * 1000;
+        if (offlineFor < offlineThresholdMs) continue;
 
         // Já tem alerta OFFLINE recente? Pula.
         const recent = await this.prisma.alert.findFirst({
