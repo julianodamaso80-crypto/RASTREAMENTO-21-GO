@@ -26,6 +26,7 @@ export const DEFAULT_SEVERITY: Record<AlertType, AlertSeverity> = {
   SOS: AlertSeverity.CRITICAL,
   BATTERY_LOW: AlertSeverity.WARNING,
   OFFLINE: AlertSeverity.WARNING,
+  GPS_SILENT: AlertSeverity.CRITICAL,
   GEOFENCE_IN: AlertSeverity.INFO,
   GEOFENCE_OUT: AlertSeverity.INFO,
   POWER_CUT: AlertSeverity.CRITICAL,

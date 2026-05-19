@@ -437,6 +437,37 @@ export class AlertsService {
     );
   }
 
+  /**
+   * GPS silenciado: rastreador continua mandando heartbeat (status=online no
+   * Traccar) mas a última `position` parou de atualizar. Sinal forte de:
+   *   - antena GPS arrancada/coberta (roubo em andamento)
+   *   - jamming GPS sem disparo de flag de jamming explícita
+   *   - veículo em túnel/garagem fechada (falso positivo possível, operador valida)
+   * Severidade CRITICAL — não pode mascarar como veículo parado normal.
+   */
+  async notifyGpsSilent(
+    vehicleId: string,
+    tenantId: string,
+    lastPositionAt: Date,
+    lastHeartbeatAt: Date,
+  ) {
+    const minutesGpsSilent = Math.floor(
+      (Date.now() - lastPositionAt.getTime()) / 60_000,
+    );
+    return this.createAlert(
+      AlertType.GPS_SILENT,
+      vehicleId,
+      tenantId,
+      `GPS silenciado há ${minutesGpsSilent} min (heartbeat continua chegando — possível sabotagem da antena)`,
+      {
+        lastPositionAt: lastPositionAt.toISOString(),
+        lastHeartbeatAt: lastHeartbeatAt.toISOString(),
+        minutesGpsSilent,
+        severity: 'CRITICAL',
+      },
+    );
+  }
+
   async findAll(tenantId: string, filters: FilterAlertsDto) {
     const { page, perPage, type, status, assignedToId, vehicleId, read, from, to } = filters;
 

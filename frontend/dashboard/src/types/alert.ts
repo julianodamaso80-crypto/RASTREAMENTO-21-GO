@@ -5,6 +5,7 @@ export type AlertType =
   | 'SOS'
   | 'BATTERY_LOW'
   | 'OFFLINE'
+  | 'GPS_SILENT'
   | 'GEOFENCE_IN'
   | 'GEOFENCE_OUT'
   | 'POWER_CUT'
@@ -44,6 +45,7 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   SOS: 'SOS',
   BATTERY_LOW: 'Bateria do rastreador baixa',
   OFFLINE: 'Offline',
+  GPS_SILENT: 'GPS silenciado (possível sabotagem)',
   GEOFENCE_IN: 'Entrada em Cerca',
   GEOFENCE_OUT: 'Saída de Cerca',
   POWER_CUT: 'Corte de energia (sabotagem)',
@@ -64,6 +66,7 @@ export const ALERT_TYPE_COLORS: Record<AlertType, string> = {
   SOS: '#ef4444',
   BATTERY_LOW: '#f97316',
   OFFLINE: '#6b7280',
+  GPS_SILENT: '#dc2626',
   GEOFENCE_IN: '#3b82f6',
   GEOFENCE_OUT: '#8b5cf6',
   POWER_CUT: '#dc2626',

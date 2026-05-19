@@ -115,6 +115,7 @@ enum AlertType {
   SOS
   BATTERY_LOW
   OFFLINE
+  GPS_SILENT
   GEOFENCE_IN
   GEOFENCE_OUT
   POWER_CUT
@@ -197,38 +198,38 @@ model Tenant {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  users         User[]
-  vehicles      Vehicle[]
-  associates    Associate[]
-  alerts        Alert[]
-  geofences     Geofence[]
-  devices       Device[]
-  chips         Chip[]
-  bleSightings  BleSighting[]
-  settings      TenantSettings?
+  users        User[]
+  vehicles     Vehicle[]
+  associates   Associate[]
+  alerts       Alert[]
+  geofences    Geofence[]
+  devices      Device[]
+  chips        Chip[]
+  bleSightings BleSighting[]
+  settings     TenantSettings?
 
   @@map("tenants")
 }
 
 model TenantSettings {
-  id                            String   @id @default(uuid()) @db.Uuid
-  tenantId                      String   @unique @map("tenant_id") @db.Uuid
-  speedThresholdKmh             Int      @default(120) @map("speed_threshold_kmh")
-  offlineThresholdMinutes       Int      @default(15) @map("offline_threshold_minutes")
-  batteryDeviceLowThreshold     Int      @default(20) @map("battery_device_low_threshold")
-  batteryVehicleLowVolts        Float    @default(11.5) @map("battery_vehicle_low_volts")
-  harshBrakeKmhPerSec           Float    @default(-10) @map("harsh_brake_kmh_per_sec")
-  harshAccelKmhPerSec           Float    @default(8) @map("harsh_accel_kmh_per_sec")
-  fuelDropPercentForTheft       Float    @default(10) @map("fuel_drop_percent_for_theft")
-  fuelDropWindowMinutes         Int      @default(5) @map("fuel_drop_window_minutes")
-  engineOverheatCelsius         Int      @default(100) @map("engine_overheat_celsius")
-  idleSpeedKmh                  Int      @default(2) @map("idle_speed_kmh")
-  autoBlockOnPowerCut           Boolean  @default(false) @map("auto_block_on_power_cut")
-  jammingConfirmReadings        Int      @default(2) @map("jamming_confirm_readings")
-  notifyChannels                Json     @default("{\"email\":true,\"push\":true,\"whatsapp\":false}") @map("notify_channels")
-  notifyTypes                   Json?    @map("notify_types")
-  createdAt                     DateTime @default(now()) @map("created_at")
-  updatedAt                     DateTime @updatedAt @map("updated_at")
+  id                        String   @id @default(uuid()) @db.Uuid
+  tenantId                  String   @unique @map("tenant_id") @db.Uuid
+  speedThresholdKmh         Int      @default(120) @map("speed_threshold_kmh")
+  offlineThresholdMinutes   Int      @default(15) @map("offline_threshold_minutes")
+  batteryDeviceLowThreshold Int      @default(20) @map("battery_device_low_threshold")
+  batteryVehicleLowVolts    Float    @default(11.5) @map("battery_vehicle_low_volts")
+  harshBrakeKmhPerSec       Float    @default(-10) @map("harsh_brake_kmh_per_sec")
+  harshAccelKmhPerSec       Float    @default(8) @map("harsh_accel_kmh_per_sec")
+  fuelDropPercentForTheft   Float    @default(10) @map("fuel_drop_percent_for_theft")
+  fuelDropWindowMinutes     Int      @default(5) @map("fuel_drop_window_minutes")
+  engineOverheatCelsius     Int      @default(100) @map("engine_overheat_celsius")
+  idleSpeedKmh              Int      @default(2) @map("idle_speed_kmh")
+  autoBlockOnPowerCut       Boolean  @default(false) @map("auto_block_on_power_cut")
+  jammingConfirmReadings    Int      @default(2) @map("jamming_confirm_readings")
+  notifyChannels            Json     @default("{\"email\":true,\"push\":true,\"whatsapp\":false}") @map("notify_channels")
+  notifyTypes               Json?    @map("notify_types")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -250,8 +251,8 @@ model User {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  tenant         Tenant              @relation(fields: [tenantId], references: [id])
-  vehicleAccess  UserVehicleAccess[]
+  tenant        Tenant              @relation(fields: [tenantId], references: [id])
+  vehicleAccess UserVehicleAccess[]
 
   @@index([tenantId, deletedAt])
   @@map("users")
@@ -308,22 +309,22 @@ model Vehicle {
 }
 
 model MaintenancePlan {
-  id                    String              @id @default(uuid()) @db.Uuid
-  vehicleId             String              @map("vehicle_id") @db.Uuid
-  tenantId              String              @map("tenant_id") @db.Uuid
-  type                  MaintenanceType
-  name                  String
-  intervalKm            Int?                @map("interval_km")
-  intervalEngineHours   Int?                @map("interval_engine_hours")
-  intervalMonths        Int?                @map("interval_months")
-  lastDoneAt            DateTime?           @map("last_done_at")
-  lastDoneKm            Float?              @map("last_done_km")
-  lastDoneEngineHours   Float?              @map("last_done_engine_hours")
-  active                Boolean             @default(true)
-  severity              MaintenanceSeverity?
-  deletedAt             DateTime?           @map("deleted_at")
-  createdAt             DateTime            @default(now()) @map("created_at")
-  updatedAt             DateTime            @updatedAt @map("updated_at")
+  id                  String               @id @default(uuid()) @db.Uuid
+  vehicleId           String               @map("vehicle_id") @db.Uuid
+  tenantId            String               @map("tenant_id") @db.Uuid
+  type                MaintenanceType
+  name                String
+  intervalKm          Int?                 @map("interval_km")
+  intervalEngineHours Int?                 @map("interval_engine_hours")
+  intervalMonths      Int?                 @map("interval_months")
+  lastDoneAt          DateTime?            @map("last_done_at")
+  lastDoneKm          Float?               @map("last_done_km")
+  lastDoneEngineHours Float?               @map("last_done_engine_hours")
+  active              Boolean              @default(true)
+  severity            MaintenanceSeverity?
+  deletedAt           DateTime?            @map("deleted_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
@@ -333,15 +334,15 @@ model MaintenancePlan {
 }
 
 model VehicleScore {
-  id           String   @id @default(uuid()) @db.Uuid
-  vehicleId    String   @map("vehicle_id") @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  periodStart  DateTime @map("period_start")
-  periodEnd    DateTime @map("period_end")
-  totalScore   Int      @map("total_score")
-  breakdown    Json
-  kmAnalyzed   Float    @default(0) @map("km_analyzed")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id          String   @id @default(uuid()) @db.Uuid
+  vehicleId   String   @map("vehicle_id") @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  totalScore  Int      @map("total_score")
+  breakdown   Json
+  kmAnalyzed  Float    @default(0) @map("km_analyzed")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
@@ -401,23 +402,23 @@ model Associate {
 }
 
 model Alert {
-  id           String      @id @default(uuid()) @db.Uuid
+  id           String        @id @default(uuid()) @db.Uuid
   type         AlertType
   severity     AlertSeverity @default(INFO)
   message      String
   data         Json?
-  read         Boolean     @default(false)
-  status       AlertStatus @default(OPEN)
-  assignedToId String?     @map("assigned_to_id") @db.Uuid
-  assignedAt   DateTime?   @map("assigned_at")
-  resolvedById String?     @map("resolved_by_id") @db.Uuid
-  resolvedAt   DateTime?   @map("resolved_at")
+  read         Boolean       @default(false)
+  status       AlertStatus   @default(OPEN)
+  assignedToId String?       @map("assigned_to_id") @db.Uuid
+  assignedAt   DateTime?     @map("assigned_at")
+  resolvedById String?       @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime?     @map("resolved_at")
   resolution   String?
-  vehicleId    String      @map("vehicle_id") @db.Uuid
-  tenantId     String      @map("tenant_id") @db.Uuid
-  deletedAt    DateTime?   @map("deleted_at")
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
+  vehicleId    String        @map("vehicle_id") @db.Uuid
+  tenantId     String        @map("tenant_id") @db.Uuid
+  deletedAt    DateTime?     @map("deleted_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
 
   vehicle Vehicle        @relation(fields: [vehicleId], references: [id])
   tenant  Tenant         @relation(fields: [tenantId], references: [id])
@@ -516,35 +517,35 @@ model Device {
 /// ponto parado faz throttle de 1/min.
 /// Em produção, particionar por mês via SQL puro (Prisma não gera partição).
 model Position {
-  id              String    @id @default(uuid()) @db.Uuid
-  vehicleId       String    @map("vehicle_id") @db.Uuid
-  tenantId        String    @map("tenant_id") @db.Uuid
-  traccarPositionId Int?    @map("traccar_position_id")
-  deviceTime      DateTime  @map("device_time")
-  serverTime      DateTime  @default(now()) @map("server_time")
-  latitude        Float
-  longitude       Float
-  speed           Float
-  course          Float?
-  altitude        Float?
-  accuracy        Float?
-  address         String?
-  ignition        Boolean?
-  batteryLevel    Int?      @map("battery_level")
-  powerVolts      Float?    @map("power_volts")
-  rpm             Int?
-  fuel            Float?
-  temperature     Float?
-  odometer        Float?
-  gsmSignal       Int?      @map("gsm_signal")
-  satellites      Int?
-  powerCut        Boolean   @default(false) @map("power_cut")
-  jamming         Boolean   @default(false)
-  vibration       Boolean   @default(false)
-  jarring         Boolean   @default(false)
-  charging        Boolean   @default(false)
-  alarm           String?
-  rawAttributes   Json?     @map("raw_attributes")
+  id                String   @id @default(uuid()) @db.Uuid
+  vehicleId         String   @map("vehicle_id") @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  traccarPositionId Int?     @map("traccar_position_id")
+  deviceTime        DateTime @map("device_time")
+  serverTime        DateTime @default(now()) @map("server_time")
+  latitude          Float
+  longitude         Float
+  speed             Float
+  course            Float?
+  altitude          Float?
+  accuracy          Float?
+  address           String?
+  ignition          Boolean?
+  batteryLevel      Int?     @map("battery_level")
+  powerVolts        Float?   @map("power_volts")
+  rpm               Int?
+  fuel              Float?
+  temperature       Float?
+  odometer          Float?
+  gsmSignal         Int?     @map("gsm_signal")
+  satellites        Int?
+  powerCut          Boolean  @default(false) @map("power_cut")
+  jamming           Boolean  @default(false)
+  vibration         Boolean  @default(false)
+  jarring           Boolean  @default(false)
+  charging          Boolean  @default(false)
+  alarm             String?
+  rawAttributes     Json?    @map("raw_attributes")
 
   @@index([vehicleId, deviceTime(sort: Desc)])
   @@index([tenantId, deviceTime(sort: Desc)])

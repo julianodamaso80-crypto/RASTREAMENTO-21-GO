@@ -31,6 +31,7 @@ const ALERT_LABELS: Record<AlertType, string> = {
   SOS: 'SOS acionado',
   BATTERY_LOW: 'Bateria do rastreador baixa',
   OFFLINE: 'Rastreador sem comunicação',
+  GPS_SILENT: 'GPS silenciado (heartbeat ok, mas sem nova posição — possível sabotagem)',
   GEOFENCE_IN: 'Entrada em cerca',
   GEOFENCE_OUT: 'Saída de cerca',
   POWER_CUT: 'Corte de energia detectado',
