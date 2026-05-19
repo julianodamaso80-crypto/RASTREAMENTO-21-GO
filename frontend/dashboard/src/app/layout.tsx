@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { Barlow } from 'next/font/google';
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import './globals.css';
 
-const barlow = Barlow({
+const plusJakarta = Plus_Jakarta_Sans({
   variable: '--font-sans',
   subsets: ['latin'],
   weight: ['400', '500', '600', '700', '800'],
@@ -20,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={`${barlow.variable} h-full antialiased`}>
+    <html lang="pt-BR" className={`${plusJakarta.variable} h-full antialiased`}>
       <body className="min-h-full">
         <Providers>{children}</Providers>
       </body>
