@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { AxiosError } from 'axios';
 import {
   Dialog,
   DialogContent,
@@ -40,8 +41,16 @@ export function BlockConfirmModal({
         toast.success(`Veículo ${vehicle.plate} desbloqueado`);
       }
       onClose();
-    } catch {
-      toast.error(`Erro ao ${isBlocking ? 'bloquear' : 'desbloquear'} veículo`);
+    } catch (err) {
+      // Backend agora propaga 503 quando o Traccar recusa o comando —
+      // mostramos a mensagem real pro operador saber que o carro NÃO foi
+      // bloqueado (em vez de toast genérico que dava falsa sensação de ok).
+      const backendMsg =
+        err instanceof AxiosError
+          ? (err.response?.data as { message?: string } | undefined)?.message
+          : undefined;
+      const fallback = `Erro ao ${isBlocking ? 'bloquear' : 'desbloquear'} veículo`;
+      toast.error(backendMsg ?? fallback);
     } finally {
       setLoading(false);
     }

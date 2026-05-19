@@ -2,8 +2,11 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
+  ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma, VehicleStatus } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
@@ -18,7 +21,18 @@ export class VehiclesService {
   constructor(
     private prisma: PrismaService,
     private traccarService: TraccarService,
+    private configService: ConfigService,
   ) {}
+
+  /**
+   * Quando true (env var `BLOCK_COMMANDS_DRY_RUN=true`), block/unblock NÃO
+   * envia o comando real ao Traccar — só registra no log e atualiza o banco.
+   * Útil pra desenvolver/testar sem risco de bloquear um carro real ligado.
+   * Default: false (produção dispara o comando de verdade).
+   */
+  private isBlockCommandDryRun(): boolean {
+    return this.configService.get<string>('BLOCK_COMMANDS_DRY_RUN') === 'true';
+  }
 
   async findAll(tenantId: string, filters: FilterVehiclesDto) {
     const { page, perPage, status, plate, search } = filters;
@@ -257,44 +271,73 @@ export class VehiclesService {
   }
 
   async block(id: string, tenantId: string) {
-    const vehicle = await this.findOne(id, tenantId);
-
-    if (vehicle.traccarDeviceId) {
-      try {
-        await this.traccarService.sendCommand(
-          vehicle.traccarDeviceId,
-          'engineStop',
-        );
-        this.logger.log(`Comando de bloqueio enviado para ${vehicle.plate}`);
-      } catch (error) {
-        this.logger.warn(`Falha ao enviar comando de bloqueio: ${error}`);
-      }
-    }
-
-    return this.prisma.vehicle.update({
-      where: { id },
-      data: { status: VehicleStatus.BLOCKED },
-    });
+    return this.sendBlockCommand(id, tenantId, 'block');
   }
 
   async unblock(id: string, tenantId: string) {
+    return this.sendBlockCommand(id, tenantId, 'unblock');
+  }
+
+  /**
+   * Fluxo seguro de block/unblock:
+   * 1. Veículo precisa ter `traccarDeviceId` — sem rastreador vinculado,
+   *    não tem o que comandar (BadRequest, não 500).
+   * 2. Envia o comando via Traccar (que já tem withRetry x3 internamente).
+   * 3. SE o comando falhar → propaga 503 e NÃO atualiza status no banco.
+   *    Assim o frontend mostra erro real e o operador sabe que precisa
+   *    reagir, em vez de ver "bloqueado" enganosamente.
+   * 4. SÓ atualiza o banco depois de o Traccar aceitar o comando.
+   *
+   * BLOCK_COMMANDS_DRY_RUN=true pula o passo 2 — só pra dev/teste.
+   */
+  private async sendBlockCommand(
+    id: string,
+    tenantId: string,
+    op: 'block' | 'unblock',
+  ) {
     const vehicle = await this.findOne(id, tenantId);
 
-    if (vehicle.traccarDeviceId) {
+    if (!vehicle.traccarDeviceId) {
+      throw new BadRequestException(
+        'Veículo sem rastreador vinculado. Cadastre um device no Traccar antes de bloquear.',
+      );
+    }
+
+    const commandType = op === 'block' ? 'engineStop' : 'engineResume';
+    const newStatus =
+      op === 'block' ? VehicleStatus.BLOCKED : VehicleStatus.ACTIVE;
+    const dryRun = this.isBlockCommandDryRun();
+
+    if (dryRun) {
+      this.logger.warn(
+        `[DRY RUN] Comando ${commandType} NÃO enviado ao Traccar — flag BLOCK_COMMANDS_DRY_RUN ativa. Placa=${vehicle.plate}`,
+      );
+    } else {
       try {
         await this.traccarService.sendCommand(
           vehicle.traccarDeviceId,
-          'engineResume',
+          commandType,
         );
-        this.logger.log(`Comando de desbloqueio enviado para ${vehicle.plate}`);
+        this.logger.log(
+          `Comando ${commandType} aceito pelo Traccar para ${vehicle.plate} (deviceId=${vehicle.traccarDeviceId})`,
+        );
       } catch (error) {
-        this.logger.warn(`Falha ao enviar comando de desbloqueio: ${error}`);
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Falha ao enviar ${commandType} para ${vehicle.plate}: ${msg}`,
+        );
+        // NÃO atualiza o banco quando o comando falha. Se a UI mostrasse
+        // "bloqueado" sem o Traccar ter aceito, o operador ficaria seguro
+        // achando que o carro está parado — risco grave.
+        throw new ServiceUnavailableException(
+          `Não foi possível ${op === 'block' ? 'bloquear' : 'desbloquear'} o veículo: ${msg}`,
+        );
       }
     }
 
     return this.prisma.vehicle.update({
       where: { id },
-      data: { status: VehicleStatus.ACTIVE },
+      data: { status: newStatus },
     });
   }
 }
