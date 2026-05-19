@@ -22,7 +22,6 @@ import {
   LineChart,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
   YAxis,
@@ -300,7 +299,6 @@ export default function DashboardOverviewPage() {
               <EmptyChart label="Sem alertas registrados no período" />
             ) : (
               <SafeChart>
-              <ResponsiveContainer width="100%" height="100%" minWidth={320}>
                 <LineChart data={timeSeriesData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="display" stroke="#64748b" fontSize={11} tickLine={false} />
@@ -321,7 +319,6 @@ export default function DashboardOverviewPage() {
                     dot={false}
                   />
                 </LineChart>
-              </ResponsiveContainer>
               </SafeChart>
             )}
           </CardContent>
@@ -338,7 +335,6 @@ export default function DashboardOverviewPage() {
               <EmptyChart label="Sem veículos cadastrados" />
             ) : (
               <SafeChart>
-              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={fleetPie}
@@ -366,7 +362,6 @@ export default function DashboardOverviewPage() {
                     wrapperStyle={{ fontSize: 11 }}
                   />
                 </PieChart>
-              </ResponsiveContainer>
               </SafeChart>
             )}
           </CardContent>
@@ -383,7 +378,6 @@ export default function DashboardOverviewPage() {
               <EmptyChart label="Sem dados de distância disponíveis" />
             ) : (
               <SafeChart>
-              <ResponsiveContainer width="100%" height="100%" minWidth={480}>
                 <BarChart
                   data={charts.topKmVehicles}
                   layout="vertical"
@@ -409,7 +403,6 @@ export default function DashboardOverviewPage() {
                   />
                   <Bar dataKey="km" fill={CHART_COLORS.bar} radius={[0, 4, 4, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
               </SafeChart>
             )}
           </CardContent>
