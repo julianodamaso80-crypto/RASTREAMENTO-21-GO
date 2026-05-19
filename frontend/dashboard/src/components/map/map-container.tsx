@@ -130,9 +130,14 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         const tooltip = document.createElement('div');
         tooltip.style.cssText =
           'display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding:6px 10px;background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.15);border-radius:6px;white-space:nowrap;font-size:12px;color:#e2e8f0;z-index:10;pointer-events:none;margin-bottom:6px;backdrop-filter:blur(8px);';
+        const tooltipSpeed =
+          vehicle.displayStatus === 'moving' ? formatSpeed(vehicle.speed) : '0 km/h';
+        const tooltipTime = formatRelativeTime(
+          vehicle.positionTime ?? vehicle.lastUpdate,
+        );
         tooltip.innerHTML = `
           <div style="font-weight:600;color:${color}">${vehicle.plate}</div>
-          <div>${formatSpeed(vehicle.speed)} · ${formatRelativeTime(vehicle.lastUpdate)}</div>
+          <div>${tooltipSpeed} · GPS ${tooltipTime}</div>
         `;
         el.appendChild(tooltip);
 

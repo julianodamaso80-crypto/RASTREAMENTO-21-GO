@@ -181,9 +181,20 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       const position = deviceId ? positionMap.get(deviceId) : undefined;
 
       const speed = position?.speed ?? 0;
+      // `lastUpdate` = heartbeat do device (Traccar atualiza mesmo em keep-alive
+      // sem GPS novo). `positionTime` = quando o GPS efetivamente mexeu.
+      // Os dois divergem quando o rastreador para de mandar posições mas continua
+      // online — caso típico de carro parado com ignição ligada em GT06/Concox.
       const lastUpdate = device?.lastUpdate || position?.serverTime || vehicle.updatedAt;
+      const positionTime = position?.fixTime || position?.deviceTime || position?.serverTime || null;
       const deviceStatus = device?.status || 'offline';
-      const displayStatus = getDisplayStatus(deviceStatus, speed, lastUpdate, vehicle.status);
+      const displayStatus = getDisplayStatus(
+        deviceStatus,
+        speed,
+        lastUpdate,
+        vehicle.status,
+        positionTime,
+      );
 
       result.push({
         ...vehicle,
@@ -193,6 +204,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         course: position?.course ?? 0,
         address: position?.address ?? '',
         lastUpdate,
+        positionTime,
         deviceStatus,
         displayStatus,
         ignition: (position?.attributes?.ignition as boolean) ?? false,

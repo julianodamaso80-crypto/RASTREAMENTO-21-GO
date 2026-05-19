@@ -69,3 +69,9 @@ export const STATUS_LABELS: Record<DisplayStatus, string> = {
 
 // Tempo em ms para considerar um dispositivo offline
 export const OFFLINE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutos
+
+// Acima desse gap entre AGORA e a última posição GPS real, o veículo é
+// tratado como 'stopped' mesmo se o último speed > 0 — rastreadores
+// GT06/Concox/Suntech costumam parar de mandar GPS quando ficam estáticos
+// (só mandam heartbeat), o que mantinha "Em movimento · 2 km/h" travado.
+export const STALE_POSITION_MS = 3 * 60 * 1000; // 3 minutos

@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import type { DisplayStatus } from '@/types/vehicle';
-import { OFFLINE_THRESHOLD_MS } from './constants';
+import { OFFLINE_THRESHOLD_MS, STALE_POSITION_MS } from './constants';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -64,15 +64,36 @@ export function formatTimeOnlyBR(isoDate: string): string {
   });
 }
 
+/**
+ * Calcula o status visível do veículo baseado em:
+ *  - status do device no Traccar (heartbeat: online/offline)
+ *  - velocidade da última posição GPS (em nós)
+ *  - `lastUpdate`  = device.lastUpdate (pode ser só heartbeat, sem GPS novo)
+ *  - `positionTime` = quando o GPS mexeu pela última vez (null se nunca veio)
+ *
+ * Regra crítica: rastreadores GT06/Concox/Suntech costumam parar de enviar
+ * GPS quando ficam estáticos por economia — só mandam heartbeat. Resultado:
+ * `device.status='online'` + `position.speed=2km/h` (último valor antes de
+ * parar) ficavam congelados como "Em movimento". A regra `STALE_POSITION_MS`
+ * trata isso: se o GPS não atualiza há mais de 3min, o veículo é 'stopped'
+ * mesmo que o último speed conhecido seja > 0.
+ */
 export function getDisplayStatus(
   deviceStatus: string,
   speed: number,
   lastUpdate: string,
   vehicleStatus: string,
+  positionTime: string | null = null,
 ): DisplayStatus {
   if (vehicleStatus === 'BLOCKED') return 'alert';
   const age = Date.now() - new Date(lastUpdate).getTime();
   if (age > OFFLINE_THRESHOLD_MS || deviceStatus === 'offline') return 'offline';
+  // GPS antigo + device online ⇒ rastreador mandando só heartbeat. Tratar
+  // como parado, ignorando o speed antigo travado.
+  const positionAge = positionTime
+    ? Date.now() - new Date(positionTime).getTime()
+    : Infinity;
+  if (positionAge > STALE_POSITION_MS) return 'stopped';
   if (speed > 0 && deviceStatus === 'online') return 'moving';
   return 'stopped';
 }

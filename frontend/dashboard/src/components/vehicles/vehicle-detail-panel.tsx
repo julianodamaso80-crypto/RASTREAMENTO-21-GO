@@ -74,7 +74,9 @@ export function VehicleDetailPanel() {
             <div className="text-xs text-muted-foreground mt-0.5">
               {vehicle.ignition ? '🟢 Ignição ligada' : '⚪ Ignição desligada'}
               {' · '}
-              atualizado {formatRelativeTime(vehicle.lastUpdate)}
+              {vehicle.positionTime
+                ? `GPS ${formatRelativeTime(vehicle.positionTime)}`
+                : `sem GPS · heartbeat ${formatRelativeTime(vehicle.lastUpdate)}`}
             </div>
           </div>
         </div>
@@ -166,7 +168,11 @@ export function VehicleDetailPanel() {
               <Gauge className="h-4 w-4 text-brand-green-500" />
               <div>
                 <p className="text-xs text-muted-foreground">Velocidade</p>
-                <p className="font-bold text-sm">{formatSpeed(vehicle.speed)}</p>
+                <p className="font-bold text-sm">
+                  {vehicle.displayStatus === 'moving'
+                    ? formatSpeed(vehicle.speed)
+                    : '0 km/h'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2 bg-muted/20 rounded-lg p-2.5">

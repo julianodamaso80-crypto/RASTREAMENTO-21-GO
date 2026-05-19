@@ -30,7 +30,7 @@ import { TelemetryCharts } from '@/components/vehicles/telemetry-charts';
 import { TripReplay } from '@/components/vehicles/trip-replay';
 import { BlockConfirmModal } from '@/components/vehicles/block-confirm-modal';
 import { useTracking } from '@/contexts/tracking-context';
-import { formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime, formatSpeed } from '@/lib/utils';
 
 export default function VehicleCockpitPage() {
   const params = useParams();
@@ -221,7 +221,11 @@ function OverviewTab({ vehicle, vehicleId }: { vehicle: VehicleWithTracking; veh
           <div className="grid grid-cols-2 gap-2">
             <div>
               <span className="text-muted-foreground text-xs">Velocidade</span>
-              <p className="font-semibold">{vehicle.speed?.toFixed(0) ?? 0} km/h</p>
+              <p className="font-semibold">
+                {vehicle.displayStatus === 'moving'
+                  ? formatSpeed(vehicle.speed)
+                  : '0 km/h'}
+              </p>
             </div>
             <div>
               <span className="text-muted-foreground text-xs">Ignição</span>
@@ -238,8 +242,14 @@ function OverviewTab({ vehicle, vehicleId }: { vehicle: VehicleWithTracking; veh
               </p>
             </div>
             <div>
-              <span className="text-muted-foreground text-xs">Última atualização</span>
-              <p className="font-semibold">{vehicle.lastUpdate ? formatRelativeTime(vehicle.lastUpdate) : '—'}</p>
+              <span className="text-muted-foreground text-xs">Última posição GPS</span>
+              <p className="font-semibold">
+                {vehicle.positionTime
+                  ? formatRelativeTime(vehicle.positionTime)
+                  : vehicle.lastUpdate
+                    ? `heartbeat ${formatRelativeTime(vehicle.lastUpdate)}`
+                    : '—'}
+              </p>
             </div>
           </div>
           <Separator className="my-2" />

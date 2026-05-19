@@ -36,7 +36,12 @@ export interface VehicleWithTracking extends Vehicle {
   speed: number;
   course: number;
   address: string;
+  // Heartbeat do device (Traccar lastUpdate). Pode ser keep-alive sem GPS novo.
   lastUpdate: string;
+  // Timestamp da ÚLTIMA posição GPS real (Traccar position.deviceTime/serverTime).
+  // Usar este quando a pergunta é "quando o GPS mexeu pela última vez?".
+  // Quando null, nunca houve posição.
+  positionTime: string | null;
   deviceStatus: string;
   displayStatus: DisplayStatus;
   ignition: boolean;
