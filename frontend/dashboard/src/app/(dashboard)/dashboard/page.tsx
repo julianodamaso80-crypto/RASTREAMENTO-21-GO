@@ -34,6 +34,7 @@ import { PERIOD_LABELS } from '@/types/dashboard';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import { PeriodFilter } from '@/components/dashboard/period-filter';
 import { Badge } from '@/components/ui/badge';
+import { SafeChart } from '@/components/ui/safe-chart';
 import {
   Card,
   CardContent,
@@ -298,6 +299,7 @@ export default function DashboardOverviewPage() {
             ) : timeSeriesData.length === 0 ? (
               <EmptyChart label="Sem alertas registrados no período" />
             ) : (
+              <SafeChart>
               <ResponsiveContainer width="100%" height="100%" minWidth={320}>
                 <LineChart data={timeSeriesData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -320,6 +322,7 @@ export default function DashboardOverviewPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+              </SafeChart>
             )}
           </CardContent>
         </Card>
@@ -334,6 +337,7 @@ export default function DashboardOverviewPage() {
             ) : fleetPie.length === 0 ? (
               <EmptyChart label="Sem veículos cadastrados" />
             ) : (
+              <SafeChart>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -363,6 +367,7 @@ export default function DashboardOverviewPage() {
                   />
                 </PieChart>
               </ResponsiveContainer>
+              </SafeChart>
             )}
           </CardContent>
         </Card>
@@ -377,6 +382,7 @@ export default function DashboardOverviewPage() {
             ) : !charts || charts.topKmVehicles.length === 0 ? (
               <EmptyChart label="Sem dados de distância disponíveis" />
             ) : (
+              <SafeChart>
               <ResponsiveContainer width="100%" height="100%" minWidth={480}>
                 <BarChart
                   data={charts.topKmVehicles}
@@ -404,6 +410,7 @@ export default function DashboardOverviewPage() {
                   <Bar dataKey="km" fill={CHART_COLORS.bar} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+              </SafeChart>
             )}
           </CardContent>
         </Card>
