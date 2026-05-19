@@ -18,7 +18,6 @@ import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import { useTraccarSocket } from '@/hooks/use-traccar-socket';
 import { getDisplayStatus } from '@/lib/utils';
-import { mockVehicles, mockDevices, mockPositions } from '@/lib/mock-data';
 
 interface StatusCounts {
   total: number;
@@ -111,20 +110,15 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
           .getAll()
           .then((tags) => setBleTags(tags))
           .catch(() => undefined);
-      } catch {
-        // Fallback para mock data
-        const vMap = new Map<string, Vehicle>();
-        mockVehicles.forEach((v) => vMap.set(v.id, v));
-
-        const dMap = new Map<number, TraccarDevice>();
-        mockDevices.forEach((d) => dMap.set(d.id, d));
-
-        const pMap = new Map<number, TraccarPosition>();
-        mockPositions.forEach((p) => pMap.set(p.deviceId, p));
-
-        setVehicleMap(vMap);
-        setDeviceMap(dMap);
-        setPositionMap(pMap);
+      } catch (err) {
+        // Em produção NUNCA cair pra mock — mostrar estado vazio + toast.
+        // Veículos/devices/positions ficam vazios e o operador percebe que
+        // o backend está indisponível em vez de ver placas falsas.
+        const msg = err instanceof Error ? err.message : 'Falha ao carregar dados';
+        toast.error(`Backend indisponível: ${msg}`);
+        setVehicleMap(new Map());
+        setDeviceMap(new Map());
+        setPositionMap(new Map());
       } finally {
         setIsLoading(false);
       }

@@ -58,7 +58,7 @@ export function Header() {
       : null;
 
   return (
-    <header className="h-16 bg-[#1a2332] border-b border-white/5 flex items-center justify-between gap-4 px-4 md:px-6">
+    <header className="h-16 bg-[#293c82] border-b border-white/5 flex items-center justify-between gap-4 px-4 md:px-6">
       <div className="hidden md:flex items-center gap-3 min-w-0">
         <span className="text-sm text-slate-400 truncate">
           {user?.tenant?.name || '21Go! Proteção Veicular'}
@@ -76,7 +76,7 @@ export function Header() {
             placeholder="Buscar veículo, placa, motorista…"
             className={cn(
               'w-full h-10 pl-10 pr-20 rounded-lg text-sm',
-              'bg-[#2a3441] text-slate-100 placeholder:text-slate-500',
+              'bg-[#1f2d63] text-slate-100 placeholder:text-slate-500',
               'border border-white/5',
               'focus:outline-none focus:border-brand-orange-500 focus:ring-2 focus:ring-brand-orange-500/20',
               'transition-colors',

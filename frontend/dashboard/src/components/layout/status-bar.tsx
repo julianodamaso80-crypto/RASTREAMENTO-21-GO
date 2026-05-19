@@ -9,7 +9,7 @@ export function StatusBar() {
   const { statusCounts, isSocketConnected } = useTracking();
 
   return (
-    <div className="h-12 bg-[#1a2332] border-t border-white/5 flex items-center justify-between px-4 md:px-6 text-xs">
+    <div className="h-12 bg-[#293c82] border-t border-white/5 flex items-center justify-between px-4 md:px-6 text-xs">
       {/* Esquerda: contadores rápidos da frota */}
       <div className="flex items-center gap-5 text-slate-400">
         <span>

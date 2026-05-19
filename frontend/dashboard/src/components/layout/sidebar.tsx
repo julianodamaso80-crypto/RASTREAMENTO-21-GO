@@ -185,7 +185,7 @@ export function Sidebar() {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'hidden md:flex flex-col bg-[#1a2332] h-full transition-all duration-200 border-r border-white/5',
+          'hidden md:flex flex-col bg-[#293c82] h-full transition-all duration-200 border-r border-white/5',
           collapsed ? 'w-16' : 'w-64',
         )}
       >
@@ -208,10 +208,10 @@ export function Sidebar() {
 
       {/* Mobile drawer */}
       <Sheet>
-        <SheetTrigger className="md:hidden fixed top-3 left-3 z-50 p-2 rounded-md bg-[#1a2332] text-slate-100 hover:bg-[#2a3441] transition-colors">
+        <SheetTrigger className="md:hidden fixed top-3 left-3 z-50 p-2 rounded-md bg-[#293c82] text-slate-100 hover:bg-[#1f2d63] transition-colors">
           <Menu className="h-5 w-5" />
         </SheetTrigger>
-        <SheetContent side="left" className="w-64 bg-[#1a2332] border-r border-white/5 p-0">
+        <SheetContent side="left" className="w-64 bg-[#293c82] border-r border-white/5 p-0">
           <BrandHeader collapsed={false} />
           <div className="py-4">
             <NavContent collapsed={false} />

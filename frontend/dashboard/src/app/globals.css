@@ -46,21 +46,30 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-  --color-emerald-300: #faaf6b;
-  --color-emerald-400: #f7963d;
-  --color-emerald-500: #f7963d;
-  --color-emerald-600: #e07b1d;
-  --color-emerald-700: #c4660d;
+  /* Paleta oficial 21Go! — extraída do manual_marca_21go.pdf (Abril 2026).
+     NUNCA alterar tonalidades ou criar variações não autorizadas.
+     Proporção de uso: 60% azul / 25% laranja / 15% verde. */
+  --color-brand-blue-700: #1f2d63;
+  --color-brand-blue-600: #243573;
+  --color-brand-blue-500: #293c82;  /* Azul Institucional — cor principal */
+  --color-brand-blue-400: #4257a3;
+  --color-brand-blue-300: #6f81bf;
+  --color-brand-orange-700: #c0700a;
+  --color-brand-orange-600: #d97f10;
+  --color-brand-orange-500: #f2911d;  /* Laranja 21Go — CTAs e energia */
+  --color-brand-orange-400: #f5a849;
+  --color-brand-orange-300: #f8c075;
+  --color-brand-green-600: #9fab01;
+  --color-brand-green-500: #c7d301;  /* Verde Localização — pin/acentos */
+  --color-brand-green-400: #d6e02b;
+  --color-brand-green-300: #e3eb5e;
+  /* Aliases legados pra não quebrar imports — apontam pro laranja oficial */
+  --color-emerald-300: #f8c075;
+  --color-emerald-400: #f5a849;
+  --color-emerald-500: #f2911d;
+  --color-emerald-600: #d97f10;
+  --color-emerald-700: #c0700a;
   --color-emerald-900: #3d2a12;
-  --color-brand-blue-600: #2a3e72;
-  --color-brand-blue-500: #375191;
-  --color-brand-blue-400: #5b7ac4;
-  --color-brand-orange-600: #e07b1d;
-  --color-brand-orange-500: #f7963d;
-  --color-brand-orange-400: #faaf6b;
-  --color-brand-green-600: #9bb52e;
-  --color-brand-green-500: #bfd741;
-  --color-brand-green-400: #d1e26a;
 }
 
 /* Dark-first: variáveis escuras como padrão — contraste WCAG AA */
@@ -71,8 +80,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.20 0.005 260);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: #f7963d;
-  --primary-foreground: #1a1a1a;
+  --primary: #f2911d;
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.24 0.01 260);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.24 0.01 260);
@@ -82,21 +91,23 @@
   --destructive: oklch(0.68 0.22 25);
   --border: oklch(0.38 0.01 260);
   --input: oklch(0.22 0.01 260);
-  --ring: #f7963d;
-  --chart-1: #f7963d;
-  --chart-2: #bfd741;
-  --chart-3: #5b7ac4;
+  --ring: #f2911d;
+  --chart-1: #f2911d;
+  --chart-2: #c7d301;
+  --chart-3: #4257a3;
   --chart-4: #ef4444;
   --chart-5: #64748b;
   --radius: 0.625rem;
-  --sidebar: oklch(0.15 0.01 260);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: #f7963d;
-  --sidebar-primary-foreground: #1a1a1a;
-  --sidebar-accent: oklch(0.22 0.01 260);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.28 0.01 260);
-  --sidebar-ring: #f7963d;
+  /* Sidebar/header em Azul Institucional (#293C82) conforme manual:
+     "Website: Logo no header com fundo azul." */
+  --sidebar: #293c82;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #f2911d;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1f2d63;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #f2911d;
 }
 
 @layer base {
