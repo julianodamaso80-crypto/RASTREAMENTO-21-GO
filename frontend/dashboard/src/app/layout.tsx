@@ -14,11 +14,6 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: '21Go! Proteção Patrimonial',
   description: 'Plataforma de rastreamento e proteção patrimonial 21Go!',
-  icons: {
-    icon: '/icon.png',
-    shortcut: '/icon.png',
-    apple: '/icon.png',
-  },
 };
 
 export default function RootLayout({
