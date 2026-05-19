@@ -158,8 +158,13 @@ export class VehiclesAnalyticsService {
     const harshAccelCount = alerts.filter((a) => a.type === AlertType.HARSH_ACCEL).length;
 
     const { engineMinutes, idleMinutes, drivingMinutes } = this.computeEngineWindows(alerts, positions);
-    const { maxSpeedKmh, avgSpeedKmh, nightDriveKm } = this.computeSpeedAndNight(positions);
+    const { maxSpeedKmh: maxFromPositions, avgSpeedKmh, nightDriveKm } = this.computeSpeedAndNight(positions);
     const hourlyHeatmap = this.computeHourlyHeatmap(positions);
+
+    // Fallback: usa maxSpeed do Traccar reportSummary (knots → km/h) quando Position
+    // table ainda não tem dado histórico suficiente. Mantém o maior dos dois.
+    const maxFromTraccar = traccarSummary?.maxSpeed ? Math.round(traccarSummary.maxSpeed * 1.852) : 0;
+    const maxSpeedKmh = Math.max(maxFromPositions, maxFromTraccar);
 
     return {
       period,
