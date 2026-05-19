@@ -241,11 +241,13 @@ Só começa quando Wave 1+2 estiverem estáveis em produção.
 - 22 gaps descobertos na auditoria → 6 descartados estrategicamente + 16 entregues
 - Stack moderna mantida, débito técnico resolvido (soft delete, auditoria, permissões)
 
-## Estado atual (2026-04-20)
+## Estado atual (2026-05-19)
 
-- Produção no ar: `trackgo.site`, `api.trackgo.site`, `traccar.trackgo.site`, `painel.trackgo.site`.
+- Produção no ar: `trackgo.site` / `www.trackgo.site` (dashboard), `api.trackgo.site` (backend REST/WS), `traccar.trackgo.site` (Traccar UI).
+- ⚠️ `painel.trackgo.site` está com DNS no Cloudflare mas SEM rota Traefik nem cert — retorna 404. Era pra ser o admin UI do EasyPanel; ainda não configurado. Acesso EasyPanel hoje só via IP do droplet.
 - Rastreamento **funcionando end-to-end** com rastreadores reais em `gps1.trackgo.site:5023` (GT06/J16) e `gps2.trackgo.site:5023` (backup).
-- Hinova em modo mock (`HINOVA_MOCK=true`) — credenciais reais ainda não obtidas.
+- Wave 2.5 (análise comportamental do rastreador) **em prod**: Position seletiva, TenantSettings, BehaviorCard, sabotagem (powerCut/jamming), bateria carro fraca, condução brusca (HARSH_BRAKE/ACCEL), telemetria, manutenção preditiva (cron 4h), score de motorista (cron 5h, ranking), Assistente IA (OpenRouter + tool use, isolamento por tenant).
+- Hinova em modo mock (`HINOVA_MOCK=true`, `HINOVA_SYNC_ENABLED=false`) — credenciais reais ainda não obtidas. Cron de sync DESLIGADO em prod pra não criar fantasmas.
 - Apps mobile: planejados ([docs/mobile-app-roadmap.md](docs/mobile-app-roadmap.md)), não iniciados.
-- Deploy: manual via SSH + `docker build` + `docker service update`. Sem CI/CD ainda.
+- Deploy: manual via SSH + `docker build` + `tag + push pro registry localhost:5000` + `docker service update`. Build do backend agora carrega `GIT_SHA`/`BUILD_TIME` exposto em `/api/v1/health`. Sem CI/CD ainda.
 - Auditoria competitiva: 20/04/2026 contra RedeVeiculos.com / 21go.rastreamento.vip — 27% ✓, 23% ◐, 50% ✗.

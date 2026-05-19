@@ -38,6 +38,10 @@ export class HealthController {
 
     return {
       ok: db.ok && traccar.ok,
+      version: {
+        gitSha: process.env.GIT_SHA ?? 'undefined',
+        builtAt: process.env.BUILD_TIME ?? 'undefined',
+      },
       checks: {
         db,
         traccar,
