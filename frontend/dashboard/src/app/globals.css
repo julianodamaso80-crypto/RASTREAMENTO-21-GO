@@ -72,25 +72,25 @@
   --color-emerald-900: #3d2a12;
 }
 
-/* Dark-first: variáveis escuras como padrão — contraste WCAG AA */
+/* Light theme — fundos claros, sidebar mantém Azul Institucional do manual */
 :root {
-  --background: oklch(0.13 0.01 260);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.19 0.005 260);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.20 0.005 260);
-  --popover-foreground: oklch(0.985 0 0);
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
   --primary: #f2911d;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.24 0.01 260);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.24 0.01 260);
-  --muted-foreground: oklch(0.78 0.01 260);
-  --accent: oklch(0.24 0.01 260);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.68 0.22 25);
-  --border: oklch(0.38 0.01 260);
-  --input: oklch(0.22 0.01 260);
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
   --ring: #f2911d;
   --chart-1: #f2911d;
   --chart-2: #c7d301;
@@ -98,8 +98,7 @@
   --chart-4: #ef4444;
   --chart-5: #64748b;
   --radius: 0.625rem;
-  /* Sidebar/header em Azul Institucional (#293C82) conforme manual:
-     "Website: Logo no header com fundo azul." */
+  /* Sidebar mantém Azul Institucional #293C82 do manual da marca */
   --sidebar: #293c82;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #f2911d;
@@ -122,17 +121,17 @@
   }
 }
 
-/* Glassmorphism */
+/* Glassmorphism — versão clara */
 .glass {
   backdrop-filter: blur(16px) saturate(180%);
-  background-color: rgba(15, 23, 42, 0.75);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background-color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .glass-light {
   backdrop-filter: blur(12px) saturate(150%);
-  background-color: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.08);
+  background-color: rgba(248, 250, 252, 0.85);
+  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 /* Pulsing animation para veículos em movimento */
@@ -151,7 +150,7 @@
   animation: pulse-ring 1.5s ease-out infinite;
 }
 
-/* Scrollbar dark */
+/* Scrollbar light */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -160,34 +159,34 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(100, 116, 139, 0.3);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(100, 116, 139, 0.5);
 }
 
-/* MapLibre overrides */
+/* MapLibre overrides — popups claros */
 .maplibregl-popup-content {
-  background-color: rgba(15, 23, 42, 0.9) !important;
+  background-color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(148, 163, 184, 0.15) !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
   border-radius: 8px !important;
-  color: #e2e8f0 !important;
+  color: #0f172a !important;
   padding: 12px !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.15) !important;
 }
 .maplibregl-popup-tip {
-  border-top-color: rgba(15, 23, 42, 0.9) !important;
+  border-top-color: rgba(255, 255, 255, 0.95) !important;
 }
 .maplibregl-popup-close-button {
-  color: #94a3b8 !important;
+  color: #64748b !important;
   font-size: 18px !important;
 }
 .maplibregl-ctrl-group {
-  background: rgba(15, 23, 42, 0.85) !important;
-  border: 1px solid rgba(148, 163, 184, 0.15) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
 }
 .maplibregl-ctrl-group button {
-  filter: invert(1);
+  filter: none;
 }
