@@ -10,7 +10,10 @@ import { TenantSettingsService } from '../tenant-settings/tenant-settings.servic
 // efetiva (position.fixTime), considera-se que o rastreador está mandando
 // só keep-alive sem GPS — possível sabotagem da antena. Igual ao
 // STALE_POSITION_MS do frontend pra os dois pontos do sistema concordarem.
-const GPS_SILENT_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos
+// 15 min: tempo após o qual GPS silenciado começa a ser suspeito.
+// Antes era 5 min, mas isso gerava falso positivo em carros parados +
+// rastreadores que economizam bateria reduzindo taxa de update.
+const GPS_SILENT_THRESHOLD_MS = 15 * 60 * 1000;
 
 /**
  * Detecta veículos OFFLINE comparando `tc_devices.lastUpdate` (Traccar)
@@ -187,6 +190,16 @@ export class AlertsCron {
 
         const positionAge = now - new Date(positionTime).getTime();
         if (positionAge < GPS_SILENT_THRESHOLD_MS) continue;
+
+        // Guard contra falso positivo de carro estacionado: só dispara se a
+        // última posição mostrava o veículo EM USO (ignição ligada OU em
+        // movimento). Carro com ignição off parado é normal — rastreador
+        // reduz/pára os fixes pra economizar bateria, GPS_SILENT aqui é
+        // ruído. Suspeita real = "estava rodando e o GPS sumiu".
+        const lastIgnition = (position?.attributes as { ignition?: boolean } | undefined)?.ignition;
+        const lastSpeed = position?.speed ?? 0;
+        const wasInUse = lastIgnition === true || lastSpeed > 1;
+        if (!wasInUse) continue;
 
         const recent = await this.prisma.alert.findFirst({
           where: {
