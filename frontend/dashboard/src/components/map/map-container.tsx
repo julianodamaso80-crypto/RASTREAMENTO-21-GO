@@ -93,15 +93,34 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     }, []);
 
     // ─────────────────────────────────────────────────────────────────
-    // Troca de basemap (Padrão ↔ Satélite). Markers DOM sobrevivem ao
-    // setStyle — só layers/sources internos do MapLibre são recriados.
+    // Troca de basemap (Padrão ↔ Satélite). MapLibre limpa os markers
+    // DOM ao chamar setStyle em algumas versões — re-attach manual após
+    // o `styledata` garantindo que o pin do veículo continua visível.
+    // CRÍTICO em rastreamento: se o usuário troca pra satélite e o pin
+    // some, ele perde o veículo de vista.
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
       const map = mapRef.current;
       if (!map) return;
       const def = BASEMAPS.find((b) => b.id === basemap);
       if (!def || !def.url) return;
+
+      const snapshot = Array.from(markersRef.current.entries()).map(
+        ([id, marker]) => ({ id, lngLat: marker.getLngLat(), el: marker.getElement() }),
+      );
+
       map.setStyle(def.url);
+
+      map.once('styledata', () => {
+        snapshot.forEach(({ id, lngLat, el }) => {
+          const existing = markersRef.current.get(id);
+          existing?.remove();
+          const newMarker = new maplibregl.Marker({ element: el })
+            .setLngLat(lngLat)
+            .addTo(map);
+          markersRef.current.set(id, newMarker);
+        });
+      });
     }, [basemap]);
 
     // ─────────────────────────────────────────────────────────────────
@@ -116,12 +135,16 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         const color = STATUS_COLORS[vehicle.displayStatus];
         const isMoving = vehicle.displayStatus === 'moving';
 
-        // Stroke escuro + sombra forte: visível em qualquer fundo (claro/escuro).
+        // Disco branco de fundo + seta colorida em cima + halo pulsante quando
+        // em movimento. Garante contraste em QUALQUER basemap (satélite, dark,
+        // streets). Em rastreamento o pin não pode "sumir" no terreno —
+        // operador precisa achar o veículo num glance.
         el.innerHTML = `
-          ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:48px;height:48px;border-radius:50%;background:${color};opacity:0.35;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
-          <div style="width:40px;height:40px;position:relative;z-index:1;">
-            <svg viewBox="0 0 24 24" width="40" height="40" style="transform:rotate(${vehicle.course}deg);filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6));">
-              <path d="M12 2L4.5 20.3L5.2 21L12 18L18.8 21L19.5 20.3L12 2Z" fill="${color}" stroke="#1e293b" stroke-width="1.2"/>
+          ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:56px;height:56px;border-radius:50%;background:${color};opacity:0.35;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
+          <div style="width:44px;height:44px;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">
+            <div style="position:absolute;width:44px;height:44px;border-radius:50%;background:#ffffff;border:3px solid ${color};box-shadow:0 2px 8px rgba(0,0,0,0.5);"></div>
+            <svg viewBox="0 0 24 24" width="26" height="26" style="position:relative;z-index:2;transform:rotate(${vehicle.course}deg);">
+              <path d="M12 2L4.5 20.3L5.2 21L12 18L18.8 21L19.5 20.3L12 2Z" fill="${color}" stroke="#0f172a" stroke-width="1.4" stroke-linejoin="round"/>
             </svg>
           </div>
         `;
