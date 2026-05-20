@@ -52,7 +52,7 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       <div className="space-y-2">
-        <label htmlFor="email" className="text-sm font-medium text-slate-200">
+        <label htmlFor="email" className="text-sm font-medium text-slate-700">
           Email
         </label>
         <Input
@@ -61,22 +61,22 @@ export function LoginForm() {
           autoComplete="email"
           placeholder="seu@email.com"
           aria-invalid={!!errors.email}
-          className="bg-slate-900/50 border-slate-800 focus:border-brand-orange-500"
+          className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
           {...register('email')}
         />
         {errors.email && (
-          <p className="text-xs text-red-400">{errors.email.message}</p>
+          <p className="text-xs text-red-600">{errors.email.message}</p>
         )}
       </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label htmlFor="password" className="text-sm font-medium text-slate-200">
+          <label htmlFor="password" className="text-sm font-medium text-slate-700">
             Senha
           </label>
           <Link
             href="/forgot-password"
-            className="text-xs text-brand-orange-500 hover:text-brand-orange-400 transition-colors"
+            className="text-xs font-medium text-brand-orange-600 hover:text-brand-orange-700 transition-colors"
           >
             Esqueci minha senha
           </Link>
@@ -88,7 +88,7 @@ export function LoginForm() {
             autoComplete="current-password"
             placeholder="••••••••"
             aria-invalid={!!errors.password}
-            className="bg-slate-900/50 border-slate-800 focus:border-brand-orange-500 pr-10"
+            className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900 pr-10"
             {...register('password')}
           />
           <button
@@ -97,20 +97,20 @@ export function LoginForm() {
             aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
             aria-pressed={showPassword}
             tabIndex={-1}
-            className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-200 transition-colors focus:outline-none focus-visible:text-brand-orange-500"
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none focus-visible:text-brand-orange-500"
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
         {errors.password && (
-          <p className="text-xs text-red-400">{errors.password.message}</p>
+          <p className="text-xs text-red-600">{errors.password.message}</p>
         )}
       </div>
 
       <Button
         type="submit"
         disabled={submitting}
-        className="w-full bg-brand-orange-500 hover:bg-brand-orange-600 text-slate-950 font-semibold"
+        className="w-full bg-brand-orange-500 hover:bg-brand-orange-600 text-white font-semibold"
       >
         {submitting ? (
           <>
