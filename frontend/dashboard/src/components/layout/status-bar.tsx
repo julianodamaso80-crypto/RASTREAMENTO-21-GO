@@ -17,9 +17,21 @@ export function StatusBar() {
           <strong className="text-slate-100 tabular-nums">{statusCounts.total}</strong>
         </span>
         <span>
-          Online:{' '}
-          <strong className="text-brand-green-500 tabular-nums">
-            {statusCounts.moving + statusCounts.stopped}
+          Ligados:{' '}
+          <strong className="text-emerald-400 tabular-nums">
+            {statusCounts.ignition_on}
+          </strong>
+        </span>
+        <span>
+          Desligados:{' '}
+          <strong className="text-red-400 tabular-nums">
+            {statusCounts.ignition_off}
+          </strong>
+        </span>
+        <span className="hidden sm:inline">
+          GPS silenciado:{' '}
+          <strong className="text-orange-400 tabular-nums">
+            {statusCounts.gps_silent}
           </strong>
         </span>
         <span>
@@ -27,8 +39,8 @@ export function StatusBar() {
           <strong className="text-slate-300 tabular-nums">{statusCounts.offline}</strong>
         </span>
         <span className="hidden sm:inline">
-          Alertas:{' '}
-          <strong className="text-red-400 tabular-nums">{statusCounts.alert}</strong>
+          Bloqueados:{' '}
+          <strong className="text-red-500 tabular-nums">{statusCounts.alert}</strong>
         </span>
       </div>
 

@@ -33,6 +33,10 @@ export function VehicleDetailPanel() {
 
   const color = STATUS_COLORS[vehicle.displayStatus];
   const isBlocked = vehicle.status === 'BLOCKED';
+  // "Movendo de verdade" = motor ligado + speed > 0 + GPS fresh.
+  // displayStatus sozinho não diz isso porque ele é sobre IGNIÇÃO agora.
+  const isActuallyMoving =
+    vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0;
   // Prioriza endereço do Nominatim; se falhou, usa o do Traccar (que pode
   // vir vazio se geocoder do servidor estiver lento/rate-limited).
   const displayAddress = reverseAddress || vehicle.address || null;
@@ -61,18 +65,17 @@ export function VehicleDetailPanel() {
           <div
             className={cn(
               'w-3 h-3 rounded-full shrink-0',
-              vehicle.displayStatus === 'moving' && 'animate-pulse',
+              isActuallyMoving && 'animate-pulse',
             )}
             style={{ backgroundColor: color }}
           />
           <div className="flex-1 min-w-0">
             <div className="text-base font-bold leading-tight" style={{ color }}>
               {STATUS_LABELS[vehicle.displayStatus]}
-              {vehicle.displayStatus === 'moving' &&
-                ` · ${formatSpeed(vehicle.speed)}`}
+              {isActuallyMoving && ` · ${formatSpeed(vehicle.speed)}`}
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              {vehicle.ignition ? '🟢 Ignição ligada' : '⚪ Ignição desligada'}
+              {isActuallyMoving ? 'em movimento' : 'parado'}
               {' · '}
               {vehicle.positionTime
                 ? `GPS ${formatRelativeTime(vehicle.positionTime)}`
@@ -169,9 +172,7 @@ export function VehicleDetailPanel() {
               <div>
                 <p className="text-xs text-muted-foreground">Velocidade</p>
                 <p className="font-bold text-sm">
-                  {vehicle.displayStatus === 'moving'
-                    ? formatSpeed(vehicle.speed)
-                    : '0 km/h'}
+                  {isActuallyMoving ? formatSpeed(vehicle.speed) : '0 km/h'}
                 </p>
               </div>
             </div>

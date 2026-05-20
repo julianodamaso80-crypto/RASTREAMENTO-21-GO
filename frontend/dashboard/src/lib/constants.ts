@@ -54,17 +54,19 @@ export const BASEMAPS: BasemapDef[] = [
 export const MAP_STYLE_URL = BASEMAPS[0].url;
 
 export const STATUS_COLORS: Record<DisplayStatus, string> = {
-  moving: '#bfd741',   // brand-green
-  stopped: '#eab308',  // yellow-500
-  alert: '#ef4444',    // red-500
-  offline: '#6b7280',  // gray-500
+  ignition_on: '#22c55e',  // green-500 — motor ligado
+  ignition_off: '#ef4444', // red-500   — motor desligado
+  gps_silent: '#f97316',   // orange-500 — GPS silenciado (possível sabotagem)
+  offline: '#6b7280',      // gray-500   — sem comunicação
+  alert: '#dc2626',        // red-600    — BLOQUEADO
 };
 
 export const STATUS_LABELS: Record<DisplayStatus, string> = {
-  moving: 'Em movimento',
-  stopped: 'Parado',
-  alert: 'Alerta',
+  ignition_on: 'Ligado',
+  ignition_off: 'Desligado',
+  gps_silent: 'GPS silenciado',
   offline: 'Offline',
+  alert: 'Bloqueado',
 };
 
 // Tempo em ms para considerar um dispositivo offline

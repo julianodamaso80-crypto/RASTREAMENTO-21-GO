@@ -222,7 +222,7 @@ function OverviewTab({ vehicle, vehicleId }: { vehicle: VehicleWithTracking; veh
             <div>
               <span className="text-muted-foreground text-xs">Velocidade</span>
               <p className="font-semibold">
-                {vehicle.displayStatus === 'moving'
+                {vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0
                   ? formatSpeed(vehicle.speed)
                   : '0 km/h'}
               </p>

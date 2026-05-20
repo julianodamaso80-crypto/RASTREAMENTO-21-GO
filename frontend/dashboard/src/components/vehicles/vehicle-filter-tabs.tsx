@@ -6,10 +6,11 @@ import type { DisplayStatus } from '@/types/vehicle';
 
 const filters: { key: 'all' | DisplayStatus; label: string }[] = [
   { key: 'all', label: 'Todos' },
-  { key: 'moving', label: 'Online' },
-  { key: 'stopped', label: 'Parado' },
+  { key: 'ignition_on', label: 'Ligado' },
+  { key: 'ignition_off', label: 'Desligado' },
+  { key: 'gps_silent', label: 'GPS silenciado' },
   { key: 'offline', label: 'Offline' },
-  { key: 'alert', label: 'Alerta' },
+  { key: 'alert', label: 'Bloqueado' },
 ];
 
 export function VehicleFilterTabs() {

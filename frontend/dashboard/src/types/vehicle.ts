@@ -1,5 +1,21 @@
 export type VehicleStatus = 'ACTIVE' | 'INACTIVE' | 'DEFAULTING' | 'BLOCKED';
-export type DisplayStatus = 'moving' | 'stopped' | 'offline' | 'alert';
+/**
+ * Sinal visual no mapa e na lista. Critério é IGNIÇÃO, não movimento,
+ * porque o operador precisa saber em 1s "o motor desse carro está rodando?"
+ * — pista direta de risco/uso. Movimento é derivado (mostrado como speed).
+ *
+ *  ignition_on  — motor rodando agora (pode estar parado em semáforo) → verde
+ *  ignition_off — motor desligado (estacionado normal)                 → vermelho
+ *  gps_silent   — heartbeat ok mas posição GPS stale >3min             → laranja
+ *  offline      — sem heartbeat >10min (rastreador morto/sem sinal)    → cinza
+ *  alert        — veículo BLOQUEADO (operação ativa)                   → vermelho intenso
+ */
+export type DisplayStatus =
+  | 'ignition_on'
+  | 'ignition_off'
+  | 'gps_silent'
+  | 'offline'
+  | 'alert';
 
 export interface Associate {
   id: string;

@@ -48,8 +48,8 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
           {vehicle.brand} {vehicle.model} · {vehicle.color}
         </span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {vehicle.displayStatus === 'moving' && (
-            <span className="text-brand-green-500">{formatSpeed(vehicle.speed)}</span>
+          {vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0 && (
+            <span className="text-emerald-400">{formatSpeed(vehicle.speed)}</span>
           )}
           <span>{formatRelativeTime(vehicle.positionTime ?? vehicle.lastUpdate)}</span>
         </div>

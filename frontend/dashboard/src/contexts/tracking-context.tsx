@@ -21,8 +21,9 @@ import { getDisplayStatus } from '@/lib/utils';
 
 interface StatusCounts {
   total: number;
-  moving: number;
-  stopped: number;
+  ignition_on: number;
+  ignition_off: number;
+  gps_silent: number;
   offline: number;
   alert: number;
 }
@@ -188,12 +189,14 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       const lastUpdate = device?.lastUpdate || position?.serverTime || vehicle.updatedAt;
       const positionTime = position?.fixTime || position?.deviceTime || position?.serverTime || null;
       const deviceStatus = device?.status || 'offline';
+      const ignition = (position?.attributes?.ignition as boolean) ?? false;
       const displayStatus = getDisplayStatus(
         deviceStatus,
         speed,
         lastUpdate,
         vehicle.status,
         positionTime,
+        ignition,
       );
 
       result.push({
@@ -207,7 +210,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         positionTime,
         deviceStatus,
         displayStatus,
-        ignition: (position?.attributes?.ignition as boolean) ?? false,
+        ignition,
         satellites: (position?.attributes?.sat as number) ?? 0,
       });
     });
@@ -237,7 +240,14 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
 
   // Contadores
   const statusCounts = useMemo<StatusCounts>(() => {
-    const counts = { total: 0, moving: 0, stopped: 0, offline: 0, alert: 0 };
+    const counts: StatusCounts = {
+      total: 0,
+      ignition_on: 0,
+      ignition_off: 0,
+      gps_silent: 0,
+      offline: 0,
+      alert: 0,
+    };
     vehicles.forEach((v) => {
       counts.total++;
       counts[v.displayStatus]++;

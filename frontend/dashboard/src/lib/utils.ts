@@ -65,35 +65,38 @@ export function formatTimeOnlyBR(isoDate: string): string {
 }
 
 /**
- * Calcula o status visível do veículo baseado em:
- *  - status do device no Traccar (heartbeat: online/offline)
- *  - velocidade da última posição GPS (em nós)
- *  - `lastUpdate`  = device.lastUpdate (pode ser só heartbeat, sem GPS novo)
- *  - `positionTime` = quando o GPS mexeu pela última vez (null se nunca veio)
+ * Calcula o status visível do veículo. Critério primário é IGNIÇÃO (motor
+ * ligado/desligado), não movimento. Operador precisa saber em 1s se o motor
+ * está rodando — isso é o sinal direto de uso/risco; movimento vem da
+ * velocidade.
  *
- * Regra crítica: rastreadores GT06/Concox/Suntech costumam parar de enviar
- * GPS quando ficam estáticos por economia — só mandam heartbeat. Resultado:
- * `device.status='online'` + `position.speed=2km/h` (último valor antes de
- * parar) ficavam congelados como "Em movimento". A regra `STALE_POSITION_MS`
- * trata isso: se o GPS não atualiza há mais de 3min, o veículo é 'stopped'
- * mesmo que o último speed conhecido seja > 0.
+ *  alert        — VehicleStatus=BLOCKED (operação ativa, bloqueado manualmente)
+ *  offline      — sem heartbeat >10min OU device.status='offline' (rastreador morto)
+ *  gps_silent   — heartbeat fresh mas última posição GPS >3min (possível sabotagem)
+ *  ignition_on  — última posição confiável tem ignição ligada (motor rodando)
+ *  ignition_off — última posição confiável tem ignição desligada
+ *
+ * Regra crítica: rastreadores GT06/Concox costumam parar de mandar GPS
+ * quando ficam estáticos — só mandam heartbeat. Por isso a checagem
+ * `gps_silent` vem ANTES de avaliar ignição: se o GPS está stale, a
+ * ignição lida do último position também é stale, e o estado verdadeiro
+ * é desconhecido. Mostrar laranja é mais honesto do que verde/vermelho
+ * baseado em dado velho.
  */
 export function getDisplayStatus(
   deviceStatus: string,
-  speed: number,
+  _speed: number,
   lastUpdate: string,
   vehicleStatus: string,
   positionTime: string | null = null,
+  ignition: boolean = false,
 ): DisplayStatus {
   if (vehicleStatus === 'BLOCKED') return 'alert';
   const age = Date.now() - new Date(lastUpdate).getTime();
   if (age > OFFLINE_THRESHOLD_MS || deviceStatus === 'offline') return 'offline';
-  // GPS antigo + device online ⇒ rastreador mandando só heartbeat. Tratar
-  // como parado, ignorando o speed antigo travado.
   const positionAge = positionTime
     ? Date.now() - new Date(positionTime).getTime()
     : Infinity;
-  if (positionAge > STALE_POSITION_MS) return 'stopped';
-  if (speed > 0 && deviceStatus === 'online') return 'moving';
-  return 'stopped';
+  if (positionAge > STALE_POSITION_MS) return 'gps_silent';
+  return ignition ? 'ignition_on' : 'ignition_off';
 }
