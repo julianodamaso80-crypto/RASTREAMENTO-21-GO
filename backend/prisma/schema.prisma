@@ -381,23 +381,27 @@ model AssistantMessage {
 }
 
 model Associate {
-  id         String    @id @default(uuid()) @db.Uuid
-  name       String
-  cpf        String
-  rg         String?
-  birthDate  DateTime? @map("birth_date")
-  phone      String?
-  email      String?
-  tenantId   String    @map("tenant_id") @db.Uuid
-  hinovaCode String?   @map("hinova_code")
-  deletedAt  DateTime? @map("deleted_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  cpf         String
+  rg          String?
+  birthDate   DateTime? @map("birth_date")
+  phone       String?
+  email       String?
+  tenantId    String    @map("tenant_id") @db.Uuid
+  hinovaCode  String?   @map("hinova_code")
+  // Auth do app do associado. Nullable: associado só loga depois de senha definida.
+  password    String?
+  lastLoginAt DateTime? @map("last_login_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   vehicles Vehicle[]
 
   @@index([tenantId, deletedAt])
+  @@index([cpf])
   @@map("associates")
 }
 
