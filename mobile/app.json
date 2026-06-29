@@ -47,7 +47,12 @@
       "reactCompiler": true
     },
     "extra": {
-      "apiUrl": "https://api.trackgo.site/api/v1"
-    }
+      "apiUrl": "https://api.trackgo.site/api/v1",
+      "router": {},
+      "eas": {
+        "projectId": "f2b12e95-4908-41f6-b8b8-9a8a61dfe270"
+      }
+    },
+    "owner": "julianodamaso"
   }
 }
