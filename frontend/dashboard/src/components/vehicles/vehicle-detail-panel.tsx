@@ -33,6 +33,15 @@ export function VehicleDetailPanel() {
 
   const color = STATUS_COLORS[vehicle.displayStatus];
   const statusHint = STATUS_HINTS[vehicle.displayStatus];
+  // No GPS sem sinal o label mostra o ESTADO DO VEÍCULO (Ligado/Desligado pela
+  // última leitura), não "GPS desligado" — a orientação de central avisa do
+  // problema de sinal. O dono quer saber do carro, não de jargão de GPS.
+  const statusLabel =
+    vehicle.displayStatus === 'gps_silent'
+      ? vehicle.ignition
+        ? 'Ligado'
+        : 'Desligado'
+      : STATUS_LABELS[vehicle.displayStatus];
   const isBlocked = vehicle.status === 'BLOCKED';
   // "Movendo de verdade" = motor ligado + speed > 0 + GPS fresh.
   // displayStatus sozinho não diz isso porque ele é sobre IGNIÇÃO agora.
@@ -72,7 +81,7 @@ export function VehicleDetailPanel() {
           />
           <div className="flex-1 min-w-0">
             <div className="text-base font-bold leading-tight" style={{ color }}>
-              {STATUS_LABELS[vehicle.displayStatus]}
+              {statusLabel}
               {isActuallyMoving && ` · ${formatSpeed(vehicle.speed)}`}
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">

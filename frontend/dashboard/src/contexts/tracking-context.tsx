@@ -201,6 +201,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
 
       result.push({
         ...vehicle,
+        vehicleType: vehicle.vehicleType ?? 'CAR',
         latitude: position?.latitude ?? 0,
         longitude: position?.longitude ?? 0,
         speed,

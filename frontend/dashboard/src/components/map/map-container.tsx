@@ -15,6 +15,7 @@ import {
   MAP_ZOOM,
   BASEMAPS,
   STATUS_COLORS,
+  VEHICLE_ICONS,
   type BasemapId,
 } from '@/lib/constants';
 import { formatSpeed, formatRelativeTime } from '@/lib/utils';
@@ -138,25 +139,16 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         const isMoving =
           vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0;
 
-        // Disco branco de fundo + seta colorida em cima + halo pulsante quando
-        // em movimento. Garante contraste em QUALQUER basemap (satélite, dark,
-        // streets). Em rastreamento o pin não pode "sumir" no terreno —
-        // operador precisa achar o veículo num glance.
+        // Desenho REALISTA do veículo (carro/moto vista de cima) girando na
+        // direção real, com anel colorido por status pra leitura rápida e
+        // sombra pra destacar em qualquer basemap (satélite/streets/dark).
+        const icon = VEHICLE_ICONS[vehicle.vehicleType] ?? VEHICLE_ICONS.CAR;
         el.innerHTML = `
-          ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:56px;height:56px;border-radius:50%;background:${color};opacity:0.35;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
-          <div style="width:44px;height:44px;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">
-            <div style="position:absolute;width:44px;height:44px;border-radius:50%;background:#ffffff;border:3px solid ${color};box-shadow:0 2px 8px rgba(0,0,0,0.5);"></div>
-            <svg viewBox="0 0 24 24" width="28" height="28" style="position:relative;z-index:2;transform:rotate(${vehicle.course}deg);">
-              <!-- carro visto de cima; frente = topo (course 0 = norte). Cor do
-                   corpo = status do veículo. -->
-              <rect x="4.4" y="6" width="2.2" height="3.6" rx="0.9" fill="#0f172a"/>
-              <rect x="17.4" y="6" width="2.2" height="3.6" rx="0.9" fill="#0f172a"/>
-              <rect x="4.4" y="14.4" width="2.2" height="3.6" rx="0.9" fill="#0f172a"/>
-              <rect x="17.4" y="14.4" width="2.2" height="3.6" rx="0.9" fill="#0f172a"/>
-              <rect x="6" y="2.5" width="12" height="19" rx="4" fill="${color}" stroke="#0f172a" stroke-width="1"/>
-              <path d="M8.4 6.2 L15.6 6.2 L14.4 9.2 L9.6 9.2 Z" fill="#0f172a" opacity="0.5"/>
-              <path d="M9.6 14.8 L14.4 14.8 L15.6 17.8 L8.4 17.8 Z" fill="#0f172a" opacity="0.5"/>
-            </svg>
+          ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:60px;height:60px;border-radius:50%;background:${color};opacity:0.3;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
+          <div style="width:54px;height:54px;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">
+            <div style="position:absolute;width:50px;height:50px;border-radius:50%;border:3px solid ${color};background:rgba(15,23,42,0.25);box-shadow:0 0 0 1px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.55);"></div>
+            <img src="${icon}" width="44" height="44" alt="" draggable="false"
+              style="position:relative;z-index:2;transform:rotate(${vehicle.course}deg);filter:drop-shadow(0 1px 2px rgba(0,0,0,0.7));pointer-events:none;" />
           </div>
         `;
 

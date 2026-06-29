@@ -29,7 +29,7 @@ export function StatusBar() {
           </strong>
         </span>
         <span className="hidden sm:inline">
-          GPS desligado:{' '}
+          Sem sinal:{' '}
           <strong className="text-orange-400 tabular-nums">
             {statusCounts.gps_silent}
           </strong>

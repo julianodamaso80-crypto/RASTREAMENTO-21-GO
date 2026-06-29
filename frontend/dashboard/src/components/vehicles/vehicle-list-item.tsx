@@ -16,6 +16,12 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
   const isSelected = selectedVehicleId === vehicle.id;
   const color = STATUS_COLORS[vehicle.displayStatus];
   const statusHint = STATUS_HINTS[vehicle.displayStatus];
+  const statusLabel =
+    vehicle.displayStatus === 'gps_silent'
+      ? vehicle.ignition
+        ? 'Ligado'
+        : 'Desligado'
+      : STATUS_LABELS[vehicle.displayStatus];
 
   return (
     <button
@@ -42,7 +48,7 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
           className="text-[10px] px-1.5 py-0"
           style={{ borderColor: color, color }}
         >
-          {STATUS_LABELS[vehicle.displayStatus]}
+          {statusLabel}
         </Badge>
       </div>
       <div className="flex items-center justify-between mt-1 ml-4">

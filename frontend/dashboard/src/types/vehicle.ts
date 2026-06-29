@@ -1,4 +1,6 @@
 export type VehicleStatus = 'ACTIVE' | 'INACTIVE' | 'DEFAULTING' | 'BLOCKED';
+/** Tipo do veículo — define o desenho usado no mapa (carro x moto). */
+export type VehicleType = 'CAR' | 'MOTORCYCLE';
 /**
  * Sinal visual no mapa e na lista. Critério é IGNIÇÃO, não movimento,
  * porque o operador precisa saber em 1s "o motor desse carro está rodando?"
@@ -27,6 +29,7 @@ export interface Associate {
 export interface Vehicle {
   id: string;
   plate: string;
+  vehicleType: VehicleType;
   brand: string | null;
   model: string | null;
   year: number | null;

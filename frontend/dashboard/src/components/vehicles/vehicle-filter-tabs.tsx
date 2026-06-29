@@ -8,7 +8,7 @@ const filters: { key: 'all' | DisplayStatus; label: string }[] = [
   { key: 'all', label: 'Todos' },
   { key: 'ignition_on', label: 'Ligado' },
   { key: 'ignition_off', label: 'Desligado' },
-  { key: 'gps_silent', label: 'GPS desligado' },
+  { key: 'gps_silent', label: 'Sem sinal' },
   { key: 'offline', label: 'Sem comunicação' },
   { key: 'alert', label: 'Bloqueado' },
 ];

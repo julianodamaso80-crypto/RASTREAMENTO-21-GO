@@ -1,4 +1,5 @@
-import type { DisplayStatus } from '@/types/vehicle';
+import type { StyleSpecification } from 'maplibre-gl';
+import type { DisplayStatus, VehicleType } from '@/types/vehicle';
 
 export const MAP_CENTER: [number, number] = [-49.2643, -16.6869]; // Goiânia
 export const MAP_ZOOM = 12;
@@ -26,10 +27,39 @@ export type BasemapId = 'streets' | 'satellite';
 interface BasemapDef {
   id: BasemapId;
   label: string;
-  url: string;
+  // string = URL de style; objeto = StyleSpecification inline (satélite Esri).
+  url: string | StyleSpecification;
   /** Quando true, só carrega se HAS_MAPTILER. */
   requiresKey: boolean;
 }
+
+// Satélite Esri World Imagery — nítido (estilo Google), grátis e SEM API key.
+// Camada de imagery + overlay de ruas/labels (World_Transportation) = "híbrido"
+// igual ao satélite do Google Maps. Substitui o MapTiler hybrid, que era menos nítido.
+const ESRI_SATELLITE_STYLE = {
+  version: 8,
+  sources: {
+    'esri-imagery': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      attribution: 'Esri, Maxar, Earthstar Geographics',
+    },
+    'esri-labels': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+    },
+  },
+  layers: [
+    { id: 'esri-imagery', type: 'raster', source: 'esri-imagery' },
+    { id: 'esri-labels', type: 'raster', source: 'esri-labels' },
+  ],
+} as StyleSpecification;
 
 export const BASEMAPS: BasemapDef[] = [
   {
@@ -43,15 +73,21 @@ export const BASEMAPS: BasemapDef[] = [
   {
     id: 'satellite',
     label: 'Satélite',
-    // Estilo "hybrid" = imagery aérea + rótulos de ruas e cidades sobrepostos.
-    // É o equivalente ao satélite do Google Maps. Sem chave, não fica disponível.
-    url: HAS_MAPTILER ? maptilerStyle('hybrid') : '',
-    requiresKey: true,
+    // Esri World Imagery + ruas/labels — nítido tipo Google, grátis e sem key.
+    url: ESRI_SATELLITE_STYLE,
+    requiresKey: false,
   },
 ];
 
 // Estilo padrão usado no /mapa ao primeiro load.
 export const MAP_STYLE_URL = BASEMAPS[0].url;
+
+// Desenho realista (vista de cima) usado como marcador no mapa, por tipo.
+// PNGs em /public/markers — recortados com fundo transparente.
+export const VEHICLE_ICONS: Record<VehicleType, string> = {
+  CAR: '/markers/car-top.png',
+  MOTORCYCLE: '/markers/moto-top.png',
+};
 
 export const STATUS_COLORS: Record<DisplayStatus, string> = {
   ignition_on: '#22c55e',  // green-500 — motor ligado
@@ -64,7 +100,7 @@ export const STATUS_COLORS: Record<DisplayStatus, string> = {
 export const STATUS_LABELS: Record<DisplayStatus, string> = {
   ignition_on: 'Ligado',
   ignition_off: 'Desligado',
-  gps_silent: 'GPS desligado',
+  gps_silent: 'Sem sinal',
   offline: 'Sem comunicação',
   alert: 'Bloqueado',
 };
