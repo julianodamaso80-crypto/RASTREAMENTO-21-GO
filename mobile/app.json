@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "21Go! Proteção Veicular",
+    "name": "Track Go",
     "slug": "r21go-cliente",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +13,7 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "CFBundleDisplayName": "21Go!"
+        "CFBundleDisplayName": "Track Go"
       }
     },
     "android": {

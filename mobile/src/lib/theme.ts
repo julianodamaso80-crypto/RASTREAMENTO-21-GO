@@ -1,6 +1,6 @@
 /**
- * Paleta de marca oficial 21Go! — extraída do reskin do dashboard
- * (designer/manual_marca_21go.pdf). Navy + laranja + limão.
+ * Paleta de marca Track Go — navy + laranja + limão
+ * (designer/manual_marca_21go.pdf). Mesma identidade do dashboard 21 GO.
  */
 export const colors = {
   navy: '#293c82',
