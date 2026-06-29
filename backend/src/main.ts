@@ -27,8 +27,11 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Prefixo global
-  app.setGlobalPrefix('api/v1');
+  // Prefixo global — exclui a página pública de privacidade (exigida pela App Store
+  // e Play Store; precisa de URL limpa sem o prefixo da API).
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['privacidade', 'privacy'],
+  });
 
   // Validação
   app.useGlobalPipes(

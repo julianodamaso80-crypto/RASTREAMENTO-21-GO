@@ -32,6 +32,7 @@ import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { ScoringModule } from './modules/scoring/scoring.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
 import { AppAssociateModule } from './modules/app/app-associate.module';
+import { LegalModule } from './modules/legal/legal.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
@@ -89,6 +90,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     ScoringModule,
     AssistantModule,
     AppAssociateModule,
+    LegalModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
