@@ -21,9 +21,11 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "marketing21goprotpatri@gmail.com",
         "ascAppId": "6785540839",
-        "appleTeamId": "CCMH2N6PS4"
+        "appleTeamId": "CCMH2N6PS4",
+        "ascApiKeyPath": "../secrets/AuthKey_VQ77NAF88A.p8",
+        "ascApiKeyId": "VQ77NAF88A",
+        "ascApiKeyIssuerId": "a3225ffd-89f3-457e-890b-358e23270a43"
       }
     }
   }
