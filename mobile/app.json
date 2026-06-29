@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Track Go",
+    "name": "21 Go Rastreamento",
     "slug": "r21go-cliente",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +13,7 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "CFBundleDisplayName": "Track Go"
+        "CFBundleDisplayName": "21 Go"
       }
     },
     "android": {

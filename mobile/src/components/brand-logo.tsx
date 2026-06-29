@@ -2,7 +2,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { colors } from '@/lib/theme';
 
-/** Marca-símbolo Track Go — círculo laranja + pin limão. */
+/** Marca-símbolo 21 Go — círculo laranja + pin limão. */
 export function BrandMark({ size = 44 }: { size?: number }) {
   const inner = Math.round(size * 0.5);
   return (
@@ -34,7 +34,7 @@ export function BrandMark({ size = 44 }: { size?: number }) {
   );
 }
 
-/** Marca completa: símbolo + "Track Go" + tagline. */
+/** Marca completa: símbolo + "21 Go" + tagline. */
 export function BrandLockup({ light = false }: { light?: boolean }) {
   return (
     <View style={styles.row}>
@@ -43,7 +43,7 @@ export function BrandLockup({ light = false }: { light?: boolean }) {
         <Text
           style={[styles.word, { color: light ? colors.white : colors.text }]}
         >
-          Track<Text style={{ color: colors.orange }}> Go</Text>
+          21 <Text style={{ color: colors.orange }}>Go</Text>
         </Text>
         <Text
           style={[
@@ -51,7 +51,7 @@ export function BrandLockup({ light = false }: { light?: boolean }) {
             { color: light ? 'rgba(255,255,255,0.7)' : colors.textMuted },
           ]}
         >
-          PROTEÇÃO VEICULAR
+          RASTREAMENTO
         </Text>
       </View>
     </View>
