@@ -64,9 +64,17 @@ export const STATUS_COLORS: Record<DisplayStatus, string> = {
 export const STATUS_LABELS: Record<DisplayStatus, string> = {
   ignition_on: 'Ligado',
   ignition_off: 'Desligado',
-  gps_silent: 'GPS silenciado',
-  offline: 'Offline',
+  gps_silent: 'GPS desligado',
+  offline: 'Sem comunicação',
   alert: 'Bloqueado',
+};
+
+// Orientação ao usuário quando o estado indica problema (não é uso normal).
+// O dono não quer saber de jargão técnico ("GPS silenciado") — quer uma AÇÃO
+// clara. Mostrada no painel/lista nos estados que pedem intervenção.
+export const STATUS_HINTS: Partial<Record<DisplayStatus, string>> = {
+  gps_silent: 'Entre em contato com a central',
+  offline: 'Entre em contato com a central',
 };
 
 // Tempo em ms para considerar um dispositivo offline

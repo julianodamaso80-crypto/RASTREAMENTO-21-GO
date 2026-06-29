@@ -146,8 +146,16 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           ${isMoving ? `<div class="vehicle-pulse" style="position:absolute;width:56px;height:56px;border-radius:50%;background:${color};opacity:0.35;top:50%;left:50%;transform:translate(-50%,-50%);"></div>` : ''}
           <div style="width:44px;height:44px;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">
             <div style="position:absolute;width:44px;height:44px;border-radius:50%;background:#ffffff;border:3px solid ${color};box-shadow:0 2px 8px rgba(0,0,0,0.5);"></div>
-            <svg viewBox="0 0 24 24" width="26" height="26" style="position:relative;z-index:2;transform:rotate(${vehicle.course}deg);">
-              <path d="M12 2L4.5 20.3L5.2 21L12 18L18.8 21L19.5 20.3L12 2Z" fill="${color}" stroke="#0f172a" stroke-width="1.4" stroke-linejoin="round"/>
+            <svg viewBox="0 0 24 24" width="28" height="28" style="position:relative;z-index:2;transform:rotate(${vehicle.course}deg);">
+              <!-- carro visto de cima; frente = topo (course 0 = norte). Cor do
+                   corpo = status do veículo. -->
+              <rect x="4.4" y="6" width="2.2" height="3.6" rx="0.9" fill="#0f172a"/>
+              <rect x="17.4" y="6" width="2.2" height="3.6" rx="0.9" fill="#0f172a"/>
+              <rect x="4.4" y="14.4" width="2.2" height="3.6" rx="0.9" fill="#0f172a"/>
+              <rect x="17.4" y="14.4" width="2.2" height="3.6" rx="0.9" fill="#0f172a"/>
+              <rect x="6" y="2.5" width="12" height="19" rx="4" fill="${color}" stroke="#0f172a" stroke-width="1"/>
+              <path d="M8.4 6.2 L15.6 6.2 L14.4 9.2 L9.6 9.2 Z" fill="#0f172a" opacity="0.5"/>
+              <path d="M9.6 14.8 L14.4 14.8 L15.6 17.8 L8.4 17.8 Z" fill="#0f172a" opacity="0.5"/>
             </svg>
           </div>
         `;

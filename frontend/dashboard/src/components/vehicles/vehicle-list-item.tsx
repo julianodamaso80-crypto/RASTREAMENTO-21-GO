@@ -1,8 +1,9 @@
 'use client';
 
 import { cn, formatSpeed, formatRelativeTime } from '@/lib/utils';
-import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants';
+import { STATUS_COLORS, STATUS_LABELS, STATUS_HINTS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
+import { Phone } from 'lucide-react';
 import { useTracking } from '@/contexts/tracking-context';
 import type { VehicleWithTracking } from '@/types/vehicle';
 
@@ -14,6 +15,7 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
   const { selectedVehicleId, selectVehicle } = useTracking();
   const isSelected = selectedVehicleId === vehicle.id;
   const color = STATUS_COLORS[vehicle.displayStatus];
+  const statusHint = STATUS_HINTS[vehicle.displayStatus];
 
   return (
     <button
@@ -54,6 +56,15 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
           <span>{formatRelativeTime(vehicle.positionTime ?? vehicle.lastUpdate)}</span>
         </div>
       </div>
+      {statusHint && (
+        <div
+          className="flex items-center gap-1 mt-1 ml-4 text-[11px] font-medium"
+          style={{ color }}
+        >
+          <Phone className="h-3 w-3 shrink-0" />
+          {statusHint}
+        </div>
+      )}
     </button>
   );
 }

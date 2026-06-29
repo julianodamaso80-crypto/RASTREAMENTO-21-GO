@@ -1,12 +1,12 @@
 'use client';
 
-import { X, Navigation, Gauge, Satellite, MapPin, Power, Lock, Unlock } from 'lucide-react';
+import { X, Navigation, Gauge, Satellite, MapPin, Power, Lock, Unlock, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useTracking } from '@/contexts/tracking-context';
 import { cn, maskCPF, formatSpeed, formatRelativeTime } from '@/lib/utils';
-import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants';
+import { STATUS_COLORS, STATUS_LABELS, STATUS_HINTS } from '@/lib/constants';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { BlockConfirmModal } from './block-confirm-modal';
 import Link from 'next/link';
@@ -32,6 +32,7 @@ export function VehicleDetailPanel() {
   if (!vehicle) return null;
 
   const color = STATUS_COLORS[vehicle.displayStatus];
+  const statusHint = STATUS_HINTS[vehicle.displayStatus];
   const isBlocked = vehicle.status === 'BLOCKED';
   // "Movendo de verdade" = motor ligado + speed > 0 + GPS fresh.
   // displayStatus sozinho não diz isso porque ele é sobre IGNIÇÃO agora.
@@ -81,6 +82,15 @@ export function VehicleDetailPanel() {
                 ? `GPS ${formatRelativeTime(vehicle.positionTime)}`
                 : `sem GPS · heartbeat ${formatRelativeTime(vehicle.lastUpdate)}`}
             </div>
+            {statusHint && (
+              <div
+                className="text-xs font-semibold mt-1.5 flex items-center gap-1"
+                style={{ color }}
+              >
+                <Phone className="h-3 w-3 shrink-0" />
+                {statusHint}
+              </div>
+            )}
           </div>
         </div>
 
