@@ -16,7 +16,10 @@ import {
   MapPin,
   Power,
   Satellite,
+  Car,
+  Bike,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +46,20 @@ export default function VehicleCockpitPage() {
   const [error, setError] = useState<string | null>(null);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [tab, setTab] = useState<string>('overview');
+  const [savingType, setSavingType] = useState(false);
+
+  async function handleSetType(type: 'CAR' | 'MOTORCYCLE') {
+    setSavingType(true);
+    setVehicleBase((prev) => (prev ? { ...prev, vehicleType: type } : prev));
+    try {
+      await vehiclesApi.update(vehicleId, { vehicleType: type });
+      toast.success(type === 'MOTORCYCLE' ? 'Tipo: Moto' : 'Tipo: Carro');
+    } catch {
+      toast.error('Erro ao atualizar o tipo');
+    } finally {
+      setSavingType(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +110,31 @@ export default function VehicleCockpitPage() {
               <Badge variant="outline" className="uppercase">
                 {vehicle.status}
               </Badge>
+              {/* Tipo do veículo — define o desenho no mapa (carro x moto) */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => handleSetType('CAR')}
+                  disabled={savingType}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors disabled:opacity-50 ${
+                    vehicle.vehicleType === 'CAR'
+                      ? 'border-emerald-400 bg-emerald-500/10 text-emerald-400'
+                      : 'border-border/40 text-muted-foreground hover:bg-muted/30'
+                  }`}
+                >
+                  <Car className="h-3.5 w-3.5" /> Carro
+                </button>
+                <button
+                  onClick={() => handleSetType('MOTORCYCLE')}
+                  disabled={savingType}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors disabled:opacity-50 ${
+                    vehicle.vehicleType === 'MOTORCYCLE'
+                      ? 'border-emerald-400 bg-emerald-500/10 text-emerald-400'
+                      : 'border-border/40 text-muted-foreground hover:bg-muted/30'
+                  }`}
+                >
+                  <Bike className="h-3.5 w-3.5" /> Moto
+                </button>
+              </div>
               {vehicle.associate?.name && (
                 <span className="text-sm text-muted-foreground">
                   Cliente: <span className="font-medium text-foreground">{vehicle.associate.name}</span>

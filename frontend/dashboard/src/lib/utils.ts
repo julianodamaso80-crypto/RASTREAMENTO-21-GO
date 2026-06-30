@@ -70,29 +70,30 @@ export function formatTimeOnlyBR(isoDate: string): string {
  *  alert        — VehicleStatus=BLOCKED (bloqueado manualmente)
  *  offline      — rastreador parou de comunicar (heartbeat >10min OU
  *                 device.status='offline') → "GPS com defeito", VERMELHO
- *  ignition_on  — rastreador comunicando + motor LIGADO   → VERDE,   "Ligado"
- *  ignition_off — rastreador comunicando + motor DESLIGADO → LARANJA, "Desligado"
+ *  ignition_on  — motor em FUNCIONAMENTO (rodando/andando) → VERDE,   "Ligado"
+ *  ignition_off — parado/motor desligado                   → LARANJA, "Desligado"
  *
- * IMPORTANTE: posição GPS velha NÃO é mais "defeito". Rastreadores GT06/Concox
- * param de mandar GPS quando o carro fica parado, mas continuam ONLINE
- * (heartbeat). Carro parado/desligado é estado normal, não problema — o que
- * importa pro defeito é o rastreador SUMIR (parar de comunicar de vez).
- * O `positionTime` segue no parâmetro só por compatibilidade de chamada.
+ * "Ligado" = motor em funcionamento de verdade. O sinal confiável disso é o
+ * MOVIMENTO: rastreadores reportam `ignition=true` mesmo com o carro parado
+ * horas (sensor ACC fica ligado / leitura velha), então usar a flag de ignição
+ * marcava carro parado como "ligado" — errado. Regra do dono: andando = ligado,
+ * parado = desligado. O rastreador sumindo (sem comunicação) = GPS com defeito.
  */
+const MOVING_KNOTS = 1; // ~1.8 km/h — acima disso é movimento real (evita drift)
 export function getDisplayStatus(
   deviceStatus: string,
-  _speed: number,
+  speed: number,
   lastUpdate: string,
   vehicleStatus: string,
   _positionTime: string | null = null,
-  ignition: boolean = false,
+  _ignition: boolean = false,
 ): DisplayStatus {
   if (vehicleStatus === 'BLOCKED') return 'alert';
   const age = Date.now() - new Date(lastUpdate).getTime();
   // rastreador sumiu (sem comunicação) = GPS com defeito
   if (age > OFFLINE_THRESHOLD_MS || deviceStatus === 'offline') return 'offline';
-  // rastreador comunicando → estado pela ignição
-  return ignition ? 'ignition_on' : 'ignition_off';
+  // em movimento = motor em funcionamento (ligado); parado = desligado
+  return speed > MOVING_KNOTS ? 'ignition_on' : 'ignition_off';
 }
 
 /**
