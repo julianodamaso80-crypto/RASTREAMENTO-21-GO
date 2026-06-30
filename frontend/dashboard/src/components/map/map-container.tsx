@@ -202,19 +202,31 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
 
         const existing = markersRef.current.get(vehicle.id);
         const lngLat: [number, number] = [vehicle.longitude, vehicle.latitude];
+        const isMoving =
+          vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0;
+        // chave do "visual": só muda quando precisa redesenhar (cor/ícone/pulse)
+        const vkey = `${vehicle.displayStatus}|${vehicle.vehicleType}|${isMoving}`;
 
         if (existing) {
-          existing.setLngLat(lngLat);
-          // Substitui o elemento DOM pra refletir mudança de course/status/etc.
-          const newEl = createMarkerElement(vehicle);
-          const oldEl = existing.getElement();
-          oldEl.replaceWith(newEl);
-          // Atualiza a referência interna do MapLibre Marker pra apontar pro
-          // novo elemento (caso contrário, eventos como drag deixariam de
-          // funcionar — embora não usemos drag).
-          (existing as unknown as { _element: HTMLElement })._element = newEl;
+          existing.setLngLat(lngLat); // sempre move pro ponto atual
+          const el = existing.getElement();
+          if (el.dataset.vkey !== vkey) {
+            // status/tipo/movimento mudou → redesenha o marcador inteiro
+            const newEl = createMarkerElement(vehicle);
+            newEl.dataset.vkey = vkey;
+            el.replaceWith(newEl);
+            (existing as unknown as { _element: HTMLElement })._element = newEl;
+          } else {
+            // só posição/direção mudou (carro andando) → gira a img no lugar,
+            // sem recriar (evita o "pisca" do desenho a cada atualização)
+            const img = el.querySelector('img');
+            if (img) {
+              (img as HTMLElement).style.transform = `rotate(${vehicle.course}deg)`;
+            }
+          }
         } else {
           const el = createMarkerElement(vehicle);
+          el.dataset.vkey = vkey;
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat(lngLat)
             .addTo(map);

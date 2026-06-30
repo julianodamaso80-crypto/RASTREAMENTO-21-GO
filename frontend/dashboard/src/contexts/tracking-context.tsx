@@ -139,6 +139,35 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     loadData();
   }, []);
 
+  // Polling de GARANTIA. O WebSocket dá updates instantâneos, mas se ele cair,
+  // não reconectar, ou o backend não emitir `position:update` (ex.: device fora
+  // do deviceTenantMap), o mapa "congelava" na última posição carregada. Aqui
+  // re-buscamos posições + devices a cada 8s direto do Traccar (REST), então o
+  // marcador e o endereço SEMPRE refletem o dado real e atual — sem depender só
+  // do WS. Rastreamento não pode parar de atualizar.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const [devices, positions] = await Promise.all([
+          traccarApi.getDevices(),
+          traccarApi.getPositions(),
+        ]);
+        if (cancelled) return;
+        setDeviceMap(new Map(devices.map((d) => [d.id, d])));
+        setPositionMap(new Map(positions.map((p) => [p.deviceId, p])));
+      } catch {
+        // silencia — mantém os últimos dados até a próxima tentativa
+      }
+    };
+    const id = setInterval(poll, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [token]);
+
   // WebSocket
   const handlePositionUpdate = useCallback((position: TraccarPosition) => {
     setPositionMap((prev) => {
