@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import type { DisplayStatus } from '@/types/vehicle';
-import { OFFLINE_THRESHOLD_MS, STALE_POSITION_MS } from './constants';
+import { OFFLINE_THRESHOLD_MS } from './constants';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -65,38 +65,53 @@ export function formatTimeOnlyBR(isoDate: string): string {
 }
 
 /**
- * Calcula o status visível do veículo. Critério primário é IGNIÇÃO (motor
- * ligado/desligado), não movimento. Operador precisa saber em 1s se o motor
- * está rodando — isso é o sinal direto de uso/risco; movimento vem da
- * velocidade.
+ * Calcula o status visível do veículo — 3 estados que o dono entende:
  *
- *  alert        — VehicleStatus=BLOCKED (operação ativa, bloqueado manualmente)
- *  offline      — sem heartbeat >10min OU device.status='offline' (rastreador morto)
- *  gps_silent   — heartbeat fresh mas última posição GPS >3min (possível sabotagem)
- *  ignition_on  — última posição confiável tem ignição ligada (motor rodando)
- *  ignition_off — última posição confiável tem ignição desligada
+ *  alert        — VehicleStatus=BLOCKED (bloqueado manualmente)
+ *  offline      — rastreador parou de comunicar (heartbeat >10min OU
+ *                 device.status='offline') → "GPS com defeito", VERMELHO
+ *  ignition_on  — rastreador comunicando + motor LIGADO   → VERDE,   "Ligado"
+ *  ignition_off — rastreador comunicando + motor DESLIGADO → LARANJA, "Desligado"
  *
- * Regra crítica: rastreadores GT06/Concox costumam parar de mandar GPS
- * quando ficam estáticos — só mandam heartbeat. Por isso a checagem
- * `gps_silent` vem ANTES de avaliar ignição: se o GPS está stale, a
- * ignição lida do último position também é stale, e o estado verdadeiro
- * é desconhecido. Mostrar laranja é mais honesto do que verde/vermelho
- * baseado em dado velho.
+ * IMPORTANTE: posição GPS velha NÃO é mais "defeito". Rastreadores GT06/Concox
+ * param de mandar GPS quando o carro fica parado, mas continuam ONLINE
+ * (heartbeat). Carro parado/desligado é estado normal, não problema — o que
+ * importa pro defeito é o rastreador SUMIR (parar de comunicar de vez).
+ * O `positionTime` segue no parâmetro só por compatibilidade de chamada.
  */
 export function getDisplayStatus(
   deviceStatus: string,
   _speed: number,
   lastUpdate: string,
   vehicleStatus: string,
-  positionTime: string | null = null,
+  _positionTime: string | null = null,
   ignition: boolean = false,
 ): DisplayStatus {
   if (vehicleStatus === 'BLOCKED') return 'alert';
   const age = Date.now() - new Date(lastUpdate).getTime();
+  // rastreador sumiu (sem comunicação) = GPS com defeito
   if (age > OFFLINE_THRESHOLD_MS || deviceStatus === 'offline') return 'offline';
-  const positionAge = positionTime
-    ? Date.now() - new Date(positionTime).getTime()
-    : Infinity;
-  if (positionAge > STALE_POSITION_MS) return 'gps_silent';
+  // rastreador comunicando → estado pela ignição
   return ignition ? 'ignition_on' : 'ignition_off';
+}
+
+/**
+ * Label do status para um veículo específico, com o tipo (carro/moto) e
+ * concordância de gênero. Usado no painel e na lista.
+ */
+export function getVehicleStatusLabel(
+  status: DisplayStatus,
+  vehicleType: 'CAR' | 'MOTORCYCLE',
+): string {
+  const moto = vehicleType === 'MOTORCYCLE';
+  switch (status) {
+    case 'ignition_on':
+      return moto ? 'Moto ligada' : 'Carro ligado';
+    case 'ignition_off':
+      return moto ? 'Moto desligada' : 'Carro desligado';
+    case 'offline':
+      return 'GPS com defeito';
+    case 'alert':
+      return 'Bloqueado';
+  }
 }

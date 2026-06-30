@@ -28,15 +28,9 @@ export function StatusBar() {
             {statusCounts.ignition_off}
           </strong>
         </span>
-        <span className="hidden sm:inline">
-          Sem sinal:{' '}
-          <strong className="text-orange-400 tabular-nums">
-            {statusCounts.gps_silent}
-          </strong>
-        </span>
         <span>
-          Sem comunicação:{' '}
-          <strong className="text-slate-300 tabular-nums">{statusCounts.offline}</strong>
+          GPS com defeito:{' '}
+          <strong className="text-red-400 tabular-nums">{statusCounts.offline}</strong>
         </span>
         <span className="hidden sm:inline">
           Bloqueados:{' '}

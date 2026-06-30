@@ -2,20 +2,21 @@ export type VehicleStatus = 'ACTIVE' | 'INACTIVE' | 'DEFAULTING' | 'BLOCKED';
 /** Tipo do veículo — define o desenho usado no mapa (carro x moto). */
 export type VehicleType = 'CAR' | 'MOTORCYCLE';
 /**
- * Sinal visual no mapa e na lista. Critério é IGNIÇÃO, não movimento,
- * porque o operador precisa saber em 1s "o motor desse carro está rodando?"
- * — pista direta de risco/uso. Movimento é derivado (mostrado como speed).
+ * Sinal visual no mapa e na lista. 3 estados que o dono entende:
  *
- *  ignition_on  — motor rodando agora (pode estar parado em semáforo) → verde
- *  ignition_off — motor desligado (estacionado normal)                 → vermelho
- *  gps_silent   — heartbeat ok mas posição GPS stale >3min             → laranja
- *  offline      — sem heartbeat >10min (rastreador morto/sem sinal)    → cinza
- *  alert        — veículo BLOQUEADO (operação ativa)                   → vermelho intenso
+ *  ignition_on  — rastreador OK (comunicando) + motor LIGADO   → VERDE   "Carro/Moto ligado"
+ *  ignition_off — rastreador OK (comunicando) + motor DESLIGADO → LARANJA "Carro/Moto desligado"
+ *  offline      — rastreador parou de comunicar (não marca mais
+ *                 localização, defeito técnico)                 → VERMELHO "GPS com defeito" + central
+ *  alert        — veículo BLOQUEADO (operação ativa)            → vermelho intenso
+ *
+ * Carro parado e desligado NÃO é defeito — o rastreador continua online,
+ * só não manda GPS novo porque está estático. Só vira "GPS com defeito"
+ * quando o rastreador some (heartbeat para = sem comunicação).
  */
 export type DisplayStatus =
   | 'ignition_on'
   | 'ignition_off'
-  | 'gps_silent'
   | 'offline'
   | 'alert';
 

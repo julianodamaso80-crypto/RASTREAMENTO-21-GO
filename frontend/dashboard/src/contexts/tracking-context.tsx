@@ -23,7 +23,6 @@ interface StatusCounts {
   total: number;
   ignition_on: number;
   ignition_off: number;
-  gps_silent: number;
   offline: number;
   alert: number;
 }
@@ -258,7 +257,6 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       total: 0,
       ignition_on: 0,
       ignition_off: 0,
-      gps_silent: 0,
       offline: 0,
       alert: 0,
     };

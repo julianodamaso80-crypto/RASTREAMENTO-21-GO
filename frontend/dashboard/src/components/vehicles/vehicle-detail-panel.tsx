@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useTracking } from '@/contexts/tracking-context';
-import { cn, maskCPF, formatSpeed, formatRelativeTime } from '@/lib/utils';
-import { STATUS_COLORS, STATUS_LABELS, STATUS_HINTS } from '@/lib/constants';
+import { cn, maskCPF, formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
+import { STATUS_COLORS, STATUS_HINTS } from '@/lib/constants';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { BlockConfirmModal } from './block-confirm-modal';
 import Link from 'next/link';
@@ -52,9 +52,11 @@ export function VehicleDetailPanel() {
 
   const color = STATUS_COLORS[vehicle.displayStatus];
   const statusHint = STATUS_HINTS[vehicle.displayStatus];
-  // Label direto: "Ligado"/"Desligado" no uso normal; "Sem sinal"/"Sem
-  // comunicação" quando há problema (+ orientação de central no statusHint).
-  const statusLabel = STATUS_LABELS[vehicle.displayStatus];
+  // "Carro/Moto ligado(a)" | "...desligado(a)" | "GPS com defeito".
+  const statusLabel = getVehicleStatusLabel(
+    vehicle.displayStatus,
+    vehicle.vehicleType,
+  );
   const isBlocked = vehicle.status === 'BLOCKED';
   // "Movendo de verdade" = motor ligado + speed > 0 + GPS fresh.
   // displayStatus sozinho não diz isso porque ele é sobre IGNIÇÃO agora.

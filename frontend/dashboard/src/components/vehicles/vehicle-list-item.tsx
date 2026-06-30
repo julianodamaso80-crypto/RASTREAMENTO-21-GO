@@ -1,7 +1,7 @@
 'use client';
 
-import { cn, formatSpeed, formatRelativeTime } from '@/lib/utils';
-import { STATUS_COLORS, STATUS_LABELS, STATUS_HINTS } from '@/lib/constants';
+import { cn, formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
+import { STATUS_COLORS, STATUS_HINTS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
 import { Phone } from 'lucide-react';
 import { useTracking } from '@/contexts/tracking-context';
@@ -16,7 +16,10 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
   const isSelected = selectedVehicleId === vehicle.id;
   const color = STATUS_COLORS[vehicle.displayStatus];
   const statusHint = STATUS_HINTS[vehicle.displayStatus];
-  const statusLabel = STATUS_LABELS[vehicle.displayStatus];
+  const statusLabel = getVehicleStatusLabel(
+    vehicle.displayStatus,
+    vehicle.vehicleType,
+  );
 
   return (
     <button

@@ -99,27 +99,24 @@ export const VEHICLE_ICONS: Record<VehicleType, string> = {
 };
 
 export const STATUS_COLORS: Record<DisplayStatus, string> = {
-  ignition_on: '#22c55e',  // green-500 — motor ligado
-  ignition_off: '#ef4444', // red-500   — motor desligado
-  gps_silent: '#f97316',   // orange-500 — GPS silenciado (possível sabotagem)
-  offline: '#6b7280',      // gray-500   — sem comunicação
-  alert: '#dc2626',        // red-600    — BLOQUEADO
+  ignition_on: '#22c55e',  // green-500   — ligado
+  ignition_off: '#f97316', // orange-500  — desligado (parado normal)
+  offline: '#ef4444',      // red-500     — GPS com defeito (rastreador sem comunicação)
+  alert: '#dc2626',        // red-600     — BLOQUEADO
 };
 
+// Labels genéricos (abas de filtro / barra). Para o card de um veículo
+// específico, usar getVehicleStatusLabel() (com Carro/Moto e gênero).
 export const STATUS_LABELS: Record<DisplayStatus, string> = {
   ignition_on: 'Ligado',
   ignition_off: 'Desligado',
-  gps_silent: 'Sem sinal',
-  offline: 'Sem comunicação',
+  offline: 'GPS com defeito',
   alert: 'Bloqueado',
 };
 
-// Orientação ao usuário quando o estado indica problema (não é uso normal).
-// O dono não quer saber de jargão técnico ("GPS silenciado") — quer uma AÇÃO
-// clara. Mostrada no painel/lista nos estados que pedem intervenção.
+// Orientação ao usuário quando há defeito (rastreador sem comunicação).
 export const STATUS_HINTS: Partial<Record<DisplayStatus, string>> = {
-  gps_silent: 'Entre em contato com a central',
-  offline: 'Entre em contato com a central',
+  offline: 'Favor entrar em contato com a central',
 };
 
 // Tempo em ms para considerar um dispositivo offline
