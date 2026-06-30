@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import type { DisplayStatus } from '@/types/vehicle';
-import { OFFLINE_THRESHOLD_MS } from './constants';
+import { OFFLINE_THRESHOLD_MS, STALE_POSITION_MS } from './constants';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -73,11 +73,16 @@ export function formatTimeOnlyBR(isoDate: string): string {
  *  ignition_on  — motor em FUNCIONAMENTO (rodando/andando) → VERDE,   "Ligado"
  *  ignition_off — parado/motor desligado                   → LARANJA, "Desligado"
  *
- * "Ligado" = motor em funcionamento de verdade. O sinal confiável disso é o
- * MOVIMENTO: rastreadores reportam `ignition=true` mesmo com o carro parado
- * horas (sensor ACC fica ligado / leitura velha), então usar a flag de ignição
- * marcava carro parado como "ligado" — errado. Regra do dono: andando = ligado,
- * parado = desligado. O rastreador sumindo (sem comunicação) = GPS com defeito.
+ * "Ligado" = carro EM MOVIMENTO de verdade. Dois sinais juntos, porque nenhum
+ * sozinho basta:
+ *  - velocidade > 0 na última posição, E
+ *  - a posição GPS é RECENTE (atualizou agora há pouco).
+ * O segundo é crucial: rastreadores Concox/GT06 PARAM de mandar GPS quando o
+ * carro fica parado, congelando a última posição com a velocidade antiga (ex.:
+ * fica "6 km/h" travado por horas no mesmo lugar). Sem checar a idade da
+ * posição, carro parado aparecia "em movimento" — exatamente o bug reportado.
+ * Posição velha = carro parado = "desligado" (laranja). Rastreador sem
+ * comunicação (heartbeat parado) = "GPS com defeito" (vermelho).
  */
 const MOVING_KNOTS = 1; // ~1.8 km/h — acima disso é movimento real (evita drift)
 export function getDisplayStatus(
@@ -85,15 +90,22 @@ export function getDisplayStatus(
   speed: number,
   lastUpdate: string,
   vehicleStatus: string,
-  _positionTime: string | null = null,
+  positionTime: string | null = null,
   _ignition: boolean = false,
 ): DisplayStatus {
   if (vehicleStatus === 'BLOCKED') return 'alert';
-  const age = Date.now() - new Date(lastUpdate).getTime();
+  const now = Date.now();
   // rastreador sumiu (sem comunicação) = GPS com defeito
-  if (age > OFFLINE_THRESHOLD_MS || deviceStatus === 'offline') return 'offline';
-  // em movimento = motor em funcionamento (ligado); parado = desligado
-  return speed > MOVING_KNOTS ? 'ignition_on' : 'ignition_off';
+  if (now - new Date(lastUpdate).getTime() > OFFLINE_THRESHOLD_MS || deviceStatus === 'offline') {
+    return 'offline';
+  }
+  const positionAge = positionTime
+    ? now - new Date(positionTime).getTime()
+    : Infinity;
+  // em movimento SÓ se o GPS está atualizando (posição fresca) E com velocidade.
+  // Posição velha = parado (velocidade congelada não conta).
+  const moving = positionAge < STALE_POSITION_MS && speed > MOVING_KNOTS;
+  return moving ? 'ignition_on' : 'ignition_off';
 }
 
 /**
