@@ -214,6 +214,7 @@ export class VehiclesService {
       data: {
         plate: dto.plate,
         uniqueId: dto.uniqueId,
+        vehicleType: dto.vehicleType,
         brand: dto.brand,
         model: dto.model,
         year: dto.year,
@@ -236,6 +237,7 @@ export class VehiclesService {
       where: { id: vehicle.id },
       data: {
         plate: dto.plate,
+        vehicleType: dto.vehicleType,
         brand: dto.brand,
         model: dto.model,
         year: dto.year,

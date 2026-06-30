@@ -1,5 +1,13 @@
-import { IsString, IsOptional, IsInt, IsUUID, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  IsUUID,
+  IsEnum,
+  Matches,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { VehicleType } from '.prisma/client';
 
 export class CreateVehicleDto {
   @ApiProperty({
@@ -18,6 +26,15 @@ export class CreateVehicleDto {
   })
   @IsString()
   uniqueId: string;
+
+  @ApiPropertyOptional({
+    enum: VehicleType,
+    default: VehicleType.CAR,
+    description: 'Tipo do veículo — define o ícone no mapa (carro x moto)',
+  })
+  @IsOptional()
+  @IsEnum(VehicleType)
+  vehicleType?: VehicleType;
 
   @ApiPropertyOptional({ example: 'Chevrolet' })
   @IsOptional()

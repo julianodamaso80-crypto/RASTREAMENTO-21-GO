@@ -1,6 +1,9 @@
 'use client';
 
-import { X, Navigation, Gauge, Satellite, MapPin, Power, Lock, Unlock, Phone } from 'lucide-react';
+import { X, Navigation, Gauge, Satellite, MapPin, Power, Lock, Unlock, Phone, Car, Bike } from 'lucide-react';
+import { toast } from 'sonner';
+import { vehiclesApi } from '@/lib/api';
+import type { VehicleType } from '@/types/vehicle';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +17,24 @@ import { Activity } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 export function VehicleDetailPanel() {
-  const { vehicles, selectedVehicleId, selectVehicle } = useTracking();
+  const { vehicles, selectedVehicleId, selectVehicle, updateVehicleLocal } =
+    useTracking();
   const [showBlockModal, setShowBlockModal] = useState(false);
+  const [savingType, setSavingType] = useState(false);
+
+  async function handleSetType(id: string, type: VehicleType) {
+    setSavingType(true);
+    // otimista: o desenho no mapa muda na hora
+    updateVehicleLocal(id, { vehicleType: type });
+    try {
+      await vehiclesApi.update(id, { vehicleType: type });
+      toast.success(type === 'MOTORCYCLE' ? 'Marcado como Moto' : 'Marcado como Carro');
+    } catch {
+      toast.error('Erro ao atualizar o tipo do veículo');
+    } finally {
+      setSavingType(false);
+    }
+  }
 
   const vehicle = useMemo(
     () => vehicles.find((v) => v.id === selectedVehicleId),
@@ -33,15 +52,9 @@ export function VehicleDetailPanel() {
 
   const color = STATUS_COLORS[vehicle.displayStatus];
   const statusHint = STATUS_HINTS[vehicle.displayStatus];
-  // No GPS sem sinal o label mostra o ESTADO DO VEÍCULO (Ligado/Desligado pela
-  // última leitura), não "GPS desligado" — a orientação de central avisa do
-  // problema de sinal. O dono quer saber do carro, não de jargão de GPS.
-  const statusLabel =
-    vehicle.displayStatus === 'gps_silent'
-      ? vehicle.ignition
-        ? 'Ligado'
-        : 'Desligado'
-      : STATUS_LABELS[vehicle.displayStatus];
+  // Label direto: "Ligado"/"Desligado" no uso normal; "Sem sinal"/"Sem
+  // comunicação" quando há problema (+ orientação de central no statusHint).
+  const statusLabel = STATUS_LABELS[vehicle.displayStatus];
   const isBlocked = vehicle.status === 'BLOCKED';
   // "Movendo de verdade" = motor ligado + speed > 0 + GPS fresh.
   // displayStatus sozinho não diz isso porque ele é sobre IGNIÇÃO agora.
@@ -147,6 +160,35 @@ export function VehicleDetailPanel() {
                 <p className="font-medium font-mono text-xs">{vehicle.chassi}</p>
               </div>
             )}
+            <div className="col-span-2 mt-1">
+              <span className="text-muted-foreground text-xs">Tipo (desenho no mapa)</span>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => handleSetType(vehicle.id, 'CAR')}
+                  disabled={savingType}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors disabled:opacity-50',
+                    vehicle.vehicleType === 'CAR'
+                      ? 'border-emerald-400 bg-emerald-500/10 text-emerald-400'
+                      : 'border-border/40 text-muted-foreground hover:bg-muted/30',
+                  )}
+                >
+                  <Car className="h-3.5 w-3.5" /> Carro
+                </button>
+                <button
+                  onClick={() => handleSetType(vehicle.id, 'MOTORCYCLE')}
+                  disabled={savingType}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors disabled:opacity-50',
+                    vehicle.vehicleType === 'MOTORCYCLE'
+                      ? 'border-emerald-400 bg-emerald-500/10 text-emerald-400'
+                      : 'border-border/40 text-muted-foreground hover:bg-muted/30',
+                  )}
+                >
+                  <Bike className="h-3.5 w-3.5" /> Moto
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -47,7 +47,14 @@ const ESRI_SATELLITE_STYLE = {
       tileSize: 256,
       attribution: 'Esri, Maxar, Earthstar Geographics',
     },
-    'esri-labels': {
+    'esri-places': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+    },
+    'esri-roads': {
       type: 'raster',
       tiles: [
         'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
@@ -57,7 +64,9 @@ const ESRI_SATELLITE_STYLE = {
   },
   layers: [
     { id: 'esri-imagery', type: 'raster', source: 'esri-imagery' },
-    { id: 'esri-labels', type: 'raster', source: 'esri-labels' },
+    // nomes de bairros/cidades + ruas com nome por cima da imagery
+    { id: 'esri-places', type: 'raster', source: 'esri-places' },
+    { id: 'esri-roads', type: 'raster', source: 'esri-roads' },
   ],
 } as StyleSpecification;
 

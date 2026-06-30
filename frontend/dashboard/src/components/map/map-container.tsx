@@ -131,7 +131,11 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       (vehicle: VehicleWithTracking) => {
         const el = document.createElement('div');
         el.className = 'vehicle-marker-container';
-        el.style.cssText = 'cursor: pointer; position: relative;';
+        // width/height FIXOS são essenciais: sem isso o div vira block e estica
+        // pra largura inteira do mapa, jogando o ícone ~350px pra esquerda do
+        // ponto real (o veículo "some" do lugar certo). Comprovado via teste.
+        el.style.cssText =
+          'cursor:pointer;position:relative;width:54px;height:54px;display:flex;align-items:center;justify-content:center;';
 
         const color = STATUS_COLORS[vehicle.displayStatus];
         // Pulse só quando carro REALMENTE está se movendo (motor ligado +

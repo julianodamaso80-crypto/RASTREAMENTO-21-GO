@@ -29,6 +29,12 @@ enum GeofenceType {
   CIRCLE
 }
 
+/// Tipo do veículo — define o desenho usado no mapa (carro x moto).
+enum VehicleType {
+  CAR
+  MOTORCYCLE
+}
+
 enum DeviceModel {
   GT06N
   GT06
@@ -278,6 +284,7 @@ model UserVehicleAccess {
 model Vehicle {
   id              String        @id @default(uuid()) @db.Uuid
   plate           String
+  vehicleType     VehicleType   @default(CAR) @map("vehicle_type")
   brand           String?
   model           String?
   year            Int?

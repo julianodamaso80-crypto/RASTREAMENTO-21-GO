@@ -70,6 +70,10 @@ export const vehiclesApi = {
     const res = await api.get<ApiResponse<Vehicle>>(`/vehicles/${id}`);
     return res.data.data;
   },
+  update: async (id: string, data: Partial<Vehicle>): Promise<Vehicle> => {
+    const res = await api.patch<ApiResponse<Vehicle>>(`/vehicles/${id}`, data);
+    return res.data.data;
+  },
   block: async (id: string): Promise<Vehicle> => {
     const res = await api.post<ApiResponse<Vehicle>>(`/vehicles/${id}/block`);
     return res.data.data;

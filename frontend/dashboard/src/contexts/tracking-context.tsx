@@ -46,6 +46,9 @@ interface TrackingContextType {
   markAllAlertsRead: () => void;
   bleTags: BleTag[];
   refreshBleTags: () => Promise<void>;
+  // Atualiza um veículo localmente (otimista) — ex.: trocar o tipo (carro/moto)
+  // reflete na hora no mapa sem esperar reload.
+  updateVehicleLocal: (id: string, patch: Partial<Vehicle>) => void;
 }
 
 const TrackingContext = createContext<TrackingContextType | null>(null);
@@ -62,6 +65,16 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [statusFilter, setStatusFilter] = useState<'all' | DisplayStatus>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [bleTags, setBleTags] = useState<BleTag[]>([]);
+
+  const updateVehicleLocal = useCallback((id: string, patch: Partial<Vehicle>) => {
+    setVehicleMap((prev) => {
+      const v = prev.get(id);
+      if (!v) return prev;
+      const next = new Map(prev);
+      next.set(id, { ...v, ...patch });
+      return next;
+    });
+  }, []);
 
   const refreshBleTags = useCallback(async () => {
     try {
@@ -292,6 +305,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         markAllAlertsRead,
         bleTags,
         refreshBleTags,
+        updateVehicleLocal,
       }}
     >
       {children}

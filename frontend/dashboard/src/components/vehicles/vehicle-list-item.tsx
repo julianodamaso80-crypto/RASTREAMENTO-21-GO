@@ -16,12 +16,7 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
   const isSelected = selectedVehicleId === vehicle.id;
   const color = STATUS_COLORS[vehicle.displayStatus];
   const statusHint = STATUS_HINTS[vehicle.displayStatus];
-  const statusLabel =
-    vehicle.displayStatus === 'gps_silent'
-      ? vehicle.ignition
-        ? 'Ligado'
-        : 'Desligado'
-      : STATUS_LABELS[vehicle.displayStatus];
+  const statusLabel = STATUS_LABELS[vehicle.displayStatus];
 
   return (
     <button
