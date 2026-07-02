@@ -9,6 +9,7 @@ import {
 import MapView, { Marker, Polyline, Region } from 'react-native-maps';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SatelliteTiles } from '@/components/satellite-tiles';
 import { AppApi, Position } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
@@ -81,7 +82,8 @@ export default function VehicleHistoryScreen() {
             <Text style={styles.empty}>Sem trajeto registrado nesse período.</Text>
           </View>
         ) : (
-          <MapView style={StyleSheet.absoluteFill} initialRegion={region}>
+          <MapView style={StyleSheet.absoluteFill} initialRegion={region} mapType="standard">
+            <SatelliteTiles />
             <Polyline
               coordinates={coords}
               strokeColor={colors.orange}

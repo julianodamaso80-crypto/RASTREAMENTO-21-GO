@@ -20,11 +20,17 @@ export const useAuth = create<AuthState>((set) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const [token, name] = await Promise.all([
-      SecureStore.getItemAsync(TOKEN_KEY),
-      SecureStore.getItemAsync(NAME_KEY),
-    ]);
-    set({ token, name, hydrated: true });
+    // NUNCA pode lançar: se o SecureStore falhar, o app precisa seguir pro login
+    // mesmo assim (senão fica preso na tela de carregamento — bug que a Apple pegou).
+    try {
+      const [token, name] = await Promise.all([
+        SecureStore.getItemAsync(TOKEN_KEY),
+        SecureStore.getItemAsync(NAME_KEY),
+      ]);
+      set({ token, name, hydrated: true });
+    } catch {
+      set({ token: null, name: null, hydrated: true });
+    }
   },
 
   signIn: async (token, name) => {

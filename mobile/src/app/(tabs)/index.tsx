@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { SatelliteTiles } from '@/components/satellite-tiles';
 import { AppApi, Vehicle } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
 import { timeAgo } from '@/lib/format';
@@ -94,9 +95,11 @@ export default function MapScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
+        mapType="standard"
         showsUserLocation={false}
         showsMyLocationButton={false}
       >
+        <SatelliteTiles />
         {withPos.map((v) => (
           <Marker
             key={v.id}

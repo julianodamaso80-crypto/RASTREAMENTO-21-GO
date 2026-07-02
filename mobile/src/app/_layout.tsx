@@ -1,10 +1,14 @@
 import { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuth } from '@/lib/auth-store';
 import { colors } from '@/lib/theme';
+
+// Mantém a splash nativa até o app estar pronto (hidratado). Sem isso, o app
+// pode ficar preso numa tela em branco — bug que a App Review pegou no iPad.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const router = useRouter();
@@ -15,6 +19,11 @@ export default function RootLayout() {
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  // Esconde a splash só quando o app terminou de carregar.
+  useEffect(() => {
+    if (hydrated) SplashScreen.hideAsync().catch(() => {});
+  }, [hydrated]);
 
   // Gate de auth: manda pro login se sem token, ou pro app se logado.
   useEffect(() => {
@@ -27,13 +36,8 @@ export default function RootLayout() {
     }
   }, [token, hydrated, segments, router]);
 
-  if (!hydrated) {
-    return (
-      <View style={styles.splash}>
-        <ActivityIndicator color={colors.orange} size="large" />
-      </View>
-    );
-  }
+  // Enquanto não hidratou, a splash nativa cobre a tela.
+  if (!hydrated) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -53,12 +57,3 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
-
-const styles = StyleSheet.create({
-  splash: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bg,
-  },
-});
