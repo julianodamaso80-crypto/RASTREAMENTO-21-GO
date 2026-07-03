@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
+import { diag } from './diag';
 
 const TOKEN_KEY = 'r21go.associate.token';
 const NAME_KEY = 'r21go.associate.name';
@@ -23,8 +24,10 @@ export const useAuth = create<AuthState>((set) => ({
     // NUNCA pode ficar pendente: se o SecureStore travar/falhar no iPhone, o app
     // precisa destravar mesmo assim (senão fica preso na tela de carregamento —
     // bug que a Apple pegou). Failsafe de 4s garante que hydrated sempre vira true.
+    diag('06-hydrate-start');
     const failsafe = setTimeout(() => {
       if (!useAuth.getState().hydrated) {
+        diag('08-hydrate-failsafe');
         set({ token: null, name: null, hydrated: true });
       }
     }, 4000);
@@ -34,9 +37,11 @@ export const useAuth = create<AuthState>((set) => ({
         SecureStore.getItemAsync(NAME_KEY),
       ]);
       clearTimeout(failsafe);
+      diag('07-hydrate-done');
       set({ token, name, hydrated: true });
     } catch {
       clearTimeout(failsafe);
+      diag('07-hydrate-error');
       set({ token: null, name: null, hydrated: true });
     }
   },

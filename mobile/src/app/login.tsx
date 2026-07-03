@@ -16,8 +16,10 @@ import { AppApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
 import { maskCpf, onlyDigits } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
+import { diag } from '@/lib/diag';
 
 export default function LoginScreen() {
+  diag('05-login-render');
   const signIn = useAuth((s) => s.signIn);
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');

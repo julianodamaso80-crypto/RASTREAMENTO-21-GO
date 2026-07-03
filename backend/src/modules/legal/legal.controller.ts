@@ -1,4 +1,4 @@
-import { Controller, Get, Header } from '@nestjs/common';
+import { Controller, Get, Header, Query } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Public } from '../../common/decorators';
 
@@ -88,5 +88,16 @@ export class LegalController {
   @Header('Content-Type', 'text/html; charset=utf-8')
   privacy(): string {
     return PRIVACY_HTML;
+  }
+
+  // Rastreador de boot do app mobile (diagnóstico). O app chama em cada etapa do
+  // boot; aparece nos logs do backend pra sabermos até onde o JS executa no device.
+  @Public()
+  @Get('diag')
+  @Header('Content-Type', 'text/plain')
+  diag(@Query('e') e?: string, @Query('b') b?: string): string {
+    // console.error escapa do filtro de nível do Pino e vai pro stdout (docker logs).
+    console.error(`APP_DIAG build=${b || '?'} event=${e || 'none'} at=${new Date().toISOString()}`);
+    return 'ok';
   }
 }

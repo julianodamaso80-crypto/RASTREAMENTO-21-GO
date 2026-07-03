@@ -2,12 +2,14 @@ import { Redirect } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuth } from '@/lib/auth-store';
 import { colors } from '@/lib/theme';
+import { diag } from '@/lib/diag';
 
 /**
  * Rota inicial "/". Mostra um carregamento visível (nunca tela branca) enquanto
  * o login salvo é lido, e então redireciona pro app ou pro login.
  */
 export default function Index() {
+  diag('04-index-render');
   const { token, hydrated } = useAuth();
 
   if (!hydrated) {
