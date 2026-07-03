@@ -20,15 +20,23 @@ export const useAuth = create<AuthState>((set) => ({
   hydrated: false,
 
   hydrate: async () => {
-    // NUNCA pode lançar: se o SecureStore falhar, o app precisa seguir pro login
-    // mesmo assim (senão fica preso na tela de carregamento — bug que a Apple pegou).
+    // NUNCA pode ficar pendente: se o SecureStore travar/falhar no iPhone, o app
+    // precisa destravar mesmo assim (senão fica preso na tela de carregamento —
+    // bug que a Apple pegou). Failsafe de 4s garante que hydrated sempre vira true.
+    const failsafe = setTimeout(() => {
+      if (!useAuth.getState().hydrated) {
+        set({ token: null, name: null, hydrated: true });
+      }
+    }, 4000);
     try {
       const [token, name] = await Promise.all([
         SecureStore.getItemAsync(TOKEN_KEY),
         SecureStore.getItemAsync(NAME_KEY),
       ]);
+      clearTimeout(failsafe);
       set({ token, name, hydrated: true });
     } catch {
+      clearTimeout(failsafe);
       set({ token: null, name: null, hydrated: true });
     }
   },
