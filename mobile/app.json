@@ -40,11 +40,11 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 120
         }
-      ]
+      ],
+      "./plugins/with-native-boot-diag"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "extra": {
       "apiUrl": "https://api.trackgo.site/api/v1",
