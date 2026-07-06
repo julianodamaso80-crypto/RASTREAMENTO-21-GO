@@ -13,9 +13,9 @@ import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SatelliteTiles } from '@/components/satellite-tiles';
+import { VehicleCard } from '@/components/vehicle-card';
 import { AppApi, Vehicle } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
-import { timeAgo } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 
 const POLL_MS = 12000;
@@ -144,38 +144,13 @@ export default function MapScreen() {
             }
           >
             {vehicles.map((v) => (
-              <TouchableOpacity
+              <VehicleCard
                 key={v.id}
-                style={[
-                  styles.card,
-                  selected === v.id && styles.cardSelected,
-                ]}
-                activeOpacity={0.8}
-                onPress={() => focusVehicle(v)}
-              >
-                <View
-                  style={[styles.dot, { backgroundColor: statusColor(v) }]}
-                />
-                <View style={styles.cardBody}>
-                  <Text style={styles.plate}>{v.plate}</Text>
-                  <Text style={styles.cardSub}>
-                    {[v.brand, v.model].filter(Boolean).join(' ') || 'Veículo'} ·{' '}
-                    {statusLabel(v)}
-                  </Text>
-                  <Text style={styles.cardMeta}>
-                    {v.position
-                      ? `${v.position.speed} km/h · ${timeAgo(v.position.fixTime)}`
-                      : 'Aguardando posição'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => router.push(`/vehicle/${v.id}`)}
-                  hitSlop={10}
-                  style={styles.histBtn}
-                >
-                  <Ionicons name="time-outline" size={22} color={colors.navy} />
-                </TouchableOpacity>
-              </TouchableOpacity>
+                vehicle={v}
+                selected={selected === v.id}
+                onFocus={() => focusVehicle(v)}
+                onHistory={() => router.push(`/vehicle/${v.id}`)}
+              />
             ))}
           </ScrollView>
         )}
@@ -217,7 +192,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    maxHeight: '46%',
+    maxHeight: '62%',
     backgroundColor: colors.white,
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,

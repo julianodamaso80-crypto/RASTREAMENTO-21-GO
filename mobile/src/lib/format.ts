@@ -25,6 +25,13 @@ export function timeAgo(iso: string | null | undefined): string {
   return `há ${d} ${d === 1 ? 'dia' : 'dias'}`;
 }
 
+/** Curso em graus -> direção cardeal em PT-BR (N, NE, L, SE, S, SO, O, NO). */
+export function compass(course: number | null | undefined): string {
+  if (course == null) return '—';
+  const dirs = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
+  return dirs[Math.round((course % 360) / 45) % 8];
+}
+
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
