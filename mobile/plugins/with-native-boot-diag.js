@@ -16,7 +16,7 @@
 // ancora sumir, LANCA erro -> o build falha rapido no prebuild da nuvem.
 const { withAppDelegate } = require('@expo/config-plugins');
 
-const BUILD = '19';
+const BUILD = '20';
 
 // import Foundation + helpers fileprivate (assincrono e sincrono).
 const IMPORT_AND_HELPER = `import Foundation
@@ -57,7 +57,8 @@ const BODY_START = `// r21go native boot diag (build ${BUILD}): pings nativos + 
 const N2 = `// r21go native boot diag: fim do didFinishLaunching
     r21goNativeDiag("N2-didFinishLaunching-end")`;
 
-const ANCHOR_CLASS = '@main';
+// Atributo da AppDelegate: SDK 56 usa "@main", SDK 54 usa "@UIApplicationMain".
+const ANCHOR_CLASS_CANDIDATES = ['@UIApplicationMain', '@main'];
 const ANCHOR_BODY = 'let delegate = ReactNativeDelegate()';
 const ANCHOR_RETURN = 'return super.application(application, didFinishLaunchingWithOptions: launchOptions)';
 
@@ -66,8 +67,9 @@ function applyDiag(contents) {
   if (contents.includes('r21goNativeDiag')) {
     return contents; // idempotente
   }
-  if (!contents.includes(ANCHOR_CLASS)) {
-    throw new Error('[with-native-boot-diag] ancora "@main" nao encontrada no AppDelegate.swift');
+  const classAnchor = ANCHOR_CLASS_CANDIDATES.find((a) => contents.includes(a));
+  if (!classAnchor) {
+    throw new Error('[with-native-boot-diag] atributo da AppDelegate (@main / @UIApplicationMain) nao encontrado');
   }
   if (!contents.includes(ANCHOR_BODY)) {
     throw new Error('[with-native-boot-diag] ancora do corpo (let delegate = ReactNativeDelegate()) nao encontrada');
@@ -76,7 +78,7 @@ function applyDiag(contents) {
     throw new Error('[with-native-boot-diag] ancora do return final do didFinishLaunching nao encontrada');
   }
   let out = contents;
-  out = out.replace(ANCHOR_CLASS, `${IMPORT_AND_HELPER}\n${ANCHOR_CLASS}`);
+  out = out.replace(classAnchor, `${IMPORT_AND_HELPER}\n${classAnchor}`);
   out = out.replace(ANCHOR_BODY, `${BODY_START}\n    ${ANCHOR_BODY}`);
   out = out.replace(ANCHOR_RETURN, `${N2}\n    ${ANCHOR_RETURN}`);
   return out;

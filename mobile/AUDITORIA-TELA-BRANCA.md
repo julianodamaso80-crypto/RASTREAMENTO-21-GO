@@ -503,6 +503,24 @@ o 19 travar, o próximo `.ips` da caixa-preta **tem que** mostrar `usedImages` S
 RNWorklets. Só então a hipótese reanimated estará descartada de verdade, liberando o **Build 20
 = SDK 54 + `newArchEnabled:false`**.
 
-**Resultado:** _(aguardando build 19 + teste)_
+**Resultado build 19 (06/07, teste ~11:32 -0300):** pings **N1** 14:32:31, **N2** 14:32:31,
+**N3** 14:32:35, **N4** 14:32:53 (UTC) — MESMO padrão do 18: JS nunca roda, watchdog crashou.
+**Prova de binário (baixei o IPA e listei Frameworks):** `RNReanimated.framework` e
+`RNWorklets.framework` **REMOVIDOS** ✅; `ExpoModulesWorklets.framework` continua (é parte do
+`expo-modules-core`, não do pacote excluído). → **Reanimated/worklets DESCARTADOS como causa**
+(comprovadamente fora do binário e o hang persiste). Libera o Build 20.
+
+---
+
+## 17. BUILD 20 — SDK 54 + Legacy Architecture (newArchEnabled:false) — 06/07/2026
+
+Reanimated/worklets descartados com prova de binário. Boot nativo saudável, JS nunca sobe
+(expo#44925 / RN#54859, New Architecture no iOS 26). Última mitigação no nível do app:
+**downgrade Expo SDK 56→54 + `newArchEnabled:false`** — caminho de boot Legacy `RCTBridge`,
+fora da rota do bug do RSDHost/New Arch. Viável: reanimated (que exigia New Arch) já removido.
+diag `BUILD='20'`, pings N1–N4 + caixa-preta mantidos; plugin re-ancorado pro AppDelegate do
+SDK 54. `npx expo install --fix` + `tsc`.
+
+**Resultado:** _(em implementação)_
 
 _(fim da auditoria)_
