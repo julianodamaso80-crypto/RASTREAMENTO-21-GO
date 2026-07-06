@@ -3,7 +3,7 @@
 // Fire-and-forget, nunca lança.
 import { Settings } from 'react-native';
 
-const BUILD = '18';
+const BUILD = '19';
 
 export function diag(event: string) {
   // Sinal de vida do JS pra camada NATIVA (NSUserDefaults via RN Settings, iOS).

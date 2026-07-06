@@ -39,5 +39,10 @@
     "web": "expo start --web",
     "lint": "expo lint"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "exclude": ["react-native-reanimated", "react-native-worklets"]
+    }
+  }
 }

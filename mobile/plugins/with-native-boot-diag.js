@@ -16,7 +16,7 @@
 // ancora sumir, LANCA erro -> o build falha rapido no prebuild da nuvem.
 const { withAppDelegate } = require('@expo/config-plugins');
 
-const BUILD = '18';
+const BUILD = '19';
 
 // import Foundation + helpers fileprivate (assincrono e sincrono).
 const IMPORT_AND_HELPER = `import Foundation
