@@ -22,9 +22,18 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// O backend (NestJS) embrulha toda resposta de sucesso em { data: <payload> }.
+// Desembrulha aqui pra que os `.then((r) => r.data)` recebam o payload real
+// (sem isso, login/me/vehicles/etc vêm undefined e o app acha que deu erro).
 // 401 → token inválido/expirado: desloga e volta pro login.
 api.interceptors.response.use(
-  (r) => r,
+  (r) => {
+    const body: unknown = r.data;
+    if (body && typeof body === 'object' && 'data' in body) {
+      r.data = (body as { data: unknown }).data;
+    }
+    return r;
+  },
   async (error) => {
     if (error?.response?.status === 401) {
       await useAuth.getState().logout();

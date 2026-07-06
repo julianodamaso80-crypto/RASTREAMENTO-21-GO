@@ -521,6 +521,28 @@ fora da rota do bug do RSDHost/New Arch. Viável: reanimated (que exigia New Arc
 diag `BUILD='20'`, pings N1–N4 + caixa-preta mantidos; plugin re-ancorado pro AppDelegate do
 SDK 54. `npx expo install --fix` + `tsc`.
 
-**Resultado:** _(em implementação)_
+### ✅ RESULTADO BUILD 20 — VITÓRIA (06/07/2026, teste ~12:21 -0300)
+O app **ABRIU NA TELA DE LOGIN** (confirmado pelo dono) e os pings provam o boot completo do
+JS pela primeira vez em 12 builds:
+```
+N1-didFinishLaunching-start → 01-module-loaded → 02-root-render → 03-effect-hydrate
+→ 04-index-render → 06-hydrate-start → 07-hydrate-done → 05-login-render ✅
+N3-alive-8s   (e NENHUM N4 — o watchdog NAO disparou: o JS subiu e marcou a flag)
+```
+**Causa raiz (fechada com prova):** New Architecture do RN no iOS 26 travava a subida do
+runtime JS antes da 1ª linha (expo#44925 / RN#54859). Nao era o codigo do app, nao era
+reanimated (descartado com prova de binario no build 19). **Solucao: Expo SDK 54 +
+`newArchEnabled:false`** (caminho de boot Legacy `RCTBridge`, fora da rota do bug).
+
+## 18. BUILD 21 — correcao de login + remocao da caixa-preta
+
+No 1o login o dono viu "nao foi possivel entrar". **Backend 100% OK** (`curl` no
+`/app/auth/login` → HTTP 201 com token). Bug era no app: o backend NestJS embrulha toda
+resposta em `{ data: <payload> }` e o `AppApi` fazia `.then((r) => r.data)` → devolvia o
+envelope, deixando `accessToken`/`associate` undefined. **Fix:** interceptor de resposta no
+`api.ts` desembrulha `{ data }` uma vez (corrige login/me/vehicles/history/alerts de uma vez).
+Confirmado que TODOS os endpoints usam o mesmo envelope. Build 21 tambem **remove a caixa-preta**
+(tira o plugin `with-native-boot-diag` do app.json → sem crash proposital pra usuario real).
+Mantem SDK 54 + New Arch off. diag JS `BUILD='21'` (pings 01–05, sem N1–N4). tsc limpo.
 
 _(fim da auditoria)_

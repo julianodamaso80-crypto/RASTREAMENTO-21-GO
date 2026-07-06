@@ -41,8 +41,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 120
         }
-      ],
-      "./plugins/with-native-boot-diag"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
