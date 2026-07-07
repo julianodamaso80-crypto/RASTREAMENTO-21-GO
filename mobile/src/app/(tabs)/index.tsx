@@ -14,11 +14,14 @@ import { useRouter } from 'expo-router';
 import { SatelliteTiles } from '@/components/satellite-tiles';
 import { VehicleCard } from '@/components/vehicle-card';
 import { VehicleMarker } from '@/components/vehicle-marker';
-import { AppApi, Vehicle } from '@/lib/api';
+import { AppApi, Vehicle, Position } from '@/lib/api';
+import { useVehicleRealtime, RawTraccarDevice } from '@/lib/realtime';
 import { useAuth } from '@/lib/auth-store';
 import { colors, radii } from '@/lib/theme';
 
-const POLL_MS = 12000;
+// Poll de GARANTIA. O tempo real vem do WebSocket (instantâneo); este intervalo
+// só cobre o caso do WS cair/reconectar, pra a lista nunca "congelar".
+const POLL_MS = 20000;
 
 export default function MapScreen() {
   const router = useRouter();
@@ -51,6 +54,34 @@ export default function MapScreen() {
     await load();
     setRefreshing(false);
   }, [load]);
+
+  // Tempo real: cada posição nova do rastreador atualiza o veículo na hora,
+  // casando pelo traccarDeviceId. Sem esperar o próximo poll.
+  const onPosition = useCallback((deviceId: number, position: Position) => {
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.traccarDeviceId === deviceId ? { ...v, position } : v,
+      ),
+    );
+  }, []);
+
+  const onDevice = useCallback((device: RawTraccarDevice) => {
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.traccarDeviceId === device.id
+          ? {
+              ...v,
+              connection: {
+                status: device.status,
+                lastUpdate: device.lastUpdate,
+              },
+            }
+          : v,
+      ),
+    );
+  }, []);
+
+  const { connected } = useVehicleRealtime({ onPosition, onDevice });
 
   const focusVehicle = useCallback((v: Vehicle) => {
     if (!v.position) return;
@@ -92,7 +123,18 @@ export default function MapScreen() {
 
       <SafeAreaView style={styles.topBar} edges={['top']} pointerEvents="box-none">
         <View style={styles.greeting}>
-          <Text style={styles.hello}>Olá{name ? `, ${name.split(' ')[0]}` : ''}</Text>
+          <View style={styles.helloRow}>
+            <Text style={styles.hello}>Olá{name ? `, ${name.split(' ')[0]}` : ''}</Text>
+            <View style={styles.liveTag}>
+              <View
+                style={[
+                  styles.liveDot,
+                  { backgroundColor: connected ? colors.green : colors.textFaint },
+                ]}
+              />
+              <Text style={styles.liveText}>{connected ? 'AO VIVO' : '···'}</Text>
+            </View>
+          </View>
           <Text style={styles.helloSub}>
             {withPos.length} de {vehicles.length}{' '}
             {vehicles.length === 1 ? 'veículo' : 'veículos'} no mapa
@@ -150,8 +192,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
   },
+  helloRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   hello: { color: colors.white, fontWeight: '800', fontSize: 16 },
   helloSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },
+  liveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+  },
+  liveDot: { width: 7, height: 7, borderRadius: 4 },
+  liveText: {
+    color: colors.white,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   sheet: {
     position: 'absolute',
     bottom: 0,

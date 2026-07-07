@@ -32,6 +32,10 @@ export class TraccarGateway
   // Cache: traccarDeviceId -> { tenantId, vehicleId }
   private deviceTenantMap = new Map<number, string>();
   private deviceVehicleMap = new Map<number, string>();
+  // Cache: traccarDeviceId -> associateId (dono do veículo, quando houver).
+  // Usado pra emitir posição SÓ pro app do associado dono — nunca vazar a
+  // frota inteira do tenant pro cliente final.
+  private deviceAssociateMap = new Map<number, string>();
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
   private readonly WS_BACKOFF_MIN_MS = 2_000;
@@ -79,6 +83,17 @@ export class TraccarGateway
         secret: this.configService.get<string>('jwt.secret'),
       });
 
+      // App do associado: entra SÓ na sua própria sala, nunca na do tenant —
+      // assim recebe em tempo real apenas os veículos que são dele.
+      if (payload.type === 'associate') {
+        client.join(`associate:${payload.sub}`);
+        client.data.associateId = payload.sub;
+        this.logger.log(
+          `Associado conectado: ${payload.name} (assoc: ${payload.sub})`,
+        );
+        return;
+      }
+
       const tenantId = payload.tenantId;
       client.join(`tenant:${tenantId}`);
       client.data.tenantId = tenantId;
@@ -103,15 +118,24 @@ export class TraccarGateway
     try {
       const vehicles = await this.prisma.vehicle.findMany({
         where: { traccarDeviceId: { not: null }, deletedAt: null },
-        select: { traccarDeviceId: true, tenantId: true, id: true },
+        select: {
+          traccarDeviceId: true,
+          tenantId: true,
+          id: true,
+          associateId: true,
+        },
       });
 
       this.deviceTenantMap.clear();
       this.deviceVehicleMap.clear();
+      this.deviceAssociateMap.clear();
       for (const v of vehicles) {
         if (v.traccarDeviceId) {
           this.deviceTenantMap.set(v.traccarDeviceId, v.tenantId);
           this.deviceVehicleMap.set(v.traccarDeviceId, v.id);
+          if (v.associateId) {
+            this.deviceAssociateMap.set(v.traccarDeviceId, v.associateId);
+          }
         }
       }
 
@@ -216,6 +240,14 @@ export class TraccarGateway
               );
           }
         }
+
+        // Espelha o mesmo update pro app do associado dono (tempo real).
+        const associateId = this.deviceAssociateMap.get(position.deviceId);
+        if (associateId) {
+          this.server
+            .to(`associate:${associateId}`)
+            .emit('position:update', position);
+        }
       }
     }
 
@@ -224,6 +256,13 @@ export class TraccarGateway
         const tenantId = this.deviceTenantMap.get(device.id);
         if (tenantId) {
           this.server.to(`tenant:${tenantId}`).emit('device:update', device);
+        }
+
+        const associateId = this.deviceAssociateMap.get(device.id);
+        if (associateId) {
+          this.server
+            .to(`associate:${associateId}`)
+            .emit('device:update', device);
         }
       }
     }
