@@ -32,6 +32,42 @@ export function compass(course: number | null | undefined): string {
   return dirs[Math.round((course % 360) / 45) % 8];
 }
 
+/** Distância entre duas coordenadas (metros) — Haversine. */
+export function distanceMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/** Metros -> "850 m" ou "12,4 km". */
+export function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1).replace('.', ',')} km`;
+}
+
+/** Duração entre dois ISOs -> "1 h 20 min" / "45 min". */
+export function formatDuration(
+  fromIso: string | null | undefined,
+  toIso: string | null | undefined,
+): string {
+  if (!fromIso || !toIso) return '—';
+  const min = Math.max(0, Math.round((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 60000));
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);

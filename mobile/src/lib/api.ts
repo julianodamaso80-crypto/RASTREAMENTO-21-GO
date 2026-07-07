@@ -60,9 +60,12 @@ export interface Connection {
   lastUpdate: string | null;
 }
 
+export type VehicleType = 'CAR' | 'MOTORCYCLE';
+
 export interface Vehicle {
   id: string;
   plate: string;
+  vehicleType: VehicleType; // define o desenho do marcador (carro x moto)
   brand: string | null;
   model: string | null;
   color: string | null;

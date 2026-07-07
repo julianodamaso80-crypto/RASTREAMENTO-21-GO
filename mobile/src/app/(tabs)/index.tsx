@@ -9,31 +9,16 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, Region } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
+import MapView, { Region } from 'react-native-maps';
 import { useRouter } from 'expo-router';
 import { SatelliteTiles } from '@/components/satellite-tiles';
 import { VehicleCard } from '@/components/vehicle-card';
+import { VehicleMarker } from '@/components/vehicle-marker';
 import { AppApi, Vehicle } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
 import { colors, radii } from '@/lib/theme';
 
 const POLL_MS = 12000;
-
-/** Verde = ligado, vermelho = desligado, cinza = sem posição. */
-function statusColor(v: Vehicle): string {
-  if (!v.position) return colors.textFaint;
-  if (v.position.ignition === true) return colors.green;
-  if (v.position.ignition === false) return colors.red;
-  return colors.amber;
-}
-
-function statusLabel(v: Vehicle): string {
-  if (!v.position) return 'Sem sinal';
-  if (v.position.ignition === true) return 'Ligado';
-  if (v.position.ignition === false) return 'Desligado';
-  return 'Em repouso';
-}
 
 export default function MapScreen() {
   const router = useRouter();
@@ -101,20 +86,7 @@ export default function MapScreen() {
       >
         <SatelliteTiles />
         {withPos.map((v) => (
-          <Marker
-            key={v.id}
-            coordinate={{
-              latitude: v.position!.latitude,
-              longitude: v.position!.longitude,
-            }}
-            onPress={() => setSelected(v.id)}
-            title={v.plate}
-            description={statusLabel(v)}
-          >
-            <View style={[styles.pin, { backgroundColor: statusColor(v) }]}>
-              <Ionicons name="car-sport" size={16} color={colors.white} />
-            </View>
-          </Marker>
+          <VehicleMarker key={v.id} vehicle={v} onPress={() => setSelected(v.id)} />
         ))}
       </MapView>
 
@@ -149,7 +121,12 @@ export default function MapScreen() {
                 vehicle={v}
                 selected={selected === v.id}
                 onFocus={() => focusVehicle(v)}
-                onHistory={() => router.push(`/vehicle/${v.id}`)}
+                onHistory={() =>
+                  router.push({
+                    pathname: '/vehicle/[id]',
+                    params: { id: v.id, plate: v.plate, type: v.vehicleType },
+                  })
+                }
               />
             ))}
           </ScrollView>
@@ -161,18 +138,6 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  pin: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-  },
   topBar: { position: 'absolute', top: 0, left: 0, right: 0 },
   greeting: {
     margin: 16,

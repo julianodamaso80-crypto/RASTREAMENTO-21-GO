@@ -36,6 +36,7 @@ export class AppDataService {
       select: {
         id: true,
         plate: true,
+        vehicleType: true, // CAR | MOTORCYCLE — define o desenho do marcador no app
         brand: true,
         model: true,
         color: true,

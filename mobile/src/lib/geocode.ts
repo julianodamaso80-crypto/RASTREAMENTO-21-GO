@@ -28,10 +28,16 @@ export async function reverseGeocode(
       cache.set(k, null);
       return null;
     }
+    // "Rua, Nº · Bairro · Cidade — UF" — mesma riqueza de detalhe do dashboard.
     const street = [r.street, r.streetNumber].filter(Boolean).join(', ');
-    const area = r.district || r.subregion || r.city || null;
+    const neighborhood = r.district || r.subregion || null;
+    const city = r.city || r.subregion || null;
+    const uf = r.region || null;
+    const cityUf = [city, uf].filter(Boolean).join(' — ');
     const label =
-      [street || r.name, area].filter(Boolean).join(' · ') || r.city || null;
+      [street || r.name, neighborhood, cityUf].filter(Boolean).join(' · ') ||
+      r.city ||
+      null;
     cache.set(k, label);
     return label;
   } catch {
