@@ -11,10 +11,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Selecionar Xcode 16+ (RN exige >= 16.1)
+      - name: Selecionar Xcode 26 (Apple exige iOS 26 SDK)
         run: |
           echo "Xcodes disponiveis:"; ls -d /Applications/Xcode*.app
-          XC=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
           if [ -z "$XC" ]; then XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1); fi
           echo "Selecionando: $XC"
           sudo xcode-select -s "$XC/Contents/Developer"
