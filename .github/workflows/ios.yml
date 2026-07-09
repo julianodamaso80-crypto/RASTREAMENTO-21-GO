@@ -1,0 +1,66 @@
+name: Build iOS (local no runner macOS)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Restaurar credenciais iOS (dos secrets)
+        env:
+          P12: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          PROFILE: ${{ secrets.IOS_PROFILE_BASE64 }}
+          ASC: ${{ secrets.ASC_API_KEY_BASE64 }}
+          P12PASS: ${{ secrets.IOS_P12_PASSWORD }}
+        run: |
+          mkdir -p secrets
+          echo "$P12" | base64 -d > secrets/dist.p12
+          echo "$PROFILE" | base64 -d > secrets/profile.mobileprovision
+          echo "$ASC" | base64 -d > secrets/AuthKey_VQ77NAF88A.p8
+          cat > mobile/credentials.json <<EOF
+          {
+            "ios": {
+              "provisioningProfilePath": "../secrets/profile.mobileprovision",
+              "distributionCertificate": {
+                "path": "../secrets/dist.p12",
+                "password": "$P12PASS"
+              }
+            }
+          }
+          EOF
+          echo "Credenciais restauradas."
+
+      - name: Instalar dependencias
+        working-directory: mobile
+        run: npm install
+
+      - name: Instalar eas-cli
+        run: npm install -g eas-cli
+
+      - name: Build IPA (local, sem cota EAS nuvem)
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas build --local --platform ios --profile production --non-interactive --output "$GITHUB_WORKSPACE/app.ipa"
+
+      - name: Upload do IPA como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-ipa
+          path: app.ipa
+
+      - name: Enviar pro App Store Connect
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas submit --platform ios --path "$GITHUB_WORKSPACE/app.ipa" --non-interactive
