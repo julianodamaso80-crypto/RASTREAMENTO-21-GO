@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -23,6 +24,7 @@ import { Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StockService } from './stock.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
+import { AssociateStockDto } from './dto/associate-stock.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -61,6 +63,20 @@ export class StockController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.stockService.importFromBuffer(file.buffer, req.tenantId);
+  }
+
+  @Post(':id/associate')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary: 'Associar cliente e ativo: vincula o rastreador a uma placa do SGA',
+  })
+  associate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AssociateStockDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.associate(id, req.tenantId, dto);
   }
 
   @Delete(':id')

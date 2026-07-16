@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Param,
   Query,
   Req,
   Inject,
@@ -16,7 +17,11 @@ import {
 import { Role } from '.prisma/client';
 import { Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { HINOVA_CLIENT, type IHinovaClient } from './hinova.interface';
+import {
+  HINOVA_CLIENT,
+  type IHinovaClient,
+  type HinovaLookupResult,
+} from './hinova.interface';
 import { HinovaSyncService } from './hinova-sync.service';
 
 interface AuthenticatedRequest {
@@ -66,5 +71,14 @@ export class HinovaController {
   @ApiQuery({ name: 'plate', required: true })
   async searchByPlate(@Query('plate') plate: string) {
     return this.hinovaClient.searchByPlate(plate);
+  }
+
+  @Get('lookup/:placa')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary: 'Consulta uma placa ao vivo no SGA (cliente + veículo + situação)',
+  })
+  async lookup(@Param('placa') placa: string): Promise<HinovaLookupResult> {
+    return this.hinovaClient.lookupByPlate(placa);
   }
 }

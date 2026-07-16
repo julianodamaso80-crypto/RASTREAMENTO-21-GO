@@ -11,6 +11,7 @@ import {
   Bell,
   Radio,
   Boxes,
+  Users,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -51,6 +52,7 @@ const navItems: NavItem[] = [
   { href: '/manutencao', label: 'Manutenção', icon: Wrench, roles: NON_CLIENT_ROLES },
   { href: '/dispositivos', label: 'Dispositivos', icon: Radio, roles: NON_CLIENT_ROLES },
   { href: '/estoque', label: 'Estoque', icon: Boxes, roles: NON_CLIENT_ROLES },
+  { href: '/clientes', label: 'Clientes Ativos', icon: Users, roles: NON_CLIENT_ROLES },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 

@@ -1,12 +1,17 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
+import { AssociateStockDto } from './dto/associate-stock.dto';
+import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
+import { TraccarService } from '../traccar/traccar.service';
 
 type ParsedRow = {
   imei: string;
@@ -58,11 +63,20 @@ const HEADER_MAP: Record<string, keyof ParsedRow> = {
 export class StockService {
   private readonly logger = new Logger(StockService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
+    private traccar: TraccarService,
+  ) {}
 
   async findAll(tenantId: string, filters: FilterStockDto) {
     const { page, perPage, search, status, operator } = filters;
-    const where: Record<string, unknown> = { tenantId, deletedAt: null };
+    // associatedAt: null → só rastreadores disponíveis (associados saíram do estoque).
+    const where: Record<string, unknown> = {
+      tenantId,
+      deletedAt: null,
+      associatedAt: null,
+    };
 
     if (status) where.status = { equals: status, mode: 'insensitive' };
     if (operator) where.operator = { equals: operator, mode: 'insensitive' };
@@ -117,6 +131,190 @@ export class StockService {
       data: { deletedAt: new Date() },
     });
     return { id };
+  }
+
+  /**
+   * Associar cliente e ativo: vincula um rastreador do estoque a uma placa do
+   * SGA, criando cliente (Associate) + veículo (Vehicle) + rastreador (Device),
+   * e tirando o item do estoque disponível. O IMEI é a identidade única.
+   *
+   * Regras (decididas com o usuário):
+   * - Placa não encontrada no SGA → bloqueia (422).
+   * - Placa INATIVA no SGA → bloqueia (422).
+   * - Técnico e local de instalação obrigatórios (validados no DTO).
+   */
+  async associate(id: string, tenantId: string, dto: AssociateStockDto) {
+    const item = await this.prisma.stockItem.findFirst({
+      where: { id, tenantId, deletedAt: null, associatedAt: null },
+    });
+    if (!item) {
+      throw new NotFoundException(
+        'Item de estoque não encontrado ou já associado.',
+      );
+    }
+
+    // Fonte da verdade: o servidor rebusca no SGA (não confia no que veio da tela).
+    const lookup = await this.hinova.lookupByPlate(dto.placa);
+    if (!lookup.encontrado) {
+      throw new UnprocessableEntityException(
+        lookup.motivo || 'Placa não encontrada no SGA.',
+      );
+    }
+    if (!lookup.ativo) {
+      throw new UnprocessableEntityException(
+        `Placa ${lookup.veiculo.placa ?? dto.placa} está ${
+          lookup.situacao.descricao ?? 'INATIVA'
+        } no SGA — vínculo bloqueado.`,
+      );
+    }
+    if (!lookup.cliente.cpf) {
+      throw new UnprocessableEntityException(
+        'SGA não retornou o CPF do cliente para esta placa.',
+      );
+    }
+
+    const placa = (lookup.veiculo.placa ?? dto.placa)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    const technicianName = dto.technicianName.trim();
+    const installLocation = dto.installLocation.trim();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1) Cliente — dedupe por (tenant, cpf).
+      let associate = await tx.associate.findFirst({
+        where: { tenantId, cpf: lookup.cliente.cpf!, deletedAt: null },
+      });
+      if (associate) {
+        associate = await tx.associate.update({
+          where: { id: associate.id },
+          data: {
+            name: lookup.cliente.nome ?? associate.name,
+            hinovaCode: lookup.veiculo.codigoVeiculo ?? associate.hinovaCode,
+          },
+        });
+      } else {
+        associate = await tx.associate.create({
+          data: {
+            tenantId,
+            name: lookup.cliente.nome ?? 'Associado (SGA)',
+            cpf: lookup.cliente.cpf!,
+            hinovaCode: lookup.veiculo.codigoVeiculo,
+          },
+        });
+      }
+
+      // 2) Veículo — dedupe por (placa, tenant) OU uniqueId (IMEI).
+      let vehicle = await tx.vehicle.findFirst({
+        where: {
+          OR: [
+            { plate: placa, tenantId, deletedAt: null },
+            { uniqueId: item.imei, deletedAt: null },
+          ],
+        },
+      });
+      if (vehicle) {
+        vehicle = await tx.vehicle.update({
+          where: { id: vehicle.id },
+          data: {
+            plate: placa,
+            chassi: lookup.veiculo.chassi ?? vehicle.chassi,
+            model: lookup.veiculo.modelo ?? vehicle.model,
+            status: 'ACTIVE',
+            associateId: associate.id,
+            hinovaCode: lookup.veiculo.codigoVeiculo ?? vehicle.hinovaCode,
+            lastSync: new Date(),
+          },
+        });
+      } else {
+        vehicle = await tx.vehicle.create({
+          data: {
+            plate: placa,
+            uniqueId: item.imei,
+            chassi: lookup.veiculo.chassi,
+            model: lookup.veiculo.modelo,
+            status: 'ACTIVE',
+            tenantId,
+            associateId: associate.id,
+            hinovaCode: lookup.veiculo.codigoVeiculo,
+            lastSync: new Date(),
+          },
+        });
+      }
+
+      // 3) Rastreador — um Device por IMEI e por veículo.
+      const existingDevice = await tx.device.findUnique({
+        where: { imei: item.imei },
+      });
+      const device = existingDevice
+        ? await tx.device.update({
+            where: { id: existingDevice.id },
+            data: {
+              vehicleId: vehicle.id,
+              status: 'INSTALLED',
+              installedAt: new Date(),
+              installedBy: technicianName,
+              installLocation,
+            },
+          })
+        : await tx.device.create({
+            data: {
+              imei: item.imei,
+              model: 'OTHER',
+              status: 'INSTALLED',
+              vehicleId: vehicle.id,
+              tenantId,
+              installedAt: new Date(),
+              installedBy: technicianName,
+              installLocation,
+            },
+          });
+
+      // 4) Item sai do estoque disponível.
+      await tx.stockItem.update({
+        where: { id: item.id },
+        data: { associatedAt: new Date(), deviceId: device.id },
+      });
+
+      return { associate, vehicle, device };
+    });
+
+    // 5) Traccar (best-effort — não derruba o vínculo se estiver indisponível).
+    try {
+      let traccarDevice = await this.traccar.getDeviceByUniqueId(item.imei);
+      if (!traccarDevice) {
+        traccarDevice = await this.traccar.createDevice(placa, item.imei);
+      }
+      if (traccarDevice?.id) {
+        await this.prisma.$transaction([
+          this.prisma.vehicle.update({
+            where: { id: result.vehicle.id },
+            data: { traccarDeviceId: traccarDevice.id },
+          }),
+          this.prisma.device.update({
+            where: { id: result.device.id },
+            data: { traccarDeviceId: traccarDevice.id },
+          }),
+        ]);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Associação ${item.imei}: Traccar indisponível (${
+          error instanceof Error ? error.message : error
+        }). Device vinculado sem traccarDeviceId.`,
+      );
+    }
+
+    this.logger.log(
+      `Estoque associado: IMEI ${item.imei} → placa ${placa} (cliente ${result.associate.id})`,
+    );
+
+    return {
+      ok: true,
+      associateId: result.associate.id,
+      vehicleId: result.vehicle.id,
+      deviceId: result.device.id,
+      placa,
+    };
   }
 
   async importFromBuffer(

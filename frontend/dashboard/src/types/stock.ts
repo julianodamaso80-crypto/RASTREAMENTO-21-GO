@@ -24,3 +24,58 @@ export interface StockStats {
   total: number;
   byStatus: Array<{ status: string; count: number }>;
 }
+
+/** Resultado da consulta de placa ao vivo no SGA (fluxo Associar). */
+export interface HinovaLookup {
+  encontrado: boolean;
+  ativo: boolean;
+  motivo?: string;
+  cliente: { nome: string | null; cpf: string | null };
+  veiculo: {
+    placa: string | null;
+    chassi: string | null;
+    codigoModelo: string | null;
+    modelo: string | null;
+    codigoVeiculo: string | null;
+  };
+  situacao: {
+    codigo: string | null;
+    descricao: string | null;
+    financeira: string | null;
+    dataVencimento: string | null;
+  };
+}
+
+export interface StockAssociateResult {
+  ok: boolean;
+  associateId: string;
+  vehicleId: string;
+  deviceId: string;
+  placa: string;
+}
+
+/** Cliente ativo (associado com veículo/rastreador vinculado). */
+export interface ActiveClient {
+  id: string;
+  name: string;
+  cpf: string;
+  phone: string | null;
+  email: string | null;
+  hinovaCode: string | null;
+  createdAt: string;
+  vehicles: Array<{
+    id: string;
+    plate: string;
+    model: string | null;
+    chassi: string | null;
+    status: string;
+    device: {
+      id: string;
+      imei: string;
+      status: string;
+      installedBy: string | null;
+      installLocation: string | null;
+      installedAt: string | null;
+    } | null;
+  }>;
+}

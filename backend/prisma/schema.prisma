@@ -510,6 +510,7 @@ model Device {
   tenant          Tenant       @relation(fields: [tenantId], references: [id])
   installedAt     DateTime?    @map("installed_at")
   installedBy     String?      @map("installed_by")
+  installLocation String?      @map("install_location")
   lastConnection  DateTime?    @map("last_connection")
   notes           String?
   deletedAt       DateTime?    @map("deleted_at")
@@ -626,6 +627,10 @@ model StockItem {
   notes        String?
   tenantId     String    @map("tenant_id") @db.Uuid
   tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  // Associação: quando o rastreador é vinculado a um cliente/veículo, sai do
+  // estoque disponível (a listagem filtra associatedAt: null) e vira Device.
+  associatedAt DateTime? @map("associated_at")
+  deviceId     String?   @unique @map("device_id") @db.Uuid
   deletedAt    DateTime? @map("deleted_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")

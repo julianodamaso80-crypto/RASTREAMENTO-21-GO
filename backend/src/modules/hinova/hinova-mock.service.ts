@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { IHinovaClient } from './hinova.interface';
+import type { IHinovaClient, HinovaLookupResult } from './hinova.interface';
 import type {
   HinovaVehicleDto,
   HinovaListResponse,
@@ -218,6 +218,52 @@ export class HinovaMockService implements IHinovaClient {
       total: this.vehicles.length,
       pagina: page,
       porPagina: perPage,
+    };
+  }
+
+  async lookupByPlate(placa: string): Promise<HinovaLookupResult> {
+    await this.simulateLatency();
+    const p = (placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const v = this.vehicles.find((x) => x.placa === p);
+    if (!v) {
+      return {
+        encontrado: false,
+        ativo: false,
+        motivo: 'Placa não encontrada no SGA (mock).',
+        cliente: { nome: null, cpf: null },
+        veiculo: {
+          placa: null,
+          chassi: null,
+          codigoModelo: null,
+          modelo: null,
+          codigoVeiculo: null,
+        },
+        situacao: {
+          codigo: null,
+          descricao: null,
+          financeira: null,
+          dataVencimento: null,
+        },
+      };
+    }
+    const ativo = v.status === 'ATIVO';
+    return {
+      encontrado: true,
+      ativo,
+      cliente: { nome: v.associado.nome, cpf: v.associado.cpf },
+      veiculo: {
+        placa: v.placa,
+        chassi: v.chassi,
+        codigoModelo: null,
+        modelo: `${v.marca} ${v.modelo}`,
+        codigoVeiculo: v.codigoVeiculo,
+      },
+      situacao: {
+        codigo: ativo ? '1' : '0',
+        descricao: v.status,
+        financeira: v.status === 'INADIMPLENTE' ? 'INADIMPLENTE' : 'ADIMPLENTE',
+        dataVencimento: null,
+      },
     };
   }
 

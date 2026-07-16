@@ -9,7 +9,14 @@ import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, 
 import type { DashboardOverview, DashboardPeriod } from '@/types/dashboard';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 import type { BleTag, BleSighting } from '@/types/ble-tag';
-import type { StockItem, StockImportResult, StockStats } from '@/types/stock';
+import type {
+  StockItem,
+  StockStats,
+  StockImportResult,
+  HinovaLookup,
+  StockAssociateResult,
+  ActiveClient,
+} from '@/types/stock';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
@@ -505,6 +512,34 @@ export const stockApi = {
   },
   delete: async (id: string): Promise<void> => {
     await api.delete(`/stock/${id}`);
+  },
+  associate: async (
+    id: string,
+    payload: { placa: string; technicianName: string; installLocation: string },
+  ): Promise<StockAssociateResult> => {
+    const res = await api.post<ApiResponse<StockAssociateResult>>(
+      `/stock/${id}/associate`,
+      payload,
+    );
+    return res.data.data;
+  },
+};
+
+export const hinovaApi = {
+  lookup: async (placa: string): Promise<HinovaLookup> => {
+    const res = await api.get<ApiResponse<HinovaLookup>>(
+      `/hinova/lookup/${encodeURIComponent(placa)}`,
+    );
+    return res.data.data;
+  },
+};
+
+export const clientsApi = {
+  getActive: async (search?: string): Promise<ActiveClient[]> => {
+    const res = await api.get<ApiResponse<ActiveClient[]>>('/clients', {
+      params: search ? { search } : undefined,
+    });
+    return res.data.data;
   },
 };
 

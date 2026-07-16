@@ -8,6 +8,16 @@ import {
   Loader2,
   Trash2,
   FileSpreadsheet,
+  MoreVertical,
+  UserCheck,
+  MapPin,
+  SignalHigh,
+  HardHat,
+  ListPlus,
+  Wrench,
+  Send,
+  Ban,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatDateOnlyBR } from '@/lib/utils';
@@ -19,6 +29,15 @@ import { SelectNative } from '@/components/ui/select-native';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+} from '@/components/ui/dropdown-menu';
+import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog';
 import type { StockItem, StockStats } from '@/types/stock';
 
 // Cor do badge por status (case-insensitive, com fallback neutro).
@@ -32,6 +51,10 @@ function statusColor(status: string | null): string {
 
 export default function EstoquePage() {
   const { user } = useAuth();
+  const canManage =
+    user?.role === 'SUPER_ADMIN' ||
+    user?.role === 'ADMIN' ||
+    user?.role === 'OPERATOR';
   const canDelete = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
 
   const [items, setItems] = useState<StockItem[]>([]);
@@ -40,6 +63,8 @@ export default function EstoquePage() {
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [associItem, setAssociItem] = useState<StockItem | null>(null);
+  const [associOpen, setAssociOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadStock = useCallback(async () => {
@@ -101,6 +126,11 @@ export default function EstoquePage() {
     }
   };
 
+  const openAssociate = (item: StockItem) => {
+    setAssociItem(item);
+    setAssociOpen(true);
+  };
+
   const handleDelete = async (item: StockItem) => {
     if (!confirm(`Remover o rastreador ${item.imei} do estoque?`)) return;
     try {
@@ -112,6 +142,8 @@ export default function EstoquePage() {
     }
   };
 
+  const soon = () => toast.info('Disponível em breve (próxima atualização).');
+
   return (
     <div className="flex flex-col h-full p-4 md:p-6 gap-4 overflow-auto">
       {/* Header */}
@@ -122,7 +154,7 @@ export default function EstoquePage() {
             Estoque
           </h1>
           <p className="text-sm text-muted-foreground">
-            Rastreadores em estoque — importe a planilha para atualizar
+            Rastreadores disponíveis — associe a um cliente do SGA ou importe a planilha
           </p>
         </div>
         <input
@@ -223,7 +255,7 @@ export default function EstoquePage() {
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">Server</th>
                 <th className="px-3 py-2 font-medium">Ativação</th>
-                {canDelete && <th className="px-3 py-2" />}
+                {canManage && <th className="px-3 py-2 text-right font-medium">Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -257,15 +289,26 @@ export default function EstoquePage() {
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {item.activatedAt ? formatDateOnlyBR(item.activatedAt) : '—'}
                   </td>
-                  {canDelete && (
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        onClick={() => handleDelete(item)}
-                        className="text-muted-foreground hover:text-red-400 transition-colors"
-                        title="Remover do estoque"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                  {canManage && (
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => openAssociate(item)}
+                        >
+                          <UserCheck className="h-3.5 w-3.5 mr-1" />
+                          Associar (SGA)
+                        </Button>
+                        <StockRowMenu
+                          item={item}
+                          canDelete={canDelete}
+                          onAssociate={() => openAssociate(item)}
+                          onDelete={() => handleDelete(item)}
+                          onSoon={soon}
+                        />
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -280,6 +323,85 @@ export default function EstoquePage() {
           Mostrando os primeiros 100 itens. Use a busca para refinar.
         </p>
       )}
+
+      <AssociateStockDialog
+        item={associItem}
+        open={associOpen}
+        onOpenChange={setAssociOpen}
+        onAssociated={() => Promise.all([loadStock(), loadStats()])}
+      />
     </div>
+  );
+}
+
+// Menu de ações por rastreador — espelha as 10 opções da referência (RedeVeiculos).
+// Fase 1: "Associar cliente e ativo" e "Remover equipamento" funcionais; as demais
+// entram nas próximas fases (aparecem desabilitadas com selo "em breve").
+function StockRowMenu({
+  item,
+  canDelete,
+  onAssociate,
+  onDelete,
+  onSoon,
+}: {
+  item: StockItem;
+  canDelete: boolean;
+  onAssociate: () => void;
+  onDelete: () => void;
+  onSoon: () => void;
+}) {
+  const Soon = () => (
+    <DropdownMenuShortcut className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+      em breve
+    </DropdownMenuShortcut>
+  );
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label="Ações">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuItem disabled onClick={onSoon}>
+          <MapPin className="h-4 w-4" /> Abrir no mapa <Soon />
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled onClick={onSoon}>
+          <SignalHigh className="h-4 w-4" /> Validar instalação <Soon />
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onAssociate}>
+          <UserCheck className="h-4 w-4" /> Associar um cliente e ativo
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled onClick={onSoon}>
+          <HardHat className="h-4 w-4" /> Disponibilizar no login do técnico <Soon />
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled onClick={onSoon}>
+          <ListPlus className="h-4 w-4" /> Adicionar à lista de pendência <Soon />
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled onClick={onSoon}>
+          <Wrench className="h-4 w-4" /> Colocar em manutenção <Soon />
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled onClick={onSoon}>
+          <Send className="h-4 w-4" /> Enviar SMS Comandos <Soon />
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled onClick={onSoon}>
+          <Ban className="h-4 w-4" /> Indisponibilizar para uso <Soon />
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" disabled onClick={onSoon}>
+          <AlertTriangle className="h-4 w-4" /> Equipamento perdido <Soon />
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          variant="destructive"
+          disabled={!canDelete}
+          onClick={canDelete ? onDelete : onSoon}
+        >
+          <Trash2 className="h-4 w-4" /> Remover equipamento
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
