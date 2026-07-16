@@ -4,9 +4,11 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Animated,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Region } from 'react-native-maps';
@@ -23,6 +25,11 @@ import { colors, radii } from '@/lib/theme';
 // só cobre o caso do WS cair/reconectar, pra a lista nunca "congelar".
 const POLL_MS = 20000;
 
+// Painel arrastável: dois pontos de encaixe (minimizado x expandido).
+const SCREEN_H = Dimensions.get('window').height;
+const SHEET_MAX = Math.round(SCREEN_H * 0.66); // expandido
+const SHEET_MIN = 150; // minimizado (só o topo do veículo, mais mapa)
+
 export default function MapScreen() {
   const router = useRouter();
   const name = useAuth((s) => s.name);
@@ -31,6 +38,40 @@ export default function MapScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+
+  // Altura animada do painel + gesto de arraste na "barrinha".
+  const sheetH = useRef(new Animated.Value(SHEET_MAX)).current;
+  const startH = useRef(SHEET_MAX);
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 3,
+      onPanResponderGrant: () => {
+        sheetH.stopAnimation((v: number) => {
+          startH.current = v;
+        });
+      },
+      onPanResponderMove: (_, g) => {
+        const h = Math.min(SHEET_MAX, Math.max(SHEET_MIN, startH.current - g.dy));
+        sheetH.setValue(h);
+      },
+      onPanResponderRelease: (_, g) => {
+        const current = Math.min(
+          SHEET_MAX,
+          Math.max(SHEET_MIN, startH.current - g.dy),
+        );
+        const mid = (SHEET_MAX + SHEET_MIN) / 2;
+        // gesto rápido pra baixo/cima também decide o snap
+        const target =
+          g.vy > 0.5 ? SHEET_MIN : g.vy < -0.5 ? SHEET_MAX : current < mid ? SHEET_MIN : SHEET_MAX;
+        Animated.spring(sheetH, {
+          toValue: target,
+          useNativeDriver: false,
+          bounciness: 2,
+          speed: 14,
+        }).start();
+      },
+    }),
+  ).current;
 
   const load = useCallback(async () => {
     try {
@@ -55,13 +96,9 @@ export default function MapScreen() {
     setRefreshing(false);
   }, [load]);
 
-  // Tempo real: cada posição nova do rastreador atualiza o veículo na hora,
-  // casando pelo traccarDeviceId. Sem esperar o próximo poll.
   const onPosition = useCallback((deviceId: number, position: Position) => {
     setVehicles((prev) =>
-      prev.map((v) =>
-        v.traccarDeviceId === deviceId ? { ...v, position } : v,
-      ),
+      prev.map((v) => (v.traccarDeviceId === deviceId ? { ...v, position } : v)),
     );
   }, []);
 
@@ -69,13 +106,7 @@ export default function MapScreen() {
     setVehicles((prev) =>
       prev.map((v) =>
         v.traccarDeviceId === device.id
-          ? {
-              ...v,
-              connection: {
-                status: device.status,
-                lastUpdate: device.lastUpdate,
-              },
-            }
+          ? { ...v, connection: { status: device.status, lastUpdate: device.lastUpdate } }
           : v,
       ),
     );
@@ -83,17 +114,27 @@ export default function MapScreen() {
 
   const { connected } = useVehicleRealtime({ onPosition, onDevice });
 
-  const focusVehicle = useCallback((v: Vehicle) => {
-    if (!v.position) return;
-    setSelected(v.id);
-    const region: Region = {
-      latitude: v.position.latitude,
-      longitude: v.position.longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
-    mapRef.current?.animateToRegion(region, 600);
-  }, []);
+  // Ao centralizar num veículo, minimiza o painel pra o mapa aparecer.
+  const focusVehicle = useCallback(
+    (v: Vehicle) => {
+      if (!v.position) return;
+      setSelected(v.id);
+      const region: Region = {
+        latitude: v.position.latitude,
+        longitude: v.position.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      };
+      mapRef.current?.animateToRegion(region, 600);
+      Animated.spring(sheetH, {
+        toValue: SHEET_MIN,
+        useNativeDriver: false,
+        bounciness: 2,
+        speed: 14,
+      }).start();
+    },
+    [sheetH],
+  );
 
   const withPos = vehicles.filter((v) => v.position);
   const initialRegion: Region | undefined = withPos[0]
@@ -127,10 +168,7 @@ export default function MapScreen() {
             <Text style={styles.hello}>Olá{name ? `, ${name.split(' ')[0]}` : ''}</Text>
             <View style={styles.liveTag}>
               <View
-                style={[
-                  styles.liveDot,
-                  { backgroundColor: connected ? colors.green : colors.textFaint },
-                ]}
+                style={[styles.liveDot, { backgroundColor: connected ? colors.green : colors.textFaint }]}
               />
               <Text style={styles.liveText}>{connected ? 'AO VIVO' : '···'}</Text>
             </View>
@@ -142,20 +180,22 @@ export default function MapScreen() {
         </View>
       </SafeAreaView>
 
-      <View style={styles.sheet}>
-        <View style={styles.handle} />
+      <Animated.View style={[styles.sheet, { height: sheetH }]}>
+        {/* Zona de arraste: a barrinha e a área ao redor puxam o painel. */}
+        <View style={styles.grabZone} {...panResponder.panHandlers}>
+          <View style={styles.handle} />
+        </View>
+
         {loading ? (
           <ActivityIndicator color={colors.navy} style={{ paddingVertical: 24 }} />
         ) : vehicles.length === 0 ? (
-          <Text style={styles.empty}>
-            Nenhum veículo vinculado à sua conta ainda.
-          </Text>
+          <Text style={styles.empty}>Nenhum veículo vinculado à sua conta ainda.</Text>
         ) : (
           <ScrollView
             style={styles.list}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
+            contentContainerStyle={{ paddingBottom: 16 }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           >
             {vehicles.map((v) => (
               <VehicleCard
@@ -174,7 +214,7 @@ export default function MapScreen() {
             ))}
           </ScrollView>
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -206,59 +246,23 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
   liveDot: { width: 7, height: 7, borderRadius: 4 },
-  liveText: {
-    color: colors.white,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
+  liveText: { color: colors.white, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   sheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    maxHeight: '62%',
     backgroundColor: colors.white,
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,
-    paddingTop: 8,
     paddingHorizontal: 16,
-    paddingBottom: 8,
     shadowColor: '#000',
     shadowOpacity: 0.12,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 },
   },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginBottom: 8,
-  },
-  list: { marginBottom: 4 },
-  empty: {
-    textAlign: 'center',
-    color: colors.textMuted,
-    paddingVertical: 28,
-    paddingHorizontal: 20,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-    borderRadius: radii.md,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  cardSelected: { borderColor: colors.orange, backgroundColor: '#fff7ed' },
-  dot: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
-  cardBody: { flex: 1 },
-  plate: { fontWeight: '800', fontSize: 16, color: colors.text },
-  cardSub: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
-  cardMeta: { fontSize: 12, color: colors.textFaint, marginTop: 2 },
-  histBtn: { padding: 6 },
+  grabZone: { alignItems: 'center', paddingTop: 8, paddingBottom: 10 },
+  handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border },
+  list: { marginBottom: 0 },
+  empty: { textAlign: 'center', color: colors.textMuted, paddingVertical: 28, paddingHorizontal: 20 },
 });
