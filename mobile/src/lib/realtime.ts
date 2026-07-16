@@ -32,6 +32,11 @@ export interface RawTraccarPosition {
     ignition?: boolean;
     motion?: boolean;
     batteryLevel?: number;
+    power?: number;
+    sat?: number;
+    satellites?: number;
+    totalDistance?: number;
+    powerCut?: boolean;
   };
 }
 
@@ -53,6 +58,13 @@ export function mapTraccarPosition(p: RawTraccarPosition): Position {
     ignition: p.attributes?.ignition ?? null,
     motion: p.attributes?.motion ?? null,
     battery: p.attributes?.batteryLevel ?? null,
+    voltage: p.attributes?.power ?? null,
+    satellites: p.attributes?.sat ?? p.attributes?.satellites ?? null,
+    odometer:
+      p.attributes?.totalDistance != null
+        ? Math.round(p.attributes.totalDistance / 1000)
+        : null,
+    powerCut: p.attributes?.powerCut ?? null,
   };
 }
 

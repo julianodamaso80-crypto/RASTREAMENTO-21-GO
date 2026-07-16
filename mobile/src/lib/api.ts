@@ -53,6 +53,10 @@ export interface Position {
   ignition: boolean | null;
   motion: boolean | null;
   battery: number | null;
+  voltage: number | null; // tensão da bateria do veículo (V)
+  satellites: number | null; // nº de satélites GPS
+  odometer: number | null; // km
+  powerCut: boolean | null; // alimentação cortada
 }
 
 export interface Connection {

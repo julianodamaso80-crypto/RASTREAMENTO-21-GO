@@ -162,6 +162,7 @@ export default function MapScreen() {
                 key={v.id}
                 vehicle={v}
                 selected={selected === v.id}
+                ownerName={name}
                 onFocus={() => focusVehicle(v)}
                 onHistory={() =>
                   router.push({

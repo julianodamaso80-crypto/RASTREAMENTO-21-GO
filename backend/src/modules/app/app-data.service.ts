@@ -9,6 +9,7 @@ const KNOTS_TO_KMH = 1.852;
 
 /** Posição "limpa" pro app — só o que a UI do associado precisa. */
 function toPositionDto(p: TraccarPosition) {
+  const a = p.attributes ?? {};
   return {
     latitude: p.latitude,
     longitude: p.longitude,
@@ -16,9 +17,15 @@ function toPositionDto(p: TraccarPosition) {
     course: p.course,
     address: p.address ?? null,
     fixTime: p.fixTime, // momento REAL do GPS (nunca confundir com heartbeat)
-    ignition: p.attributes?.ignition ?? null,
-    motion: p.attributes?.motion ?? null,
-    battery: p.attributes?.batteryLevel ?? null,
+    ignition: a.ignition ?? null,
+    motion: a.motion ?? null,
+    battery: a.batteryLevel ?? null,
+    // Telemetria detalhada (para a ficha do veículo no app)
+    voltage: a.power ?? null, // tensão da bateria do veículo (V)
+    satellites: a.sat ?? a.satellites ?? null, // nº de satélites GPS
+    odometer:
+      a.totalDistance != null ? Math.round(a.totalDistance / 1000) : null, // km
+    powerCut: a.powerCut ?? null, // alimentação cortada (possível sabotagem)
   };
 }
 
