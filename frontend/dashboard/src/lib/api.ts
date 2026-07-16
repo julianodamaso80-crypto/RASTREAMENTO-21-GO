@@ -9,6 +9,7 @@ import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, 
 import type { DashboardOverview, DashboardPeriod } from '@/types/dashboard';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 import type { BleTag, BleSighting } from '@/types/ble-tag';
+import type { StockItem, StockImportResult, StockStats } from '@/types/stock';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
@@ -482,6 +483,28 @@ export const bleTagsApi = {
   getSightings: async (id: string, params?: { page?: number; perPage?: number }): Promise<PaginatedResponse<BleSighting>> => {
     const res = await api.get<PaginatedResponse<BleSighting>>(`/ble-tags/${id}/sightings`, { params });
     return res.data;
+  },
+};
+
+export const stockApi = {
+  getAll: async (params?: Record<string, string | number>): Promise<PaginatedResponse<StockItem>> => {
+    const res = await api.get<PaginatedResponse<StockItem>>('/stock', { params });
+    return res.data;
+  },
+  getStats: async (): Promise<StockStats> => {
+    const res = await api.get<ApiResponse<StockStats>>('/stock/stats');
+    return res.data.data;
+  },
+  import: async (file: File): Promise<StockImportResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await api.post<ApiResponse<StockImportResult>>('/stock/import', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data.data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/stock/${id}`);
   },
 };
 

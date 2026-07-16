@@ -13,6 +13,7 @@ const SOFT_DELETE_MODELS = new Set([
   'Geofence',
   'Device',
   'Chip',
+  'StockItem',
   'MaintenancePlan',
 ]);
 
@@ -62,6 +63,7 @@ function createExtendedClient(base: PrismaClient) {
       geofence: softDeleteModel,
       device: softDeleteModel,
       chip: softDeleteModel,
+      stockItem: softDeleteModel,
       maintenancePlan: softDeleteModel,
     },
     query: {
@@ -137,6 +139,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   }
   get chip() {
     return this.ext.chip;
+  }
+  get stockItem() {
+    return this.ext.stockItem;
   }
   get maintenancePlan() {
     return this.ext.maintenancePlan;

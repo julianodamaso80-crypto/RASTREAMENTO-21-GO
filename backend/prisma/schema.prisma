@@ -212,6 +212,7 @@ model Tenant {
   devices      Device[]
   chips        Chip[]
   bleSightings BleSighting[]
+  stockItems   StockItem[]
   settings     TenantSettings?
 
   @@map("tenants")
@@ -608,6 +609,30 @@ model Chip {
 
   @@index([tenantId, status])
   @@map("chips")
+}
+
+/// Estoque de rastreadores importado via planilha (IMEI + chip/linha + operadora + status + server).
+/// Chave de deduplicação: (tenantId, imei) — reimportar atualiza em vez de duplicar.
+model StockItem {
+  id           String    @id @default(uuid()) @db.Uuid
+  imei         String
+  iccid        String?
+  line         String?
+  operator     String?
+  status       String?
+  server       String?
+  registeredAt DateTime? @map("registered_at")
+  activatedAt  DateTime? @map("activated_at")
+  notes        String?
+  tenantId     String    @map("tenant_id") @db.Uuid
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, imei])
+  @@index([tenantId, status])
+  @@map("stock_items")
 }
 
 model SmsCommand {

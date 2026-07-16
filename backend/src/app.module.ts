@@ -17,6 +17,7 @@ import { GeofencesModule } from './modules/geofences/geofences.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { BleTagsModule } from './modules/ble-tags/ble-tags.module';
 import { ChipsModule } from './modules/chips/chips.module';
+import { StockModule } from './modules/stock/stock.module';
 import { SmsCommandsModule } from './modules/sms-commands/sms-commands.module';
 import { ServerInfoModule } from './modules/server-info/server-info.module';
 import { HealthModule } from './modules/health/health.module';
@@ -75,6 +76,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     DevicesModule,
     BleTagsModule,
     ChipsModule,
+    StockModule,
     SmsCommandsModule,
     ServerInfoModule,
     HealthModule,
