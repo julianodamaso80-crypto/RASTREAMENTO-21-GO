@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
   Animated,
@@ -11,6 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import MapView, { Region } from 'react-native-maps';
 import { useRouter } from 'expo-router';
 import { SatelliteTiles } from '@/components/satellite-tiles';
@@ -21,14 +23,20 @@ import { useVehicleRealtime, RawTraccarDevice } from '@/lib/realtime';
 import { useAuth } from '@/lib/auth-store';
 import { colors, radii } from '@/lib/theme';
 
-// Poll de GARANTIA. O tempo real vem do WebSocket (instantâneo); este intervalo
-// só cobre o caso do WS cair/reconectar, pra a lista nunca "congelar".
 const POLL_MS = 20000;
 
-// Painel arrastável: dois pontos de encaixe (minimizado x expandido).
 const SCREEN_H = Dimensions.get('window').height;
-const SHEET_MAX = Math.round(SCREEN_H * 0.66); // expandido
-const SHEET_MIN = 150; // minimizado (só o topo do veículo, mais mapa)
+const SHEET_MAX = Math.round(SCREEN_H * 0.66);
+const SHEET_MIN = 150;
+
+/** Cor do ponto de status derivada da POSIÇÃO GPS real. */
+function dotColor(v: Vehicle): string {
+  const p = v.position;
+  if (!p) return colors.textFaint;
+  if (p.motion) return colors.green;
+  if (p.ignition === false) return colors.red;
+  return colors.amber;
+}
 
 export default function MapScreen() {
   const router = useRouter();
@@ -39,9 +47,14 @@ export default function MapScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
-  // Altura animada do painel + gesto de arraste na "barrinha".
   const sheetH = useRef(new Animated.Value(SHEET_MAX)).current;
   const startH = useRef(SHEET_MAX);
+  const snapTo = useCallback(
+    (to: number) => {
+      Animated.spring(sheetH, { toValue: to, useNativeDriver: false, bounciness: 2, speed: 14 }).start();
+    },
+    [sheetH],
+  );
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 3,
@@ -55,20 +68,11 @@ export default function MapScreen() {
         sheetH.setValue(h);
       },
       onPanResponderRelease: (_, g) => {
-        const current = Math.min(
-          SHEET_MAX,
-          Math.max(SHEET_MIN, startH.current - g.dy),
-        );
+        const current = Math.min(SHEET_MAX, Math.max(SHEET_MIN, startH.current - g.dy));
         const mid = (SHEET_MAX + SHEET_MIN) / 2;
-        // gesto rápido pra baixo/cima também decide o snap
         const target =
           g.vy > 0.5 ? SHEET_MIN : g.vy < -0.5 ? SHEET_MAX : current < mid ? SHEET_MIN : SHEET_MAX;
-        Animated.spring(sheetH, {
-          toValue: target,
-          useNativeDriver: false,
-          bounciness: 2,
-          speed: 14,
-        }).start();
+        Animated.spring(sheetH, { toValue: target, useNativeDriver: false, bounciness: 2, speed: 14 }).start();
       },
     }),
   ).current;
@@ -78,7 +82,7 @@ export default function MapScreen() {
       const data = await AppApi.vehicles();
       setVehicles(data);
     } catch {
-      // silencioso no polling; 401 já trata logout no interceptor
+      // silencioso; 401 já trata logout no interceptor
     } finally {
       setLoading(false);
     }
@@ -114,26 +118,36 @@ export default function MapScreen() {
 
   const { connected } = useVehicleRealtime({ onPosition, onDevice });
 
-  // Ao centralizar num veículo, minimiza o painel pra o mapa aparecer.
-  const focusVehicle = useCallback(
-    (v: Vehicle) => {
-      if (!v.position) return;
-      setSelected(v.id);
-      const region: Region = {
+  const centerOn = useCallback((v: Vehicle) => {
+    if (!v.position) return;
+    mapRef.current?.animateToRegion(
+      {
         latitude: v.position.latitude,
         longitude: v.position.longitude,
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
-      };
-      mapRef.current?.animateToRegion(region, 600);
-      Animated.spring(sheetH, {
-        toValue: SHEET_MIN,
-        useNativeDriver: false,
-        bounciness: 2,
-        speed: 14,
-      }).start();
+      },
+      600,
+    );
+  }, []);
+
+  // Trocar de veículo pela aba: seleciona + centraliza (mantém o painel aberto).
+  const pickVehicle = useCallback(
+    (v: Vehicle) => {
+      setSelected(v.id);
+      centerOn(v);
     },
-    [sheetH],
+    [centerOn],
+  );
+
+  // Botão "Centralizar" do card: foca e minimiza o painel pra ver o mapa.
+  const focusVehicle = useCallback(
+    (v: Vehicle) => {
+      setSelected(v.id);
+      centerOn(v);
+      snapTo(SHEET_MIN);
+    },
+    [centerOn, snapTo],
   );
 
   const withPos = vehicles.filter((v) => v.position);
@@ -145,6 +159,10 @@ export default function MapScreen() {
         longitudeDelta: 0.05,
       }
     : undefined;
+
+  // Veículo em foco: o selecionado, ou o primeiro por padrão.
+  const currentId = selected ?? vehicles[0]?.id ?? null;
+  const current = vehicles.find((v) => v.id === currentId) ?? null;
 
   return (
     <View style={styles.root}>
@@ -158,7 +176,7 @@ export default function MapScreen() {
       >
         <SatelliteTiles />
         {withPos.map((v) => (
-          <VehicleMarker key={v.id} vehicle={v} onPress={() => setSelected(v.id)} />
+          <VehicleMarker key={v.id} vehicle={v} onPress={() => pickVehicle(v)} />
         ))}
       </MapView>
 
@@ -167,53 +185,76 @@ export default function MapScreen() {
           <View style={styles.helloRow}>
             <Text style={styles.hello}>Olá{name ? `, ${name.split(' ')[0]}` : ''}</Text>
             <View style={styles.liveTag}>
-              <View
-                style={[styles.liveDot, { backgroundColor: connected ? colors.green : colors.textFaint }]}
-              />
+              <View style={[styles.liveDot, { backgroundColor: connected ? colors.green : colors.textFaint }]} />
               <Text style={styles.liveText}>{connected ? 'AO VIVO' : '···'}</Text>
             </View>
           </View>
           <Text style={styles.helloSub}>
-            {withPos.length} de {vehicles.length}{' '}
-            {vehicles.length === 1 ? 'veículo' : 'veículos'} no mapa
+            {withPos.length} de {vehicles.length} {vehicles.length === 1 ? 'veículo' : 'veículos'} no mapa
           </Text>
         </View>
       </SafeAreaView>
 
       <Animated.View style={[styles.sheet, { height: sheetH }]}>
-        {/* Zona de arraste: a barrinha e a área ao redor puxam o painel. */}
         <View style={styles.grabZone} {...panResponder.panHandlers}>
           <View style={styles.handle} />
         </View>
+
+        {/* Abas de placa — só aparecem com mais de um veículo */}
+        {vehicles.length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.tabs}
+            contentContainerStyle={styles.tabsContent}
+          >
+            {vehicles.map((v) => {
+              const active = v.id === currentId;
+              return (
+                <TouchableOpacity
+                  key={v.id}
+                  style={[styles.tab, active && styles.tabActive]}
+                  onPress={() => pickVehicle(v)}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.tabDot, { backgroundColor: dotColor(v) }]} />
+                  <Ionicons
+                    name={v.vehicleType === 'MOTORCYCLE' ? 'bicycle' : 'car'}
+                    size={14}
+                    color={active ? colors.white : colors.navy}
+                  />
+                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{v.plate}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
 
         {loading ? (
           <ActivityIndicator color={colors.navy} style={{ paddingVertical: 24 }} />
         ) : vehicles.length === 0 ? (
           <Text style={styles.empty}>Nenhum veículo vinculado à sua conta ainda.</Text>
-        ) : (
+        ) : current ? (
           <ScrollView
             style={styles.list}
             contentContainerStyle={{ paddingBottom: 16 }}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           >
-            {vehicles.map((v) => (
-              <VehicleCard
-                key={v.id}
-                vehicle={v}
-                selected={selected === v.id}
-                ownerName={name}
-                onFocus={() => focusVehicle(v)}
-                onHistory={() =>
-                  router.push({
-                    pathname: '/vehicle/[id]',
-                    params: { id: v.id, plate: v.plate, type: v.vehicleType },
-                  })
-                }
-              />
-            ))}
+            <VehicleCard
+              vehicle={current}
+              selected
+              ownerName={name}
+              onFocus={() => focusVehicle(current)}
+              onHistory={() =>
+                router.push({
+                  pathname: '/vehicle/[id]',
+                  params: { id: current.id, plate: current.plate, type: current.vehicleType },
+                })
+              }
+            />
           </ScrollView>
-        )}
+        ) : null}
       </Animated.View>
     </View>
   );
@@ -261,8 +302,25 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 },
   },
-  grabZone: { alignItems: 'center', paddingTop: 8, paddingBottom: 10 },
+  grabZone: { alignItems: 'center', paddingTop: 8, paddingBottom: 8 },
   handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border },
+  tabs: { flexGrow: 0, marginBottom: 10 },
+  tabsContent: { gap: 8, paddingRight: 8 },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.pill,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  tabActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  tabDot: { width: 8, height: 8, borderRadius: 4 },
+  tabText: { fontSize: 13, fontWeight: '800', color: colors.navy, letterSpacing: 0.3 },
+  tabTextActive: { color: colors.white },
   list: { marginBottom: 0 },
   empty: { textAlign: 'center', color: colors.textMuted, paddingVertical: 28, paddingHorizontal: 20 },
 });
