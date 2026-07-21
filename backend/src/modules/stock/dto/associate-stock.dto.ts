@@ -1,5 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 /**
  * Payload do "Associar cliente e ativo": vincula um rastreador do estoque a uma
@@ -19,6 +26,15 @@ export class AssociateStockDto {
   @IsNotEmpty({ message: 'Informe o nome do técnico que instalou.' })
   @MaxLength(120)
   technicianName!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Técnico cadastrado que executou. Preenchido pelo PWA /tecnico; ' +
+      'no painel o campo é livre e este id fica vazio.',
+  })
+  @IsOptional()
+  @IsUUID()
+  technicianId?: string;
 
   @ApiProperty({ description: 'Local onde o rastreador foi instalado' })
   @IsString()

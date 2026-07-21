@@ -10,6 +10,7 @@ import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
+import { AssignStockDto } from './dto/assign-stock.dto';
 import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
 import { TraccarService } from '../traccar/traccar.service';
 
@@ -70,7 +71,7 @@ export class StockService {
   ) {}
 
   async findAll(tenantId: string, filters: FilterStockDto) {
-    const { page, perPage, search, status, operator } = filters;
+    const { page, perPage, search, status, operator, assignment } = filters;
     // associatedAt: null → só rastreadores disponíveis (associados saíram do estoque).
     const where: Record<string, unknown> = {
       tenantId,
@@ -80,6 +81,8 @@ export class StockService {
 
     if (status) where.status = { equals: status, mode: 'insensitive' };
     if (operator) where.operator = { equals: operator, mode: 'insensitive' };
+    if (assignment === 'free') where.assignedTechnicianId = null;
+    if (assignment === 'assigned') where.assignedTechnicianId = { not: null };
     if (search) {
       where.OR = [
         { imei: { contains: search, mode: 'insensitive' } },
@@ -95,6 +98,9 @@ export class StockService {
         skip: (page - 1) * perPage,
         take: perPage,
         orderBy: { createdAt: 'desc' },
+        include: {
+          assignedTechnician: { select: { id: true, name: true } },
+        },
       }),
       this.prisma.stockItem.count({ where }),
     ]);
@@ -253,6 +259,7 @@ export class StockService {
               status: 'INSTALLED',
               installedAt: new Date(),
               installedBy: technicianName,
+              installedByTechnicianId: dto.technicianId ?? null,
               installLocation,
             },
           })
@@ -265,14 +272,20 @@ export class StockService {
               tenantId,
               installedAt: new Date(),
               installedBy: technicianName,
+              installedByTechnicianId: dto.technicianId ?? null,
               installLocation,
             },
           });
 
-      // 4) Item sai do estoque disponível.
+      // 4) Item sai do estoque disponível e da lista do técnico.
       await tx.stockItem.update({
         where: { id: item.id },
-        data: { associatedAt: new Date(), deviceId: device.id },
+        data: {
+          associatedAt: new Date(),
+          deviceId: device.id,
+          assignedTechnicianId: null,
+          assignedAt: null,
+        },
       });
 
       return { associate, vehicle, device };
@@ -314,6 +327,102 @@ export class StockService {
       vehicleId: result.vehicle.id,
       deviceId: result.device.id,
       placa,
+    };
+  }
+
+  /**
+   * Reserva equipamentos pro login do técnico, em lote. Um item já reservado por
+   * outro técnico não aborta o lote — volta em `skipped` com o motivo, pra tela
+   * mostrar exatamente o que não foi.
+   */
+  async assign(tenantId: string, dto: AssignStockDto, userId: string) {
+    const { stockItemIds, technicianId } = dto;
+    if (!technicianId) {
+      throw new BadRequestException('Informe o técnico que vai receber.');
+    }
+
+    const technician = await this.prisma.technician.findFirst({
+      where: { id: technicianId, tenantId, deletedAt: null },
+      select: { id: true, name: true, active: true, canReceiveEquipment: true },
+    });
+    if (!technician) throw new NotFoundException('Técnico não encontrado');
+    if (!technician.active) {
+      throw new UnprocessableEntityException(`${technician.name} está inativo.`);
+    }
+    if (!technician.canReceiveEquipment) {
+      throw new UnprocessableEntityException(
+        `${technician.name} não está habilitado a receber equipamentos.`,
+      );
+    }
+
+    const items = await this.prisma.stockItem.findMany({
+      where: { id: { in: stockItemIds }, tenantId, deletedAt: null },
+      select: {
+        id: true,
+        imei: true,
+        associatedAt: true,
+        assignedTechnicianId: true,
+        assignedTechnician: { select: { name: true } },
+      },
+    });
+
+    const skipped: Array<{ imei: string; motivo: string }> = [];
+    const okIds: string[] = [];
+
+    for (const item of items) {
+      if (item.associatedAt) {
+        skipped.push({ imei: item.imei, motivo: 'já instalado' });
+      } else if (
+        item.assignedTechnicianId &&
+        item.assignedTechnicianId !== technicianId
+      ) {
+        skipped.push({
+          imei: item.imei,
+          motivo: `já está com ${item.assignedTechnician?.name ?? 'outro técnico'}`,
+        });
+      } else {
+        okIds.push(item.id);
+      }
+    }
+
+    const encontrados = new Set(items.map((i) => i.id));
+    for (const id of stockItemIds) {
+      if (!encontrados.has(id)) {
+        skipped.push({ imei: id, motivo: 'não encontrado no estoque' });
+      }
+    }
+
+    if (okIds.length > 0) {
+      await this.prisma.stockItem.updateMany({
+        where: { id: { in: okIds }, tenantId },
+        data: {
+          assignedTechnicianId: technicianId,
+          assignedAt: new Date(),
+          assignedById: userId,
+        },
+      });
+    }
+
+    this.logger.log(
+      `Reserva: ${okIds.length} equipamento(s) pro técnico ${technician.name} (${skipped.length} ignorados)`,
+    );
+    return { ok: okIds.length, skipped };
+  }
+
+  /** Devolve equipamentos ao estoque livre (cancela a reserva). */
+  async unassign(tenantId: string, stockItemIds: string[]) {
+    const result = await this.prisma.stockItem.updateMany({
+      where: {
+        id: { in: stockItemIds },
+        tenantId,
+        deletedAt: null,
+        associatedAt: null,
+      },
+      data: { assignedTechnicianId: null, assignedAt: null, assignedById: null },
+    });
+    return {
+      ok: result.count,
+      skipped: [] as Array<{ imei: string; motivo: string }>,
     };
   }
 

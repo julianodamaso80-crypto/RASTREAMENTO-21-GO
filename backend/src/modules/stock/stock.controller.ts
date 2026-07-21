@@ -25,9 +25,11 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { StockService } from './stock.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
+import { AssignStockDto } from './dto/assign-stock.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
+  user: { id: string };
 }
 
 @ApiTags('Estoque')
@@ -77,6 +79,24 @@ export class StockController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.stockService.associate(id, req.tenantId, dto);
+  }
+
+  @Post('assign')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary: 'Reserva equipamentos pro login do técnico (lote)',
+  })
+  assign(@Body() dto: AssignStockDto, @Req() req: AuthenticatedRequest) {
+    return this.stockService.assign(req.tenantId, dto, req.user.id);
+  }
+
+  @Post('unassign')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Cancela a reserva e devolve ao estoque livre' })
+  unassign(@Body() dto: AssignStockDto, @Req() req: AuthenticatedRequest) {
+    return this.stockService.unassign(req.tenantId, dto.stockItemIds);
   }
 
   @Delete(':id')
