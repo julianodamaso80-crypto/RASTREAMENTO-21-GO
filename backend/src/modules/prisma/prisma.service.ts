@@ -15,6 +15,7 @@ const SOFT_DELETE_MODELS = new Set([
   'Chip',
   'StockItem',
   'MaintenancePlan',
+  'Technician',
 ]);
 
 const READ_OPERATIONS = new Set([
@@ -65,6 +66,7 @@ function createExtendedClient(base: PrismaClient) {
       chip: softDeleteModel,
       stockItem: softDeleteModel,
       maintenancePlan: softDeleteModel,
+      technician: softDeleteModel,
     },
     query: {
       $allModels: {
@@ -145,6 +147,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   }
   get maintenancePlan() {
     return this.ext.maintenancePlan;
+  }
+  get technician() {
+    return this.ext.technician;
   }
 
   // Models sem soft delete — usam cliente base (tabela de junção / log de comandos / audit)

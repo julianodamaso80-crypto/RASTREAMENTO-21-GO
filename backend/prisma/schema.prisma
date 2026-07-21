@@ -213,6 +213,7 @@ model Tenant {
   chips        Chip[]
   bleSightings BleSighting[]
   stockItems   StockItem[]
+  technicians  Technician[]
   settings     TenantSettings?
 
   @@map("tenants")
@@ -413,6 +414,34 @@ model Associate {
   @@map("associates")
 }
 
+/// Técnico instalador. Auth própria por CPF + senha (JWT type: 'technician'),
+/// isolada do User do painel e do Associate do app — técnico nunca acessa o painel.
+model Technician {
+  id                  String    @id @default(uuid()) @db.Uuid
+  name                String
+  cpf                 String
+  phone               String?
+  email               String?
+  canReceiveEquipment Boolean   @default(true) @map("can_receive_equipment")
+  active              Boolean   @default(true)
+  // Nullable: técnico só loga depois que a senha provisória é gerada.
+  password            String?
+  mustChangePassword  Boolean   @default(true) @map("must_change_password")
+  lastLoginAt         DateTime? @map("last_login_at")
+  tenantId            String    @map("tenant_id") @db.Uuid
+  deletedAt           DateTime? @map("deleted_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  stockItems StockItem[]
+  devices    Device[]
+
+  @@unique([tenantId, cpf])
+  @@index([tenantId, deletedAt])
+  @@map("technicians")
+}
+
 model Alert {
   id           String        @id @default(uuid()) @db.Uuid
   type         AlertType
@@ -510,6 +539,10 @@ model Device {
   tenant          Tenant       @relation(fields: [tenantId], references: [id])
   installedAt     DateTime?    @map("installed_at")
   installedBy     String?      @map("installed_by")
+  // Técnico que executou a instalação. `installedBy` (texto) fica pro histórico
+  // anterior ao cadastro de técnicos; este campo é o que sustenta a contagem.
+  installedByTechnicianId String?     @map("installed_by_technician_id") @db.Uuid
+  installedByTechnician   Technician? @relation(fields: [installedByTechnicianId], references: [id])
   installLocation String?      @map("install_location")
   lastConnection  DateTime?    @map("last_connection")
   notes           String?
@@ -631,12 +664,19 @@ model StockItem {
   // estoque disponível (a listagem filtra associatedAt: null) e vira Device.
   associatedAt DateTime? @map("associated_at")
   deviceId     String?   @unique @map("device_id") @db.Uuid
+  // Reserva pro login do técnico. Escalar (não N:N) porque um equipamento nunca
+  // pode estar em dois logins ao mesmo tempo.
+  assignedTechnicianId String?     @map("assigned_technician_id") @db.Uuid
+  assignedTechnician   Technician? @relation(fields: [assignedTechnicianId], references: [id])
+  assignedAt           DateTime?   @map("assigned_at")
+  assignedById         String?     @map("assigned_by_id") @db.Uuid
   deletedAt    DateTime? @map("deleted_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@unique([tenantId, imei])
   @@index([tenantId, status])
+  @@index([tenantId, assignedTechnicianId])
   @@map("stock_items")
 }
 
