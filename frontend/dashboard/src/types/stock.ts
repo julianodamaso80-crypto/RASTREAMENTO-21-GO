@@ -9,8 +9,17 @@ export interface StockItem {
   registeredAt: string | null;
   activatedAt: string | null;
   notes: string | null;
+  /** Técnico com quem o equipamento está reservado (null = livre no estoque). */
+  assignedTechnician: { id: string; name: string } | null;
+  assignedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Resultado da reserva/devolução em lote. `skipped` diz o que não foi e por quê. */
+export interface StockAssignResult {
+  ok: number;
+  skipped: Array<{ imei: string; motivo: string }>;
 }
 
 export interface StockImportResult {

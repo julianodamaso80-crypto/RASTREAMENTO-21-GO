@@ -19,6 +19,7 @@ import {
   Wrench,
   Trophy,
   ArrowRight,
+  HardHat,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,7 @@ const navItems: NavItem[] = [
   { href: '/dispositivos', label: 'Dispositivos', icon: Radio, roles: NON_CLIENT_ROLES },
   { href: '/estoque', label: 'Estoque', icon: Boxes, roles: NON_CLIENT_ROLES },
   { href: '/clientes', label: 'Clientes Ativos', icon: Users, roles: NON_CLIENT_ROLES },
+  { href: '/tecnicos', label: 'Técnicos', icon: HardHat, roles: NON_CLIENT_ROLES },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 

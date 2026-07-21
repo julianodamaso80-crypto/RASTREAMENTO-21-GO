@@ -38,6 +38,7 @@ import {
   DropdownMenuShortcut,
 } from '@/components/ui/dropdown-menu';
 import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog';
+import { AssignTechnicianDialog } from '@/components/stock/assign-technician-dialog';
 import type { StockItem, StockStats } from '@/types/stock';
 
 // Cor do badge por status (case-insensitive, com fallback neutro).
@@ -63,8 +64,12 @@ export default function EstoquePage() {
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [assignmentFilter, setAssignmentFilter] = useState('');
   const [associItem, setAssociItem] = useState<StockItem | null>(null);
   const [associOpen, setAssociOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [assignItems, setAssignItems] = useState<StockItem[]>([]);
+  const [assignOpen, setAssignOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadStock = useCallback(async () => {
@@ -72,14 +77,16 @@ export default function EstoquePage() {
       const params: Record<string, string | number> = { perPage: 100 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
+      if (assignmentFilter) params.assignment = assignmentFilter;
       const res = await stockApi.getAll(params);
       setItems(res.data);
+      setSelected(new Set()); // recarregou a lista, seleção antiga não vale mais
     } catch {
       toast.error('Erro ao carregar estoque');
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter]);
+  }, [search, statusFilter, assignmentFilter]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -129,6 +136,44 @@ export default function EstoquePage() {
   const openAssociate = (item: StockItem) => {
     setAssociItem(item);
     setAssociOpen(true);
+  };
+
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    setSelected((prev) =>
+      prev.size === items.length ? new Set() : new Set(items.map((i) => i.id)),
+    );
+  };
+
+  const selectedItems = items.filter((i) => selected.has(i.id));
+
+  const openAssign = (list: StockItem[]) => {
+    setAssignItems(list);
+    setAssignOpen(true);
+  };
+
+  const handleUnassign = async () => {
+    const comTecnico = selectedItems.filter((i) => i.assignedTechnician);
+    if (comTecnico.length === 0) {
+      toast.info('Nenhum dos selecionados está com técnico.');
+      return;
+    }
+    if (!confirm(`Cancelar a reserva de ${comTecnico.length} equipamento(s)?`)) return;
+    try {
+      const res = await stockApi.unassign(comTecnico.map((i) => i.id));
+      toast.success(`${res.ok} equipamento(s) devolvido(s) ao estoque livre`);
+      await loadStock();
+    } catch {
+      toast.error('Erro ao cancelar a reserva');
+    }
   };
 
   const handleDelete = async (item: StockItem) => {
@@ -223,6 +268,16 @@ export default function EstoquePage() {
             ))}
           </SelectNative>
         </div>
+        <div className="sm:w-44">
+          <SelectNative
+            value={assignmentFilter}
+            onChange={(e) => setAssignmentFilter(e.target.value)}
+          >
+            <option value="">Todos</option>
+            <option value="free">Livres</option>
+            <option value="assigned">Com técnico</option>
+          </SelectNative>
+        </div>
       </div>
 
       {/* Tabela */}
@@ -248,12 +303,24 @@ export default function EstoquePage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                {canManage && (
+                  <th className="px-3 py-2 w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar todos"
+                      className="h-4 w-4 cursor-pointer accent-brand-orange-500"
+                      checked={items.length > 0 && selected.size === items.length}
+                      onChange={toggleAll}
+                    />
+                  </th>
+                )}
                 <th className="px-3 py-2 font-medium">IMEI</th>
                 <th className="px-3 py-2 font-medium">ICCID</th>
                 <th className="px-3 py-2 font-medium">Linha</th>
                 <th className="px-3 py-2 font-medium">Operadora</th>
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">Server</th>
+                <th className="px-3 py-2 font-medium">Técnico</th>
                 <th className="px-3 py-2 font-medium">Ativação</th>
                 {canManage && <th className="px-3 py-2 text-right font-medium">Ações</th>}
               </tr>
@@ -262,8 +329,22 @@ export default function EstoquePage() {
               {items.map((item) => (
                 <tr
                   key={item.id}
-                  className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+                  className={cn(
+                    'border-b last:border-0 hover:bg-muted/30 transition-colors',
+                    selected.has(item.id) && 'bg-brand-orange-500/5',
+                  )}
                 >
+                  {canManage && (
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        aria-label={`Selecionar ${item.imei}`}
+                        className="h-4 w-4 cursor-pointer accent-brand-orange-500"
+                        checked={selected.has(item.id)}
+                        onChange={() => toggleOne(item.id)}
+                      />
+                    </td>
+                  )}
                   <td className="px-3 py-2 font-mono text-xs">{item.imei}</td>
                   <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                     {item.iccid ?? '—'}
@@ -286,6 +367,16 @@ export default function EstoquePage() {
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {item.server ?? '—'}
                   </td>
+                  <td className="px-3 py-2">
+                    {item.assignedTechnician ? (
+                      <Badge className="text-xs border bg-amber-500/15 text-amber-400 border-amber-500/30">
+                        <HardHat className="h-3 w-3 mr-1" />
+                        {item.assignedTechnician.name.split(' ')[0]}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {item.activatedAt ? formatDateOnlyBR(item.activatedAt) : '—'}
                   </td>
@@ -305,6 +396,7 @@ export default function EstoquePage() {
                           item={item}
                           canDelete={canDelete}
                           onAssociate={() => openAssociate(item)}
+                          onAssign={() => openAssign([item])}
                           onDelete={() => handleDelete(item)}
                           onSoon={soon}
                         />
@@ -324,6 +416,35 @@ export default function EstoquePage() {
         </p>
       )}
 
+      {/* Barra de ações em lote — só aparece com algo selecionado */}
+      {canManage && selected.size > 0 && (
+        <div className="sticky bottom-0 z-10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 rounded-lg border bg-card px-4 py-3 shadow-lg">
+          <span className="text-sm font-medium">
+            {selected.size} equipamento(s) selecionado(s)
+          </span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              Limpar
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleUnassign}>
+              <Ban className="h-4 w-4 mr-1" />
+              Cancelar reserva
+            </Button>
+            <Button size="sm" onClick={() => openAssign(selectedItems)}>
+              <HardHat className="h-4 w-4 mr-1" />
+              Enviar pro técnico
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <AssignTechnicianDialog
+        items={assignItems}
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+        onAssigned={() => Promise.all([loadStock(), loadStats()])}
+      />
+
       <AssociateStockDialog
         item={associItem}
         open={associOpen}
@@ -341,12 +462,14 @@ function StockRowMenu({
   item,
   canDelete,
   onAssociate,
+  onAssign,
   onDelete,
   onSoon,
 }: {
   item: StockItem;
   canDelete: boolean;
   onAssociate: () => void;
+  onAssign: () => void;
   onDelete: () => void;
   onSoon: () => void;
 }) {
@@ -375,8 +498,9 @@ function StockRowMenu({
         <DropdownMenuItem onClick={onAssociate}>
           <UserCheck className="h-4 w-4" /> Associar um cliente e ativo
         </DropdownMenuItem>
-        <DropdownMenuItem disabled onClick={onSoon}>
-          <HardHat className="h-4 w-4" /> Disponibilizar no login do técnico <Soon />
+        <DropdownMenuItem onClick={onAssign}>
+          <HardHat className="h-4 w-4" />
+          {item.assignedTechnician ? 'Trocar o técnico' : 'Disponibilizar no login do técnico'}
         </DropdownMenuItem>
         <DropdownMenuItem disabled onClick={onSoon}>
           <ListPlus className="h-4 w-4" /> Adicionar à lista de pendência <Soon />

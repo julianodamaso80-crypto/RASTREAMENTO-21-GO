@@ -15,8 +15,16 @@ import type {
   StockImportResult,
   HinovaLookup,
   StockAssociateResult,
+  StockAssignResult,
   ActiveClient,
 } from '@/types/stock';
+import type {
+  Technician,
+  TechnicianAssignment,
+  TechnicianWithPassword,
+  CreateTechnicianPayload,
+  UpdateTechnicianPayload,
+} from '@/types/technician';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
@@ -520,6 +528,53 @@ export const stockApi = {
     const res = await api.post<ApiResponse<StockAssociateResult>>(
       `/stock/${id}/associate`,
       payload,
+    );
+    return res.data.data;
+  },
+  // Reserva em lote pro login do técnico. Marcar 1 checkbox é um lote de 1.
+  assign: async (stockItemIds: string[], technicianId: string): Promise<StockAssignResult> => {
+    const res = await api.post<ApiResponse<StockAssignResult>>('/stock/assign', {
+      stockItemIds,
+      technicianId,
+    });
+    return res.data.data;
+  },
+  unassign: async (stockItemIds: string[]): Promise<StockAssignResult> => {
+    const res = await api.post<ApiResponse<StockAssignResult>>('/stock/unassign', {
+      stockItemIds,
+    });
+    return res.data.data;
+  },
+};
+
+export const techniciansApi = {
+  getAll: async (search?: string): Promise<Technician[]> => {
+    const res = await api.get<ApiResponse<Technician[]>>('/technicians', {
+      params: search ? { search } : undefined,
+    });
+    return res.data.data;
+  },
+  create: async (payload: CreateTechnicianPayload): Promise<TechnicianWithPassword> => {
+    const res = await api.post<ApiResponse<TechnicianWithPassword>>('/technicians', payload);
+    return res.data.data;
+  },
+  update: async (id: string, payload: UpdateTechnicianPayload): Promise<Technician> => {
+    const res = await api.patch<ApiResponse<Technician>>(`/technicians/${id}`, payload);
+    return res.data.data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await api.delete(`/technicians/${id}`);
+  },
+  resetPassword: async (id: string): Promise<TechnicianWithPassword> => {
+    const res = await api.post<ApiResponse<TechnicianWithPassword>>(
+      `/technicians/${id}/reset-password`,
+      {},
+    );
+    return res.data.data;
+  },
+  assignments: async (id: string): Promise<TechnicianAssignment[]> => {
+    const res = await api.get<ApiResponse<TechnicianAssignment[]>>(
+      `/technicians/${id}/assignments`,
     );
     return res.data.data;
   },
