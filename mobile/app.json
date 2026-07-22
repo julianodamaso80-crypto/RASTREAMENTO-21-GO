@@ -19,6 +19,14 @@
     },
     "android": {
       "package": "com.r21go.client",
+      "versionCode": 1,
+      "blockedPermissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#293c82",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
