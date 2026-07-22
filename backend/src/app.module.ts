@@ -62,6 +62,21 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
         level:
           process.env.LOG_LEVEL ||
           (process.env.NODE_ENV === 'production' ? 'warn' : 'debug'),
+        // Sem isto o pino-http grava os headers inteiros em qualquer log de
+        // request — e o Authorization vinha em texto claro, expondo o JWT de
+        // sessão de quem estava logado pra quem tivesse `docker logs`.
+        // Um token desses vale acesso completo ao tenant até expirar.
+        redact: {
+          paths: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'res.headers["set-cookie"]',
+            'req.body.password',
+            'req.body.senha',
+            'req.body.token',
+          ],
+          censor: '[redacted]',
+        },
       },
     }),
     // 100 req/min por tenant (operador) ou IP (rotas públicas).
