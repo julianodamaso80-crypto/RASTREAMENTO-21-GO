@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { IHinovaClient, HinovaLookupResult } from './hinova.interface';
+import type {
+  IHinovaClient,
+  HinovaLookupResult,
+  HinovaRawVehicle,
+  HinovaRawAssociate,
+} from './hinova.interface';
 import type {
   HinovaVehicleDto,
   HinovaListResponse,
@@ -277,5 +282,56 @@ export class HinovaMockService implements IHinovaClient {
     await this.simulateLatency();
     this.simulateError();
     return this.vehicles.filter((v) => v.associado.cpf === cpf);
+  }
+
+  /**
+   * Espelha o formato cru do SGA a partir dos veículos mock. Um a cada três
+   * ganha pendência (1 = rastreador, 10 = TAG) com contrato escalonado nos
+   * últimos 90 dias, pra tela de pendências ter o que mostrar em dev.
+   */
+  async listRawActiveVehicles(
+    offset: number,
+    limit: number,
+  ): Promise<HinovaRawVehicle[]> {
+    await this.simulateLatency();
+    const hoje = Date.now();
+
+    return this.vehicles.slice(offset, offset + limit).map((v, i) => {
+      const indice = offset + i;
+      const tipoAdesao = indice % 3 === 0 ? '1' : indice % 3 === 1 ? '10' : '2';
+      const diasAtras = (indice * 7) % 90;
+      return {
+        codigo_veiculo: v.codigoVeiculo,
+        codigo_associado: v.associado.codigoAssociado,
+        placa: v.placa,
+        marca: v.marca,
+        modelo: v.modelo,
+        tipo: 'VEICULOS LEVES',
+        codigo_tipo_adesao: tipoAdesao,
+        valor_fipe_protegido: String(20000 + indice * 137),
+        data_contrato: new Date(hoje - diasAtras * 86400000).toISOString(),
+        codigo_tabela_avaliacao: '0',
+        nome_associado: v.associado.nome,
+        cpf_associado: v.associado.cpf,
+        email: v.associado.email ?? undefined,
+        telefone_celular: v.associado.telefone ?? undefined,
+        nome_voluntario: 'CONSULTOR MOCK',
+      } satisfies HinovaRawVehicle;
+    });
+  }
+
+  async listRawActiveAssociates(
+    offset: number,
+    limit: number,
+  ): Promise<HinovaRawAssociate[]> {
+    await this.simulateLatency();
+    const cidades = ['RIO DE JANEIRO', 'NITERÓI', 'DUQUE DE CAXIAS'];
+    const bairros = ['CENTRO', 'CAMPO GRANDE', 'BANGU', 'MADUREIRA'];
+
+    return this.vehicles.slice(offset, offset + limit).map((v, i) => ({
+      codigo_associado: v.associado.codigoAssociado,
+      cidade: cidades[(offset + i) % cidades.length],
+      bairro: bairros[(offset + i) % bairros.length],
+    }));
   }
 }

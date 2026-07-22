@@ -19,6 +19,7 @@ import { BleTagsModule } from './modules/ble-tags/ble-tags.module';
 import { ChipsModule } from './modules/chips/chips.module';
 import { StockModule } from './modules/stock/stock.module';
 import { TechniciansModule } from './modules/technicians/technicians.module';
+import { InstallationPendingsModule } from './modules/installation-pendings/installation-pendings.module';
 import { TechModule } from './modules/tech/tech.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { SmsCommandsModule } from './modules/sms-commands/sms-commands.module';
@@ -83,6 +84,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     TechniciansModule,
     TechModule,
     ClientsModule,
+    InstallationPendingsModule,
     SmsCommandsModule,
     ServerInfoModule,
     HealthModule,

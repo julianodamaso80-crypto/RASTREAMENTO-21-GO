@@ -216,7 +216,52 @@ model Tenant {
   technicians  Technician[]
   settings     TenantSettings?
 
+  installationPendings InstallationPending[]
+
   @@map("tenants")
+}
+
+/// Pendencia de instalacao espelhada do SGA Hinova.
+///
+/// A pendencia vive no campo `codigo_tipo_adesao` do veiculo no SGA
+/// (GET /tipo-adesao/listar/todos): 1 = PENDENTE INSTALACAO DE RASTREADOR,
+/// 10 = PENDENTE INSTALACAO DE TAG. O campo chega em POST /listar/veiculo mas
+/// NAO esta na doc oficial - foi confirmado inspecionando a resposta real.
+///
+/// Esta tabela e um espelho descartavel: cada sync apaga e reescreve as linhas
+/// do tenant. Nao substitui Vehicle/Associate - varrer o SGA inteiro pra dentro
+/// de Vehicle criaria 22 mil veiculos fantasma (por isso HINOVA_SYNC_ENABLED
+/// segue false).
+model InstallationPending {
+  id                String   @id @default(uuid()) @db.Uuid
+  hinovaVehicleCode String   @map("hinova_vehicle_code")
+  plate             String
+  /// TRACKER (tipo_adesao 1) ou TAG (tipo_adesao 10).
+  pendingType       String   @map("pending_type")
+  associateName     String   @map("associate_name")
+  associateCode     String   @map("associate_code")
+  cpf               String?
+  phone             String?
+  email             String?
+  brandModel        String   @map("brand_model")
+  vehicleType       String?  @map("vehicle_type")
+  city              String?
+  neighborhood      String?
+  protectedValue    Decimal  @default(0) @map("protected_value") @db.Decimal(12, 2)
+  contractDate      DateTime @map("contract_date") @db.Date
+  evaluationTable   String?  @map("evaluation_table")
+  consultantName    String?  @map("consultant_name")
+
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  syncedAt  DateTime @default(now()) @map("synced_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, hinovaVehicleCode])
+  @@index([tenantId, contractDate])
+  @@index([tenantId, pendingType])
+  @@map("installation_pendings")
 }
 
 model TenantSettings {

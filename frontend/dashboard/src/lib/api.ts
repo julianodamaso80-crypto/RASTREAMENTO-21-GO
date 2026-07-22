@@ -25,6 +25,12 @@ import type {
   CreateTechnicianPayload,
   UpdateTechnicianPayload,
 } from '@/types/technician';
+import type {
+  InstallationPending,
+  InstallationPendingStats,
+  InstallationPendingSyncResult,
+  InstallationPendingFilters,
+} from '@/types/installation-pending';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
@@ -595,6 +601,54 @@ export const clientsApi = {
       params: search ? { search } : undefined,
     });
     return res.data.data;
+  },
+};
+
+function pendingParams(f: InstallationPendingFilters) {
+  return {
+    days: f.days,
+    ...(f.type ? { type: f.type } : {}),
+    ...(f.city ? { city: f.city } : {}),
+    ...(f.search ? { search: f.search } : {}),
+  };
+}
+
+export const installationPendingsApi = {
+  getAll: async (f: InstallationPendingFilters): Promise<InstallationPending[]> => {
+    const res = await api.get<ApiResponse<InstallationPending[]>>(
+      '/installation-pendings',
+      { params: pendingParams(f) },
+    );
+    return res.data.data;
+  },
+  getStats: async (days: number): Promise<InstallationPendingStats> => {
+    const res = await api.get<ApiResponse<InstallationPendingStats>>(
+      '/installation-pendings/stats',
+      { params: { days } },
+    );
+    return res.data.data;
+  },
+  getCities: async (): Promise<string[]> => {
+    const res = await api.get<ApiResponse<string[]>>(
+      '/installation-pendings/cities',
+    );
+    return res.data.data;
+  },
+  // A varredura do SGA leva minutos — o timeout padrão do axios derrubaria antes.
+  sync: async (): Promise<InstallationPendingSyncResult> => {
+    const res = await api.post<ApiResponse<InstallationPendingSyncResult>>(
+      '/installation-pendings/sync',
+      {},
+      { timeout: 15 * 60 * 1000 },
+    );
+    return res.data.data;
+  },
+  exportXlsx: async (f: InstallationPendingFilters): Promise<Blob> => {
+    const res = await api.get('/installation-pendings/export', {
+      params: pendingParams(f),
+      responseType: 'blob',
+    });
+    return res.data as Blob;
   },
 };
 

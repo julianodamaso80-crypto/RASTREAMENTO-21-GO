@@ -2,7 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { type AxiosInstance } from 'axios';
 import * as https from 'https';
-import type { IHinovaClient, HinovaLookupResult } from './hinova.interface';
+import type {
+  IHinovaClient,
+  HinovaLookupResult,
+  HinovaRawVehicle,
+  HinovaRawAssociate,
+} from './hinova.interface';
 import type {
   HinovaVehicleDto,
   HinovaListResponse,
@@ -280,5 +285,38 @@ export class HinovaService implements IHinovaClient {
   async searchByCpf(_cpf: string): Promise<HinovaVehicleDto[]> {
     // Não usado na Fase 1; a busca por CPF direta tem barreira de cooperativa.
     return [];
+  }
+
+  /** Situação 1 = ATIVO, tanto para veículo quanto para associado no SGA. */
+  private static readonly SITUACAO_ATIVA = 1;
+
+  async listRawActiveVehicles(
+    offset: number,
+    limit: number,
+  ): Promise<HinovaRawVehicle[]> {
+    const data = await this.post<{ veiculos?: HinovaRawVehicle[] }>(
+      '/listar/veiculo',
+      {
+        codigo_situacao: HinovaService.SITUACAO_ATIVA,
+        inicio_paginacao: offset,
+        quantidade_por_pagina: limit,
+      },
+    );
+    return data.veiculos ?? [];
+  }
+
+  async listRawActiveAssociates(
+    offset: number,
+    limit: number,
+  ): Promise<HinovaRawAssociate[]> {
+    const data = await this.post<{ associados?: HinovaRawAssociate[] }>(
+      '/listar/associado/',
+      {
+        codigo_situacao: HinovaService.SITUACAO_ATIVA,
+        inicio_paginacao: offset,
+        quantidade_por_pagina: limit,
+      },
+    );
+    return data.associados ?? [];
   }
 }

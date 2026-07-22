@@ -36,6 +36,46 @@ export interface HinovaLookupResult {
   };
 }
 
+/**
+ * Linha crua de veículo do POST /listar/veiculo.
+ *
+ * A doc oficial do SGA documenta 26 campos no retorno; a API devolve 63.
+ * `codigo_tipo_adesao` — que é onde vive a pendência de instalação — está entre
+ * os NÃO documentados, confirmado inspecionando a resposta real em 2026-07-22.
+ * Tipado só o que consumimos; o resto passa como index signature.
+ */
+export interface HinovaRawVehicle {
+  codigo_veiculo?: string;
+  codigo_associado?: string;
+  placa?: string;
+  marca?: string;
+  modelo?: string;
+  tipo?: string;
+  /** 1 = PENDENTE INSTALAÇÃO DE RASTREADOR · 10 = PENDENTE INSTALAÇÃO DE TAG. */
+  codigo_tipo_adesao?: string;
+  valor_fipe_protegido?: string;
+  valor_fipe?: number;
+  data_contrato?: string;
+  codigo_tabela_avaliacao?: string;
+  nome_associado?: string;
+  cpf_associado?: string;
+  email?: string;
+  ddd?: string;
+  telefone?: string;
+  ddd_celular?: string;
+  telefone_celular?: string;
+  nome_voluntario?: string;
+  [key: string]: unknown;
+}
+
+/** Linha crua de associado do POST /listar/associado/ (traz cidade e bairro). */
+export interface HinovaRawAssociate {
+  codigo_associado?: string;
+  cidade?: string;
+  bairro?: string;
+  [key: string]: unknown;
+}
+
 export interface IHinovaClient {
   authenticate(): Promise<void>;
   /** Consulta uma placa ao vivo no SGA (usada pelo fluxo Associar cliente e ativo). */
@@ -43,4 +83,11 @@ export interface IHinovaClient {
   listVehicles(page: number, perPage: number): Promise<HinovaListResponse>;
   searchByPlate(plate: string): Promise<HinovaVehicleDto | null>;
   searchByCpf(cpf: string): Promise<HinovaVehicleDto[]>;
+  /**
+   * Página crua de veículos ATIVOS, sem mapeamento — o sync de pendências
+   * precisa de campos que o HinovaVehicleDto não carrega.
+   */
+  listRawActiveVehicles(offset: number, limit: number): Promise<HinovaRawVehicle[]>;
+  /** Página crua de associados ATIVOS (fonte de cidade/bairro). */
+  listRawActiveAssociates(offset: number, limit: number): Promise<HinovaRawAssociate[]>;
 }

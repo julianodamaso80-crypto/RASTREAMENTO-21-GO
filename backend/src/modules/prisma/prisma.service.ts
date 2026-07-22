@@ -186,6 +186,11 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get assistantMessage() {
     return this.base.assistantMessage;
   }
+  // Espelho descartável do SGA: cada sync apaga e reescreve. Sem soft delete —
+  // linha que saiu da pendência no SGA não deve sobreviver aqui.
+  get installationPending() {
+    return this.base.installationPending;
+  }
 
   // Raw queries — sempre pelo base (extension não afeta raw)
   $queryRaw<T = unknown>(
