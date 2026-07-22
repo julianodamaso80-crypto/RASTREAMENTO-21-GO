@@ -47,7 +47,9 @@ export interface HinovaLookupResult {
 export interface HinovaRawVehicle {
   codigo_veiculo?: string;
   codigo_associado?: string;
+  /** Vem vazia em veículo ainda sem emplacamento. */
   placa?: string;
+  chassi?: string;
   marca?: string;
   modelo?: string;
   tipo?: string;

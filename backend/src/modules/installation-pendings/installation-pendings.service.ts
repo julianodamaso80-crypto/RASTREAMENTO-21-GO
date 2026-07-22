@@ -37,7 +37,9 @@ export class InstallationPendingsService {
   private static readonly MAX_PAGINAS = 50;
 
   private syncing = false;
+  private syncStartedAt: Date | null = null;
   private lastSync: SyncOutcome | null = null;
+  private lastError: string | null = null;
 
   constructor(
     @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
@@ -68,6 +70,7 @@ export class InstallationPendingsService {
     return rows.map((r) => ({
       id: r.id,
       plate: r.plate,
+      chassi: r.chassi,
       pendingType: r.pendingType as 'TRACKER' | 'TAG',
       associateName: r.associateName,
       cpf: r.cpf,
@@ -118,8 +121,53 @@ export class InstallationPendingsService {
     return rows.map((r) => r.city!).filter(Boolean);
   }
 
-  getSyncStatus(): { syncing: boolean; last: SyncOutcome | null } {
-    return { syncing: this.syncing, last: this.lastSync };
+  getSyncStatus(): {
+    syncing: boolean;
+    startedAt: string | null;
+    elapsedSeconds: number | null;
+    last: SyncOutcome | null;
+    lastError: string | null;
+  } {
+    return {
+      syncing: this.syncing,
+      startedAt: this.syncStartedAt?.toISOString() ?? null,
+      elapsedSeconds: this.syncStartedAt
+        ? Math.round((Date.now() - this.syncStartedAt.getTime()) / 1000)
+        : null,
+      last: this.lastSync,
+      lastError: this.lastError,
+    };
+  }
+
+  /**
+   * Tira a placa da fila no instante em que o rastreador é instalado, sem
+   * esperar o próximo sync. Chamado pelo vínculo do estoque (painel e técnico).
+   *
+   * Best-effort de propósito: falhar aqui não pode derrubar uma instalação que
+   * já foi concluída — no pior caso a linha some no sync seguinte.
+   */
+  async removeByPlate(tenantId: string, plate: string): Promise<number> {
+    const normalizada = (plate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!normalizada) return 0;
+
+    try {
+      const { count } = await this.prisma.installationPending.deleteMany({
+        where: { tenantId, plate: normalizada },
+      });
+      if (count > 0) {
+        this.logger.log(
+          `Placa ${normalizada} saiu da fila de pendências (instalação concluída).`,
+        );
+      }
+      return count;
+    } catch (erro) {
+      this.logger.warn(
+        `Não consegui remover ${normalizada} da fila de pendências: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+      return 0;
+    }
   }
 
   private dataCorte(days: number): Date {
@@ -131,9 +179,11 @@ export class InstallationPendingsService {
 
   private filtroBusca(termo: string) {
     const t = termo.trim();
+    const alfanumerico = t.toUpperCase().replace(/[^A-Z0-9]/g, '');
     return {
       OR: [
-        { plate: { contains: t.toUpperCase().replace(/[^A-Z0-9]/g, '') } },
+        { plate: { contains: alfanumerico } },
+        { chassi: { contains: alfanumerico } },
         { associateName: { contains: t, mode: 'insensitive' as const } },
         { cpf: { contains: t.replace(/\D/g, '') } },
       ],
@@ -153,7 +203,11 @@ export class InstallationPendingsService {
   // Sync
   // ---------------------------------------------------------------------------
 
-  @Cron(CronExpression.EVERY_6_HOURS)
+  /**
+   * 09:00 e 17:00 de Brasília, todos os dias. Duas passadas cobrem o que foi
+   * vendido de manhã e o que foi instalado no correr do dia.
+   */
+  @Cron('0 0 9,17 * * *', { timeZone: 'America/Sao_Paulo' })
   async scheduledSync(): Promise<void> {
     // Flag própria: HINOVA_SYNC_ENABLED desliga o sync que escreve em
     // Vehicle/Associate e está false em prod. Este aqui só reescreve a tabela
@@ -166,6 +220,7 @@ export class InstallationPendingsService {
     });
     if (!tenant) return;
 
+    this.logger.log('Sync agendado de pendências disparado.');
     try {
       await this.sync(tenant.id);
     } catch (erro) {
@@ -175,12 +230,33 @@ export class InstallationPendingsService {
     }
   }
 
+  /**
+   * Dispara a varredura em background e devolve na hora.
+   *
+   * A varredura leva minutos e o Cloudflare corta requisição em ~100s — manter
+   * a resposta HTTP aberta até o fim nunca ia funcionar pelo botão da tela.
+   * Quem chama acompanha por getSyncStatus().
+   */
+  startSync(tenantId: string): { started: boolean; alreadyRunning: boolean } {
+    if (this.syncing) return { started: false, alreadyRunning: true };
+
+    void this.sync(tenantId).catch((erro) => {
+      this.logger.error(
+        `Sync de pendências falhou: ${erro instanceof Error ? erro.message : erro}`,
+      );
+    });
+
+    return { started: true, alreadyRunning: false };
+  }
+
   async sync(tenantId: string): Promise<SyncOutcome> {
     if (this.syncing) {
       return this.lastSync ?? { started: true, tracker: 0, tag: 0, total: 0, duration: '0s' };
     }
 
     this.syncing = true;
+    this.syncStartedAt = new Date();
+    this.lastError = null;
     const inicio = Date.now();
 
     try {
@@ -215,8 +291,12 @@ export class InstallationPendingsService {
         `Pendências sincronizadas: ${resultado.total} (${resultado.tracker} rastreador, ${resultado.tag} TAG) em ${resultado.duration}`,
       );
       return resultado;
+    } catch (erro) {
+      this.lastError = erro instanceof Error ? erro.message : String(erro);
+      throw erro;
     } finally {
       this.syncing = false;
+      this.syncStartedAt = null;
     }
   }
 

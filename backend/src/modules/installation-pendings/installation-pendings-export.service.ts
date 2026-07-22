@@ -13,7 +13,8 @@ const COLUNAS: Array<{
   { header: 'CPF/CNPJ', width: 18, valor: (r) => r.cpf ?? '' },
   { header: 'Contato', width: 22, valor: (r) => r.phone ?? '' },
   { header: 'E-mail', width: 30, valor: (r) => r.email ?? '' },
-  { header: 'Placa', width: 11, valor: (r) => r.plate },
+  { header: 'Placa', width: 11, valor: (r) => r.plate || 'SEM PLACA' },
+  { header: 'Chassi', width: 22, valor: (r) => r.chassi ?? '' },
   { header: 'Modelo', width: 45, valor: (r) => r.brandModel },
   { header: 'Tipo de veículo', width: 30, valor: (r) => r.vehicleType ?? '' },
   { header: 'Cidade', width: 22, valor: (r) => r.city ?? '' },
@@ -59,7 +60,10 @@ export class InstallationPendingsExportService {
       aba.addRow(COLUNAS.map((c) => c.valor(linha)));
     }
 
-    aba.getColumn(12).numFmt = 'R$ #,##0.00';
+    // Índice pelo header, não fixo: inserir coluna antes desta não pode
+    // deslocar a formatação de moeda em silêncio.
+    const colunaValor = COLUNAS.findIndex((c) => c.header === 'Valor protegido') + 1;
+    aba.getColumn(colunaValor).numFmt = 'R$ #,##0.00';
     aba.autoFilter = { from: 'A1', to: { row: 1, column: COLUNAS.length } };
     aba.views = [{ state: 'frozen', ySplit: 1 }];
   }

@@ -18,6 +18,7 @@ function veiculo(over: Partial<HinovaRawVehicle> = {}): HinovaRawVehicle {
     codigo_veiculo: '2605',
     codigo_associado: '881',
     placa: 'LLB8H47',
+    chassi: '9BWAA05Z4A4116200',
     marca: 'VW - VOLKSWAGEN',
     modelo: 'FOX 1.0 MI TOTAL FLEX 8V 5P',
     tipo: 'VEICULOS LEVES',
@@ -103,10 +104,29 @@ describe('paraLinha', () => {
     expect(linha?.brandModel).toBe('VW - VOLKSWAGEN FOX 1.0 MI TOTAL FLEX 8V 5P');
   });
 
-  it('recusa linha sem placa, sem código ou com data inválida', () => {
-    expect(paraLinha(veiculo({ placa: undefined }), mapaEnderecos, TENANT)).toBeNull();
+  it('recusa linha sem código ou com data inválida', () => {
     expect(paraLinha(veiculo({ codigo_veiculo: undefined }), mapaEnderecos, TENANT)).toBeNull();
     expect(paraLinha(veiculo({ data_contrato: 'xx' }), mapaEnderecos, TENANT)).toBeNull();
+  });
+
+  // Moto recém-vendida aguardando emplacamento é pendência real: 357 casos na
+  // base em 2026-07-22 sumiam da fila quando a placa era obrigatória.
+  it('mantém veículo sem placa desde que tenha chassi', () => {
+    const linha = paraLinha(veiculo({ placa: '' }), mapaEnderecos, TENANT);
+    expect(linha).not.toBeNull();
+    expect(linha?.plate).toBe('');
+    expect(linha?.chassi).toBe('9BWAA05Z4A4116200');
+  });
+
+  it('recusa só quando falta placa E chassi', () => {
+    expect(
+      paraLinha(veiculo({ placa: '', chassi: '' }), mapaEnderecos, TENANT),
+    ).toBeNull();
+  });
+
+  it('normaliza placa para caixa alta', () => {
+    const linha = paraLinha(veiculo({ placa: 'llb8h47' }), mapaEnderecos, TENANT);
+    expect(linha?.plate).toBe('LLB8H47');
   });
 });
 

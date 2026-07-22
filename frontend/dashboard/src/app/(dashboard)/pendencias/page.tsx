@@ -116,6 +116,7 @@ export default function PendenciasPage() {
   const [cities, setCities] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [elapsed, setElapsed] = useState<number | null>(null);
 
   const [days, setDays] = useState(60);
   const [type, setType] = useState<PendingType | ''>('');
@@ -156,22 +157,76 @@ export default function PendenciasPage() {
     installationPendingsApi.getCities().then(setCities).catch(() => setCities([]));
   }, []);
 
-  async function handleSync() {
+  /**
+   * O servidor varre o SGA em background — aqui só acompanhamos por polling.
+   * Manter uma requisição aberta por minutos não funciona atrás do Cloudflare.
+   */
+  const acompanharSync = useCallback(async () => {
     setSyncing(true);
-    toast.info('Varrendo o SGA — leva alguns minutos.');
-    try {
-      const r = await installationPendingsApi.sync();
-      toast.success(
-        `${r.total} pendências atualizadas (${r.tracker} rastreador, ${r.tag} TAG) em ${r.duration}`,
-      );
-      await load();
-      setCities(await installationPendingsApi.getCities());
-    } catch {
-      toast.error('Falha ao sincronizar com o SGA');
-    } finally {
+    const inicio = Date.now();
+    const LIMITE_MS = 20 * 60 * 1000;
+
+    while (Date.now() - inicio < LIMITE_MS) {
+      await new Promise((r) => setTimeout(r, 5000));
+
+      let status;
+      try {
+        status = await installationPendingsApi.getSyncStatus();
+      } catch {
+        continue; // rede oscilou; tenta de novo no próximo ciclo
+      }
+
+      setElapsed(status.elapsedSeconds);
+      if (status.syncing) continue;
+
       setSyncing(false);
+      setElapsed(null);
+
+      if (status.lastError) {
+        toast.error(`Sincronização falhou: ${status.lastError}`);
+      } else if (status.last) {
+        toast.success(
+          `${status.last.total} pendências atualizadas (${status.last.tracker} rastreador, ${status.last.tag} TAG) em ${status.last.duration}`,
+        );
+      }
+      await load();
+      installationPendingsApi.getCities().then(setCities).catch(() => {});
+      return;
+    }
+
+    setSyncing(false);
+    setElapsed(null);
+    toast.error('A sincronização passou de 20 minutos. Verifique os logs do servidor.');
+  }, [load]);
+
+  async function handleSync() {
+    try {
+      const r = await installationPendingsApi.startSync();
+      toast.info(
+        r.alreadyRunning
+          ? 'Já existe uma sincronização em andamento.'
+          : 'Varrendo o SGA — leva alguns minutos. Pode continuar usando o sistema.',
+      );
+      void acompanharSync();
+    } catch {
+      toast.error('Não consegui iniciar a sincronização');
     }
   }
+
+  // Se o cron (09h/17h) estiver rodando quando a tela abre, mostra o progresso.
+  useEffect(() => {
+    installationPendingsApi
+      .getSyncStatus()
+      .then((s) => {
+        if (s.syncing) {
+          setElapsed(s.elapsedSeconds);
+          void acompanharSync();
+        }
+      })
+      .catch(() => {});
+    // Só na montagem: acompanharSync se refaz junto com os filtros.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleExport() {
     try {
@@ -197,7 +252,8 @@ export default function PendenciasPage() {
             Pendentes de Instalação
           </h1>
           <p className="text-sm text-muted-foreground">
-            Rastreadores e TAGs contratados no SGA que ainda não foram instalados
+            Rastreadores e TAGs contratados no SGA que ainda não foram instalados ·
+            sincroniza sozinho às 9h e 17h
             {stats?.lastSyncAt && ` · atualizado ${formatRelativeTime(stats.lastSyncAt)}`}
           </p>
         </div>
@@ -208,7 +264,9 @@ export default function PendenciasPage() {
           </Button>
           <Button size="sm" onClick={handleSync} disabled={syncing}>
             <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
-            {syncing ? 'Sincronizando...' : 'Atualizar do SGA'}
+            {syncing
+              ? `Sincronizando${elapsed !== null ? ` · ${Math.floor(elapsed / 60)}min` : ''}...`
+              : 'Atualizar do SGA'}
           </Button>
         </div>
       </div>
@@ -247,7 +305,7 @@ export default function PendenciasPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Placa, nome ou CPF..."
+            placeholder="Placa, chassi, nome ou CPF..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -328,7 +386,20 @@ export default function PendenciasPage() {
                           {p.pendingType === 'TRACKER' ? 'Rastreador' : 'TAG'}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-mono font-semibold">{p.plate}</td>
+                      <td className="px-3 py-2 font-mono font-semibold">
+                        {p.plate || (
+                          <span title={p.chassi ?? ''}>
+                            <span className="text-muted-foreground text-xs font-sans">
+                              sem placa
+                            </span>
+                            {p.chassi && (
+                              <p className="text-[10px] text-muted-foreground font-normal">
+                                {p.chassi}
+                              </p>
+                            )}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <p className="font-medium">{p.associateName}</p>
                         <p className="text-xs text-muted-foreground">

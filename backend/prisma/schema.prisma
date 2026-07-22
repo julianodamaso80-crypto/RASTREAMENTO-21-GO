@@ -235,7 +235,9 @@ model Tenant {
 model InstallationPending {
   id                String   @id @default(uuid()) @db.Uuid
   hinovaVehicleCode String   @map("hinova_vehicle_code")
+  /// Vazia em veiculo aguardando emplacamento — nesses casos vale o chassi.
   plate             String
+  chassi            String?
   /// TRACKER (tipo_adesao 1) ou TAG (tipo_adesao 10).
   pendingType       String   @map("pending_type")
   associateName     String   @map("associate_name")

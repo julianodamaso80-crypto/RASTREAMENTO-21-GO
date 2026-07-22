@@ -24,7 +24,9 @@ export const TIPO_ADESAO_PENDENTE: Record<string, PendingType> = {
 
 export interface PendingRowData {
   hinovaVehicleCode: string;
+  /** Vazia em veículo ainda sem emplacamento — nesse caso vale o `chassi`. */
   plate: string;
+  chassi: string | null;
   pendingType: PendingType;
   associateName: string;
   associateCode: string;
@@ -75,8 +77,13 @@ export function montarTelefone(v: HinovaRawVehicle): string | null {
 }
 
 /**
- * Monta a linha do espelho. Retorna null quando falta o mínimo (código, placa
- * ou data de contrato válida) — linha incompleta não entra na fila.
+ * Monta a linha do espelho. Retorna null quando falta o mínimo: código do
+ * veículo, data de contrato válida e alguma forma de identificar o carro em
+ * campo (placa **ou** chassi).
+ *
+ * Placa vazia é comum e legítima — moto recém-vendida aguardando emplacamento
+ * continua sendo instalação pendente. Eram 357 casos na base em 2026-07-22, e
+ * exigir placa os apagava da fila em silêncio.
  */
 export function paraLinha(
   v: HinovaRawVehicle,
@@ -85,13 +92,18 @@ export function paraLinha(
 ): PendingRowData | null {
   const pendingType = TIPO_ADESAO_PENDENTE[String(v.codigo_tipo_adesao)];
   const contractDate = paraData(v.data_contrato);
-  if (!pendingType || !contractDate || !v.codigo_veiculo || !v.placa) return null;
+  const plate = String(v.placa ?? '').trim().toUpperCase();
+  const chassi = String(v.chassi ?? '').trim().toUpperCase() || null;
+
+  if (!pendingType || !contractDate || !v.codigo_veiculo) return null;
+  if (!plate && !chassi) return null;
 
   const endereco = enderecos.get(String(v.codigo_associado));
 
   return {
     hinovaVehicleCode: String(v.codigo_veiculo),
-    plate: String(v.placa).toUpperCase(),
+    plate,
+    chassi,
     pendingType,
     associateName: v.nome_associado ?? '',
     associateCode: String(v.codigo_associado ?? ''),

@@ -28,7 +28,8 @@ import type {
 import type {
   InstallationPending,
   InstallationPendingStats,
-  InstallationPendingSyncResult,
+  InstallationPendingSyncStart,
+  InstallationPendingSyncStatus,
   InstallationPendingFilters,
 } from '@/types/installation-pending';
 
@@ -634,12 +635,21 @@ export const installationPendingsApi = {
     );
     return res.data.data;
   },
-  // A varredura do SGA leva minutos — o timeout padrão do axios derrubaria antes.
-  sync: async (): Promise<InstallationPendingSyncResult> => {
-    const res = await api.post<ApiResponse<InstallationPendingSyncResult>>(
+  /**
+   * Dispara a varredura e volta na hora — ela roda em background no servidor.
+   * Manter a requisição aberta não funcionaria: o Cloudflare corta em ~100s e a
+   * varredura leva minutos. O acompanhamento é por getSyncStatus().
+   */
+  startSync: async (): Promise<InstallationPendingSyncStart> => {
+    const res = await api.post<ApiResponse<InstallationPendingSyncStart>>(
       '/installation-pendings/sync',
       {},
-      { timeout: 15 * 60 * 1000 },
+    );
+    return res.data.data;
+  },
+  getSyncStatus: async (): Promise<InstallationPendingSyncStatus> => {
+    const res = await api.get<ApiResponse<InstallationPendingSyncStatus>>(
+      '/installation-pendings/sync/status',
     );
     return res.data.data;
   },

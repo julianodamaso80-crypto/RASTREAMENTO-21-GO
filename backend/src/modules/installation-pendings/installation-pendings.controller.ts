@@ -105,14 +105,15 @@ export class InstallationPendingsController {
   @Post('sync')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
   @ApiOperation({
-    summary: 'Força a varredura do SGA agora (leva alguns minutos)',
+    summary:
+      'Dispara a varredura do SGA em background e retorna na hora; acompanhe por sync/status',
   })
   sync(@Req() req: AuthenticatedRequest) {
-    return this.service.sync(req.tenantId);
+    return this.service.startSync(req.tenantId);
   }
 
   @Get('sync/status')
-  @ApiOperation({ summary: 'Situação da última varredura' })
+  @ApiOperation({ summary: 'Situação da varredura em andamento e da última concluída' })
   syncStatus() {
     return this.service.getSyncStatus();
   }

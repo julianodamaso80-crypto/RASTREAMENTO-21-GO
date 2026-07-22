@@ -2,7 +2,9 @@ export type PendingType = 'TRACKER' | 'TAG';
 
 export interface InstallationPending {
   id: string;
+  /** Vazia em veículo aguardando emplacamento — nesse caso vale o chassi. */
   plate: string;
+  chassi: string | null;
   pendingType: PendingType;
   associateName: string;
   cpf: string | null;
@@ -36,6 +38,20 @@ export interface InstallationPendingSyncResult {
   tag: number;
   total: number;
   duration: string;
+}
+
+/** Resposta imediata do POST /sync — a varredura roda em background. */
+export interface InstallationPendingSyncStart {
+  started: boolean;
+  alreadyRunning: boolean;
+}
+
+export interface InstallationPendingSyncStatus {
+  syncing: boolean;
+  startedAt: string | null;
+  elapsedSeconds: number | null;
+  last: InstallationPendingSyncResult | null;
+  lastError: string | null;
 }
 
 export interface InstallationPendingFilters {

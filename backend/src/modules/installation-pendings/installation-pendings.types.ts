@@ -11,7 +11,9 @@ export interface PendingListQuery {
 
 export interface InstallationPendingRow {
   id: string;
+  /** Vazia em veículo aguardando emplacamento — nesse caso use o `chassi`. */
   plate: string;
+  chassi: string | null;
   pendingType: PendingType;
   associateName: string;
   cpf: string | null;

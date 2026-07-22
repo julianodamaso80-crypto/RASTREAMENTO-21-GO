@@ -98,12 +98,18 @@ export class HinovaService implements IHinovaClient {
   }
 
   /** POST autenticado com reautenticação automática em 401. */
-  private async post<T = unknown>(path: string, body: unknown): Promise<T> {
+  private async post<T = unknown>(
+    path: string,
+    body: unknown,
+    timeout?: number,
+  ): Promise<T> {
     if (!this.tokenUsuario) await this.authenticate();
+    const config = {
+      headers: { Authorization: `Bearer ${this.tokenUsuario}` },
+      ...(timeout ? { timeout } : {}),
+    };
     try {
-      const { data } = await this.client.post(path, body, {
-        headers: { Authorization: `Bearer ${this.tokenUsuario}` },
-      });
+      const { data } = await this.client.post(path, body, config);
       return data as T;
     } catch (error: unknown) {
       const status = (error as { response?: { status: number } }).response
@@ -111,6 +117,7 @@ export class HinovaService implements IHinovaClient {
       if (status === 401) {
         await this.authenticate();
         const { data } = await this.client.post(path, body, {
+          ...config,
           headers: { Authorization: `Bearer ${this.tokenUsuario}` },
         });
         return data as T;
@@ -290,11 +297,56 @@ export class HinovaService implements IHinovaClient {
   /** Situação 1 = ATIVO, tanto para veículo quanto para associado no SGA. */
   private static readonly SITUACAO_ATIVA = 1;
 
+  /**
+   * Timeout das listagens em massa.
+   *
+   * O timeout global de 30s serve pro lookup por placa (resposta em ~1s) mas
+   * não pra cá: o SGA degrada conforme o offset cresce — medido em 2026-07-22,
+   * lote de 2.000 levou 19s no offset 0, 29s no 8.000, 34s no 16.000 e 59s no
+   * 20.000. Era esse timeout que derrubava o sync no meio da varredura.
+   */
+  private static readonly TIMEOUT_LISTAGEM_MS = 240_000;
+
+  /**
+   * O SGA falha de forma transitória sob carga: 401 com token válido e
+   * "Parâmetros Inválidos" que somem na tentativa seguinte. Sem retry, uma
+   * falha isolada perde a varredura inteira.
+   */
+  private async postComRetry<T>(path: string, body: unknown): Promise<T> {
+    const TENTATIVAS = 4;
+    let ultimoErro: unknown;
+
+    for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
+      try {
+        return await this.post<T>(
+          path,
+          body,
+          HinovaService.TIMEOUT_LISTAGEM_MS,
+        );
+      } catch (error: unknown) {
+        ultimoErro = error;
+        if (tentativa === TENTATIVAS) break;
+        // 401 força reautenticação na próxima volta.
+        if ((error as { response?: { status: number } }).response?.status === 401) {
+          this.tokenUsuario = null;
+        }
+        const espera = 3000 * tentativa;
+        this.logger.warn(
+          `SGA ${path} falhou (tentativa ${tentativa}/${TENTATIVAS}): ${
+            error instanceof Error ? error.message : error
+          }. Repetindo em ${espera / 1000}s.`,
+        );
+        await new Promise((r) => setTimeout(r, espera));
+      }
+    }
+    throw ultimoErro;
+  }
+
   async listRawActiveVehicles(
     offset: number,
     limit: number,
   ): Promise<HinovaRawVehicle[]> {
-    const data = await this.post<{ veiculos?: HinovaRawVehicle[] }>(
+    const data = await this.postComRetry<{ veiculos?: HinovaRawVehicle[] }>(
       '/listar/veiculo',
       {
         codigo_situacao: HinovaService.SITUACAO_ATIVA,
@@ -309,7 +361,7 @@ export class HinovaService implements IHinovaClient {
     offset: number,
     limit: number,
   ): Promise<HinovaRawAssociate[]> {
-    const data = await this.post<{ associados?: HinovaRawAssociate[] }>(
+    const data = await this.postComRetry<{ associados?: HinovaRawAssociate[] }>(
       '/listar/associado/',
       {
         codigo_situacao: HinovaService.SITUACAO_ATIVA,
