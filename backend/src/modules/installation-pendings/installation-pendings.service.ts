@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,7 +24,7 @@ import type {
  * e a tela lê o Postgres.
  */
 @Injectable()
-export class InstallationPendingsService {
+export class InstallationPendingsService implements OnModuleInit {
   private readonly logger = new Logger(InstallationPendingsService.name);
 
   /**
@@ -202,6 +202,42 @@ export class InstallationPendingsService {
   // ---------------------------------------------------------------------------
   // Sync
   // ---------------------------------------------------------------------------
+
+  /**
+   * Carga inicial: se a fila está vazia, o próximo horário do cron pode estar a
+   * horas de distância e a tela fica zerada até lá — parecendo defeito. Roda uma
+   * vez, em background, e só quando não há nada gravado.
+   *
+   * Espera 30s pro boot terminar: a varredura é longa e não pode competir com a
+   * subida do resto da aplicação.
+   */
+  onModuleInit(): void {
+    if (this.config.get<string>('hinova.pendingsSyncEnabled') === 'false') return;
+
+    setTimeout(() => {
+      void this.cargaInicial();
+    }, 30_000).unref();
+  }
+
+  private async cargaInicial(): Promise<void> {
+    try {
+      const jaTem = await this.prisma.installationPending.count();
+      if (jaTem > 0) return;
+
+      const tenant = await this.prisma.tenant.findFirst({
+        where: { active: true, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!tenant) return;
+
+      this.logger.log('Fila de pendências vazia — disparando carga inicial.');
+      await this.sync(tenant.id);
+    } catch (erro) {
+      this.logger.error(
+        `Carga inicial de pendências falhou: ${erro instanceof Error ? erro.message : erro}`,
+      );
+    }
+  }
 
   /**
    * 09:00 e 17:00 de Brasília, todos os dias. Duas passadas cobrem o que foi

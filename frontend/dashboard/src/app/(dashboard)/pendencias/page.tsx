@@ -243,10 +243,13 @@ export default function PendenciasPage() {
   }
 
   return (
-    <div className="flex flex-col h-full p-4 md:p-6 gap-4 overflow-auto">
+    // min-w-0 impede que a tabela larga estique o container e empurre os botões
+    // e os cards pra fora da viewport — o pai do layout é overflow-hidden e
+    // cortaria sem nem mostrar barra de rolagem.
+    <div className="flex flex-col h-full min-w-0 p-4 md:p-6 gap-4 overflow-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold flex items-center gap-2">
             <ClipboardList className="h-5 w-5 text-brand-orange-500" />
             Pendentes de Instalação
@@ -257,7 +260,7 @@ export default function PendenciasPage() {
             {stats?.lastSyncAt && ` · atualizado ${formatRelativeTime(stats.lastSyncAt)}`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={handleExport} disabled={!rows.length}>
             <Download className="h-4 w-4" />
             Exportar
@@ -272,7 +275,7 @@ export default function PendenciasPage() {
       </div>
 
       {/* Totais */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 xl:grid-cols-4 shrink-0">
         <StatCard
           label="Total pendente"
           value={String(stats?.total ?? 0)}
@@ -301,7 +304,7 @@ export default function PendenciasPage() {
       </div>
 
       {/* Filtros */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 shrink-0">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
