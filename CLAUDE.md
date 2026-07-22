@@ -67,6 +67,7 @@ Credenciais dev (seed): `admin@rastreamento21go.com.br` / `admin123`.
 | Histórico de viagens (rota, paradas, velocidade) | ✓ | [reports.service.ts](backend/src/modules/reports/reports.service.ts) |
 | Relatórios + export XLSX/CSV | ✓ | [reports.controller.ts](backend/src/modules/reports/reports.controller.ts) |
 | Gestão de Chips (CRUD, operadora, vínculo a device) | ✓ | [chips.service.ts](backend/src/modules/chips/chips.service.ts) |
+| Técnicos: cadastro + senha provisória, reserva de equipamento em lote, PWA de campo | ✓ | [technicians.service.ts](backend/src/modules/technicians/technicians.service.ts), [tech-field.service.ts](backend/src/modules/tech/tech-field.service.ts), [/tecnico](frontend/dashboard/src/app/tecnico/page.tsx) |
 | Gestão de Veículos | ◐ | [vehicles.service.ts](backend/src/modules/vehicles/vehicles.service.ts) — falta grupos, âncora, odômetro, foto, ícone |
 | SMS Comandos com templates por modelo | ◐ | [sms-commands.service.ts](backend/src/modules/sms-commands/sms-commands.service.ts) — sem favoritos, sem saldo |
 | Hinova SGA | ◐ MOCK | [hinova.service.ts](backend/src/modules/hinova/hinova.service.ts) — `HINOVA_MOCK=true` |
