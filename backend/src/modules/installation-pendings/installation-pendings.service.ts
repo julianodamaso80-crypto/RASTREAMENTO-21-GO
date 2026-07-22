@@ -155,7 +155,10 @@ export class InstallationPendingsService {
 
   @Cron(CronExpression.EVERY_6_HOURS)
   async scheduledSync(): Promise<void> {
-    if (this.config.get<string>('hinova.syncEnabled') === 'false') return;
+    // Flag própria: HINOVA_SYNC_ENABLED desliga o sync que escreve em
+    // Vehicle/Associate e está false em prod. Este aqui só reescreve a tabela
+    // espelho, então segue ligado por padrão.
+    if (this.config.get<string>('hinova.pendingsSyncEnabled') === 'false') return;
 
     const tenant = await this.prisma.tenant.findFirst({
       where: { active: true, deletedAt: null },

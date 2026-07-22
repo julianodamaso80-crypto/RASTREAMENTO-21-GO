@@ -32,6 +32,10 @@ export default () => ({
     // Em prod: 'false' enquanto não temos credenciais Hinova reais.
     // Caso contrário o cron do mock cria vehicles/associates fantasmas.
     syncEnabled: process.env.HINOVA_SYNC_ENABLED || 'true',
+    // Flag SEPARADA de propósito. O sync acima escreve em Vehicle/Associate e
+    // por isso vive desligado; o de pendências só toca a tabela espelho
+    // installation_pendings, que é descartável — desligar não protege nada.
+    pendingsSyncEnabled: process.env.INSTALLATION_PENDINGS_SYNC_ENABLED || 'true',
   },
   server: {
     primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',
