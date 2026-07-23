@@ -39,6 +39,9 @@ export class InstallationPendingsService implements OnModuleInit {
   /** Trava contra paginação infinita se o SGA parar de encurtar o último lote. */
   private static readonly MAX_PAGINAS = 50;
 
+  /** Espaçamento entre páginas pra não bater no rate limit do SGA (406). */
+  private static readonly PAUSA_ENTRE_PAGINAS_MS = 2500;
+
   private syncing = false;
   private syncStartedAt: Date | null = null;
   private lastSync: SyncOutcome | null = null;
@@ -369,8 +372,13 @@ export class InstallationPendingsService implements OnModuleInit {
       );
       todos.push(...lote);
       if (lote.length < InstallationPendingsService.LOTE) break;
+      // Pausa entre páginas. Medido ao vivo 2026-07-23: bater página após página
+      // sem pausa faz o SGA devolver 406 intermitente (rate limit) — requests
+      // isolados sempre respondem 200. 2,5s de espaçamento estabiliza a varredura.
+      await new Promise((r) =>
+        setTimeout(r, InstallationPendingsService.PAUSA_ENTRE_PAGINAS_MS),
+      );
     }
     return todos;
   }
-
 }
