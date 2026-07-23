@@ -217,6 +217,7 @@ model Tenant {
   settings     TenantSettings?
 
   installationPendings InstallationPending[]
+  installationRoutes   InstallationRoute[]
 
   @@map("tenants")
 }
@@ -254,6 +255,14 @@ model InstallationPending {
   evaluationTable   String?  @map("evaluation_table")
   consultantName    String?  @map("consultant_name")
 
+  // Endereço + coordenadas pra montar rota. cep/street/number vêm do associado
+  // no SGA; lat/lng são geocodificados do CEP (AwesomeAPI) e ficam null até lá.
+  cep          String?
+  street       String?
+  number       String?
+  lat          Float?
+  lng          Float?
+
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id])
 
@@ -264,6 +273,70 @@ model InstallationPending {
   @@index([tenantId, contractDate])
   @@index([tenantId, pendingType])
   @@map("installation_pendings")
+}
+
+/// Cache de geocoding por CEP. Endereço não muda, então cada CEP é resolvido uma
+/// vez (AwesomeAPI, fallback Nominatim) e reusado por todas as pendências que o
+/// compartilham. Não é multi-tenant: coordenada de CEP é fato público.
+model CepCoordinate {
+  cep       String   @id
+  lat       Float
+  lng       Float
+  source    String   // 'awesomeapi' | 'nominatim'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("cep_coordinates")
+}
+
+/// Rota de instalação montada pelo operador e enviada a um técnico.
+model InstallationRoute {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  technicianId String   @map("technician_id") @db.Uuid
+  technician   Technician @relation(fields: [technicianId], references: [id])
+  /// User do painel que montou/enviou.
+  assignedById String?  @map("assigned_by_id") @db.Uuid
+  /// PENDING | DONE | CANCELLED
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  stops RouteStop[]
+
+  @@index([tenantId, technicianId, status])
+  @@map("installation_routes")
+}
+
+/// Parada da rota. Guarda snapshot dos dados no envio — o sync reescreve
+/// installation_pendings, então a rota não pode depender daquela linha.
+model RouteStop {
+  id        String   @id @default(uuid()) @db.Uuid
+  routeId   String   @map("route_id") @db.Uuid
+  route     InstallationRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  /// Ordem de visita (0-based), já otimizada por vizinho-mais-próximo.
+  order     Int
+  /// PENDING | DONE
+  status    String   @default("PENDING")
+  doneAt    DateTime? @map("done_at")
+
+  // Snapshot da pendência no momento do envio.
+  hinovaVehicleCode String  @map("hinova_vehicle_code")
+  plate             String
+  pendingType       String  @map("pending_type")
+  associateName     String  @map("associate_name")
+  phone             String?
+  brandModel        String  @map("brand_model")
+  street            String?
+  number            String?
+  neighborhood      String?
+  city              String?
+  cep               String?
+  lat               Float?
+  lng               Float?
+
+  @@index([routeId, order])
+  @@map("route_stops")
 }
 
 model TenantSettings {
@@ -483,6 +556,7 @@ model Technician {
   tenant     Tenant      @relation(fields: [tenantId], references: [id])
   stockItems StockItem[]
   devices    Device[]
+  routes     InstallationRoute[]
 
   @@unique([tenantId, cpf])
   @@index([tenantId, deletedAt])

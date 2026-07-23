@@ -1,6 +1,8 @@
 import {
+  Body,
   Controller,
   Get,
+  Param,
   Post,
   Query,
   Req,
@@ -14,10 +16,17 @@ import { Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { InstallationPendingsService } from './installation-pendings.service';
 import { InstallationPendingsExportService } from './installation-pendings-export.service';
+import { RoutesService } from './routes.service';
 import type { PendingType } from './installation-pendings.types';
 
 interface AuthenticatedRequest {
   tenantId: string;
+  user?: { id: string };
+}
+
+interface CreateRouteBody {
+  technicianId: string;
+  pendingIds: string[];
 }
 
 const DIAS_PADRAO = 60;
@@ -31,6 +40,7 @@ export class InstallationPendingsController {
   constructor(
     private service: InstallationPendingsService,
     private exportService: InstallationPendingsExportService,
+    private routes: RoutesService,
   ) {}
 
   @Get()
@@ -116,6 +126,43 @@ export class InstallationPendingsController {
   @ApiOperation({ summary: 'Situação da varredura em andamento e da última concluída' })
   syncStatus() {
     return this.service.getSyncStatus();
+  }
+
+  // --- Rota inteligente ---
+
+  @Get('clusters')
+  @ApiOperation({ summary: 'Bolsões de pendências próximas, pra montar rota' })
+  @ApiQuery({ name: 'days', required: false })
+  clusters(@Req() req: AuthenticatedRequest, @Query('days') days?: string) {
+    return this.routes.clusters(req.tenantId, parseDias(days));
+  }
+
+  @Get('routes')
+  @ApiOperation({ summary: 'Rotas montadas e seu status' })
+  listRoutes(@Req() req: AuthenticatedRequest) {
+    return this.routes.listRoutes(req.tenantId);
+  }
+
+  @Post('routes')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Monta uma rota ordenada e envia pro técnico' })
+  createRoute(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: CreateRouteBody,
+  ) {
+    return this.routes.createRoute(
+      req.tenantId,
+      body.technicianId,
+      body.pendingIds ?? [],
+      req.user?.id,
+    );
+  }
+
+  @Post('routes/:id/cancel')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Cancela uma rota' })
+  cancelRoute(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.routes.cancelRoute(req.tenantId, id);
   }
 }
 

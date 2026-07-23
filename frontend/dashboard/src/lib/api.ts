@@ -32,6 +32,10 @@ import type {
   InstallationPendingSyncStatus,
   InstallationPendingFilters,
 } from '@/types/installation-pending';
+import type {
+  InstallationCluster,
+  InstallationRoute,
+} from '@/types/route';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
@@ -659,6 +663,35 @@ export const installationPendingsApi = {
       responseType: 'blob',
     });
     return res.data as Blob;
+  },
+};
+
+export const routesApi = {
+  getClusters: async (days: number): Promise<InstallationCluster[]> => {
+    const res = await api.get<ApiResponse<InstallationCluster[]>>(
+      '/installation-pendings/clusters',
+      { params: { days } },
+    );
+    return res.data.data;
+  },
+  getRoutes: async (): Promise<InstallationRoute[]> => {
+    const res = await api.get<ApiResponse<InstallationRoute[]>>(
+      '/installation-pendings/routes',
+    );
+    return res.data.data;
+  },
+  create: async (
+    technicianId: string,
+    pendingIds: string[],
+  ): Promise<InstallationRoute> => {
+    const res = await api.post<ApiResponse<InstallationRoute>>(
+      '/installation-pendings/routes',
+      { technicianId, pendingIds },
+    );
+    return res.data.data;
+  },
+  cancel: async (id: string): Promise<void> => {
+    await api.post(`/installation-pendings/routes/${id}/cancel`, {});
   },
 };
 

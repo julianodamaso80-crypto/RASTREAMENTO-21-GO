@@ -14,6 +14,11 @@ import {
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
+  Navigation,
+  MapPin,
+  Phone,
+  Radio,
+  Tag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -25,8 +30,19 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SelectNative } from '@/components/ui/select-native';
-import type { TechAssignment, TechMe } from '@/types/tech';
+import type { TechAssignment, TechMe, TechRoute, TechRouteStop } from '@/types/tech';
 import type { HinovaLookup } from '@/types/stock';
+
+/** Link de navegação: Waze quando há coordenada, Google Maps por endereço senão. */
+function navUrl(stop: TechRouteStop): string {
+  if (stop.lat != null && stop.lng != null) {
+    return `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes`;
+  }
+  const endereco = [stop.street, stop.number, stop.neighborhood, stop.city]
+    .filter(Boolean)
+    .join(', ');
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(endereco)}`;
+}
 
 const LOCAIS_INSTALACAO = [
   'Painel',
@@ -56,6 +72,7 @@ export default function TecnicoPage() {
   const [booting, setBooting] = useState(true);
   const [me, setMe] = useState<TechMe | null>(null);
   const [assignments, setAssignments] = useState<TechAssignment[] | null>(null);
+  const [route, setRoute] = useState<TechRoute | null>(null);
   const [installing, setInstalling] = useState<TechAssignment | null>(null);
 
   const loadMe = useCallback(async () => {
@@ -80,6 +97,12 @@ export default function TecnicoPage() {
     } catch {
       toast.error('Erro ao carregar seus equipamentos');
       setAssignments([]);
+    }
+    // Rota é best-effort: falhar aqui não pode travar a tela de equipamentos.
+    try {
+      setRoute(await techApi.route());
+    } catch {
+      setRoute(null);
     }
   }, []);
 
@@ -131,6 +154,7 @@ export default function TecnicoPage() {
     <AssignmentsScreen
       me={me}
       assignments={assignments}
+      route={route}
       onRefresh={loadAssignments}
       onInstall={setInstalling}
       onLogout={handleLogout}
@@ -312,12 +336,14 @@ function ChangePasswordScreen({
 function AssignmentsScreen({
   me,
   assignments,
+  route,
   onRefresh,
   onInstall,
   onLogout,
 }: {
   me: TechMe;
   assignments: TechAssignment[] | null;
+  route: TechRoute | null;
   onRefresh: () => void;
   onInstall: (item: TechAssignment) => void;
   onLogout: () => void;
@@ -338,6 +364,10 @@ function AssignmentsScreen({
           </Button>
         </div>
       </div>
+
+      {route && route.stops.some((s) => s.status === 'PENDING') && (
+        <RouteCard route={route} />
+      )}
 
       <div className="flex items-center gap-2 rounded-lg border bg-card px-4 py-3">
         <Boxes className="h-5 w-5 text-brand-orange-500" />
@@ -387,6 +417,84 @@ function AssignmentsScreen({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------ Minha rota ------------------------------- */
+
+function RouteCard({ route }: { route: TechRoute }) {
+  const pendentes = route.stops.filter((s) => s.status === 'PENDING');
+  const feitas = route.stops.length - pendentes.length;
+
+  return (
+    <div className="rounded-lg border border-brand-orange-500/30 bg-brand-orange-500/5 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="flex items-center gap-1.5 font-semibold">
+          <Navigation className="h-4 w-4 text-brand-orange-500" />
+          Sua rota de hoje
+        </h2>
+        <span className="text-xs text-muted-foreground">
+          {feitas}/{route.stops.length} feitas
+        </span>
+      </div>
+
+      <ol className="space-y-2">
+        {pendentes.map((s) => (
+          <li
+            key={s.id}
+            className="flex items-start gap-3 rounded-lg border bg-card px-3 py-3"
+          >
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-orange-500 text-xs font-bold text-white">
+              {s.order + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono font-semibold">
+                  {s.plate || 'sem placa'}
+                </span>
+                {s.pendingType === 'TRACKER' ? (
+                  <Radio className="h-3.5 w-3.5 text-brand-orange-500" />
+                ) : (
+                  <Tag className="h-3.5 w-3.5 text-sky-400" />
+                )}
+              </div>
+              <p className="truncate text-sm">{s.associateName}</p>
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3 shrink-0" />
+                {[s.street, s.number, s.neighborhood].filter(Boolean).join(', ') ||
+                  s.city ||
+                  'Endereço não informado'}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{s.brandModel}</p>
+
+              <div className="mt-2 flex gap-2">
+                <a
+                  href={navUrl(s)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-md bg-brand-orange-500 px-3 py-1.5 text-xs font-medium text-white active:opacity-80"
+                >
+                  <Navigation className="h-3.5 w-3.5" /> Ir com Waze
+                </a>
+                {s.phone && (
+                  <a
+                    href={`tel:${s.phone.replace(/\D/g, '')}`}
+                    className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium active:bg-muted"
+                  >
+                    <Phone className="h-3.5 w-3.5" /> Ligar
+                  </a>
+                )}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Instale o rastreador pelo equipamento abaixo — a parada sai da rota
+        automaticamente ao finalizar.
+      </p>
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
   ArrowRight,
   HardHat,
   ClipboardList,
+  Route,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,7 @@ const navItems: NavItem[] = [
   { href: '/estoque', label: 'Estoque', icon: Boxes, roles: NON_CLIENT_ROLES },
   { href: '/clientes', label: 'Clientes Ativos', icon: Users, roles: NON_CLIENT_ROLES },
   { href: '/pendencias', label: 'Pendentes de Instalação', icon: ClipboardList, roles: NON_CLIENT_ROLES },
+  { href: '/rotas', label: 'Rota Inteligente', icon: Route, roles: NON_CLIENT_ROLES },
   { href: '/tecnicos', label: 'Técnicos', icon: HardHat, roles: NON_CLIENT_ROLES },
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];

@@ -14,6 +14,7 @@ import { AssignStockDto } from './dto/assign-stock.dto';
 import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
 import { TraccarService } from '../traccar/traccar.service';
 import { InstallationPendingsService } from '../installation-pendings/installation-pendings.service';
+import { RoutesService } from '../installation-pendings/routes.service';
 
 type ParsedRow = {
   imei: string;
@@ -70,6 +71,7 @@ export class StockService {
     @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
     private traccar: TraccarService,
     private installationPendings: InstallationPendingsService,
+    private routes: RoutesService,
   ) {}
 
   async findAll(tenantId: string, filters: FilterStockDto) {
@@ -321,7 +323,9 @@ export class StockService {
 
     // 6) A placa deixa de ser pendência no mesmo instante. Sem isso ela ficaria
     // na fila até o próximo sync do SGA — a lista tem que mostrar só quem falta.
+    // E a parada correspondente sai da rota do técnico (marcada como concluída).
     await this.installationPendings.removeByPlate(tenantId, placa);
+    await this.routes.markStopDoneByPlate(tenantId, placa);
 
     this.logger.log(
       `Estoque associado: IMEI ${item.imei} → placa ${placa} (cliente ${result.associate.id})`,

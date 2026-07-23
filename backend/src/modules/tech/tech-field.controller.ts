@@ -16,6 +16,7 @@ import {
   type TechnicianContext,
 } from './decorators/current-technician.decorator';
 import { TechFieldService } from './tech-field.service';
+import { RoutesService } from '../installation-pendings/routes.service';
 import { FinishInstallDto } from './dto/finish-install.dto';
 
 /** Rotas de campo do técnico. Tudo escopado ao técnico logado + tenant dele. */
@@ -25,12 +26,21 @@ import { FinishInstallDto } from './dto/finish-install.dto';
 @ApiBearerAuth()
 @Controller('tech')
 export class TechFieldController {
-  constructor(private readonly service: TechFieldService) {}
+  constructor(
+    private readonly service: TechFieldService,
+    private readonly routes: RoutesService,
+  ) {}
 
   @Get('assignments')
   @ApiOperation({ summary: 'Equipamentos reservados pro técnico logado' })
   assignments(@CurrentTechnician() tech: TechnicianContext) {
     return this.service.assignments(tech.id, tech.tenantId);
+  }
+
+  @Get('route')
+  @ApiOperation({ summary: 'Rota de instalação do dia enviada pro técnico' })
+  route(@CurrentTechnician() tech: TechnicianContext) {
+    return this.routes.currentRouteForTechnician(tech.tenantId, tech.id);
   }
 
   @Get('lookup')

@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
 import { montarFila, diasPendente } from './installation-pendings.mapper';
+import { GeocodingService } from './geocoding.service';
 import type {
   InstallationPendingRow,
   PendingListQuery,
@@ -45,6 +46,7 @@ export class InstallationPendingsService implements OnModuleInit {
     @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
     private prisma: PrismaService,
     private config: ConfigService,
+    private geocoding: GeocodingService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -298,6 +300,28 @@ export class InstallationPendingsService implements OnModuleInit {
 
       const linhas = montarFila(veiculos, associados, tenantId);
 
+      // Geocodifica os CEPs (cache cobre o que já foi resolvido antes) e preenche
+      // lat/lng — é o que alimenta a rota inteligente. Best-effort: CEP que não
+      // resolve fica sem coordenada e cai na lista "sem localização".
+      const coords = await this.geocoding.resolverLote(
+        linhas.map((l) => ({
+          cep: l.cep ?? '',
+          street: l.street,
+          number: l.number,
+          city: l.city,
+          state: 'RJ',
+        })),
+      );
+      let comCoord = 0;
+      for (const l of linhas) {
+        const c = l.cep ? coords.get(l.cep) : undefined;
+        if (c) {
+          l.lat = c.lat;
+          l.lng = c.lng;
+          comCoord++;
+        }
+      }
+
       // Espelho: o que saiu da pendência no SGA some daqui. Trocar tudo numa
       // transação evita a tela ficar vazia no meio do sync.
       await this.prisma.$transaction([
@@ -312,6 +336,10 @@ export class InstallationPendingsService implements OnModuleInit {
         total: linhas.length,
         duration: `${((Date.now() - inicio) / 1000).toFixed(1)}s`,
       };
+
+      this.logger.log(
+        `Geocoding: ${comCoord}/${linhas.length} pendências com coordenada.`,
+      );
 
       this.lastSync = resultado;
       this.logger.log(

@@ -70,11 +70,15 @@ export interface HinovaRawVehicle {
   [key: string]: unknown;
 }
 
-/** Linha crua de associado do POST /listar/associado/ (traz cidade e bairro). */
+/** Linha crua de associado do POST /listar/associado/ (traz endereço completo). */
 export interface HinovaRawAssociate {
   codigo_associado?: string;
   cidade?: string;
   bairro?: string;
+  logradouro?: string;
+  numero?: string;
+  cep?: string;
+  estado?: string;
   [key: string]: unknown;
 }
 

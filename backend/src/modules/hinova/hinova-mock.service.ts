@@ -327,11 +327,16 @@ export class HinovaMockService implements IHinovaClient {
     await this.simulateLatency();
     const cidades = ['RIO DE JANEIRO', 'NITERÓI', 'DUQUE DE CAXIAS'];
     const bairros = ['CENTRO', 'CAMPO GRANDE', 'BANGU', 'MADUREIRA'];
+    const ceps = ['20040-002', '24020-053', '23070-000', '25010-000'];
 
     return this.vehicles.slice(offset, offset + limit).map((v, i) => ({
       codigo_associado: v.associado.codigoAssociado,
       cidade: cidades[(offset + i) % cidades.length],
       bairro: bairros[(offset + i) % bairros.length],
+      logradouro: `RUA EXEMPLO ${(offset + i) % 200}`,
+      numero: String(((offset + i) % 900) + 1),
+      cep: ceps[(offset + i) % ceps.length],
+      estado: 'RJ',
     }));
   }
 }

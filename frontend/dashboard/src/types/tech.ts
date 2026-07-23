@@ -39,3 +39,26 @@ export interface TechSignal {
   lastUpdate: string | null;
   motivo: string | null;
 }
+
+export interface TechRouteStop {
+  id: string;
+  order: number;
+  status: 'PENDING' | 'DONE';
+  plate: string;
+  pendingType: 'TRACKER' | 'TAG';
+  associateName: string;
+  phone: string | null;
+  brandModel: string;
+  street: string | null;
+  number: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+export interface TechRoute {
+  id: string;
+  status: 'PENDING' | 'DONE' | 'CANCELLED';
+  stops: TechRouteStop[];
+}

@@ -37,6 +37,12 @@ export interface PendingRowData {
   vehicleType: string | null;
   city: string | null;
   neighborhood: string | null;
+  cep: string | null;
+  street: string | null;
+  number: string | null;
+  /** Preenchidos pelo geocoding no sync; null até resolver o CEP. */
+  lat: number | null;
+  lng: number | null;
   protectedValue: number;
   contractDate: Date;
   evaluationTable: string | null;
@@ -137,6 +143,11 @@ export function paraLinha(
     vehicleType: v.tipo ?? null,
     city: endereco?.cidade ?? null,
     neighborhood: endereco?.bairro ?? null,
+    cep: endereco?.cep ? String(endereco.cep).replace(/\D/g, '') || null : null,
+    street: endereco?.logradouro ?? null,
+    number: endereco?.numero ?? null,
+    lat: null,
+    lng: null,
     protectedValue: Number(v.valor_fipe_protegido ?? v.valor_fipe ?? 0),
     contractDate,
     evaluationTable: v.codigo_tabela_avaliacao ?? null,

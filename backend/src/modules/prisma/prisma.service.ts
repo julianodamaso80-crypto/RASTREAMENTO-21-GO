@@ -191,6 +191,16 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get installationPending() {
     return this.base.installationPending;
   }
+  // Rota inteligente de instalação (sem soft delete — rota é efêmera).
+  get cepCoordinate() {
+    return this.base.cepCoordinate;
+  }
+  get installationRoute() {
+    return this.base.installationRoute;
+  }
+  get routeStop() {
+    return this.base.routeStop;
+  }
 
   // Raw queries — sempre pelo base (extension não afeta raw)
   $queryRaw<T = unknown>(

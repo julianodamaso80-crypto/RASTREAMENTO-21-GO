@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { StockModule } from '../stock/stock.module';
 import { TraccarModule } from '../traccar/traccar.module';
 import { HinovaModule } from '../hinova/hinova.module';
+import { InstallationPendingsModule } from '../installation-pendings/installation-pendings.module';
 import { TechAuthService } from './tech-auth.service';
 import { TechAuthController } from './tech-auth.controller';
 import { TechFieldService } from './tech-field.service';
@@ -20,6 +21,7 @@ import { TechnicianJwtGuard } from './guards/technician-jwt.guard';
     StockModule,
     TraccarModule,
     HinovaModule,
+    InstallationPendingsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

@@ -4,6 +4,7 @@ import type {
   TechMe,
   TechLoginResponse,
   TechSignal,
+  TechRoute,
 } from '@/types/tech';
 import type { HinovaLookup, StockAssociateResult } from '@/types/stock';
 
@@ -79,6 +80,10 @@ export const techApi = {
   assignments: async (): Promise<TechAssignment[]> => {
     const res = await techHttp.get('/tech/assignments');
     return unwrap<TechAssignment[]>(res.data);
+  },
+  route: async (): Promise<TechRoute | null> => {
+    const res = await techHttp.get('/tech/route');
+    return unwrap<TechRoute | null>(res.data);
   },
   lookup: async (placa: string): Promise<HinovaLookup> => {
     const res = await techHttp.get('/tech/lookup', { params: { placa } });
