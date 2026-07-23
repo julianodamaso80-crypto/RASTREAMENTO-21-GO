@@ -7,6 +7,17 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { agrupar, ordenarRota, type GeoPoint } from './route-geo';
 
+export interface ClusterFilters {
+  /** Janela sobre a data de contrato (padrão 60). */
+  days: number;
+  type?: 'TRACKER' | 'TAG';
+  /** Só pendências com valor protegido >= este. */
+  minValue?: number;
+  /** Só pendências paradas há pelo menos N dias. */
+  minDaysPending?: number;
+  city?: string;
+}
+
 export interface ClusterDto {
   id: string;
   count: number;
@@ -16,7 +27,13 @@ export interface ClusterDto {
   center: { lat: number; lng: number };
   neighborhood: string | null;
   city: string | null;
-  /** IDs das pendências no bolsão, já ordenados por vizinho-mais-próximo. */
+  /** Soma do valor protegido do bolsão — quanto de patrimônio a rota cobre. */
+  totalValue: number;
+  /**
+   * IDs das pendências no bolsão, ordenados por valor protegido (maior primeiro).
+   * Limitar a rota a N paradas pega as N mais valiosas; a ordem de visita é
+   * reotimizada geograficamente no createRoute.
+   */
   pendingIds: string[];
 }
 
@@ -34,17 +51,35 @@ export class RoutesService {
   constructor(private prisma: PrismaService) {}
 
   /** Bolsões de pendências geolocalizadas dentro da janela de dias. */
-  async clusters(tenantId: string, days: number): Promise<ClusterDto[]> {
-    const corte = new Date();
-    corte.setUTCHours(0, 0, 0, 0);
-    corte.setUTCDate(corte.getUTCDate() - days);
+  async clusters(
+    tenantId: string,
+    filters: ClusterFilters,
+  ): Promise<ClusterDto[]> {
+    // Janela: contract_date entre (hoje - days) e (hoje - minDaysPending).
+    // minDaysPending recorta os mais antigos (parados há X dias ou mais).
+    const inicio = new Date();
+    inicio.setUTCHours(0, 0, 0, 0);
+    inicio.setUTCDate(inicio.getUTCDate() - filters.days);
+
+    const contractDate: { gte: Date; lte?: Date } = { gte: inicio };
+    if (filters.minDaysPending && filters.minDaysPending > 0) {
+      const fim = new Date();
+      fim.setUTCHours(0, 0, 0, 0);
+      fim.setUTCDate(fim.getUTCDate() - filters.minDaysPending);
+      contractDate.lte = fim;
+    }
 
     const rows = await this.prisma.installationPending.findMany({
       where: {
         tenantId,
-        contractDate: { gte: corte },
+        contractDate,
         lat: { not: null },
         lng: { not: null },
+        ...(filters.type ? { pendingType: filters.type } : {}),
+        ...(filters.city ? { city: filters.city } : {}),
+        ...(filters.minValue && filters.minValue > 0
+          ? { protectedValue: { gte: filters.minValue } }
+          : {}),
       },
       select: {
         id: true,
@@ -53,6 +88,7 @@ export class RoutesService {
         pendingType: true,
         neighborhood: true,
         city: true,
+        protectedValue: true,
       },
     });
 
@@ -63,7 +99,10 @@ export class RoutesService {
     const clusters = agrupar(pontos, RoutesService.LIMITE_CLUSTER_KM);
 
     return clusters.map((c, i) => {
-      const ordenados = ordenarRota(c.pontos, c.centro);
+      // Prioridade por valor: limitar a rota a N pega os N mais valiosos.
+      const porValor = [...c.pontos].sort(
+        (a, b) => Number(b.row.protectedValue) - Number(a.row.protectedValue),
+      );
       const bairros = new Map<string, number>();
       for (const p of c.pontos) {
         const b = p.row.neighborhood ?? '';
@@ -81,7 +120,11 @@ export class RoutesService {
         center: c.centro,
         neighborhood: bairroTop,
         city: c.pontos[0]?.row.city ?? null,
-        pendingIds: ordenados.map((p) => p.id),
+        totalValue: c.pontos.reduce(
+          (s, p) => s + Number(p.row.protectedValue),
+          0,
+        ),
+        pendingIds: porValor.map((p) => p.id),
       };
     });
   }

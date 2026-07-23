@@ -35,6 +35,7 @@ import type {
 import type {
   InstallationCluster,
   InstallationRoute,
+  RouteFilters,
 } from '@/types/route';
 
 const api = axios.create({
@@ -667,10 +668,18 @@ export const installationPendingsApi = {
 };
 
 export const routesApi = {
-  getClusters: async (days: number): Promise<InstallationCluster[]> => {
+  getClusters: async (f: RouteFilters): Promise<InstallationCluster[]> => {
     const res = await api.get<ApiResponse<InstallationCluster[]>>(
       '/installation-pendings/clusters',
-      { params: { days } },
+      {
+        params: {
+          days: f.days,
+          ...(f.type ? { type: f.type } : {}),
+          ...(f.minValue ? { minValue: f.minValue } : {}),
+          ...(f.minDaysPending ? { minDaysPending: f.minDaysPending } : {}),
+          ...(f.city ? { city: f.city } : {}),
+        },
+      },
     );
     return res.data.data;
   },

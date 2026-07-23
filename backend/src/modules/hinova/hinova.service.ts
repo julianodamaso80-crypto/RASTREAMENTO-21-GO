@@ -308,12 +308,17 @@ export class HinovaService implements IHinovaClient {
   private static readonly TIMEOUT_LISTAGEM_MS = 240_000;
 
   /**
-   * O SGA falha de forma transitória sob carga: 401 com token válido e
-   * "Parâmetros Inválidos" que somem na tentativa seguinte. Sem retry, uma
-   * falha isolada perde a varredura inteira.
+   * O SGA falha de forma transitória, às vezes por vários minutos seguidos:
+   * 401 com token válido, 406 "Parâmetros Inválidos", e 502/timeout quando o
+   * gateway dele cai (visto no sync de 2026-07-23). Sem retry robusto, uma
+   * janela ruim de alguns minutos perde a varredura inteira.
+   *
+   * 8 tentativas com backoff que cresce até 60s cobre ~4min de instabilidade —
+   * o suficiente pra atravessar os piques de 502 que observamos.
    */
   private async postComRetry<T>(path: string, body: unknown): Promise<T> {
-    const TENTATIVAS = 4;
+    const TENTATIVAS = 8;
+    const ESPERA_MAX_MS = 60_000;
     let ultimoErro: unknown;
 
     for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
@@ -330,7 +335,7 @@ export class HinovaService implements IHinovaClient {
         if ((error as { response?: { status: number } }).response?.status === 401) {
           this.tokenUsuario = null;
         }
-        const espera = 3000 * tentativa;
+        const espera = Math.min(3000 * 2 ** (tentativa - 1), ESPERA_MAX_MS);
         this.logger.warn(
           `SGA ${path} falhou (tentativa ${tentativa}/${TENTATIVAS}): ${
             error instanceof Error ? error.message : error

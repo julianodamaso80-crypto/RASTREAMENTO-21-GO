@@ -7,8 +7,18 @@ export interface InstallationCluster {
   center: { lat: number; lng: number };
   neighborhood: string | null;
   city: string | null;
-  /** IDs das pendências no bolsão, já ordenados por vizinho-mais-próximo. */
+  /** Patrimônio protegido somado no bolsão. */
+  totalValue: number;
+  /** IDs ordenados por valor (maior primeiro); a rota reordena por distância. */
   pendingIds: string[];
+}
+
+export interface RouteFilters {
+  days: number;
+  type?: 'TRACKER' | 'TAG';
+  minValue?: number;
+  minDaysPending?: number;
+  city?: string;
 }
 
 export interface RouteStop {

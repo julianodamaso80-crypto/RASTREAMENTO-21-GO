@@ -133,8 +133,25 @@ export class InstallationPendingsController {
   @Get('clusters')
   @ApiOperation({ summary: 'Bolsões de pendências próximas, pra montar rota' })
   @ApiQuery({ name: 'days', required: false })
-  clusters(@Req() req: AuthenticatedRequest, @Query('days') days?: string) {
-    return this.routes.clusters(req.tenantId, parseDias(days));
+  @ApiQuery({ name: 'type', required: false, enum: ['TRACKER', 'TAG'] })
+  @ApiQuery({ name: 'minValue', required: false, description: 'Valor protegido mínimo' })
+  @ApiQuery({ name: 'minDaysPending', required: false, description: 'Parado há pelo menos N dias' })
+  @ApiQuery({ name: 'city', required: false })
+  clusters(
+    @Req() req: AuthenticatedRequest,
+    @Query('days') days?: string,
+    @Query('type') type?: PendingType,
+    @Query('minValue') minValue?: string,
+    @Query('minDaysPending') minDaysPending?: string,
+    @Query('city') city?: string,
+  ) {
+    return this.routes.clusters(req.tenantId, {
+      days: parseDias(days),
+      type: type || undefined,
+      minValue: parseNum(minValue),
+      minDaysPending: parseNum(minDaysPending),
+      city: city || undefined,
+    });
   }
 
   @Get('routes')
@@ -170,4 +187,10 @@ export class InstallationPendingsController {
 function parseDias(valor?: string): number {
   const n = Number(valor);
   return Number.isFinite(n) && n > 0 && n <= 3650 ? Math.floor(n) : DIAS_PADRAO;
+}
+
+/** Número positivo opcional; vazio/inválido vira undefined (sem filtro). */
+function parseNum(valor?: string): number | undefined {
+  const n = Number(valor);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }

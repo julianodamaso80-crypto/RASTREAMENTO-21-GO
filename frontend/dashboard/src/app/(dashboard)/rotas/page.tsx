@@ -11,9 +11,10 @@ import {
   Send,
   X,
   Check,
+  Wallet,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { routesApi, techniciansApi } from '@/lib/api';
+import { routesApi, techniciansApi, installationPendingsApi } from '@/lib/api';
 import { CARTO_VOYAGER_URL } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,8 +22,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { SelectNative } from '@/components/ui/select-native';
 import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { InstallationCluster, InstallationRoute } from '@/types/route';
+import type {
+  InstallationCluster,
+  InstallationRoute,
+  RouteFilters,
+} from '@/types/route';
 import type { Technician } from '@/types/technician';
+
+const moeda = (v: number) =>
+  v.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    maximumFractionDigits: 0,
+  });
 
 /**
  * Rota inteligente: o operador vê os bolsões de pendências no mapa, escolhe um,
@@ -33,7 +45,15 @@ export default function RotasPage() {
   const [clusters, setClusters] = useState<InstallationCluster[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [routes, setRoutes] = useState<InstallationRoute[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filtros que definem QUAIS pendências entram nos bolsões.
+  const [days, setDays] = useState(60);
+  const [type, setType] = useState<'TRACKER' | 'TAG' | ''>('');
+  const [minValue, setMinValue] = useState(0);
+  const [minDaysPending, setMinDaysPending] = useState(0);
+  const [city, setCity] = useState('');
 
   const [selected, setSelected] = useState<InstallationCluster | null>(null);
   const [stops, setStops] = useState(10);
@@ -44,26 +64,43 @@ export default function RotasPage() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
+  const filters = useMemo<RouteFilters>(
+    () => ({
+      days,
+      type: type || undefined,
+      minValue: minValue || undefined,
+      minDaysPending: minDaysPending || undefined,
+      city: city || undefined,
+    }),
+    [days, type, minValue, minDaysPending, city],
+  );
+
   const load = useCallback(async () => {
     try {
       const [cl, tec, rt] = await Promise.all([
-        routesApi.getClusters(60),
+        routesApi.getClusters(filters),
         techniciansApi.getAll(),
         routesApi.getRoutes(),
       ]);
       setClusters(cl);
       setTechnicians(tec.filter((t) => t.active && t.canReceiveEquipment));
       setRoutes(rt);
+      setSelected(null); // filtros mudaram: a seleção antiga não vale mais
     } catch {
       toast.error('Erro ao carregar as rotas');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters]);
 
   useEffect(() => {
-    load();
+    const t = setTimeout(load, 250);
+    return () => clearTimeout(t);
   }, [load]);
+
+  useEffect(() => {
+    installationPendingsApi.getCities().then(setCities).catch(() => setCities([]));
+  }, []);
 
   // Inicializa o mapa uma vez.
   useEffect(() => {
@@ -148,6 +185,10 @@ export default function RotasPage() {
     () => clusters.reduce((n, c) => n + c.count, 0),
     [clusters],
   );
+  const totalValor = useMemo(
+    () => clusters.reduce((s, c) => s + c.totalValue, 0),
+    [clusters],
+  );
 
   return (
     <div className="flex flex-col h-full min-w-0 p-4 md:p-6 gap-4 overflow-auto">
@@ -158,9 +199,66 @@ export default function RotasPage() {
             Rota Inteligente
           </h1>
           <p className="text-sm text-muted-foreground">
-            {clusters.length} bolsões · {totalInstalacoes} instalações geolocalizadas ·
-            clique num bolsão pra montar a rota
+            {clusters.length} bolsões · {totalInstalacoes} instalações no filtro ·
+            <span className="inline-flex items-center gap-1 ml-1 text-foreground font-medium">
+              <Wallet className="h-3.5 w-3.5" /> {moeda(totalValor)}
+            </span>{' '}
+            em jogo
           </p>
+        </div>
+      </div>
+
+      {/* Filtros que definem o que entra nos bolsões */}
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 shrink-0">
+        <div>
+          <label className="text-[11px] font-medium text-muted-foreground">Período</label>
+          <SelectNative value={String(days)} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value="30">Últimos 30 dias</option>
+            <option value="60">Últimos 60 dias</option>
+            <option value="90">Últimos 90 dias</option>
+            <option value="3650">Todo o histórico</option>
+          </SelectNative>
+        </div>
+        <div>
+          <label className="text-[11px] font-medium text-muted-foreground">Tipo</label>
+          <SelectNative value={type} onChange={(e) => setType(e.target.value as 'TRACKER' | 'TAG' | '')}>
+            <option value="">Rastreador e TAG</option>
+            <option value="TRACKER">Só rastreador</option>
+            <option value="TAG">Só TAG</option>
+          </SelectNative>
+        </div>
+        <div>
+          <label className="text-[11px] font-medium text-muted-foreground">Valor mínimo</label>
+          <SelectNative value={String(minValue)} onChange={(e) => setMinValue(Number(e.target.value))}>
+            <option value="0">Qualquer valor</option>
+            <option value="25000">≥ R$ 25 mil</option>
+            <option value="50000">≥ R$ 50 mil</option>
+            <option value="80000">≥ R$ 80 mil</option>
+            <option value="120000">≥ R$ 120 mil</option>
+          </SelectNative>
+        </div>
+        <div>
+          <label className="text-[11px] font-medium text-muted-foreground">Parado há</label>
+          <SelectNative
+            value={String(minDaysPending)}
+            onChange={(e) => setMinDaysPending(Number(e.target.value))}
+          >
+            <option value="0">Qualquer tempo</option>
+            <option value="15">15+ dias</option>
+            <option value="30">30+ dias</option>
+            <option value="45">45+ dias</option>
+          </SelectNative>
+        </div>
+        <div>
+          <label className="text-[11px] font-medium text-muted-foreground">Cidade</label>
+          <SelectNative value={city} onChange={(e) => setCity(e.target.value)}>
+            <option value="">Todas</option>
+            {cities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </SelectNative>
         </div>
       </div>
 
@@ -195,12 +293,15 @@ export default function RotasPage() {
                   </button>
                 </div>
 
-                <div className="flex gap-2 text-xs">
+                <div className="flex flex-wrap gap-2 text-xs">
                   <span className="inline-flex items-center gap-1 rounded-md bg-brand-orange-500/10 text-brand-orange-500 px-2 py-1">
                     <Radio className="h-3 w-3" /> {selected.tracker} rastreador
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-md bg-sky-500/10 text-sky-400 px-2 py-1">
                     <Tag className="h-3 w-3" /> {selected.tag} TAG
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 text-emerald-400 px-2 py-1">
+                    <Wallet className="h-3 w-3" /> {moeda(selected.totalValue)}
                   </span>
                 </div>
 
@@ -215,6 +316,10 @@ export default function RotasPage() {
                     onValueChange={(v) => setStops(v[0])}
                     className="mt-2"
                   />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Pega as {stops} de maior valor do bolsão e ordena pelo caminho
+                    mais curto.
+                  </p>
                 </div>
 
                 <div>
