@@ -29,10 +29,12 @@ export class InstallationPendingsService implements OnModuleInit {
   private readonly logger = new Logger(InstallationPendingsService.name);
 
   /**
-   * Lote da varredura. 5.000 (o máximo do SGA) devolve 401 esporádico mesmo com
-   * token válido; 2.000 se mostrou estável na coleta de 2026-07-22.
+   * Lote da varredura. Medido ao vivo em 2026-07-23 no offset 0: lote 500 = 5s,
+   * 1.000 = 9,5s, 2.000 = 39s — e o tempo ainda cresce com o offset. O lote de
+   * 2.000 estourava o timeout sob a lentidão do SGA; 1.000 responde rápido e
+   * dobra a folga sem multiplicar demais o número de páginas.
    */
-  private static readonly LOTE = 2000;
+  private static readonly LOTE = 1000;
 
   /** Trava contra paginação infinita se o SGA parar de encurtar o último lote. */
   private static readonly MAX_PAGINAS = 50;
