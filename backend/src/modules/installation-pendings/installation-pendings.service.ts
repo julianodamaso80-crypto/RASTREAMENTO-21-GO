@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
-import { montarFila } from './installation-pendings.mapper';
+import { montarFila, diasPendente } from './installation-pendings.mapper';
 import type {
   InstallationPendingRow,
   PendingListQuery,
@@ -82,7 +82,7 @@ export class InstallationPendingsService implements OnModuleInit {
       neighborhood: r.neighborhood,
       protectedValue: Number(r.protectedValue),
       contractDate: r.contractDate.toISOString().slice(0, 10),
-      daysPending: InstallationPendingsService.diasDesde(r.contractDate),
+      daysPending: diasPendente(r.contractDate),
       evaluationTable: r.evaluationTable,
       consultantName: r.consultantName,
       hinovaVehicleCode: r.hinovaVehicleCode,
@@ -188,15 +188,6 @@ export class InstallationPendingsService implements OnModuleInit {
         { cpf: { contains: t.replace(/\D/g, '') } },
       ],
     };
-  }
-
-  private static diasDesde(data: Date): number {
-    const hoje = new Date();
-    hoje.setUTCHours(0, 0, 0, 0);
-    return Math.max(
-      0,
-      Math.floor((hoje.getTime() - data.getTime()) / 86400000),
-    );
   }
 
   // ---------------------------------------------------------------------------

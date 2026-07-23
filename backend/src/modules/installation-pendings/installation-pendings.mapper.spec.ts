@@ -1,4 +1,5 @@
 import {
+  diasPendente,
   ehPendencia,
   montarFila,
   montarTelefone,
@@ -127,6 +128,34 @@ describe('paraLinha', () => {
   it('normaliza placa para caixa alta', () => {
     const linha = paraLinha(veiculo({ placa: 'llb8h47' }), mapaEnderecos, TENANT);
     expect(linha?.plate).toBe('LLB8H47');
+  });
+});
+
+describe('diasPendente', () => {
+  const contrato = new Date('2026-07-08T00:00:00.000Z');
+
+  it('conta os dias de calendário até hoje', () => {
+    const hoje = new Date('2026-07-23T12:00:00.000Z'); // 09h BRT
+    expect(diasPendente(contrato, hoje)).toBe(15);
+  });
+
+  it('incrementa a cada dia — 15 hoje vira 16 amanhã', () => {
+    expect(diasPendente(contrato, new Date('2026-07-23T12:00:00Z'))).toBe(15);
+    expect(diasPendente(contrato, new Date('2026-07-24T12:00:00Z'))).toBe(16);
+  });
+
+  // O bug antigo: às 22h BRT (01h UTC do dia seguinte) o cálculo UTC já contava
+  // o dia de amanhã. Deve continuar 15 até a meia-noite de Brasília.
+  it('não adianta o dia à noite (22h BRT ainda é o mesmo dia)', () => {
+    const vinteEDuasBRT = new Date('2026-07-23T01:00:00.000Z'); // 22h de 22/07 BRT
+    expect(diasPendente(contrato, vinteEDuasBRT)).toBe(14);
+    const meiaNoiteMeia = new Date('2026-07-23T03:30:00.000Z'); // 00h30 de 23/07 BRT
+    expect(diasPendente(contrato, meiaNoiteMeia)).toBe(15);
+  });
+
+  it('nunca retorna negativo para contrato futuro', () => {
+    const futuro = new Date('2026-08-01T00:00:00Z');
+    expect(diasPendente(futuro, new Date('2026-07-23T12:00:00Z'))).toBe(0);
   });
 });
 

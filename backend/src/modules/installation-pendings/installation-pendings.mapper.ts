@@ -48,6 +48,29 @@ export function ehPendencia(v: HinovaRawVehicle): boolean {
   return TIPO_ADESAO_PENDENTE[String(v.codigo_tipo_adesao)] !== undefined;
 }
 
+const FMT_SP = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * "Parado há N dias" — contagem de calendário no fuso de Brasília.
+ *
+ * Zerar a hora em UTC (versão anterior) fazia o contador virar pro dia seguinte
+ * toda noite depois das 21h BRT, mostrando 1 dia a mais até meia-noite UTC. Aqui
+ * as duas pontas viram datas puras (YYYY-MM-DD) em São Paulo, então o número só
+ * muda à meia-noite de Brasília e não depende do TZ do processo. `agora` é
+ * injetável só pros testes.
+ */
+export function diasPendente(contractDate: Date, agora: Date = new Date()): number {
+  const hojeSP = FMT_SP.format(agora);
+  const contratoISO = contractDate.toISOString().slice(0, 10);
+  const ms = Date.parse(`${hojeSP}T00:00:00Z`) - Date.parse(`${contratoISO}T00:00:00Z`);
+  return Math.max(0, Math.round(ms / 86400000));
+}
+
 /** `data_contrato` vem como "2026-05-04T00:00:00-0300"; só a data importa. */
 export function paraData(valor?: string): Date | null {
   const iso = String(valor ?? '').slice(0, 10);
