@@ -19,32 +19,59 @@ describe('distanciaKm', () => {
 });
 
 describe('agrupar', () => {
-  it('junta pontos a menos do limite e separa os distantes', () => {
-    const clusters = agrupar([CAMPO_GRANDE, CAMPO_GRANDE2, RECREIO, NITEROI], 2);
-    // CG + CG2 num bolsão; Recreio e Niterói isolados.
+  it('junta pontos vizinhos e separa os distantes', () => {
+    const clusters = agrupar([CAMPO_GRANDE, CAMPO_GRANDE2, RECREIO, NITEROI], 4);
+    // CG + CG2 (250m) na mesma célula; Recreio e Niterói longe, cada um na sua.
     expect(clusters).toHaveLength(3);
     expect(clusters[0].pontos).toHaveLength(2);
     expect(clusters[0].pontos.map((p) => p.id).sort()).toEqual(['cg', 'cg2']);
   });
 
   it('ordena os bolsões do maior pro menor', () => {
-    const clusters = agrupar([CAMPO_GRANDE, CAMPO_GRANDE2, RECREIO], 2);
+    const clusters = agrupar([CAMPO_GRANDE, CAMPO_GRANDE2, RECREIO], 4);
     expect(clusters[0].pontos.length).toBeGreaterThanOrEqual(
       clusters[1].pontos.length,
     );
   });
 
   it('calcula raio 0 pra bolsão de um ponto só', () => {
-    const clusters = agrupar([NITEROI], 2);
+    const clusters = agrupar([NITEROI], 4);
     expect(clusters[0].raioKm).toBeCloseTo(0, 5);
   });
 
-  it('funde bolsões por transitividade (A-B-C em cadeia)', () => {
-    const a = { id: 'a', lat: -22.9, lng: -43.5 };
-    const b = { id: 'b', lat: -22.915, lng: -43.5 }; // ~1.7km de a
-    const c = { id: 'c', lat: -22.93, lng: -43.5 }; // ~1.7km de b, ~3.3km de a
-    // a não alcança c direto, mas alcança via b.
-    expect(agrupar([a, b, c], 2)).toHaveLength(1);
+  it('devolve vazio sem pontos', () => {
+    expect(agrupar([], 4)).toEqual([]);
+  });
+
+  /**
+   * A regressão que motivou a troca de algoritmo: em produção, uma cadeia densa
+   * de pontos virava um bolsão único de 42 km de raio. A grade tem que manter o
+   * raio limitado mesmo com pontos enfileirados por dezenas de quilômetros.
+   */
+  it('não encadeia: linha longa de pontos vira vários bolsões de raio pequeno', () => {
+    const linha = Array.from({ length: 40 }, (_, i) => ({
+      id: `p${i}`,
+      lat: -22.9,
+      lng: -43.7 + i * 0.02, // ~2km entre vizinhos, ~80km de ponta a ponta
+    }));
+
+    const clusters = agrupar(linha, 4);
+
+    expect(clusters.length).toBeGreaterThan(5);
+    for (const c of clusters) {
+      // Meia diagonal de uma célula de 4km ≈ 2.9km; folga pra arredondamento.
+      expect(c.raioKm).toBeLessThan(3.5);
+    }
+  });
+
+  it('não perde nem duplica pontos ao agrupar', () => {
+    const linha = Array.from({ length: 40 }, (_, i) => ({
+      id: `p${i}`,
+      lat: -22.9 + i * 0.01,
+      lng: -43.5,
+    }));
+    const total = agrupar(linha, 4).reduce((s, c) => s + c.pontos.length, 0);
+    expect(total).toBe(40);
   });
 });
 

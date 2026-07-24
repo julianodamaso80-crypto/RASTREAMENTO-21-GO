@@ -45,8 +45,11 @@ export interface ClusterDto {
 export class RoutesService {
   private readonly logger = new Logger(RoutesService.name);
 
-  /** Raio que funde pendências num mesmo bolsão. */
-  private static readonly LIMITE_CLUSTER_KM = 2.5;
+  /**
+   * Lado da célula da grade de agrupamento. 4km dá bolsões do tamanho que um
+   * técnico cobre num dia, com raio máximo de ~2,9km (meia diagonal).
+   */
+  private static readonly LIMITE_CLUSTER_KM = 4;
 
   constructor(private prisma: PrismaService) {}
 

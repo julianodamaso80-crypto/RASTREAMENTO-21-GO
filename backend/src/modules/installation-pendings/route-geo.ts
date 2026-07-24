@@ -35,41 +35,42 @@ export interface Cluster<T extends GeoPoint> {
   raioKm: number;
 }
 
+const KM_POR_GRAU_LAT = 111.32;
+
 /**
- * Agrupa pontos por proximidade (single-linkage): dois pontos ficam no mesmo
- * bolsão se estão a menos de `limiteKm` um do outro, transitivamente. Um ponto
- * isolado vira um bolsão de tamanho 1.
+ * Agrupa pontos numa grade geográfica de `celulaKm` de lado.
  *
- * O(n²) — ok pros ~5 mil pontos de um tenant rodando fora do request quente.
+ * Por que grade e não "junta quem está a menos de X km" (single-linkage): numa
+ * cidade densa aquele método encadeia — A perto de B, B perto de C — e tudo
+ * vira um bolsão só. Medido em produção 2026-07-23: gerou um bolsão de 2.595
+ * instalações com **42 km de raio**, inútil pra roteirizar. A grade limita o
+ * raio por construção (no máximo meia diagonal da célula) e dá bolsões do
+ * tamanho que um técnico cobre num dia.
+ *
+ * O(n) — e o raio de cada bolsão é previsível.
  */
 export function agrupar<T extends GeoPoint>(
   pontos: T[],
-  limiteKm = 2,
+  celulaKm = 4,
 ): Cluster<T>[] {
-  const n = pontos.length;
-  const grupo = new Array<number>(n).fill(-1);
-  let atual = 0;
+  if (!pontos.length) return [];
 
-  for (let i = 0; i < n; i++) {
-    if (grupo[i] !== -1) continue;
-    // BFS ligando todos os pontos alcançáveis dentro do limite.
-    grupo[i] = atual;
-    const fila = [i];
-    while (fila.length) {
-      const p = fila.pop()!;
-      for (let j = 0; j < n; j++) {
-        if (grupo[j] === -1 && distanciaKm(pontos[p], pontos[j]) <= limiteKm) {
-          grupo[j] = atual;
-          fila.push(j);
-        }
-      }
-    }
-    atual++;
+  const deltaLat = celulaKm / KM_POR_GRAU_LAT;
+  // 1 grau de longitude encolhe conforme sai do equador.
+  const latMedia = pontos.reduce((s, p) => s + p.lat, 0) / pontos.length;
+  const kmPorGrauLng = KM_POR_GRAU_LAT * Math.cos(rad(latMedia));
+  const deltaLng = celulaKm / Math.max(kmPorGrauLng, 1);
+
+  const celulas = new Map<string, T[]>();
+  for (const p of pontos) {
+    const chave = `${Math.floor(p.lat / deltaLat)}:${Math.floor(p.lng / deltaLng)}`;
+    const atual = celulas.get(chave);
+    if (atual) atual.push(p);
+    else celulas.set(chave, [p]);
   }
 
   const clusters: Cluster<T>[] = [];
-  for (let g = 0; g < atual; g++) {
-    const membros = pontos.filter((_, i) => grupo[i] === g);
+  for (const membros of celulas.values()) {
     const centro = {
       lat: membros.reduce((s, p) => s + p.lat, 0) / membros.length,
       lng: membros.reduce((s, p) => s + p.lng, 0) / membros.length,
