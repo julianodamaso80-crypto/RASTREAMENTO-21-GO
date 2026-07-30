@@ -80,6 +80,75 @@ const PRIVACY_HTML = `<!doctype html>
 <footer class="wrap">© 2026 21 Go Proteção Veicular — Track Go Rastreamento. Todos os direitos reservados.</footer>
 </body></html>`;
 
+// Página de exclusão de conta/dados exigida pelo Google Play (Data Safety):
+// precisa mencionar o app, as etapas pra solicitar e quais dados são
+// excluídos/mantidos. URL pública: /exclusao-dados.
+const DELETE_HTML = `<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exclusão de conta e dados — Track Go Rastreamento</title>
+<style>
+  :root{--navy:#293c82;--orange:#f2911d;--text:#0f172a;--muted:#475569}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Inter,sans-serif;color:var(--text);line-height:1.65;background:#f8fafc}
+  header{background:var(--navy);color:#fff;padding:40px 20px}
+  .wrap{max-width:780px;margin:0 auto;padding:0 20px}
+  header .wrap{display:flex;align-items:center;gap:14px}
+  .logo{width:46px;height:46px;border-radius:13px;background:#1f2d63;display:flex;align-items:center;justify-content:center}
+  h1{font-size:22px;margin:0}
+  .tag{font-size:12px;letter-spacing:2px;color:#c7d301;font-weight:700}
+  main{padding:36px 0 60px}
+  h2{color:var(--navy);font-size:19px;margin-top:32px}
+  p,li{color:var(--muted);font-size:15.5px}
+  .upd{color:#94a3b8;font-size:13px}
+  a{color:var(--orange)}
+  .box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px 22px;margin-top:14px}
+  footer{border-top:1px solid #e2e8f0;padding:24px 0;color:#94a3b8;font-size:13px}
+</style></head>
+<body>
+<header><div class="wrap">
+  <div class="logo">
+    <svg width="26" height="26" viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="none" stroke="#f2911d" stroke-width="8" stroke-linecap="round" stroke-dasharray="115 6" transform="rotate(-30 32 32)"/><path d="M22 36c0-4.4 3.6-8 8-8s8 3.6 8 8c0 6-8 14-8 14s-8-8-8-14z" fill="#c7d301"/><circle cx="30" cy="36" r="3" fill="#fff"/></svg>
+  </div>
+  <div><h1>Track Go Rastreamento</h1><div class="tag">PROTEÇÃO VEICULAR</div></div>
+</div></header>
+<main class="wrap">
+  <h1 style="color:#0f172a">Exclusão de conta e dados</h1>
+  <p class="upd">Aplicativo: <strong>21 Tracker Rastreamento</strong> (Track Go Rastreamento) — 21 Go Proteção Veicular</p>
+
+  <p>Esta página explica como o associado pode solicitar a exclusão da sua conta e dos
+  dados pessoais tratados pelo aplicativo <strong>21 Tracker Rastreamento</strong>.</p>
+
+  <h2>Como solicitar a exclusão</h2>
+  <div class="box"><ol>
+    <li>Envie um e-mail para <a href="mailto:contato@trackgo.site">contato@trackgo.site</a>
+    com o assunto <strong>"Exclusão de dados"</strong>, informando o <strong>CPF</strong>
+    usado no login. Você também pode solicitar diretamente à sua associação ou empresa de
+    proteção veicular.</li>
+    <li>Confirmamos o recebimento e validamos a titularidade da conta.</li>
+    <li>A exclusão é concluída em até <strong>30 dias</strong> após a confirmação.</li>
+  </ol></div>
+
+  <h2>Dados excluídos</h2>
+  <ul>
+    <li>CPF e senha de acesso ao aplicativo.</li>
+    <li>Vínculo da sua conta de login com a associação e com os veículos.</li>
+  </ul>
+
+  <h2>Dados que podem ser mantidos</h2>
+  <p>Registros necessários ao cumprimento de obrigações legais e contratuais da proteção
+  veicular (por exemplo, dados do contrato e histórico exigidos por lei) podem ser mantidos
+  pela associação pelo período previsto na legislação aplicável, mesmo após a exclusão do
+  acesso ao aplicativo. Esses dados não ficam mais acessíveis pelo app.</p>
+
+  <h2>Contato</h2>
+  <p>E-mail: <a href="mailto:contato@trackgo.site">contato@trackgo.site</a><br>
+  Site: <a href="https://trackgo.site">trackgo.site</a></p>
+</main>
+<footer class="wrap">© 2026 21 Go Proteção Veicular — Track Go Rastreamento. Todos os direitos reservados.</footer>
+</body></html>`;
+
 @ApiExcludeController()
 @Controller()
 export class LegalController {
@@ -88,6 +157,13 @@ export class LegalController {
   @Header('Content-Type', 'text/html; charset=utf-8')
   privacy(): string {
     return PRIVACY_HTML;
+  }
+
+  @Public()
+  @Get(['exclusao-dados', 'exclusao', 'delete-account'])
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  deleteData(): string {
+    return DELETE_HTML;
   }
 
   // Rastreador de boot do app mobile (diagnóstico). O app chama em cada etapa do
