@@ -190,7 +190,8 @@ export class HinovaSyncService {
         },
         create: {
           name: hinova.associado.nome,
-          cpf: hinova.associado.cpf,
+          // Só dígitos: o CPF é o login (e a senha) do associado no app.
+          cpf: hinova.associado.cpf.replace(/\D/g, ''),
           rg: hinova.associado.rg,
           birthDate: hinova.associado.dataNascimento
             ? new Date(hinova.associado.dataNascimento)

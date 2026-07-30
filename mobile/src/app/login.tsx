@@ -81,7 +81,7 @@ export default function LoginScreen() {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="Sua senha"
+              placeholder="Seu CPF"
               placeholderTextColor={colors.textFaint}
               secureTextEntry
               style={styles.input}
@@ -102,7 +102,8 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <Text style={styles.help}>
-            Não tem senha? Fale com a sua associação para liberar o acesso.
+            No primeiro acesso, a senha é o seu próprio CPF. Não consegue
+            entrar? Fale com a sua associação.
           </Text>
         </View>
       </KeyboardAvoidingView>

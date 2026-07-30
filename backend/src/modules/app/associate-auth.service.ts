@@ -11,6 +11,16 @@ function normalizeCpf(cpf: string): string {
   return (cpf || '').replace(/\D/g, '');
 }
 
+/** Formatos em que o CPF pode ter sido gravado: só dígitos ou com máscara. */
+function cpfVariants(digits: string): string[] {
+  if (digits.length !== 11) return [digits];
+  const masked = digits.replace(
+    /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
+    '$1.$2.$3-$4',
+  );
+  return [digits, masked];
+}
+
 @Injectable()
 export class AssociateAuthService {
   private readonly logger = new Logger(AssociateAuthService.name);
@@ -23,10 +33,11 @@ export class AssociateAuthService {
   async login(dto: AssociateLoginDto) {
     const cpf = normalizeCpf(dto.cpf);
 
-    // Mesmo CPF pode existir em mais de um tenant (multi-tenant). Buscamos todos os
-    // candidatos com senha definida e validamos o hash 1-a-1 — o que bater vence.
+    // Mesmo CPF pode existir em mais de um tenant (multi-tenant). Buscamos todos
+    // os candidatos e validamos 1-a-1 — o que bater vence. A busca tolera CPF
+    // gravado com máscara (o SGA às vezes devolve "085.775.907-80").
     const candidates = await this.prisma.associate.findMany({
-      where: { cpf, deletedAt: null, password: { not: null } },
+      where: { cpf: { in: cpfVariants(cpf) }, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -39,26 +50,46 @@ export class AssociateAuthService {
     });
 
     for (const a of candidates) {
-      if (a.password && (await bcrypt.compare(dto.password, a.password))) {
-        await this.prisma.associate.update({
-          where: { id: a.id },
-          data: { lastLoginAt: new Date() },
-        });
+      if (!(await this.passwordMatches(a.password, cpf, dto.password))) continue;
 
-        const payload = {
-          sub: a.id,
-          type: 'associate' as const,
-          tenantId: a.tenantId,
-          name: a.name,
-        };
+      await this.prisma.associate.update({
+        where: { id: a.id },
+        data: {
+          lastLoginAt: new Date(),
+          // Primeiro acesso: materializa a senha padrão (CPF) como hash.
+          ...(a.password ? {} : { password: await bcrypt.hash(cpf, BCRYPT_ROUNDS) }),
+        },
+      });
 
-        const { password: _omit, ...associate } = a;
-        return { accessToken: this.jwt.sign(payload), associate };
-      }
+      const payload = {
+        sub: a.id,
+        type: 'associate' as const,
+        tenantId: a.tenantId,
+        name: a.name,
+      };
+
+      const { password: _omit, ...associate } = a;
+      return { accessToken: this.jwt.sign(payload), associate };
     }
 
     // Mensagem genérica — não revela se o CPF existe.
     throw new UnauthorizedException('CPF ou senha inválidos');
+  }
+
+  /**
+   * A senha padrão do app é o próprio CPF: o associado é liberado no SGA e loga
+   * sem nenhuma etapa de ativação — login e senha são o mesmo CPF. O hash em
+   * banco continua sendo aceito (caminho alternativo, e base pra uma futura
+   * troca de senha), mas o CPF vale sempre enquanto não existir essa tela.
+   */
+  private async passwordMatches(
+    hash: string | null,
+    cpf: string,
+    typed: string,
+  ): Promise<boolean> {
+    // Digitar o CPF com ou sem máscara no campo senha dá no mesmo.
+    if (cpf.length === 11 && normalizeCpf(typed) === cpf) return true;
+    return !!hash && bcrypt.compare(typed, hash);
   }
 
   async me(associateId: string) {

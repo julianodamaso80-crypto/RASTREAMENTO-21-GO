@@ -186,13 +186,15 @@ export class StockService {
     const placa = (lookup.veiculo.placa ?? dto.placa)
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, '');
+    // Sempre só dígitos: o CPF é o login (e a senha) do associado no app.
+    const cpf = lookup.cliente.cpf.replace(/\D/g, '');
     const technicianName = dto.technicianName.trim();
     const installLocation = dto.installLocation.trim();
 
     const result = await this.prisma.$transaction(async (tx) => {
       // 1) Cliente — dedupe por (tenant, cpf).
       let associate = await tx.associate.findFirst({
-        where: { tenantId, cpf: lookup.cliente.cpf!, deletedAt: null },
+        where: { tenantId, cpf, deletedAt: null },
       });
       if (associate) {
         associate = await tx.associate.update({
@@ -207,7 +209,7 @@ export class StockService {
           data: {
             tenantId,
             name: lookup.cliente.nome ?? 'Associado (SGA)',
-            cpf: lookup.cliente.cpf!,
+            cpf,
             hinovaCode: lookup.veiculo.codigoVeiculo,
           },
         });
