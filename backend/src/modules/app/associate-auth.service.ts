@@ -30,8 +30,39 @@ export class AssociateAuthService {
     private readonly jwt: JwtService,
   ) {}
 
+  /**
+   * Allowlist de acesso ao app (kill switch). Enquanto o app não é liberado ao
+   * público, só os CPFs desta lista conseguem logar — todos os demais são
+   * barrados, mesmo já tendo o app instalado. Isso fecha o furo de a senha
+   * padrão ser o próprio CPF: sem a trava, qualquer um com um CPF de associado
+   * do SGA entraria.
+   *
+   * `APP_ASSOCIATE_ALLOWLIST` = CPFs separados por vírgula (só dígitos ou com
+   * máscara). Vazia/ausente = app aberto (comportamento normal). Setar a env var
+   * em produção fecha o acesso na hora, sem depender da loja.
+   */
+  private allowedCpfs(): Set<string> | null {
+    const raw = process.env.APP_ASSOCIATE_ALLOWLIST?.trim();
+    if (!raw) return null;
+    const set = new Set(
+      raw
+        .split(',')
+        .map((c) => normalizeCpf(c))
+        .filter((c) => c.length > 0),
+    );
+    return set.size ? set : null;
+  }
+
   async login(dto: AssociateLoginDto) {
     const cpf = normalizeCpf(dto.cpf);
+
+    // Kill switch: se há allowlist configurada, só ela entra. Barra antes de
+    // qualquer verificação de senha.
+    const allow = this.allowedCpfs();
+    if (allow && !allow.has(cpf)) {
+      this.logger.warn(`Login bloqueado (fora da allowlist): CPF ...${cpf.slice(-4)}`);
+      throw new UnauthorizedException('O aplicativo ainda não está liberado.');
+    }
 
     // Mesmo CPF pode existir em mais de um tenant (multi-tenant). Buscamos todos
     // os candidatos e validamos 1-a-1 — o que bater vence. A busca tolera CPF
