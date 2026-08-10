@@ -249,7 +249,7 @@ Esperado: build sem erro de TypeScript.
 
 ```bash
 git add backend/src/config/ backend/src/main.ts
-git commit -m "feat(auth): segredo JWT proprio do mundo do associado com trava na subida"
+git commit -m "feat(auth): segredo JWT próprio do mundo do associado com trava na subida"
 ```
 
 ---
@@ -582,7 +582,7 @@ Esperado: `associado em rota interna: 401`.
 
 ```bash
 git add backend/src/modules/app backend/src/modules/auth/auth.module.ts
-git commit -m "feat(auth): mundo do associado assina com segredo proprio e painel expira em 12h"
+git commit -m "feat(auth): mundo do associado assina com segredo próprio e painel expira em 12h"
 ```
 
 ---
@@ -794,7 +794,7 @@ Esperado: toda linha `OK` e a mensagem final `Nenhum vazamento. Fronteira intact
 
 ```bash
 git add backend/src/common/constants backend/scripts/leak-check.ts
-git commit -m "test(auth): suite de vazamento que cobre rota nova automaticamente"
+git commit -m "test(auth): suíte de vazamento que cobre rota nova automaticamente"
 ```
 
 ---
@@ -928,7 +928,7 @@ Esperado: PASS, 1 teste.
 ```bash
 rm mobile/src/lib/smoke.test.ts
 git add mobile/package.json mobile/package-lock.json mobile/tsconfig.json
-git commit -m "chore(mobile): jest-expo pra testar as regras de sessao do app"
+git commit -m "chore(mobile): jest-expo pra testar as regras de sessão do app"
 ```
 
 ---
@@ -1126,7 +1126,7 @@ Esperado: PASS, 13 testes no total.
 ```bash
 git add mobile/src/lib/login-router.ts mobile/src/lib/login-router.test.ts \
         mobile/src/lib/session-keys.ts mobile/src/lib/session-keys.test.ts
-git commit -m "feat(mobile): roteador de login por formato e invariante de sessao unica"
+git commit -m "feat(mobile): roteador de login por formato e invariante de sessão única"
 ```
 
 ---
@@ -1317,7 +1317,7 @@ Esperado: nenhum erro.
 
 ```bash
 git add mobile/src/lib/internal-auth-store.ts mobile/src/lib/internal-api.ts mobile/src/lib/auth-store.ts
-git commit -m "feat(mobile): sessao e cliente HTTP isolados do mundo interno"
+git commit -m "feat(mobile): sessão e cliente HTTP isolados do mundo interno"
 ```
 
 ---
@@ -1439,7 +1439,7 @@ Esperado: PASS, 17 testes no total.
 
 ```bash
 git add mobile/src/lib/biometrics.ts mobile/src/lib/biometrics.test.ts mobile/app.json mobile/package.json mobile/package-lock.json
-git commit -m "feat(mobile): portao biometrico do mundo interno com fallback pro PIN"
+git commit -m "feat(mobile): portão biométrico do mundo interno com fallback pro PIN"
 ```
 
 ---
@@ -1558,7 +1558,7 @@ Esperado: nenhum erro. Se acusar `router` sem uso, conferir que o import de `use
 
 ```bash
 git add mobile/src/app/login.tsx
-git commit -m "feat(mobile): login unico que roteia associado e time interno pelo formato"
+git commit -m "feat(mobile): login único que roteia associado e time interno pelo formato"
 ```
 
 ---
@@ -1777,7 +1777,7 @@ Esperado: nenhum erro.
 
 ```bash
 git add mobile/src/app/interno mobile/package.json mobile/package-lock.json
-git commit -m "feat(mobile): painel do time interno embarcado com sessao injetada e navegacao travada"
+git commit -m "feat(mobile): painel do time interno embarcado com sessão injetada e navegação travada"
 ```
 
 ---
@@ -1937,7 +1937,7 @@ Esperado: nenhum erro de tipo; 17 testes passando.
 
 ```bash
 git add mobile/src/app/_layout.tsx mobile/src/app/index.tsx
-git commit -m "feat(mobile): boot abre o mundo certo e derruba estado de sessao dupla"
+git commit -m "feat(mobile): boot abre o mundo certo e derruba estado de sessão dupla"
 ```
 
 ---
@@ -2009,7 +2009,7 @@ cd mobile && eas submit --platform android
 
 ```bash
 git add mobile/app.json
-git commit -m "chore(mobile): versao 1.3.0 com os dois mundos no mesmo binario"
+git commit -m "chore(mobile): versão 1.3.0 com os dois mundos no mesmo binário"
 ```
 
 ---
