@@ -69,14 +69,29 @@ export class UsersService {
     this.assertCanGrantRole(actor, dto.role);
 
     const email = dto.email.trim().toLowerCase();
-    const existing = await this.prisma.user.findUnique({ where: { email } });
     const password = generateAccessPassword();
 
-    // E-mail é unique global. Se o acesso foi excluído antes (soft delete), o
-    // caminho certo é ressuscitá-lo — senão o e-mail ficava queimado pra sempre.
-    if (existing?.deletedAt && existing.tenantId === tenantId) {
+    const active = await this.prisma.user.findUnique({ where: { email } });
+    if (active) {
+      throw new ConflictException(`Já existe um acesso com o e-mail ${email}.`);
+    }
+
+    // A extension de soft delete injeta `deletedAt: null` em toda leitura, então
+    // o excluído só aparece com o filtro explícito. E-mail é unique global: sem
+    // ressuscitar o registro, o endereço ficaria queimado pra sempre.
+    const deleted = await this.prisma.user.findFirst({
+      where: { email, deletedAt: { not: null } },
+      select: { id: true, tenantId: true },
+    });
+
+    if (deleted) {
+      if (deleted.tenantId !== tenantId) {
+        throw new ConflictException(
+          `O e-mail ${email} já pertence a outra empresa.`,
+        );
+      }
       const revived = await this.prisma.user.update({
-        where: { id: existing.id },
+        where: { id: deleted.id },
         data: {
           name: dto.name.trim(),
           role: dto.role,
@@ -91,10 +106,6 @@ export class UsersService {
       });
       this.logger.log(`Acesso reativado: ${revived.email} por=${actor.id}`);
       return { user: revived, password };
-    }
-
-    if (existing) {
-      throw new ConflictException(`Já existe um acesso com o e-mail ${email}.`);
     }
 
     const user = await this.prisma.user.create({
