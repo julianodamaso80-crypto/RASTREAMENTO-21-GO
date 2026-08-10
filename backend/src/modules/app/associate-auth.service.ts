@@ -2,11 +2,14 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
 import { AssociateLoginDto } from './dto/associate-login.dto';
 
 const BCRYPT_ROUNDS = 10;
@@ -14,6 +17,21 @@ const BCRYPT_ROUNDS = 10;
 /** Remove máscara do CPF, deixando só dígitos. */
 function normalizeCpf(cpf: string): string {
   return (cpf || '').replace(/\D/g, '');
+}
+
+/**
+ * Senha temporária pra ser DITADA no telefone: blocos curtos, sem os caracteres
+ * que se confundem na fala e na leitura (0/O, 1/I/L, 5/S). Mesmo padrão já
+ * usado nas credenciais de usuário do painel.
+ */
+function gerarSenhaDitavel(): string {
+  const alfabeto = 'ABCDEFGHJKMNPQRTUVWXYZ23479';
+  const bloco = () =>
+    Array.from(
+      { length: 4 },
+      () => alfabeto[randomInt(0, alfabeto.length)],
+    ).join('');
+  return `${bloco()}-${bloco()}`;
 }
 
 /** Formatos em que o CPF pode ter sido gravado: só dígitos ou com máscara. */
@@ -33,6 +51,7 @@ export class AssociateAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly whatsapp: WhatsappService,
   ) {}
 
   /**
@@ -253,6 +272,246 @@ export class AssociateAuthService {
       throw new UnauthorizedException('Associado não encontrado');
     }
     return associate;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Recuperação de senha — "esqueci minha senha" no app
+  // ---------------------------------------------------------------------------
+
+  /** Validade do código. Curta de propósito: código vivo é código atacável. */
+  private static readonly CODIGO_VALIDADE_MIN = 15;
+  /** Tentativas erradas antes de o código morrer. */
+  private static readonly CODIGO_MAX_TENTATIVAS = 5;
+  /** Espaçamento mínimo entre envios pro mesmo CPF (anti-flood). */
+  private static readonly CODIGO_INTERVALO_MIN = 2;
+
+  /**
+   * Envia um código de 6 dígitos pro WhatsApp cadastrado do associado.
+   *
+   * A resposta é SEMPRE a mesma, exista ou não o CPF: senão a rota vira um
+   * verificador de "esse CPF é cliente de vocês?" pra qualquer um na internet.
+   * O telefone volta mascarado só quando o envio aconteceu de fato.
+   */
+  async forgotPassword(rawCpf: string): Promise<{
+    message: string;
+    sentTo: string | null;
+    canUseWhatsapp: boolean;
+  }> {
+    const cpf = normalizeCpf(rawCpf);
+    const generico = {
+      message:
+        'Se esse CPF estiver cadastrado, enviamos um código no WhatsApp. ' +
+        'Não chegou em alguns minutos? Fale com a sua associação.',
+      sentTo: null as string | null,
+      canUseWhatsapp: this.whatsapp.habilitado,
+    };
+
+    if (cpf.length !== 11) return generico;
+
+    const associate = await this.prisma.associate.findFirst({
+      where: { cpf: { in: cpfVariants(cpf) }, deletedAt: null },
+      select: {
+        id: true,
+        phone: true,
+        resetCodeSentAt: true,
+      },
+    });
+    if (!associate?.phone) {
+      // Sem cadastro ou sem telefone: nada a enviar, resposta idêntica.
+      if (associate) {
+        this.logger.warn(
+          `Recuperação pedida sem telefone cadastrado: CPF ...${cpf.slice(-4)}`,
+        );
+      }
+      return generico;
+    }
+
+    // Anti-flood: um envio a cada 2 minutos por CPF.
+    if (associate.resetCodeSentAt) {
+      const desdeUltimo = Date.now() - associate.resetCodeSentAt.getTime();
+      if (
+        desdeUltimo <
+        AssociateAuthService.CODIGO_INTERVALO_MIN * 60 * 1000
+      ) {
+        return {
+          ...generico,
+          message:
+            'Já enviamos um código há pouco. Confira o WhatsApp e aguarde ' +
+            'dois minutos antes de pedir outro.',
+        };
+      }
+    }
+
+    // randomInt do crypto: previsível é o que não pode ser.
+    const codigo = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const expiraEm = new Date(
+      Date.now() + AssociateAuthService.CODIGO_VALIDADE_MIN * 60 * 1000,
+    );
+
+    await this.prisma.associate.update({
+      where: { id: associate.id },
+      data: {
+        resetCodeHash: await bcrypt.hash(codigo, BCRYPT_ROUNDS),
+        resetCodeExpiresAt: expiraEm,
+        resetCodeAttempts: 0,
+        resetCodeSentAt: new Date(),
+      },
+    });
+
+    const envio = await this.whatsapp.enviarCodigo(
+      associate.phone,
+      codigo,
+      AssociateAuthService.CODIGO_VALIDADE_MIN,
+    );
+
+    if (!envio.enviado) {
+      this.logger.warn(
+        `Não consegui enviar o código pro CPF ...${cpf.slice(-4)}: ${envio.motivo}`,
+      );
+      return {
+        message:
+          'No momento não consigo enviar o código pelo WhatsApp. ' +
+          'Fale com a sua associação para redefinir a sua senha.',
+        sentTo: null,
+        canUseWhatsapp: false,
+      };
+    }
+
+    return {
+      ...generico,
+      sentTo: WhatsappService.mascarar(associate.phone),
+    };
+  }
+
+  /**
+   * Confere o código e grava a senha nova.
+   *
+   * Erros aqui são específicos de propósito (código errado x expirado): quem
+   * chega nesta etapa já provou ter o WhatsApp do titular, e mensagem vaga só
+   * atrapalharia o cliente legítimo.
+   */
+  async resetPasswordWithCode(
+    rawCpf: string,
+    codigo: string,
+    novaSenha: string,
+  ): Promise<{ ok: true }> {
+    const cpf = normalizeCpf(rawCpf);
+    const digitos = (codigo || '').replace(/\D/g, '');
+
+    const associate = await this.prisma.associate.findFirst({
+      where: { cpf: { in: cpfVariants(cpf) }, deletedAt: null },
+      select: {
+        id: true,
+        resetCodeHash: true,
+        resetCodeExpiresAt: true,
+        resetCodeAttempts: true,
+      },
+    });
+
+    const invalido = new UnauthorizedException(
+      'Código inválido ou expirado. Peça um novo código.',
+    );
+    if (!associate?.resetCodeHash || !associate.resetCodeExpiresAt) {
+      throw invalido;
+    }
+    if (associate.resetCodeExpiresAt.getTime() < Date.now()) {
+      await this.limparCodigo(associate.id);
+      throw invalido;
+    }
+    if (
+      associate.resetCodeAttempts >= AssociateAuthService.CODIGO_MAX_TENTATIVAS
+    ) {
+      await this.limparCodigo(associate.id);
+      throw new UnauthorizedException(
+        'Muitas tentativas erradas. Peça um novo código.',
+      );
+    }
+
+    if (!(await bcrypt.compare(digitos, associate.resetCodeHash))) {
+      // Conta a tentativa ANTES de responder — senão força bruta é de graça.
+      await this.prisma.associate.update({
+        where: { id: associate.id },
+        data: { resetCodeAttempts: { increment: 1 } },
+      });
+      throw invalido;
+    }
+
+    if (normalizeCpf(novaSenha) === cpf) {
+      throw new BadRequestException(
+        'A nova senha não pode ser o seu CPF. Escolha outra.',
+      );
+    }
+    if (novaSenha.trim().length < 6) {
+      throw new BadRequestException(
+        'A nova senha precisa ter ao menos 6 caracteres.',
+      );
+    }
+
+    await this.prisma.associate.update({
+      where: { id: associate.id },
+      data: {
+        password: await bcrypt.hash(novaSenha, BCRYPT_ROUNDS),
+        mustChangePassword: false,
+        resetCodeHash: null,
+        resetCodeExpiresAt: null,
+        resetCodeAttempts: 0,
+      },
+    });
+
+    this.logger.log(
+      `Senha redefinida por código: CPF ...${cpf.slice(-4)}`,
+    );
+    return { ok: true };
+  }
+
+  private async limparCodigo(associateId: string) {
+    await this.prisma.associate.update({
+      where: { id: associateId },
+      data: {
+        resetCodeHash: null,
+        resetCodeExpiresAt: null,
+        resetCodeAttempts: 0,
+      },
+    });
+  }
+
+  /**
+   * Reset feito pelo operador no painel: gera uma senha temporária ditável e
+   * devolve UMA única vez (no banco fica só o hash). O cliente entra com ela e
+   * o app obriga a criar a senha definitiva.
+   *
+   * É o caminho que funciona sempre — sem depender de WhatsApp, telefone
+   * cadastrado ou aprovação de template.
+   */
+  async resetPasswordByOperator(
+    associateId: string,
+    tenantId: string,
+  ): Promise<{ name: string; temporaryPassword: string }> {
+    const associate = await this.prisma.associate.findFirst({
+      where: { id: associateId, tenantId, deletedAt: null },
+      select: { id: true, name: true },
+    });
+    if (!associate) {
+      throw new NotFoundException('Cliente não encontrado');
+    }
+
+    const senha = gerarSenhaDitavel();
+    await this.prisma.associate.update({
+      where: { id: associate.id },
+      data: {
+        password: await bcrypt.hash(senha, BCRYPT_ROUNDS),
+        // Temporária: o app exige a troca no primeiro acesso.
+        mustChangePassword: true,
+        resetCodeHash: null,
+        resetCodeExpiresAt: null,
+        resetCodeAttempts: 0,
+      },
+    });
+
+    this.logger.log(
+      `Senha temporária gerada pelo painel para o cliente ${associate.name}.`,
+    );
+    return { name: associate.name, temporaryPassword: senha };
   }
 
   /**

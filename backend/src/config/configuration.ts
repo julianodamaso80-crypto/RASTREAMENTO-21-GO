@@ -41,6 +41,28 @@ export default () => ({
     primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',
     secondaryIp: process.env.SERVER_SECONDARY_IP || '0.0.0.0',
   },
+  whatsapp: {
+    // 'meta' (Cloud API oficial), 'evolution' (instância própria) ou 'none'.
+    // Fica 'none' até o número ser liberado — o reset pelo painel cobre o
+    // atendimento nesse meio-tempo.
+    provider: process.env.WHATSAPP_PROVIDER || 'none',
+    meta: {
+      token: process.env.WHATSAPP_META_TOKEN,
+      phoneNumberId: process.env.WHATSAPP_META_PHONE_NUMBER_ID,
+      // Template da categoria AUTHENTICATION aprovado no Meta Business.
+      // Sem ele a Meta recusa o envio — exigência da plataforma, não nossa.
+      template: process.env.WHATSAPP_META_TEMPLATE || 'codigo_verificacao',
+      language: process.env.WHATSAPP_META_LANGUAGE || 'pt_BR',
+      apiVersion: process.env.WHATSAPP_META_API_VERSION || 'v21.0',
+      // 'false' quando o template foi criado SEM botão de copiar código.
+      copyCodeButton: process.env.WHATSAPP_META_COPY_BUTTON || 'true',
+    },
+    evolution: {
+      url: process.env.EVOLUTION_API_URL,
+      apiKey: process.env.EVOLUTION_API_KEY,
+      instance: process.env.EVOLUTION_INSTANCE,
+    },
+  },
   positions: {
     // Histórico de posições cresce pra sempre e enche o disco do droplet —
     // disco cheio derruba TUDO. 90 dias cobre investigação de sinistro com

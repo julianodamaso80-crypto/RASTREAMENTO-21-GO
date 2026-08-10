@@ -27,5 +27,8 @@ import { AssociateJwtGuard } from './guards/associate-jwt.guard';
   ],
   controllers: [AssociateAuthController, AppDataController],
   providers: [AssociateAuthService, AppDataService, AssociateJwtGuard],
+  // O painel (ClientsModule) reusa o mesmo motor de senha pra atender o cliente
+  // que perdeu o acesso — uma regra de senha só, num lugar só.
+  exports: [AssociateAuthService],
 })
 export class AppAssociateModule {}

@@ -651,6 +651,19 @@ export const clientsApi = {
     });
     return res.data.data;
   },
+  /**
+   * Gera senha temporária do app pro cliente que perdeu o acesso. Volta uma
+   * única vez — no banco fica só o hash. É o caminho de atendimento, funciona
+   * sem depender de WhatsApp ou telefone cadastrado.
+   */
+  resetAppPassword: async (
+    associateId: string,
+  ): Promise<{ name: string; temporaryPassword: string }> => {
+    const res = await api.post<
+      ApiResponse<{ name: string; temporaryPassword: string }>
+    >(`/clients/${associateId}/reset-app-password`);
+    return res.data.data;
+  },
 };
 
 function pendingParams(f: InstallationPendingFilters) {

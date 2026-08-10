@@ -208,6 +208,12 @@ export class StockService {
     const technicianName = dto.technicianName.trim();
     const installLocation = dto.installLocation.trim();
 
+    // Contato do cliente: o lookup por placa do SGA não devolve telefone/e-mail,
+    // mas o espelho de pendências (que vem de /listar/veiculo) devolve — e cobre
+    // 99% da base. Sem isto o cliente fica sem canal e não consegue recuperar a
+    // senha do app sozinho.
+    const contato = await this.contatoDaPendencia(tenantId, placa, cpf);
+
     const result = await this.prisma.$transaction(async (tx) => {
       // 1) Cliente — dedupe por (tenant, cpf).
       let associate = await tx.associate.findFirst({
@@ -219,6 +225,9 @@ export class StockService {
           data: {
             name: lookup.cliente.nome ?? associate.name,
             hinovaCode: lookup.veiculo.codigoVeiculo ?? associate.hinovaCode,
+            // Nunca apaga contato já existente: só preenche o que falta.
+            ...(associate.phone ? {} : { phone: contato.phone }),
+            ...(associate.email ? {} : { email: contato.email }),
           },
         });
       } else {
@@ -227,6 +236,8 @@ export class StockService {
             tenantId,
             name: lookup.cliente.nome ?? 'Associado (SGA)',
             cpf,
+            phone: contato.phone,
+            email: contato.email,
             hinovaCode: lookup.veiculo.codigoVeiculo,
           },
         });
@@ -378,6 +389,45 @@ export class StockService {
       deviceId: result.device.id,
       placa,
     };
+  }
+
+  /**
+   * Telefone e e-mail do cliente, lidos do espelho de pendências do SGA.
+   *
+   * Busca pela placa e, se não achar (placa nova, pendência já removida), pelo
+   * CPF — o mesmo associado costuma ter outros veículos na fila. Best-effort:
+   * sem contato o cadastro segue, só que o cliente vai depender do atendimento
+   * pra recuperar a senha.
+   */
+  private async contatoDaPendencia(
+    tenantId: string,
+    placa: string,
+    cpf: string,
+  ): Promise<{ phone: string | null; email: string | null }> {
+    try {
+      const pendencia =
+        (await this.prisma.installationPending.findFirst({
+          where: { tenantId, plate: placa },
+          select: { phone: true, email: true },
+        })) ??
+        (await this.prisma.installationPending.findFirst({
+          where: { tenantId, cpf: { contains: cpf } },
+          select: { phone: true, email: true },
+          orderBy: { syncedAt: 'desc' },
+        }));
+
+      return {
+        phone: pendencia?.phone?.trim() || null,
+        email: pendencia?.email?.trim() || null,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Não consegui recuperar o contato da placa ${placa}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+      return { phone: null, email: null };
+    }
   }
 
   /**

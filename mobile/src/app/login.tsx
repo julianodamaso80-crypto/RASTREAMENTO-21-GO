@@ -11,6 +11,7 @@ import {
   Alert as RNAlert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { BrandLockup } from '@/components/brand-logo';
 import { AppApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
@@ -20,6 +21,7 @@ import { diag } from '@/lib/diag';
 
 export default function LoginScreen() {
   diag('05-login-render');
+  const router = useRouter();
   const signIn = useAuth((s) => s.signIn);
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
@@ -105,6 +107,13 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
+          <TouchableOpacity
+            onPress={() => router.push('/forgot-password')}
+            style={styles.forgot}
+          >
+            <Text style={styles.forgotText}>Esqueci minha senha</Text>
+          </TouchableOpacity>
+
           <Text style={styles.help}>
             No primeiro acesso, a senha é o seu próprio CPF. Não consegue
             entrar? Fale com a sua associação.
@@ -157,6 +166,8 @@ const styles = StyleSheet.create({
   },
   buttonOff: { backgroundColor: colors.orangeSoft, shadowOpacity: 0 },
   buttonText: { color: colors.white, fontSize: 16, fontWeight: '700' },
+  forgot: { alignItems: 'center', marginTop: 18 },
+  forgotText: { color: colors.navy, fontSize: 14, fontWeight: '600' },
   help: {
     fontSize: 13,
     color: colors.textFaint,

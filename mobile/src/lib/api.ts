@@ -127,6 +127,28 @@ export const AppApi = {
       })
       .then((r) => r.data),
 
+  /**
+   * Pede o código de recuperação no WhatsApp. A resposta é a mesma exista ou
+   * não o CPF — não dá pra usar isto pra descobrir quem é cliente.
+   */
+  forgotPassword: (cpf: string) =>
+    api
+      .post<{ message: string; sentTo: string | null; canUseWhatsapp: boolean }>(
+        '/app/auth/forgot-password',
+        { cpf },
+      )
+      .then((r) => r.data),
+
+  /** Confere o código de 6 dígitos e grava a senha nova. */
+  resetPassword: (cpf: string, code: string, newPassword: string) =>
+    api
+      .post<{ ok: boolean }>('/app/auth/reset-password', {
+        cpf,
+        code,
+        newPassword,
+      })
+      .then((r) => r.data),
+
   vehicles: () => api.get<Vehicle[]>('/app/vehicles').then((r) => r.data),
 
   history: (vehicleId: string, from: string, to: string) =>

@@ -30,9 +30,17 @@ export default function RootLayout() {
     if (!hydrated) return;
     const inApp = segments[0] === '(tabs)' || segments[0] === 'vehicle';
     const naTrocaDeSenha = segments[0] === 'change-password';
+    // Recuperação de senha é pra quem NÃO consegue entrar: fica fora do gate.
+    const naRecuperacao = segments[0] === 'forgot-password';
 
     if (!token) {
       if (inApp || naTrocaDeSenha) router.replace('/login');
+      return;
+    }
+
+    // Já logado não tem o que fazer na recuperação.
+    if (naRecuperacao) {
+      router.replace('/(tabs)');
       return;
     }
 
@@ -55,6 +63,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="forgot-password" />
         <Stack.Screen name="change-password" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen

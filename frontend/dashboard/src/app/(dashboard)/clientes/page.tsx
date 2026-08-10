@@ -12,6 +12,8 @@ import {
   Mail,
   PackageOpen,
   Loader2,
+  KeyRound,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDateOnlyBR } from '@/lib/utils';
@@ -40,6 +42,12 @@ interface RetiradaAlvo {
   cliente: string;
 }
 
+/** Senha temporária recém-gerada — aparece uma vez só. */
+interface SenhaTemporaria {
+  nome: string;
+  senha: string;
+}
+
 function formatCpf(cpf: string): string {
   const d = (cpf ?? '').replace(/\D/g, '');
   if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
@@ -54,6 +62,8 @@ export default function ClientesPage() {
   const [retirando, setRetirando] = useState<RetiradaAlvo | null>(null);
   const [motivo, setMotivo] = useState('');
   const [salvandoRetirada, setSalvandoRetirada] = useState(false);
+  const [resetandoId, setResetandoId] = useState<string | null>(null);
+  const [senhaGerada, setSenhaGerada] = useState<SenhaTemporaria | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -71,6 +81,23 @@ export default function ClientesPage() {
   }, [load]);
 
   const totalVehicles = clients.reduce((n, c) => n + c.vehicles.length, 0);
+
+  /**
+   * Cliente ligou dizendo que perdeu a senha do app. Gera uma temporária
+   * ditável — aparece uma vez só e obriga o cliente a criar a definitiva no
+   * primeiro acesso.
+   */
+  const resetarSenha = async (associateId: string, nome: string) => {
+    setResetandoId(associateId);
+    try {
+      const res = await clientsApi.resetAppPassword(associateId);
+      setSenhaGerada({ nome: res.name || nome, senha: res.temporaryPassword });
+    } catch {
+      toast.error('Não consegui redefinir a senha. Tente de novo.');
+    } finally {
+      setResetandoId(null);
+    }
+  };
 
   /**
    * Retirada do rastreador: o veículo sai do rastreamento e o aparelho volta
@@ -177,9 +204,26 @@ export default function ClientesPage() {
                       )}
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    Desde {formatDateOnlyBR(c.createdAt)}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => resetarSenha(c.id, c.name)}
+                      disabled={resetandoId === c.id}
+                      title="Cliente perdeu a senha do app — gera uma temporária"
+                    >
+                      {resetandoId === c.id ? (
+                        <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                      ) : (
+                        <KeyRound className="mr-1.5 h-3 w-3" />
+                      )}
+                      Redefinir senha do app
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Desde {formatDateOnlyBR(c.createdAt)}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Veículos do cliente */}
@@ -242,6 +286,51 @@ export default function ClientesPage() {
           ))}
         </div>
       )}
+
+      {/* Senha temporária — aparece uma única vez. Fechou, não volta. */}
+      <Dialog
+        open={!!senhaGerada}
+        onOpenChange={(aberto) => {
+          if (!aberto) setSenhaGerada(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Senha temporária de {senhaGerada?.nome}</DialogTitle>
+            <DialogDescription>
+              Passe essa senha pro cliente. Ela aparece só agora — depois de
+              fechar, nem o sistema consegue mostrar de novo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-4">
+            <code className="flex-1 text-center font-mono text-2xl font-bold tracking-widest">
+              {senhaGerada?.senha}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (!senhaGerada) return;
+                navigator.clipboard.writeText(senhaGerada.senha);
+                toast.success('Senha copiada');
+              }}
+            >
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Copiar
+            </Button>
+          </div>
+
+          <p className="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-sm text-sky-200">
+            O cliente entra no app com o CPF e essa senha. Na hora, o app pede
+            pra ele criar a senha definitiva dele.
+          </p>
+
+          <DialogFooter>
+            <Button onClick={() => setSenhaGerada(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!retirando}
