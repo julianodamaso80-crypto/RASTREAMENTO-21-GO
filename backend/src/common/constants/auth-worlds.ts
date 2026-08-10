@@ -7,70 +7,94 @@
  * fonte única consumida pelo `scripts/leak-check.ts`, e o spec ao lado varre
  * os controllers do repositório e falha se alguém criar rota que não esteja
  * classificada aqui — assim rota nova nasce coberta em vez de nascer furada.
+ *
+ * A chave de classificação é o CAMINHO DO ARQUIVO do controller, relativo a
+ * `backend/src/modules/` (com `/`, mesmo no Windows) — não o prefixo de rota.
+ * Prefixo não serve de chave porque `@Controller()` sem argumento (prefixo
+ * vazio) é ambíguo por construção: dois controllers diferentes podem ter
+ * prefixo `''` e ficariam indistinguíveis, ou pior, o extrator de prefixo por
+ * regex simplesmente descarta esses controllers e eles somem do mapa sem
+ * nenhuma asserção acusar. Isso já aconteceu com `ScoringController` (rotas
+ * internas autenticadas) e `LegalController` — ver `auth-worlds.spec.ts`.
  */
 
 /** Painel do time interno. Token `type: 'user'`. */
-export const INTERNAL_ROUTE_PREFIXES: readonly string[] = [
-  'admin',
-  'admin/audit',
-  'alerts',
-  'assistant',
-  'auth',
-  'ble-tags',
-  'chips',
-  'clients',
-  'dashboard',
-  'devices',
-  'devices/:deviceId/commands',
-  'geofences',
-  'hinova',
-  'installation-pendings',
-  'maintenance-plans',
-  'map',
-  'reports',
-  'server',
-  'settings',
-  'stock',
-  'technicians',
-  'tenants',
-  'traccar',
-  'users',
-  'vehicles',
+export const INTERNAL_CONTROLLERS: readonly string[] = [
+  'admin/admin.controller.ts',
+  'audit/audit.controller.ts',
+  'alerts/alerts.controller.ts',
+  'assistant/assistant.controller.ts',
+  'auth/auth.controller.ts',
+  'ble-tags/ble-tags.controller.ts',
+  'chips/chips.controller.ts',
+  'clients/clients.controller.ts',
+  'dashboard/dashboard.controller.ts',
+  'devices/devices.controller.ts',
+  'sms-commands/sms-commands.controller.ts',
+  'geofences/geofences.controller.ts',
+  'hinova/hinova.controller.ts',
+  'installation-pendings/installation-pendings.controller.ts',
+  'maintenance/maintenance.controller.ts',
+  'map/map.controller.ts',
+  'reports/reports.controller.ts',
+  'scoring/scoring.controller.ts',
+  'server-info/server-info.controller.ts',
+  'stock/stock.controller.ts',
+  'technicians/technicians.controller.ts',
+  'tenant-settings/tenant-settings.controller.ts',
+  'tenants/tenants.controller.ts',
+  'traccar/traccar.controller.ts',
+  'users/users.controller.ts',
+  'vehicles/vehicles.controller.ts',
+  'vehicles-analytics/vehicles-analytics.controller.ts',
 ];
 
 /** App do cliente final. Token `type: 'associate'`. */
-export const ASSOCIATE_ROUTE_PREFIXES: readonly string[] = ['app', 'app/auth'];
+export const ASSOCIATE_CONTROLLERS: readonly string[] = [
+  'app/app-data.controller.ts',
+  'app/associate-auth.controller.ts',
+];
 
 /** PWA do técnico de campo. Token `type: 'technician'`. */
-export const TECHNICIAN_ROUTE_PREFIXES: readonly string[] = [
-  'tech',
-  'tech/auth',
+export const TECHNICIAN_CONTROLLERS: readonly string[] = [
+  'tech/tech-field.controller.ts',
+  'tech/tech-auth.controller.ts',
 ];
 
 /**
  * Sem autenticação por desenho. `health` é sondado pelo Docker e pelo
  * monitoramento — exigir token ali derrubaria o healthcheck do container.
+ *
+ * `legal/legal.controller.ts` hoje só expõe rotas `@Public()` (política de
+ * privacidade, exclusão de dados, diagnóstico de boot do app) — nenhuma exige
+ * token. Se alguém acrescentar rota autenticada nesse controller no futuro,
+ * ele continua classificado aqui até ser movido explicitamente pra
+ * `INTERNAL_CONTROLLERS`; o item de ação é revisar este comentário sempre que
+ * `legal.controller.ts` mudar.
  */
-export const PUBLIC_ROUTE_PREFIXES: readonly string[] = ['health'];
+export const PUBLIC_CONTROLLERS: readonly string[] = [
+  'health/health.controller.ts',
+  'legal/legal.controller.ts',
+];
 
 export type AuthWorld = 'internal' | 'associate' | 'technician';
 
 export interface LeakProbe {
   world: AuthWorld;
-  /** Prefixo do controller que esta sonda cobre. */
-  prefix: string;
+  /** Caminho do controller (relativo a `backend/src/modules/`) que esta sonda cobre. */
+  controller: string;
   /** Caminho GET real e existente, que exige autenticação. */
   path: string;
 }
 
 /**
- * Prefixos com autenticação cujo controller não tem nenhum GET utilizável
+ * Controllers com autenticação cujo arquivo não tem nenhum GET utilizável
  * como sonda (só POST/PATCH/DELETE, ou só rotas `@Public()`). Registrado
  * aqui em vez de forçar uma sonda inventada — o comentário em cada item
  * explica o motivo.
  *
- * Todos os prefixos autenticados do projeto (varredura de 2026-08-10) têm ao
- * menos um GET real e protegido, então esta lista está vazia por ora.
+ * Todos os controllers autenticados do projeto (varredura de 2026-08-10) têm
+ * ao menos um GET real e protegido, então esta lista está vazia por ora.
  */
 export const PROBES_SEM_GET: readonly string[] = [];
 
@@ -86,45 +110,68 @@ export const PROBES_SEM_GET: readonly string[] = [];
  */
 export const LEAK_PROBES: readonly LeakProbe[] = [
   // Painel do time interno.
-  { world: 'internal', prefix: 'admin', path: '/admin/deleted/tenant' },
-  { world: 'internal', prefix: 'admin/audit', path: '/admin/audit' },
-  { world: 'internal', prefix: 'alerts', path: '/alerts' },
-  { world: 'internal', prefix: 'assistant', path: '/assistant/conversations' },
-  { world: 'internal', prefix: 'auth', path: '/auth/me' },
-  { world: 'internal', prefix: 'ble-tags', path: '/ble-tags' },
-  { world: 'internal', prefix: 'chips', path: '/chips' },
-  { world: 'internal', prefix: 'clients', path: '/clients' },
-  { world: 'internal', prefix: 'dashboard', path: '/dashboard/overview' },
-  { world: 'internal', prefix: 'devices', path: '/devices' },
+  { world: 'internal', controller: 'admin/admin.controller.ts', path: '/admin/deleted/tenant' },
+  { world: 'internal', controller: 'audit/audit.controller.ts', path: '/admin/audit' },
+  { world: 'internal', controller: 'alerts/alerts.controller.ts', path: '/alerts' },
   {
     world: 'internal',
-    prefix: 'devices/:deviceId/commands',
+    controller: 'assistant/assistant.controller.ts',
+    path: '/assistant/conversations',
+  },
+  { world: 'internal', controller: 'auth/auth.controller.ts', path: '/auth/me' },
+  { world: 'internal', controller: 'ble-tags/ble-tags.controller.ts', path: '/ble-tags' },
+  { world: 'internal', controller: 'chips/chips.controller.ts', path: '/chips' },
+  { world: 'internal', controller: 'clients/clients.controller.ts', path: '/clients' },
+  { world: 'internal', controller: 'dashboard/dashboard.controller.ts', path: '/dashboard/overview' },
+  { world: 'internal', controller: 'devices/devices.controller.ts', path: '/devices' },
+  {
+    world: 'internal',
+    controller: 'sms-commands/sms-commands.controller.ts',
     path: '/devices/00000000-0000-0000-0000-000000000000/commands',
   },
-  { world: 'internal', prefix: 'geofences', path: '/geofences' },
-  { world: 'internal', prefix: 'hinova', path: '/hinova/sync/status' },
+  { world: 'internal', controller: 'geofences/geofences.controller.ts', path: '/geofences' },
+  { world: 'internal', controller: 'hinova/hinova.controller.ts', path: '/hinova/sync/status' },
   {
     world: 'internal',
-    prefix: 'installation-pendings',
+    controller: 'installation-pendings/installation-pendings.controller.ts',
     path: '/installation-pendings',
   },
-  { world: 'internal', prefix: 'maintenance-plans', path: '/maintenance-plans' },
-  { world: 'internal', prefix: 'map', path: '/map/tiles' },
-  { world: 'internal', prefix: 'reports', path: '/reports/positions' },
-  { world: 'internal', prefix: 'server', path: '/server/info' },
-  { world: 'internal', prefix: 'settings', path: '/settings' },
-  { world: 'internal', prefix: 'stock', path: '/stock' },
-  { world: 'internal', prefix: 'technicians', path: '/technicians' },
-  { world: 'internal', prefix: 'tenants', path: '/tenants' },
-  { world: 'internal', prefix: 'traccar', path: '/traccar/devices' },
-  { world: 'internal', prefix: 'users', path: '/users' },
-  { world: 'internal', prefix: 'vehicles', path: '/vehicles' },
+  {
+    world: 'internal',
+    controller: 'maintenance/maintenance.controller.ts',
+    path: '/maintenance-plans',
+  },
+  { world: 'internal', controller: 'map/map.controller.ts', path: '/map/tiles' },
+  { world: 'internal', controller: 'reports/reports.controller.ts', path: '/reports/positions' },
+  {
+    world: 'internal',
+    controller: 'scoring/scoring.controller.ts',
+    path: '/vehicles/00000000-0000-0000-0000-000000000000/score',
+  },
+  { world: 'internal', controller: 'scoring/scoring.controller.ts', path: '/scores/ranking' },
+  { world: 'internal', controller: 'server-info/server-info.controller.ts', path: '/server/info' },
+  { world: 'internal', controller: 'stock/stock.controller.ts', path: '/stock' },
+  {
+    world: 'internal',
+    controller: 'tenant-settings/tenant-settings.controller.ts',
+    path: '/settings',
+  },
+  { world: 'internal', controller: 'technicians/technicians.controller.ts', path: '/technicians' },
+  { world: 'internal', controller: 'tenants/tenants.controller.ts', path: '/tenants' },
+  { world: 'internal', controller: 'traccar/traccar.controller.ts', path: '/traccar/devices' },
+  { world: 'internal', controller: 'users/users.controller.ts', path: '/users' },
+  { world: 'internal', controller: 'vehicles/vehicles.controller.ts', path: '/vehicles' },
+  {
+    world: 'internal',
+    controller: 'vehicles-analytics/vehicles-analytics.controller.ts',
+    path: '/vehicles/00000000-0000-0000-0000-000000000000/behavior',
+  },
 
   // App do cliente final.
-  { world: 'associate', prefix: 'app', path: '/app/vehicles' },
-  { world: 'associate', prefix: 'app/auth', path: '/app/auth/me' },
+  { world: 'associate', controller: 'app/app-data.controller.ts', path: '/app/vehicles' },
+  { world: 'associate', controller: 'app/associate-auth.controller.ts', path: '/app/auth/me' },
 
   // PWA do técnico de campo.
-  { world: 'technician', prefix: 'tech', path: '/tech/assignments' },
-  { world: 'technician', prefix: 'tech/auth', path: '/tech/auth/me' },
+  { world: 'technician', controller: 'tech/tech-field.controller.ts', path: '/tech/assignments' },
+  { world: 'technician', controller: 'tech/tech-auth.controller.ts', path: '/tech/auth/me' },
 ];
