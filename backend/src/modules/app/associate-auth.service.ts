@@ -31,15 +31,14 @@ export class AssociateAuthService {
   ) {}
 
   /**
-   * Allowlist de acesso ao app (kill switch). Enquanto o app não é liberado ao
-   * público, só os CPFs desta lista conseguem logar — todos os demais são
-   * barrados, mesmo já tendo o app instalado. Isso fecha o furo de a senha
-   * padrão ser o próprio CPF: sem a trava, qualquer um com um CPF de associado
-   * do SGA entraria.
+   * Allowlist de testadores — bypass da regra "só quem tem rastreador instalado".
+   * Serve pra quem precisa entrar sem device real (você, equipe de teste). Quem
+   * está aqui entra mesmo sem rastreador; quem não está segue a regra normal
+   * (precisa de rastreador instalado).
    *
-   * `APP_ASSOCIATE_ALLOWLIST` = CPFs separados por vírgula (só dígitos ou com
-   * máscara). Vazia/ausente = app aberto (comportamento normal). Setar a env var
-   * em produção fecha o acesso na hora, sem depender da loja.
+   * `APP_ASSOCIATE_ALLOWLIST` = CPFs separados por vírgula (dígitos ou com
+   * máscara). Vazia/ausente = ninguém tem bypass, e aí só cliente com rastreador
+   * instalado loga.
    */
   private allowedCpfs(): Set<string> | null {
     const raw = process.env.APP_ASSOCIATE_ALLOWLIST?.trim();
@@ -53,16 +52,36 @@ export class AssociateAuthService {
     return set.size ? set : null;
   }
 
+  /**
+   * Regra de acesso ao app (a que o dono pediu): só loga quem é cliente real,
+   * ou seja, quem tem **rastreador instalado**. Um associado sem device vinculado
+   * não tem o que ver no app e não deve entrar — mesmo que o CPF exista no banco
+   * (senão, com a senha padrão sendo o CPF, qualquer um com o CPF de um cliente
+   * entraria assim que a base do SGA fosse sincronizada).
+   *
+   * "Instalado" = qualquer device já passado da instalação; PENDING_INSTALL
+   * (ainda não instalado) e DEACTIVATED (desligado) não dão acesso.
+   */
+  private static readonly STATUS_COM_ACESSO = [
+    'INSTALLED',
+    'CONFIGURING',
+    'ONLINE',
+    'OFFLINE',
+    'MAINTENANCE',
+  ] as const;
+
+  private async hasInstalledTracker(associateId: string): Promise<boolean> {
+    const n = await this.prisma.device.count({
+      where: {
+        status: { in: [...AssociateAuthService.STATUS_COM_ACESSO] as any },
+        vehicle: { associateId, deletedAt: null },
+      },
+    });
+    return n > 0;
+  }
+
   async login(dto: AssociateLoginDto) {
     const cpf = normalizeCpf(dto.cpf);
-
-    // Kill switch: se há allowlist configurada, só ela entra. Barra antes de
-    // qualquer verificação de senha.
-    const allow = this.allowedCpfs();
-    if (allow && !allow.has(cpf)) {
-      this.logger.warn(`Login bloqueado (fora da allowlist): CPF ...${cpf.slice(-4)}`);
-      throw new UnauthorizedException('O aplicativo ainda não está liberado.');
-    }
 
     // Mesmo CPF pode existir em mais de um tenant (multi-tenant). Buscamos todos
     // os candidatos e validamos 1-a-1 — o que bater vence. A busca tolera CPF
@@ -80,8 +99,21 @@ export class AssociateAuthService {
       },
     });
 
+    const allow = this.allowedCpfs();
+
     for (const a of candidates) {
       if (!(await this.passwordMatches(a.password, cpf, dto.password))) continue;
+
+      // Direito de acesso: allowlist (testadores) OU rastreador instalado.
+      const naAllowlist = allow?.has(cpf) ?? false;
+      if (!naAllowlist && !(await this.hasInstalledTracker(a.id))) {
+        this.logger.warn(
+          `Login bloqueado (sem rastreador instalado): CPF ...${cpf.slice(-4)}`,
+        );
+        throw new UnauthorizedException(
+          'Nenhum rastreador instalado vinculado ao seu CPF. Fale com a sua associação.',
+        );
+      }
 
       await this.prisma.associate.update({
         where: { id: a.id },
