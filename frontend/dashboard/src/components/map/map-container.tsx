@@ -145,7 +145,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         });
       };
 
-      if (basemap === 'satellite') {
+      if (basemap === 'satellite-google') {
         // A sessão do Google é criada no backend; se falhar, resolve() já
         // devolve o Esri e o mapa continua de pé.
         resolveSatelliteStyle().then(({ provider, style, googleMinZoom: minZoom }) => {
@@ -349,6 +349,14 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         <BasemapToggle current={basemap} onChange={setBasemap} />
         {satProvider === 'google' && googleVisible && (
           <GoogleMapsAttribution copyright={googleCopyright} />
+        )}
+        {basemap === 'satellite-google' && satProvider === 'google' && !googleVisible && (
+          // Sem isto o operador escolhe "Satélite Google", vê a mesma imagem
+          // de antes (porque de longe o Esri já basta) e conclui que o botão
+          // não funcionou.
+          <div className="pointer-events-none absolute bottom-8 left-2 z-10 rounded-md bg-background/85 px-2 py-1 text-[11px] text-muted-foreground shadow-md backdrop-blur-md">
+            Aproxime o zoom para a imagem em alta do Google
+          </div>
         )}
       </div>
     );

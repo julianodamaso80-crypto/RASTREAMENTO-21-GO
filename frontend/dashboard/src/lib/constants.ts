@@ -22,7 +22,7 @@ export const HAS_MAPTILER = MAPTILER_KEY.length > 0;
 const maptilerStyle = (style: string) =>
   `https://api.maptiler.com/maps/${style}/style.json?key=${MAPTILER_KEY}`;
 
-export type BasemapId = 'streets' | 'satellite';
+export type BasemapId = 'streets' | 'satellite' | 'satellite-google';
 
 interface BasemapDef {
   id: BasemapId;
@@ -85,8 +85,17 @@ export const BASEMAPS: BasemapDef[] = [
   },
   {
     id: 'satellite',
-    label: 'Satélite',
-    // Esri World Imagery + ruas/labels — nítido tipo Google, grátis e sem key.
+    label: 'Satélite grátis',
+    // Esri World Imagery + ruas/labels. Não custa nada e resolve até z19.
+    url: ESRI_SATELLITE_STYLE,
+    requiresKey: false,
+  },
+  {
+    id: 'satellite-google',
+    label: 'Satélite Google',
+    // Style real é montado em runtime por resolveSatelliteStyle() — precisa
+    // da sessão criada no backend. Aqui fica o Esri como ponto de partida
+    // (e como fallback se a chave não estiver configurada).
     url: ESRI_SATELLITE_STYLE,
     requiresKey: false,
   },
