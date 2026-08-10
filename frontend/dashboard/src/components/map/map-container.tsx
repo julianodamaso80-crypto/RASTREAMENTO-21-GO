@@ -23,7 +23,12 @@ import type { VehicleWithTracking } from '@/types/vehicle';
 import { BasemapToggle } from './basemap-toggle';
 
 export interface MapContainerRef {
-  flyTo: (lng: number, lat: number, zoom?: number) => void;
+  flyTo: (
+    lng: number,
+    lat: number,
+    zoom?: number,
+    paddingRight?: number,
+  ) => void;
 }
 
 interface MapContainerProps {
@@ -50,15 +55,15 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     const [basemap, setBasemap] = useState<BasemapId>('streets');
 
     useImperativeHandle(ref, () => ({
-      flyTo: (lng: number, lat: number, zoom = 15) => {
-        // padding.right=380 compensa o painel direito (VehicleDetailPanel)
-        // pra centralizar o ponto na área visualmente útil, não no centro
-        // geométrico do canvas (que ficaria atrás do painel).
+      flyTo: (lng: number, lat: number, zoom = 15, paddingRight = 0) => {
+        // paddingRight compensa o painel de detalhes quando ele está ABERTO
+        // (overlay sobre o mapa). Com o painel recolhido vale 0 e o veículo
+        // fica no centro real do canvas.
         mapRef.current?.flyTo({
           center: [lng, lat],
           zoom,
           duration: 1000,
-          padding: { top: 0, bottom: 0, left: 0, right: 380 },
+          padding: { top: 0, bottom: 0, left: 0, right: paddingRight },
         });
       },
     }));

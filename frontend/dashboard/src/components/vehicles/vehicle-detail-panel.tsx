@@ -1,6 +1,17 @@
 'use client';
 
-import { X, Navigation, Gauge, Satellite, MapPin, Power, Lock, Unlock, Phone } from 'lucide-react';
+import {
+  X,
+  ChevronRight,
+  Navigation,
+  Gauge,
+  Satellite,
+  MapPin,
+  Power,
+  Lock,
+  Unlock,
+  Phone,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +24,12 @@ import Link from 'next/link';
 import { Activity } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
-export function VehicleDetailPanel() {
+interface VehicleDetailPanelProps {
+  /** Recolhe o painel mantendo o veículo selecionado no mapa. */
+  onCollapse?: () => void;
+}
+
+export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   const { vehicles, selectedVehicleId, selectVehicle } = useTracking();
   const [showBlockModal, setShowBlockModal] = useState(false);
 
@@ -51,16 +67,35 @@ export function VehicleDetailPanel() {
     <>
       <div
         className={cn(
-          'w-[380px] h-full glass-light border-l border-border/30 flex flex-col overflow-y-auto',
+          'w-[380px] max-w-[88vw] h-full glass-light border-l border-border/30 flex flex-col overflow-y-auto shadow-2xl',
           'animate-in slide-in-from-right duration-200',
         )}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border/30">
           <h2 className="text-lg font-bold">{vehicle.plate}</h2>
-          <Button variant="ghost" size="icon" onClick={() => selectVehicle(null)}>
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {onCollapse && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onCollapse}
+                title="Recolher painel (libera o mapa)"
+                aria-label="Recolher painel"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => selectVehicle(null)}
+              title="Fechar e soltar o veículo"
+              aria-label="Fechar detalhes"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Banner de status — visual rápido pro operador/cliente entender em 1s */}
