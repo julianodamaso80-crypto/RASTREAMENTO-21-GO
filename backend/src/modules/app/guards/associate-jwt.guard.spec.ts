@@ -48,4 +48,26 @@ describe('AssociateJwtGuard', () => {
       UnauthorizedException,
     );
   });
+
+  it('verifica o token com o segredo do mundo do associado, não com o do painel', async () => {
+    const payload = { sub: 'a1', type: 'associate', tenantId: 't1' };
+    const jwt = { verify: jest.fn(() => payload) };
+    // Mock que devolve o próprio nome da chave, não um valor genérico
+    const config = { get: jest.fn((key: string) => key) };
+    const prisma = {
+      associate: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'a1', tenantId: 't1' }),
+      },
+    };
+
+    const guard = new AssociateJwtGuard(jwt as any, config as any, prisma as any);
+    await guard.canActivate(ctx('x'));
+
+    // Valida que config.get foi consultado com a chave correta
+    expect(config.get).toHaveBeenCalledWith('jwt.associateSecret');
+
+    // Valida que jwt.verify recebeu o segredo do associado
+    const [, options] = jwt.verify.mock.calls[0];
+    expect(options.secret).toBe('jwt.associateSecret');
+  });
 });
