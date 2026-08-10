@@ -54,3 +54,6 @@ mobile/credentials.json
 .env.bak.*
 *.env.bak
 *.env.bak.*
+
+# Scratch do subagent-driven-development
+.superpowers/
