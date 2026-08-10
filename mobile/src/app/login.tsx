@@ -35,8 +35,12 @@ export default function LoginScreen() {
         onlyDigits(cpf),
         password,
       );
-      await signIn(accessToken, associate.name);
-      // o gate no _layout redireciona pro app
+      await signIn(
+        accessToken,
+        associate.name,
+        associate.mustChangePassword ?? false,
+      );
+      // o gate no _layout leva pro app — ou pra troca de senha, no 1º acesso
     } catch (e: any) {
       const msg =
         e?.response?.data?.message || 'CPF ou senha inválidos. Tente de novo.';

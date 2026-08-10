@@ -10,15 +10,35 @@ import {
   MapPin,
   Phone,
   Mail,
+  PackageOpen,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDateOnlyBR } from '@/lib/utils';
-import { clientsApi } from '@/lib/api';
+import { clientsApi, devicesApi } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import type { ActiveClient } from '@/types/stock';
+
+/** Rastreador em processo de retirada (dados só pra confirmação na tela). */
+interface RetiradaAlvo {
+  deviceId: string;
+  imei: string;
+  plate: string;
+  cliente: string;
+}
 
 function formatCpf(cpf: string): string {
   const d = (cpf ?? '').replace(/\D/g, '');
@@ -31,6 +51,9 @@ export default function ClientesPage() {
   const [clients, setClients] = useState<ActiveClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [retirando, setRetirando] = useState<RetiradaAlvo | null>(null);
+  const [motivo, setMotivo] = useState('');
+  const [salvandoRetirada, setSalvandoRetirada] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -48,6 +71,29 @@ export default function ClientesPage() {
   }, [load]);
 
   const totalVehicles = clients.reduce((n, c) => n + c.vehicles.length, 0);
+
+  /**
+   * Retirada do rastreador: o veículo sai do rastreamento e o aparelho volta
+   * pro estoque disponível. Confirmação explícita porque o carro deixa de ser
+   * monitorado no mesmo instante.
+   */
+  const confirmarRetirada = async () => {
+    if (!retirando) return;
+    setSalvandoRetirada(true);
+    try {
+      await devicesApi.uninstall(retirando.deviceId, motivo.trim() || undefined);
+      toast.success(
+        `Rastreador ${retirando.imei} retirado — voltou pro estoque disponível.`,
+      );
+      setRetirando(null);
+      setMotivo('');
+      await load();
+    } catch {
+      toast.error('Não consegui retirar o rastreador. Tente de novo.');
+    } finally {
+      setSalvandoRetirada(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full p-4 md:p-6 gap-4 overflow-auto">
@@ -170,6 +216,22 @@ export default function ClientesPage() {
                               <MapPin className="h-3 w-3" /> {v.device.installLocation}
                             </p>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-1 h-7 w-full justify-start px-2 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                            onClick={() =>
+                              setRetirando({
+                                deviceId: v.device!.id,
+                                imei: v.device!.imei,
+                                plate: v.plate,
+                                cliente: c.name,
+                              })
+                            }
+                          >
+                            <PackageOpen className="mr-1.5 h-3 w-3" />
+                            Retirar rastreador
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -180,6 +242,68 @@ export default function ClientesPage() {
           ))}
         </div>
       )}
+
+      <Dialog
+        open={!!retirando}
+        onOpenChange={(aberto) => {
+          if (!aberto && !salvandoRetirada) {
+            setRetirando(null);
+            setMotivo('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Retirar rastreador</DialogTitle>
+            <DialogDescription>
+              O rastreador{' '}
+              <span className="font-mono font-semibold">{retirando?.imei}</span>{' '}
+              vai sair do veículo{' '}
+              <span className="font-semibold">{retirando?.plate}</span> de{' '}
+              {retirando?.cliente}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-200">
+            O veículo deixa de ser rastreado imediatamente e o aparelho volta
+            pro estoque disponível. O histórico de posições é preservado.
+          </p>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="motivo-retirada">Motivo (opcional)</Label>
+            <Input
+              id="motivo-retirada"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ex.: cliente cancelou o plano"
+              maxLength={200}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRetirando(null);
+                setMotivo('');
+              }}
+              disabled={salvandoRetirada}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmarRetirada}
+              disabled={salvandoRetirada}
+            >
+              {salvandoRetirada && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Confirmar retirada
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

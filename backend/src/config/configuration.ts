@@ -41,4 +41,10 @@ export default () => ({
     primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',
     secondaryIp: process.env.SERVER_SECONDARY_IP || '0.0.0.0',
   },
+  positions: {
+    // Histórico de posições cresce pra sempre e enche o disco do droplet —
+    // disco cheio derruba TUDO. 90 dias cobre investigação de sinistro com
+    // folga. `0` desliga a limpeza (usar só se migrar pra particionamento).
+    retentionDays: parseInt(process.env.POSITION_RETENTION_DAYS || '90', 10),
+  },
 });

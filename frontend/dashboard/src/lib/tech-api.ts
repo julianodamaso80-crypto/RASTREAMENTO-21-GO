@@ -89,15 +89,53 @@ export const techApi = {
     const res = await techHttp.get('/tech/lookup', { params: { placa } });
     return unwrap<HinovaLookup>(res.data);
   },
-  signal: async (id: string): Promise<TechSignal> => {
-    const res = await techHttp.get(`/tech/assignments/${id}/signal`);
+  /**
+   * Conferência de GPS. Manda a posição do celular do técnico quando ela existe
+   * — é o que permite comparar "onde o rastreador diz que está" com "onde o
+   * técnico realmente está".
+   */
+  signal: async (
+    id: string,
+    coords?: { lat: number; lng: number } | null,
+  ): Promise<TechSignal> => {
+    const res = await techHttp.get(`/tech/assignments/${id}/signal`, {
+      params: coords ? { lat: coords.lat, lng: coords.lng } : undefined,
+    });
     return unwrap<TechSignal>(res.data);
   },
   finish: async (
     id: string,
-    payload: { placa: string; installLocation: string; notes?: string },
+    payload: {
+      placa: string;
+      installLocation: string;
+      notes?: string;
+      techLat?: number;
+      techLng?: number;
+      overrideGpsCheck?: boolean;
+    },
   ): Promise<StockAssociateResult> => {
     const res = await techHttp.post(`/tech/assignments/${id}/finish`, payload);
     return unwrap<StockAssociateResult>(res.data);
   },
 };
+
+/**
+ * Posição do celular do técnico. Best-effort: sem permissão ou sem GPS, a
+ * conferência segue sem a parte de distância (o backend trata `null`).
+ */
+export function obterPosicaoDoTecnico(): Promise<{
+  lat: number;
+  lng: number;
+} | null> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) =>
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
+    );
+  });
+}

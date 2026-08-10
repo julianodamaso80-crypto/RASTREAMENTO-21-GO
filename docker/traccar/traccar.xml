@@ -36,10 +36,28 @@
     <entry key='logger.level'>info</entry>
     <entry key='logger.file'>/opt/traccar/data/tracker-server.log</entry>
 
-    <!-- Filtros de posição -->
+    <!--
+      Filtros de posição — PRIMEIRA linha de defesa da precisão.
+
+      Sem sinal de GPS (garagem, antena coberta, rastreador dentro de mochila),
+      o rastreador continua reportando por triangulação de torre de celular:
+      erro de quilômetros. Exibir isso como localização real manda a equipe pro
+      lugar errado num roubo. Ver docs/PLANO-PRODUCAO-ZERO-ERRO.md P0.1.
+
+      O backend também barra (position-quality.ts), mas filtrar na origem evita
+      que o lixo sequer entre no banco do Traccar.
+    -->
     <entry key='filter.enable'>true</entry>
     <entry key='filter.duplicate'>true</entry>
     <entry key='filter.zero'>true</entry>
     <entry key='filter.distance'>10</entry>
+    <!-- Descarta fix marcado como inválido pelo próprio protocolo. -->
+    <entry key='filter.invalid'>true</entry>
+    <!-- Descarta posição por torre de celular (LBS / cell tower). -->
+    <entry key='filter.approximate'>true</entry>
+    <!-- Rastreador com relógio adiantado: tolera 1h, acima disso descarta. -->
+    <entry key='filter.future'>3600</entry>
+    <!-- Precisão pior que 1km não é localização, é chute. -->
+    <entry key='filter.accuracy'>1000</entry>
 
 </properties>

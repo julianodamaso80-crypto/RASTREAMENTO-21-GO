@@ -43,3 +43,14 @@ backend/prisma/*.db-journal
 # Claude Code (settings locais e MCP com secrets)
 .claude/
 .mcp.json
+
+*.p8
+API DO APP STORE CONECT _ APPLE/
+secrets/
+mobile/credentials.json
+
+# Backups de .env gerados por scripts — contêm segredos e nunca podem subir.
+.env.bak
+.env.bak.*
+*.env.bak
+*.env.bak.*

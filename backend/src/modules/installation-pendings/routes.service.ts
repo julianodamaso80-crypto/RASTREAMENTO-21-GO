@@ -153,12 +153,21 @@ export class RoutesService {
       throw new NotFoundException('Técnico não encontrado ou inativo.');
     }
 
-    const pendencias = await this.prisma.installationPending.findMany({
+    const encontradas = await this.prisma.installationPending.findMany({
       where: { id: { in: pendingIds }, tenantId },
     });
-    if (!pendencias.length) {
+    if (!encontradas.length) {
       throw new UnprocessableEntityException(
         'Nenhuma das pendências existe mais (podem ter sido instaladas).',
+      );
+    }
+
+    // Última barreira antes de mandar o técnico à rua: placa instalada entre a
+    // seleção na tela e o envio da rota não pode virar parada. Ver P1.3.
+    const pendencias = await this.semJaInstaladas(encontradas, tenantId);
+    if (!pendencias.length) {
+      throw new UnprocessableEntityException(
+        'Todas as pendências selecionadas já foram instaladas.',
       );
     }
 
@@ -206,6 +215,49 @@ export class RoutesService {
     return route;
   }
 
+  /**
+   * Tira da seleção as placas que já têm rastreador instalado. Duplica o
+   * filtro do sync de propósito: entre o sync e o envio da rota passa tempo,
+   * e mandar técnico a um carro já instalado é o erro mais caro do fluxo.
+   */
+  private async semJaInstaladas<T extends { plate: string; chassi?: string | null }>(
+    pendencias: T[],
+    tenantId: string,
+  ): Promise<T[]> {
+    const instalados = await this.prisma.device.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        status: {
+          in: ['INSTALLED', 'CONFIGURING', 'ONLINE', 'OFFLINE', 'MAINTENANCE'] as never[],
+        },
+        vehicleId: { not: null },
+      },
+      select: { vehicle: { select: { plate: true, chassi: true } } },
+    });
+    if (!instalados.length) return pendencias;
+
+    const norm = (v?: string | null) =>
+      (v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const placas = new Set(instalados.map((d) => norm(d.vehicle?.plate)).filter(Boolean));
+    const chassis = new Set(
+      instalados.map((d) => norm(d.vehicle?.chassi)).filter(Boolean),
+    );
+
+    const restantes = pendencias.filter((p) => {
+      const placa = norm(p.plate);
+      const chassi = norm(p.chassi);
+      return !(placa && placas.has(placa)) && !(chassi && chassis.has(chassi));
+    });
+
+    if (restantes.length < pendencias.length) {
+      this.logger.log(
+        `${pendencias.length - restantes.length} pendência(s) fora da rota: já instaladas.`,
+      );
+    }
+    return restantes;
+  }
+
   /** Rotas de um tenant (para o painel). */
   listRoutes(tenantId: string) {
     return this.prisma.installationRoute.findMany({
@@ -226,12 +278,21 @@ export class RoutesService {
     });
   }
 
-  /** Rota ativa (PENDING) de um técnico — usada pelo app de campo. */
+  /**
+   * Rota ativa (PENDING) de um técnico — usada pelo app de campo.
+   * Paradas canceladas ficam de fora: o técnico não pode ver na lista dele um
+   * endereço de contrato que morreu no SGA.
+   */
   async currentRouteForTechnician(tenantId: string, technicianId: string) {
     return this.prisma.installationRoute.findFirst({
       where: { tenantId, technicianId, status: 'PENDING' },
       orderBy: { createdAt: 'desc' },
-      include: { stops: { orderBy: { order: 'asc' } } },
+      include: {
+        stops: {
+          where: { status: { not: 'CANCELLED' } },
+          orderBy: { order: 'asc' },
+        },
+      },
     });
   }
 

@@ -1,4 +1,9 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -80,6 +85,19 @@ export class AssociateAuthService {
     return n > 0;
   }
 
+  /**
+   * Login do associado.
+   *
+   * Regra de senha (definida pelo dono em 2026-08-10):
+   * - **Primeiro acesso**: login = CPF e senha = CPF. Nenhuma etapa de ativação.
+   * - A partir daí o app **obriga** a trocar por uma senha escolhida pelo
+   *   cliente, e o CPF **deixa de funcionar como senha**.
+   *
+   * O motivo é sério: CPF é dado semi-público no Brasil. Enquanto ele valia
+   * como senha permanente, qualquer um que soubesse o CPF de um cliente
+   * acompanhava a localização do carro dele em tempo real — vetor de
+   * perseguição e de roubo dirigido. Ver P1.8 do plano.
+   */
   async login(dto: AssociateLoginDto) {
     const cpf = normalizeCpf(dto.cpf);
 
@@ -96,13 +114,23 @@ export class AssociateAuthService {
         phone: true,
         tenantId: true,
         password: true,
+        mustChangePassword: true,
       },
     });
 
     const allow = this.allowedCpfs();
 
     for (const a of candidates) {
-      if (!(await this.passwordMatches(a.password, cpf, dto.password))) continue;
+      if (
+        !(await this.passwordMatches(
+          a.password,
+          cpf,
+          dto.password,
+          a.mustChangePassword,
+        ))
+      ) {
+        continue;
+      }
 
       // Direito de acesso: allowlist (testadores) OU rastreador instalado.
       const naAllowlist = allow?.has(cpf) ?? false;
@@ -117,11 +145,7 @@ export class AssociateAuthService {
 
       await this.prisma.associate.update({
         where: { id: a.id },
-        data: {
-          lastLoginAt: new Date(),
-          // Primeiro acesso: materializa a senha padrão (CPF) como hash.
-          ...(a.password ? {} : { password: await bcrypt.hash(cpf, BCRYPT_ROUNDS) }),
-        },
+        data: { lastLoginAt: new Date() },
       });
 
       const payload = {
@@ -140,19 +164,69 @@ export class AssociateAuthService {
   }
 
   /**
-   * A senha padrão do app é o próprio CPF: o associado é liberado no SGA e loga
-   * sem nenhuma etapa de ativação — login e senha são o mesmo CPF. O hash em
-   * banco continua sendo aceito (caminho alternativo, e base pra uma futura
-   * troca de senha), mas o CPF vale sempre enquanto não existir essa tela.
+   * O CPF só é aceito como senha enquanto o associado **ainda não trocou**
+   * (`mustChangePassword`). Depois da troca, vale exclusivamente o hash — é o
+   * que impede que quem descobriu o CPF do cliente entre na conta dele.
    */
   private async passwordMatches(
     hash: string | null,
     cpf: string,
     typed: string,
+    mustChangePassword: boolean,
   ): Promise<boolean> {
-    // Digitar o CPF com ou sem máscara no campo senha dá no mesmo.
-    if (cpf.length === 11 && normalizeCpf(typed) === cpf) return true;
-    return !!hash && bcrypt.compare(typed, hash);
+    if (mustChangePassword) {
+      // Primeiro acesso: CPF com ou sem máscara no campo senha dá no mesmo.
+      if (cpf.length === 11 && normalizeCpf(typed) === cpf) return true;
+    }
+    return !!hash && (await bcrypt.compare(typed, hash));
+  }
+
+  /**
+   * Troca de senha feita pelo próprio associado no app. É o que encerra o
+   * período em que o CPF vale como senha.
+   */
+  async changePassword(
+    associateId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const associate = await this.prisma.associate.findFirst({
+      where: { id: associateId, deletedAt: null },
+      select: { id: true, cpf: true, password: true, mustChangePassword: true },
+    });
+    if (!associate) throw new UnauthorizedException('Associado não encontrado');
+
+    const cpf = normalizeCpf(associate.cpf);
+    const confere = await this.passwordMatches(
+      associate.password,
+      cpf,
+      currentPassword,
+      associate.mustChangePassword,
+    );
+    if (!confere) {
+      throw new UnauthorizedException('Senha atual incorreta');
+    }
+
+    // A senha nova não pode ser o próprio CPF — seria voltar ao problema.
+    if (normalizeCpf(newPassword) === cpf) {
+      throw new BadRequestException(
+        'A nova senha não pode ser o seu CPF. Escolha outra.',
+      );
+    }
+    if (newPassword.trim().length < 6) {
+      throw new BadRequestException('A nova senha precisa ter ao menos 6 caracteres.');
+    }
+
+    await this.prisma.associate.update({
+      where: { id: associate.id },
+      data: {
+        password: await bcrypt.hash(newPassword, BCRYPT_ROUNDS),
+        mustChangePassword: false,
+      },
+    });
+
+    this.logger.log(`Associado ...${cpf.slice(-4)} definiu senha própria.`);
+    return { ok: true };
   }
 
   async me(associateId: string) {
@@ -165,6 +239,9 @@ export class AssociateAuthService {
         email: true,
         phone: true,
         tenantId: true,
+        // O app usa isto pra abrir a tela de troca de senha antes de qualquer
+        // outra coisa no primeiro acesso.
+        mustChangePassword: true,
         tenant: {
           select: { id: true, name: true, logoUrl: true, primaryColor: true },
         },
@@ -194,7 +271,8 @@ export class AssociateAuthService {
     const hash = await bcrypt.hash(plainPassword, BCRYPT_ROUNDS);
     await this.prisma.associate.update({
       where: { id: associate.id },
-      data: { password: hash },
+      // Senha definida pelo suporte também encerra o período em que o CPF vale.
+      data: { password: hash, mustChangePassword: false },
     });
     this.logger.log(`Senha definida pro associado ${associate.name} (${cpf})`);
     return { id: associate.id, name: associate.name };

@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators';
 import { TechnicianJwtGuard } from './guards/technician-jwt.guard';
 import {
@@ -50,12 +50,24 @@ export class TechFieldController {
   }
 
   @Get('assignments/:id/signal')
-  @ApiOperation({ summary: 'O rastreador já reportou posição?' })
+  @ApiOperation({
+    summary:
+      'Conferência de GPS do rastreador: fix válido, recente e perto do técnico',
+  })
+  @ApiQuery({ name: 'lat', required: false, description: 'Latitude do técnico' })
+  @ApiQuery({ name: 'lng', required: false, description: 'Longitude do técnico' })
   signal(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentTechnician() tech: TechnicianContext,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
   ) {
-    return this.service.signal(id, tech.id, tech.tenantId);
+    // Coordenada do técnico vem da query como texto; só entra se for número.
+    const num = (v?: string) => {
+      const n = Number(v);
+      return v != null && v !== '' && Number.isFinite(n) ? n : undefined;
+    };
+    return this.service.signal(id, tech.id, tech.tenantId, num(lat), num(lng));
   }
 
   @Post('assignments/:id/finish')

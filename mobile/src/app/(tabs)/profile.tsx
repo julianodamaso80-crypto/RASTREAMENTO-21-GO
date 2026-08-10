@@ -8,6 +8,7 @@ import {
   Alert as RNAlert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppApi, AssociateProfile } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
@@ -15,6 +16,7 @@ import { maskCpf } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const logout = useAuth((s) => s.logout);
   const [profile, setProfile] = useState<AssociateProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +71,15 @@ export default function ProfileScreen() {
       ) : (
         <Text style={styles.error}>Não foi possível carregar o perfil.</Text>
       )}
+
+      <TouchableOpacity
+        style={styles.action}
+        onPress={() => router.push('/change-password')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="key-outline" size={20} color={colors.navy} />
+        <Text style={styles.actionText}>Trocar minha senha</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.logout} onPress={confirmLogout} activeOpacity={0.8}>
         <Ionicons name="log-out-outline" size={20} color={colors.red} />
@@ -136,12 +147,26 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: 15, color: colors.textMuted, flex: 1 },
   rowValue: { fontSize: 15, fontWeight: '600', color: colors.text },
   error: { textAlign: 'center', color: colors.textMuted, marginTop: 40 },
-  logout: {
+  action: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     marginTop: 'auto',
+    marginBottom: 12,
+    marginHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: colors.white,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  actionText: { color: colors.navy, fontSize: 16, fontWeight: '700' },
+  logout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     marginBottom: 24,
     marginHorizontal: 20,
     paddingVertical: 16,

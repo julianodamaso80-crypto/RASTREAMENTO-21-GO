@@ -19,10 +19,11 @@ import { DevicesService } from './devices.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { FilterDevicesDto } from './dto/filter-devices.dto';
+import { UninstallDeviceDto } from './dto/uninstall-device.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
-  user: { id: string; role: string };
+  user: { id: string; role: string; email?: string };
 }
 
 @ApiTags('Dispositivos')
@@ -79,6 +80,24 @@ export class DevicesController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.devicesService.remove(id, req.tenantId);
+  }
+
+  @Post(':id/uninstall')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Retirar rastreador do veículo e devolver ao estoque disponível',
+  })
+  async uninstall(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UninstallDeviceDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.devicesService.uninstall(id, req.tenantId, {
+      reason: dto.reason,
+      by: req.user?.email ?? req.user?.id,
+    });
   }
 
   @Post(':id/link-vehicle/:vehicleId')

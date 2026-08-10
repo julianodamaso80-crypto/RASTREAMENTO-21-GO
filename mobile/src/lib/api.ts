@@ -97,6 +97,12 @@ export interface AssociateProfile {
   cpf: string;
   email: string | null;
   phone: string | null;
+  /**
+   * Primeiro acesso ainda com o CPF como senha. Enquanto true o app exige a
+   * troca antes de liberar qualquer tela — CPF é dado semi-público e não pode
+   * seguir valendo como senha de quem vê a localização do carro.
+   */
+  mustChangePassword: boolean;
   tenant: { id: string; name: string; logoUrl: string | null; primaryColor: string };
   _count: { vehicles: number };
 }
@@ -104,13 +110,22 @@ export interface AssociateProfile {
 export const AppApi = {
   login: (cpf: string, password: string) =>
     api
-      .post<{ accessToken: string; associate: { id: string; name: string } }>(
-        '/app/auth/login',
-        { cpf, password },
-      )
+      .post<{
+        accessToken: string;
+        associate: { id: string; name: string; mustChangePassword: boolean };
+      }>('/app/auth/login', { cpf, password })
       .then((r) => r.data),
 
   me: () => api.get<AssociateProfile>('/app/auth/me').then((r) => r.data),
+
+  /** Troca de senha — encerra o período em que o CPF vale como senha. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api
+      .post<{ ok: boolean }>('/app/auth/change-password', {
+        currentPassword,
+        newPassword,
+      })
+      .then((r) => r.data),
 
   vehicles: () => api.get<Vehicle[]>('/app/vehicles').then((r) => r.data),
 

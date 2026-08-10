@@ -17,7 +17,7 @@ export default function RootLayout() {
   diag('02-root-render');
   const router = useRouter();
   const segments = useSegments();
-  const { token, hydrated, hydrate } = useAuth();
+  const { token, hydrated, hydrate, mustChangePassword } = useAuth();
 
   // Carrega o login salvo no boot.
   useEffect(() => {
@@ -29,12 +29,23 @@ export default function RootLayout() {
   useEffect(() => {
     if (!hydrated) return;
     const inApp = segments[0] === '(tabs)' || segments[0] === 'vehicle';
-    if (!token && inApp) {
-      router.replace('/login');
-    } else if (token && !inApp) {
-      router.replace('/(tabs)');
+    const naTrocaDeSenha = segments[0] === 'change-password';
+
+    if (!token) {
+      if (inApp || naTrocaDeSenha) router.replace('/login');
+      return;
     }
-  }, [token, hydrated, segments, router]);
+
+    // Primeiro acesso: nada do app abre antes de o cliente criar a senha dele.
+    if (mustChangePassword) {
+      if (!naTrocaDeSenha) router.replace('/change-password');
+      return;
+    }
+
+    // Trocar a senha de novo, por vontade própria (pelo perfil), é permitido —
+    // sem esta ressalva o gate expulsaria o usuário de volta pras abas.
+    if (!inApp && !naTrocaDeSenha) router.replace('/(tabs)');
+  }, [token, hydrated, mustChangePassword, segments, router]);
 
   // SEMPRE renderiza — o app nunca fica preso em branco. A rota inicial "/"
   // (index) mostra um carregamento visível enquanto hidrata e então redireciona.
@@ -44,6 +55,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="change-password" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="vehicle/[id]"

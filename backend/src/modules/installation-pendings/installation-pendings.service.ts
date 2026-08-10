@@ -303,7 +303,31 @@ export class InstallationPendingsService implements OnModuleInit {
         this.hinova.listRawActiveAssociates(offset, limite),
       );
 
-      const linhas = montarFila(veiculos, associados, tenantId);
+      const linhasSga = montarFila(veiculos, associados, tenantId);
+
+      // O espelho é reconstruído do zero a cada sync, e o SGA só deixa de
+      // listar a placa quando alguém troca o tipo_adesao lá dentro — coisa que
+      // a operação faz manualmente, às vezes dias depois. Sem este filtro, a
+      // placa que ACABAMOS de instalar reaparece na fila e pode ser mandada de
+      // novo pra rota de um técnico. Ver P1.3 do plano.
+      const { linhas, removidasPorInstalacao } = await this.tirarJaInstaladas(
+        linhasSga,
+        tenantId,
+      );
+
+      // Rede de segurança: SGA devolvendo lista vazia (ou quase) por falha
+      // silenciosa não pode apagar a fila inteira da operação. Ver P1.4.
+      const jaGravadas = await this.prisma.installationPending.count({
+        where: { tenantId },
+      });
+      if (jaGravadas > 0 && linhas.length < jaGravadas * 0.3) {
+        const aviso =
+          `SGA devolveu ${linhas.length} pendência(s) contra ${jaGravadas} ` +
+          'já gravadas (queda acima de 70%). Espelho preservado — verifique o SGA.';
+        this.lastError = aviso;
+        this.logger.error(aviso);
+        throw new Error(aviso);
+      }
 
       // Geocodifica os CEPs (cache cobre o que já foi resolvido antes) e preenche
       // lat/lng — é o que alimenta a rota inteligente. Best-effort: CEP que não
@@ -345,6 +369,15 @@ export class InstallationPendingsService implements OnModuleInit {
       this.logger.log(
         `Geocoding: ${comCoord}/${linhas.length} pendências com coordenada.`,
       );
+      if (removidasPorInstalacao > 0) {
+        this.logger.log(
+          `${removidasPorInstalacao} placa(s) ignorada(s): já têm rastreador instalado aqui (SGA ainda não atualizou o tipo de adesão).`,
+        );
+      }
+
+      // Paradas de rota que perderam a pendência (contrato cancelado no SGA)
+      // não podem continuar mandando técnico à casa do cliente. Ver P1.5.
+      await this.cancelarParadasSemPendencia(tenantId);
 
       this.lastSync = resultado;
       this.logger.log(
@@ -357,6 +390,166 @@ export class InstallationPendingsService implements OnModuleInit {
     } finally {
       this.syncing = false;
       this.syncStartedAt = null;
+    }
+  }
+
+  /**
+   * Status de Device que significam "o rastreador já está no carro". A placa
+   * correspondente não é mais pendência, não importa o que o SGA diga.
+   */
+  private static readonly STATUS_INSTALADO = [
+    'INSTALLED',
+    'CONFIGURING',
+    'ONLINE',
+    'OFFLINE',
+    'MAINTENANCE',
+  ];
+
+  /**
+   * Remove da fila as placas que já têm rastreador instalado aqui dentro.
+   *
+   * É o conserto do caso mais perigoso do ciclo: instalar hoje, o SGA continuar
+   * marcando "pendente instalação" (a baixa lá é manual) e a placa voltar na
+   * próxima varredura — indo parar de novo numa rota de instalação. Casa por
+   * placa e, pra veículo sem emplacamento, por chassi.
+   */
+  private async tirarJaInstaladas(
+    linhas: ReturnType<typeof montarFila>,
+    tenantId: string,
+  ): Promise<{
+    linhas: ReturnType<typeof montarFila>;
+    removidasPorInstalacao: number;
+  }> {
+    const instalados = await this.prisma.device.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        status: { in: InstallationPendingsService.STATUS_INSTALADO as never[] },
+        vehicleId: { not: null },
+      },
+      select: { vehicle: { select: { plate: true, chassi: true } } },
+    });
+
+    const normalizar = (v?: string | null) =>
+      (v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+    const placas = new Set<string>();
+    const chassis = new Set<string>();
+    for (const d of instalados) {
+      const placa = normalizar(d.vehicle?.plate);
+      if (placa) placas.add(placa);
+      const chassi = normalizar(d.vehicle?.chassi);
+      if (chassi) chassis.add(chassi);
+    }
+
+    if (placas.size === 0 && chassis.size === 0) {
+      return { linhas, removidasPorInstalacao: 0 };
+    }
+
+    const filtradas = linhas.filter((l) => {
+      const placa = normalizar(l.plate);
+      const chassi = normalizar(l.chassi);
+      if (placa && placas.has(placa)) return false;
+      if (chassi && chassis.has(chassi)) return false;
+      return true;
+    });
+
+    return {
+      linhas: filtradas,
+      removidasPorInstalacao: linhas.length - filtradas.length,
+    };
+  }
+
+  /**
+   * Cancela paradas de rota cuja pendência não existe mais no espelho e que
+   * também não viraram instalação.
+   *
+   * A parada é um snapshot: sem isto, contrato cancelado no SGA continuaria
+   * mandando o técnico à casa do cliente. Parada de placa já instalada não
+   * entra aqui — essa vira DONE no momento da instalação.
+   */
+  private async cancelarParadasSemPendencia(tenantId: string): Promise<void> {
+    try {
+      const paradas = await this.prisma.routeStop.findMany({
+        where: {
+          status: 'PENDING',
+          route: { tenantId, status: 'PENDING' },
+        },
+        select: { id: true, plate: true, hinovaVehicleCode: true, routeId: true },
+      });
+      if (!paradas.length) return;
+
+      const [pendencias, instalados] = await Promise.all([
+        this.prisma.installationPending.findMany({
+          where: { tenantId },
+          select: { plate: true, hinovaVehicleCode: true },
+        }),
+        this.prisma.device.findMany({
+          where: {
+            tenantId,
+            deletedAt: null,
+            status: {
+              in: InstallationPendingsService.STATUS_INSTALADO as never[],
+            },
+            vehicleId: { not: null },
+          },
+          select: { vehicle: { select: { plate: true } } },
+        }),
+      ]);
+
+      const vivas = new Set<string>();
+      for (const p of pendencias) {
+        if (p.plate) vivas.add(`P:${p.plate}`);
+        if (p.hinovaVehicleCode) vivas.add(`C:${p.hinovaVehicleCode}`);
+      }
+      const jaInstaladas = new Set(
+        instalados
+          .map((d) => (d.vehicle?.plate ?? '').toUpperCase())
+          .filter(Boolean),
+      );
+
+      const orfas = paradas.filter((s) => {
+        const placa = (s.plate ?? '').toUpperCase();
+        if (placa && jaInstaladas.has(placa)) return false; // vira DONE, não CANCELLED
+        if (placa && vivas.has(`P:${placa}`)) return false;
+        if (s.hinovaVehicleCode && vivas.has(`C:${s.hinovaVehicleCode}`)) {
+          return false;
+        }
+        return true;
+      });
+      if (!orfas.length) return;
+
+      await this.prisma.routeStop.updateMany({
+        where: { id: { in: orfas.map((s) => s.id) } },
+        data: {
+          status: 'CANCELLED',
+          note: 'Pendência saiu do SGA — não instalar sem confirmar',
+        },
+      });
+
+      // Rota sem nenhuma parada pendente está encerrada.
+      for (const routeId of new Set(orfas.map((s) => s.routeId))) {
+        const restantes = await this.prisma.routeStop.count({
+          where: { routeId, status: 'PENDING' },
+        });
+        if (restantes === 0) {
+          await this.prisma.installationRoute.update({
+            where: { id: routeId },
+            data: { status: 'DONE' },
+          });
+        }
+      }
+
+      this.logger.warn(
+        `${orfas.length} parada(s) de rota cancelada(s): a pendência saiu do SGA.`,
+      );
+    } catch (erro) {
+      // Best-effort: falhar aqui não pode derrubar um sync que já deu certo.
+      this.logger.warn(
+        `Não consegui reconciliar as paradas de rota: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
     }
   }
 

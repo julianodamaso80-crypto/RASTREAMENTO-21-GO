@@ -429,6 +429,16 @@ export const devicesApi = {
     const res = await api.post<ApiResponse<Device>>(`/devices/${id}/link-vehicle/${vehicleId}`);
     return res.data.data;
   },
+  /**
+   * Retira o rastreador do veículo: o carro sai do rastreamento e o aparelho
+   * volta pro estoque disponível pra ser reinstalado em outro cliente.
+   */
+  uninstall: async (id: string, reason?: string): Promise<Device> => {
+    const res = await api.post<ApiResponse<Device>>(`/devices/${id}/uninstall`, {
+      ...(reason ? { reason } : {}),
+    });
+    return res.data.data;
+  },
   unlinkVehicle: async (id: string): Promise<Device> => {
     const res = await api.post<ApiResponse<Device>>(`/devices/${id}/unlink-vehicle`);
     return res.data.data;

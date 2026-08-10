@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { TraccarService } from './traccar.service';
 import { TraccarController } from './traccar.controller';
 import { TraccarGateway } from './traccar.gateway';
+import { DeviceRegistryService } from './device-registry.service';
+import { TraccarReconcileService } from './traccar-reconcile.service';
 import { BleTagsModule } from '../ble-tags/ble-tags.module';
 import { AlertsModule } from '../alerts/alerts.module';
 
@@ -22,7 +24,12 @@ import { AlertsModule } from '../alerts/alerts.module';
     forwardRef(() => AlertsModule),
   ],
   controllers: [TraccarController],
-  providers: [TraccarService, TraccarGateway],
-  exports: [TraccarService],
+  providers: [
+    TraccarService,
+    TraccarGateway,
+    DeviceRegistryService,
+    TraccarReconcileService,
+  ],
+  exports: [TraccarService, DeviceRegistryService, TraccarReconcileService],
 })
 export class TraccarModule {}

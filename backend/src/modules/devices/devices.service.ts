@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
+import { DeviceRegistryService } from '../traccar/device-registry.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { FilterDevicesDto } from './dto/filter-devices.dto';
@@ -23,6 +24,7 @@ export class DevicesService {
   constructor(
     private prisma: PrismaService,
     private traccarService: TraccarService,
+    private deviceRegistry: DeviceRegistryService,
   ) {}
 
   async findAll(tenantId: string, filters: FilterDevicesDto) {
@@ -102,8 +104,42 @@ export class DevicesService {
       tenantId,
     };
 
-    if (dto.vehicleId) data.vehicleId = dto.vehicleId;
-    if (dto.chipId) data.chipId = dto.chipId;
+    // Veículo e chip informados no cadastro precisam ser DESTA empresa e estar
+    // livres — o linkVehicle/linkChip sempre validou isso, mas o create não, e
+    // um id de outro tenant passava direto. Ver P1.2 do plano.
+    if (dto.vehicleId) {
+      const vehicle = await this.prisma.vehicle.findFirst({
+        where: { id: dto.vehicleId, tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!vehicle) throw new NotFoundException('Veículo não encontrado');
+
+      const ocupado = await this.deviceModel.findFirst({
+        where: { vehicleId: dto.vehicleId, deletedAt: null },
+        select: { id: true },
+      });
+      if (ocupado) {
+        throw new ConflictException('Veículo já possui um dispositivo vinculado');
+      }
+      data.vehicleId = dto.vehicleId;
+    }
+
+    if (dto.chipId) {
+      const chip = await (this.prisma as any).chip.findFirst({
+        where: { id: dto.chipId, tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!chip) throw new NotFoundException('Chip não encontrado');
+
+      const chipEmUso = await this.deviceModel.findFirst({
+        where: { chipId: dto.chipId, deletedAt: null },
+        select: { id: true },
+      });
+      if (chipEmUso) {
+        throw new ConflictException('Chip já vinculado a outro dispositivo');
+      }
+      data.chipId = dto.chipId;
+    }
 
     const device = await this.deviceModel.create({ data });
 
@@ -123,6 +159,20 @@ export class DevicesService {
           where: { id: device.id },
           data: { traccarDeviceId: traccarDevice.id },
         });
+
+        // Device criado já vinculado a um veículo precisa propagar o id do
+        // Traccar pro Vehicle, senão o carro não aparece no mapa (só o
+        // linkVehicle fazia isso).
+        if (dto.vehicleId) {
+          await this.prisma.vehicle.update({
+            where: { id: dto.vehicleId },
+            data: { traccarDeviceId: traccarDevice.id },
+          });
+          this.deviceRegistry.notifyDeviceChanged(
+            `cadastro de rastreador ${dto.imei}`,
+          );
+        }
+
         this.logger.log(
           `Device Traccar ${existing ? 'reutilizado' : 'criado'}: ${traccarDevice.id} para IMEI ${dto.imei}`,
         );
@@ -155,12 +205,91 @@ export class DevicesService {
     return this.findOne(id, tenantId);
   }
 
+  /**
+   * Exclusão (soft delete). Se o rastreador estiver instalado, a retirada roda
+   * antes — senão o veículo ficaria com `traccarDeviceId` de um device excluído
+   * e o aparelho jamais voltaria ao estoque.
+   */
   async remove(id: string, tenantId: string) {
-    await this.findOne(id, tenantId);
+    const device = await this.findOne(id, tenantId);
+    if (device.vehicleId) {
+      await this.uninstall(id, tenantId, { reason: 'Rastreador excluído' });
+    }
     return this.deviceModel.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  /**
+   * Retirada do rastreador do veículo (cancelamento, troca de equipamento,
+   * sinistro). Devolve o aparelho ao estoque disponível pra ser reinstalado.
+   *
+   * Antes disto só existia o `remove()`, que marcava `deletedAt` no Device e
+   * deixava rastro: o veículo continuava com `traccarDeviceId` (aparecendo no
+   * mapa como se estivesse rastreado) e o StockItem seguia com `associatedAt`
+   * preenchido — o aparelho sumia do estoque pra sempre. Ver P1.7 do plano.
+   */
+  async uninstall(
+    deviceId: string,
+    tenantId: string,
+    options: { reason?: string; by?: string } = {},
+  ) {
+    const device = await this.findOne(deviceId, tenantId);
+    const vehicleId: string | null = device.vehicleId ?? null;
+    const agora = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await (tx as any).device.update({
+        where: { id: deviceId },
+        data: {
+          vehicleId: null,
+          chipId: null,
+          status: 'DEACTIVATED',
+          uninstalledAt: agora,
+          uninstalledBy: options.by ?? null,
+          uninstallReason: options.reason ?? null,
+        },
+      });
+
+      // Veículo sai do rastreamento — sem isso continuaria plotado no mapa com
+      // a última posição congelada, o que é pior que não aparecer.
+      if (vehicleId) {
+        await tx.vehicle.update({
+          where: { id: vehicleId },
+          data: { traccarDeviceId: null },
+        });
+      }
+
+      // Aparelho volta pro estoque disponível (a listagem filtra associatedAt).
+      await tx.stockItem.updateMany({
+        where: { tenantId, imei: device.imei },
+        data: { associatedAt: null, deviceId: null },
+      });
+    });
+
+    // Traccar: mantém o device (histórico de posições) mas desabilitado, pra
+    // não contar como ativo nem gerar alerta de offline eterno.
+    if (device.traccarDeviceId) {
+      try {
+        await this.traccarService.updateDevice(device.traccarDeviceId, {
+          disabled: true,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Retirada ${device.imei}: não consegui desabilitar no Traccar (${
+            error instanceof Error ? error.message : error
+          }).`,
+        );
+      }
+    }
+
+    this.deviceRegistry.notifyDeviceChanged(`retirada do rastreador ${device.imei}`);
+    this.logger.log(
+      `Rastreador ${device.imei} retirado${vehicleId ? ` do veículo ${vehicleId}` : ''} e devolvido ao estoque.`,
+    );
+
+    return this.findOne(deviceId, tenantId);
   }
 
   async linkVehicle(deviceId: string, vehicleId: string, tenantId: string) {
@@ -197,6 +326,10 @@ export class DevicesService {
       });
     }
 
+    // Mapping do tempo real na hora — sem isso o carro ficava até 2min sem
+    // aparecer no mapa depois do vínculo.
+    this.deviceRegistry.notifyDeviceChanged(`vínculo do rastreador ${device.imei}`);
+
     return this.findOne(deviceId, tenantId);
   }
 
@@ -214,6 +347,10 @@ export class DevicesService {
       where: { id: deviceId },
       data: { vehicleId: null },
     });
+
+    this.deviceRegistry.notifyDeviceChanged(
+      `desvínculo do rastreador ${device.imei}`,
+    );
 
     return this.findOne(deviceId, tenantId);
   }

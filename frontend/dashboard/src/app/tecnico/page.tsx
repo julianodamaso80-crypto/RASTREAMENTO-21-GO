@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { techApi } from '@/lib/tech-api';
+import { techApi, obterPosicaoDoTecnico } from '@/lib/tech-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,7 +30,13 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SelectNative } from '@/components/ui/select-native';
-import type { TechAssignment, TechMe, TechRoute, TechRouteStop } from '@/types/tech';
+import type {
+  TechAssignment,
+  TechMe,
+  TechRoute,
+  TechRouteStop,
+  TechSignal,
+} from '@/types/tech';
 import type { HinovaLookup } from '@/types/stock';
 
 /** Link de navegação: Waze quando há coordenada, Google Maps por endereço senão. */
@@ -517,6 +523,9 @@ function InstallScreen({
   const [localOutro, setLocalOutro] = useState('');
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Conferência de GPS: o que separa "instalei" de "instalei e ESTÁ RASTREANDO".
+  const [check, setCheck] = useState<TechSignal | null>(null);
+  const [confirmandoSemGps, setConfirmandoSemGps] = useState(false);
 
   const localFinal = local === 'Outro' ? localOutro.trim() : local;
   const podeFinalizar = !!lookup?.encontrado && !!lookup?.ativo && localFinal.length >= 3;
@@ -541,34 +550,57 @@ function InstallScreen({
     }
   };
 
-  const verificarSinal = async () => {
+  /**
+   * Confere o GPS de verdade: posição válida, recente e batendo com o lugar
+   * onde o técnico está. Chip online não prova nada — é o heartbeat do SIM e
+   * fica verde até com a antena de GPS arrancada.
+   */
+  const conferirGps = async () => {
     setChecking(true);
     try {
-      const res = await techApi.signal(item.id);
-      if (res.online) toast.success('Rastreador comunicando agora');
-      else if (res.lastUpdate)
-        toast.warning(
-          `Sem comunicação agora. Última posição: ${new Date(res.lastUpdate).toLocaleString('pt-BR')}`,
+      const minhaPos = await obterPosicaoDoTecnico();
+      const res = await techApi.signal(item.id, minhaPos);
+      setCheck(res);
+      if (res.checkOk) {
+        toast.success(
+          res.distanceM != null
+            ? `GPS confirmado a ${formatarDistancia(res.distanceM)} de você`
+            : 'GPS confirmado',
         );
-      else toast.warning(res.motivo || 'Rastreador ainda não comunicou');
+      } else {
+        toast.warning(res.motivo || 'Não consegui confirmar a posição');
+      }
     } catch (err) {
-      toast.error(apiMessage(err, 'Erro ao verificar o sinal'));
+      toast.error(apiMessage(err, 'Erro ao conferir o GPS'));
     } finally {
       setChecking(false);
     }
   };
 
-  const finalizar = async () => {
+  const finalizar = async (forcar = false) => {
     setSaving(true);
     try {
+      const minhaPos = await obterPosicaoDoTecnico();
       const res = await techApi.finish(item.id, {
         placa: placa.toUpperCase().replace(/[^A-Z0-9]/g, ''),
         installLocation: localFinal,
+        ...(minhaPos ? { techLat: minhaPos.lat, techLng: minhaPos.lng } : {}),
+        ...(forcar ? { overrideGpsCheck: true } : {}),
       });
       toast.success(`Instalação finalizada — ${res.placa}`);
+      setConfirmandoSemGps(false);
       onFinished();
     } catch (err) {
-      toast.error(apiMessage(err, 'Não consegui finalizar a instalação'));
+      // O backend recusa a finalização quando a conferência de GPS reprova.
+      // Mostramos o motivo e deixamos o técnico assumir a responsabilidade —
+      // garagem subterrânea existe, e travar de vez impediria o trabalho.
+      const detalhe = gpsCheckDoErro(err);
+      if (detalhe) {
+        setCheck(detalhe);
+        setConfirmandoSemGps(true);
+      } else {
+        toast.error(apiMessage(err, 'Não consegui finalizar a instalação'));
+      }
     } finally {
       setSaving(false);
     }
@@ -681,7 +713,7 @@ function InstallScreen({
       <Button
         variant="outline"
         className="h-12 w-full"
-        onClick={verificarSinal}
+        onClick={conferirGps}
         disabled={checking}
       >
         {checking ? (
@@ -689,23 +721,137 @@ function InstallScreen({
         ) : (
           <SignalHigh className="mr-2 h-5 w-5" />
         )}
-        Verificar sinal do rastreador
+        Conferir GPS do rastreador
       </Button>
 
-      <Button
-        className={cn('h-14 w-full text-base font-semibold')}
-        onClick={finalizar}
-        disabled={!podeFinalizar || saving}
-      >
-        {saving && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-        Finalizar instalação
-      </Button>
+      {check && <GpsCheckCard check={check} />}
 
-      {!podeFinalizar && (
+      {/* Confirmação explícita quando a conferência reprovou. Fica registrado
+          no cadastro do rastreador que a instalação foi aceita assim. */}
+      {confirmandoSemGps ? (
+        <div className="space-y-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+          <p className="text-sm font-semibold text-red-200">
+            O GPS não foi confirmado
+          </p>
+          <p className="text-sm text-red-200/90">
+            {check?.motivo ??
+              'Não consegui confirmar onde o rastreador está.'}{' '}
+            Se finalizar assim, o veículo pode não aparecer no mapa. Prefira
+            levar o carro pra céu aberto e conferir de novo.
+          </p>
+          <div className="flex flex-col gap-2 pt-1">
+            <Button
+              variant="outline"
+              className="h-11 w-full"
+              onClick={() => {
+                setConfirmandoSemGps(false);
+                void conferirGps();
+              }}
+              disabled={checking || saving}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Conferir o GPS de novo
+            </Button>
+            <Button
+              variant="destructive"
+              className="h-11 w-full"
+              onClick={() => finalizar(true)}
+              disabled={saving}
+            >
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Finalizar assim mesmo
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          className={cn('h-14 w-full text-base font-semibold')}
+          onClick={() => finalizar(false)}
+          disabled={!podeFinalizar || saving}
+        >
+          {saving && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+          Finalizar instalação
+        </Button>
+      )}
+
+      {!podeFinalizar && !confirmandoSemGps && (
         <p className="text-center text-xs text-muted-foreground">
           Consulte a placa no SGA e informe o local para liberar o botão.
         </p>
       )}
     </div>
   );
+}
+
+/** Resultado da conferência em linguagem de campo, não de sistema. */
+function GpsCheckCard({ check }: { check: TechSignal }) {
+  const ok = check.checkOk;
+  return (
+    <div
+      className={cn(
+        'rounded-lg border p-3',
+        ok
+          ? 'border-emerald-500/30 bg-emerald-500/10'
+          : 'border-amber-500/30 bg-amber-500/10',
+      )}
+    >
+      <div className="mb-1.5 flex items-center gap-2">
+        {ok ? (
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+        )}
+        <span
+          className={cn(
+            'text-sm font-semibold',
+            ok ? 'text-emerald-200' : 'text-amber-200',
+          )}
+        >
+          {ok ? 'GPS confirmado' : 'GPS não confirmado'}
+        </span>
+      </div>
+
+      {ok && check.distanceM != null && (
+        <p className="text-sm text-emerald-200/90">
+          O rastreador está a {formatarDistancia(check.distanceM)} de você — a
+          posição bate com o local da instalação.
+        </p>
+      )}
+      {ok && check.distanceM == null && (
+        <p className="text-sm text-emerald-200/90">
+          Posição de GPS válida e recente. Ative a localização do celular pra
+          conferir também a distância.
+        </p>
+      )}
+      {!ok && check.motivo && (
+        <p className="text-sm text-amber-200/90">{check.motivo}</p>
+      )}
+
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+        <span>Chip: {check.online ? 'conectado' : 'fora do ar'}</span>
+        {check.satellites != null && <span>Satélites: {check.satellites}</span>}
+        {check.position && (
+          <span>
+            Último GPS:{' '}
+            {new Date(check.position.fixTime).toLocaleTimeString('pt-BR')}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatarDistancia(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
+}
+
+/** Extrai o diagnóstico de GPS do 422 devolvido pelo backend. */
+function gpsCheckDoErro(err: unknown): TechSignal | null {
+  const data = (err as { response?: { data?: unknown } })?.response?.data as
+    | { error?: string; gpsCheck?: TechSignal; data?: { error?: string; gpsCheck?: TechSignal } }
+    | undefined;
+  const corpo = data?.data ?? data;
+  return corpo?.error === 'GPS_CHECK_FAILED' && corpo.gpsCheck
+    ? corpo.gpsCheck
+    : null;
 }

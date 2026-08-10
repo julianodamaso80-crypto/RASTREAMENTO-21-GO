@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
+import { TraccarReconcileService } from '../traccar/traccar-reconcile.service';
 import { TtlCache } from '../../common/cache/ttl-cache';
 import type { DashboardPeriod } from './dto/dashboard-query.dto';
 
@@ -24,6 +25,7 @@ export class DashboardService {
     private prisma: PrismaService,
     private traccar: TraccarService,
     private cache: TtlCache,
+    private reconcile: TraccarReconcileService,
   ) {}
 
   async getOverview(tenantId: string, period: DashboardPeriod) {
@@ -205,6 +207,10 @@ export class DashboardService {
         };
       });
 
+    // Rastreadores instalados que não estão no Traccar — veículo sem
+    // rastreamento real. Ver P2.1 do plano.
+    const notTracked = await this.reconcile.contarOrfaos(tenantId);
+
     const diffMonth =
       vehiclesPrevMonth > 0 ? totalVehicles - vehiclesPrevMonth : null;
     const percentOnline =
@@ -229,6 +235,10 @@ export class DashboardService {
         criticalOpen: { value: criticalOpen },
         lowBattery: { value: lowBattery },
         noCommOver24h: { value: noCommOver24h },
+        // Instalado em campo mas sem vínculo no Traccar: o carro NÃO está
+        // sendo rastreado e antes isso só aparecia num log. O cron de
+        // reconciliação tenta religar sozinho; este número é o alarme.
+        notTracked: { value: notTracked },
       },
       charts: {
         alertsTimeSeries: timeSeriesRaw,

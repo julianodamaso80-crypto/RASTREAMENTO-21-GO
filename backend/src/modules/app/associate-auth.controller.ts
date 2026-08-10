@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators';
 import { AssociateAuthService } from './associate-auth.service';
 import { AssociateLoginDto } from './dto/associate-login.dto';
+import { ChangeAssociatePasswordDto } from './dto/change-password.dto';
 import { AssociateJwtGuard } from './guards/associate-jwt.guard';
 import { CurrentAssociate } from './decorators/current-associate.decorator';
 
@@ -29,5 +30,24 @@ export class AssociateAuthController {
   @ApiOperation({ summary: 'Dados do associado logado' })
   async me(@CurrentAssociate('id') associateId: string) {
     return this.service.me(associateId);
+  }
+
+  @Public()
+  @UseGuards(AssociateJwtGuard)
+  @ApiBearerAuth()
+  @Post('change-password')
+  @ApiOperation({
+    summary:
+      'Troca a senha do associado — encerra o período em que o CPF vale como senha',
+  })
+  async changePassword(
+    @CurrentAssociate('id') associateId: string,
+    @Body() dto: ChangeAssociatePasswordDto,
+  ) {
+    return this.service.changePassword(
+      associateId,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 }

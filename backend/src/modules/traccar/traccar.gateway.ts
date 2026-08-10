@@ -12,7 +12,9 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import WebSocket from 'ws';
 import { PrismaService } from '../prisma/prisma.service';
-import { TraccarService } from './traccar.service';
+import { TraccarService, type TraccarPosition } from './traccar.service';
+import { assessPosition, type PositionRejectReason } from './position-quality';
+import { DeviceRegistryService } from './device-registry.service';
 import { AlertsService } from '../alerts/alerts.service';
 import { BleTagsService } from '../ble-tags/ble-tags.service';
 import { PositionsService } from '../positions/positions.service';
@@ -36,6 +38,12 @@ export class TraccarGateway
   // Usado pra emitir posição SÓ pro app do associado dono — nunca vazar a
   // frota inteira do tenant pro cliente final.
   private deviceAssociateMap = new Map<number, string>();
+  // Posições descartadas por qualidade: chave `deviceId:motivo` → contador.
+  // Serve pra log agregado e pra diagnosticar rastreador com GPS ruim em campo.
+  private rejectedPositions = new Map<
+    string,
+    { loggedAt: number; count: number }
+  >();
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
   private readonly WS_BACKOFF_MIN_MS = 2_000;
@@ -49,10 +57,15 @@ export class TraccarGateway
     private alertsService: AlertsService,
     private bleTagsService: BleTagsService,
     private positionsService: PositionsService,
+    private deviceRegistry: DeviceRegistryService,
   ) {}
 
   async afterInit() {
     this.logger.log('WebSocket Gateway inicializado');
+
+    // Instalação/retirada de rastreador atualiza o mapping na hora, em vez de
+    // esperar o refresh de 2min (que deixava o carro recém-instalado invisível).
+    this.deviceRegistry.setRefresher(() => this.refreshDeviceMapping());
 
     // Configurar emitter de alertas para WebSocket
     this.alertsService.setEmitter((tenantId, alert) => {
@@ -156,6 +169,27 @@ export class TraccarGateway
   }
 
   /**
+   * Contabiliza posição descartada por qualidade. Log agregado (1x por minuto
+   * por device+motivo) — um rastreador sem GPS gera dezenas de posições ruins
+   * por minuto e logar uma a uma afogaria o resto.
+   */
+  private countRejected(deviceId: number, reason?: PositionRejectReason) {
+    const key = `${deviceId}:${reason ?? 'unknown'}`;
+    const agora = Date.now();
+    const anterior = this.rejectedPositions.get(key);
+    if (anterior && agora - anterior.loggedAt < 60_000) {
+      anterior.count++;
+      return;
+    }
+    if (anterior) {
+      this.logger.warn(
+        `Posição descartada (${reason}) device ${deviceId}: ${anterior.count} ocorrência(s) no último minuto.`,
+      );
+    }
+    this.rejectedPositions.set(key, { loggedAt: agora, count: 1 });
+  }
+
+  /**
    * Calcula próximo delay com backoff exponencial + jitter.
    * Min 2s, máx 60s. Evita thundering herd se Traccar reiniciar.
    */
@@ -219,6 +253,16 @@ export class TraccarGateway
   private handleTraccarMessage(data: TraccarWsMessage) {
     if (data.positions) {
       for (const position of data.positions) {
+        // PORTÃO DE ENTRADA DO TEMPO REAL. Posição reprovada (LBS por torre,
+        // fix inválido, 0,0) não pode chegar ao mapa nem ao app: seria exibida
+        // como localização exata e mandaria a equipe pro lugar errado num
+        // roubo. Ver docs/PLANO-PRODUCAO-ZERO-ERRO.md P0.1.
+        const quality = assessPosition(position as unknown as TraccarPosition);
+        if (!quality.trustworthy) {
+          this.countRejected(position.deviceId, quality.reason);
+          continue;
+        }
+
         const tenantId = this.deviceTenantMap.get(position.deviceId);
         if (tenantId) {
           this.server

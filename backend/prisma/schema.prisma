@@ -316,9 +316,11 @@ model RouteStop {
   route     InstallationRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
   /// Ordem de visita (0-based), já otimizada por vizinho-mais-próximo.
   order     Int
-  /// PENDING | DONE
+  /// PENDING | DONE | CANCELLED
   status    String   @default("PENDING")
   doneAt    DateTime? @map("done_at")
+  /// Motivo quando a parada é cancelada (ex.: pendência saiu do SGA).
+  note      String?
 
   // Snapshot da pendência no momento do envio.
   hinovaVehicleCode String  @map("hinova_vehicle_code")
@@ -522,8 +524,12 @@ model Associate {
   email       String?
   tenantId    String    @map("tenant_id") @db.Uuid
   hinovaCode  String?   @map("hinova_code")
-  // Auth do app do associado. Nullable: associado só loga depois de senha definida.
+  // Auth do app do associado. Nullable: no primeiro acesso o associado entra com
+  // CPF como login E senha; a partir daí o hash aqui é a única senha válida.
   password    String?
+  /// Primeiro acesso feito com o CPF ainda não trocado pela senha do cliente.
+  /// Enquanto true o app obriga a definir senha própria antes de usar.
+  mustChangePassword Boolean @default(true) @map("must_change_password")
   lastLoginAt DateTime? @map("last_login_at")
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -668,6 +674,17 @@ model Device {
   installedByTechnicianId String?     @map("installed_by_technician_id") @db.Uuid
   installedByTechnician   Technician? @relation(fields: [installedByTechnicianId], references: [id])
   installLocation String?      @map("install_location")
+  // Conferência de GPS no ato da instalação: prova de que a posição reportada
+  // pelo rastreador batia com o lugar onde o técnico estava. Ver P0.2 do plano.
+  installCheckFixTime   DateTime? @map("install_check_fix_time")
+  installCheckLat       Float?    @map("install_check_lat")
+  installCheckLng       Float?    @map("install_check_lng")
+  /// Distância em metros entre o rastreador e o técnico no momento do aceite.
+  installCheckDistanceM Int?      @map("install_check_distance_m")
+  // Retirada do rastreador (desinstalação). Mantém o histórico do device.
+  uninstalledAt   DateTime?    @map("uninstalled_at")
+  uninstalledBy   String?      @map("uninstalled_by")
+  uninstallReason String?      @map("uninstall_reason")
   lastConnection  DateTime?    @map("last_connection")
   notes           String?
   deletedAt       DateTime?    @map("deleted_at")
@@ -692,6 +709,15 @@ model Position {
   tenantId          String   @map("tenant_id") @db.Uuid
   traccarPositionId Int?     @map("traccar_position_id")
   deviceTime        DateTime @map("device_time")
+  /// Momento em que o GPS efetivamente obteve o fix. É o único carimbo de tempo
+  /// que prova "o veículo estava AQUI neste instante" — `deviceTime` e
+  /// `serverTime` podem avançar em keep-alive sem fix novo. Nullable só pro
+  /// histórico anterior à migração.
+  fixTime           DateTime? @map("fix_time")
+  /// Falso quando o Traccar marcou a posição como inválida/aproximada (LBS por
+  /// torre de celular, erro de quilômetros). Nunca deve ser exibida como
+  /// localização real — ver docs/PLANO-PRODUCAO-ZERO-ERRO.md P0.1.
+  valid             Boolean  @default(true)
   serverTime        DateTime @default(now()) @map("server_time")
   latitude          Float
   longitude         Float
@@ -717,6 +743,10 @@ model Position {
   alarm             String?
   rawAttributes     Json?    @map("raw_attributes")
 
+  /// Um id de posição do Traccar nunca entra duas vezes. NULLs não colidem no
+  /// Postgres, então posições sem id do Traccar seguem livres. Protege contra a
+  /// reemissão do estado atual que o Traccar faz a cada reconexão do WebSocket.
+  @@unique([traccarPositionId])
   @@index([vehicleId, deviceTime(sort: Desc)])
   @@index([tenantId, deviceTime(sort: Desc)])
   @@index([vehicleId, powerCut, deviceTime(sort: Desc)])

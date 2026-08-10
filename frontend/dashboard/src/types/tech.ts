@@ -34,16 +34,27 @@ export interface TechAssignment {
   assignedAt: string | null;
 }
 
+/**
+ * Conferência de instalação. `online` é só o chip conversando (heartbeat);
+ * quem prova que a instalação está boa é `checkOk` — GPS válido, recente e,
+ * quando o celular do técnico dá a posição, a menos de 500m dele.
+ */
 export interface TechSignal {
   online: boolean;
   lastUpdate: string | null;
+  gpsOk: boolean;
+  position: { latitude: number; longitude: number; fixTime: string } | null;
+  satellites: number | null;
+  distanceM: number | null;
+  checkOk: boolean;
   motivo: string | null;
 }
 
 export interface TechRouteStop {
   id: string;
   order: number;
-  status: 'PENDING' | 'DONE';
+  status: 'PENDING' | 'DONE' | 'CANCELLED';
+  note?: string | null;
   plate: string;
   pendingType: 'TRACKER' | 'TAG';
   associateName: string;

@@ -13,6 +13,7 @@ import { AssociateStockDto } from './dto/associate-stock.dto';
 import { AssignStockDto } from './dto/assign-stock.dto';
 import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
 import { TraccarService } from '../traccar/traccar.service';
+import { DeviceRegistryService } from '../traccar/device-registry.service';
 import { InstallationPendingsService } from '../installation-pendings/installation-pendings.service';
 import { RoutesService } from '../installation-pendings/routes.service';
 
@@ -70,6 +71,7 @@ export class StockService {
     private prisma: PrismaService,
     @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
     private traccar: TraccarService,
+    private deviceRegistry: DeviceRegistryService,
     private installationPendings: InstallationPendingsService,
     private routes: RoutesService,
   ) {}
@@ -112,13 +114,22 @@ export class StockService {
     return { data, meta: { total, page, perPage } };
   }
 
+  /**
+   * Cards da tela de estoque. Contam SÓ o que está disponível (associatedAt
+   * null), igual à listagem — antes o total incluía os já instalados e não
+   * fechava com a lista logo abaixo. `installed` vai separado, pra quem quiser
+   * o número cheio. Ver P2.5 do plano.
+   */
   async stats(tenantId: string) {
-    const where = { tenantId, deletedAt: null };
-    const [total, byStatusRaw] = await Promise.all([
-      this.prisma.stockItem.count({ where }),
+    const disponivel = { tenantId, deletedAt: null, associatedAt: null };
+    const [total, installed, byStatusRaw] = await Promise.all([
+      this.prisma.stockItem.count({ where: disponivel }),
+      this.prisma.stockItem.count({
+        where: { tenantId, deletedAt: null, associatedAt: { not: null } },
+      }),
       this.prisma.stockItem.groupBy({
         by: ['status'],
-        where,
+        where: disponivel,
         _count: { _all: true },
       }),
     ]);
@@ -128,7 +139,7 @@ export class StockService {
         count: r._count._all,
       }),
     );
-    return { total, byStatus };
+    return { total, installed, byStatus };
   }
 
   async remove(id: string, tenantId: string) {
@@ -183,6 +194,12 @@ export class StockService {
       );
     }
 
+    // `Vehicle.uniqueId` e `Device.imei` são únicos GLOBAIS (não por tenant).
+    // Um IMEI já em uso noutra empresa precisa parar aqui com mensagem clara —
+    // sem isto, o fluxo ou estouraria 500 por constraint ou (pior) sequestraria
+    // o registro alheio. Ver P1.1 do plano.
+    await this.assertImeiLivreNoTenant(item.imei, tenantId);
+
     const placa = (lookup.veiculo.placa ?? dto.placa)
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, '');
@@ -215,13 +232,15 @@ export class StockService {
         });
       }
 
-      // 2) Veículo — dedupe por (placa, tenant) OU uniqueId (IMEI).
+      // 2) Veículo — dedupe por (placa, tenant) OU (uniqueId, tenant).
+      // O `tenantId` no braço do uniqueId é obrigatório: sem ele, um IMEI já
+      // usado em OUTRA empresa faria este update reatribuir placa e cliente do
+      // veículo alheio. Ver P1.1 do plano.
       let vehicle = await tx.vehicle.findFirst({
         where: {
-          OR: [
-            { plate: placa, tenantId, deletedAt: null },
-            { uniqueId: item.imei, deletedAt: null },
-          ],
+          tenantId,
+          deletedAt: null,
+          OR: [{ plate: placa }, { uniqueId: item.imei }],
         },
       });
       if (vehicle) {
@@ -253,9 +272,11 @@ export class StockService {
         });
       }
 
-      // 3) Rastreador — um Device por IMEI e por veículo.
-      const existingDevice = await tx.device.findUnique({
-        where: { imei: item.imei },
+      // 3) Rastreador — um Device por IMEI e por veículo. O filtro por tenant
+      // é redundante depois do assertImeiLivreNoTenant, mas mantém a garantia
+      // local: nada aqui dentro toca registro de outra empresa.
+      const existingDevice = await tx.device.findFirst({
+        where: { imei: item.imei, tenantId },
       });
       const device = existingDevice
         ? await tx.device.update({
@@ -326,8 +347,25 @@ export class StockService {
     // 6) A placa deixa de ser pendência no mesmo instante. Sem isso ela ficaria
     // na fila até o próximo sync do SGA — a lista tem que mostrar só quem falta.
     // E a parada correspondente sai da rota do técnico (marcada como concluída).
+    //
+    // Tudo daqui pra baixo é best-effort: a instalação JÁ foi commitada, então
+    // nenhuma falha acessória pode virar erro pro técnico (ele tentaria de novo
+    // e receberia "item já associado", que confunde). Ver P1.6 do plano.
     await this.installationPendings.removeByPlate(tenantId, placa);
-    await this.routes.markStopDoneByPlate(tenantId, placa);
+    try {
+      await this.routes.markStopDoneByPlate(tenantId, placa);
+    } catch (error) {
+      this.logger.warn(
+        `Não consegui baixar a parada de rota da placa ${placa}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    }
+
+    // 7) Mapping do tempo real na hora: sem isto o carro recém-instalado ficava
+    // até 2 minutos sem aparecer no mapa (o gateway descartava as posições dele
+    // por não conhecer o device ainda). Ver P0.3 do plano.
+    this.deviceRegistry.notifyDeviceChanged(`instalação da placa ${placa}`);
 
     this.logger.log(
       `Estoque associado: IMEI ${item.imei} → placa ${placa} (cliente ${result.associate.id})`,
@@ -340,6 +378,36 @@ export class StockService {
       deviceId: result.device.id,
       placa,
     };
+  }
+
+  /**
+   * Barra IMEI que já pertence a outra empresa.
+   *
+   * `Vehicle.uniqueId` e `Device.imei` são únicos no banco inteiro, não por
+   * tenant. Sem esta checagem, associar um IMEI já usado noutra empresa ou
+   * estouraria a constraint (500 sem explicação) ou reatribuiria o veículo
+   * alheio — vazamento entre empresas. Ver P1.1 do plano.
+   */
+  private async assertImeiLivreNoTenant(imei: string, tenantId: string) {
+    const [veiculoAlheio, deviceAlheio] = await Promise.all([
+      this.prisma.vehicle.findFirst({
+        where: { uniqueId: imei, tenantId: { not: tenantId } },
+        select: { id: true },
+      }),
+      this.prisma.device.findFirst({
+        where: { imei, tenantId: { not: tenantId } },
+        select: { id: true },
+      }),
+    ]);
+
+    if (veiculoAlheio || deviceAlheio) {
+      this.logger.warn(
+        `Tentativa de associar IMEI ${imei} que já pertence a outra empresa (tenant ${tenantId}).`,
+      );
+      throw new UnprocessableEntityException(
+        'Este rastreador já está cadastrado em outra empresa. Fale com o suporte.',
+      );
+    }
   }
 
   /**

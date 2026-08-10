@@ -115,11 +115,29 @@ export class TraccarService implements OnModuleInit {
 
   /**
    * Busca um device pelo `uniqueId` (IMEI). Retorna `null` se não existir.
-   * O Traccar não expõe filtro server-side por uniqueId; fazemos client-side.
-   * Aceitável até ~5k devices; acima disso considerar cache em Redis.
+   *
+   * O Traccar 6 aceita `GET /devices?uniqueId=<imei>` (filtro server-side).
+   * Antes baixávamos a frota inteira e filtrávamos em memória a cada chamada —
+   * e isto roda no fluxo de instalação, inclusive a cada clique do técnico no
+   * "conferir GPS". Fallback client-side fica só pra versão que não suportar.
+   * Ver P2.4 do plano.
    */
   async getDeviceByUniqueId(uniqueId: string): Promise<TraccarDevice | null> {
     return this.withRetry(async () => {
+      try {
+        const { data } = await this.client.get<TraccarDevice[]>('/devices', {
+          params: { uniqueId },
+        });
+        if (Array.isArray(data)) {
+          return data.find((d) => d.uniqueId === uniqueId) ?? null;
+        }
+      } catch (error) {
+        // 400 = versão do Traccar sem suporte ao filtro. Qualquer outro erro
+        // (rede, 401, 5xx) sobe pro withRetry tratar.
+        const status = (error as { response?: { status: number } }).response
+          ?.status;
+        if (status !== 400) throw error;
+      }
       const { data } = await this.client.get<TraccarDevice[]>('/devices');
       return data.find((d) => d.uniqueId === uniqueId) ?? null;
     });

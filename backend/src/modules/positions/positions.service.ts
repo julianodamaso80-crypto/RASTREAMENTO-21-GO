@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { ConfigService } from '@nestjs/config';
 import { AlertType, Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
@@ -7,6 +9,7 @@ import type {
   TraccarPosition,
   TraccarPositionAttributes,
 } from '../traccar/traccar.service';
+import { isTrustworthyPosition } from '../traccar/position-quality';
 
 const STATIONARY_THROTTLE_MS = 60_000;
 
@@ -21,6 +24,7 @@ export class PositionsService {
     private prisma: PrismaService,
     private settings: TenantSettingsService,
     private alerts: AlertsService,
+    private config: ConfigService,
   ) {}
 
   /**
@@ -36,6 +40,11 @@ export class PositionsService {
     tenantId: string,
   ): Promise<void> {
     try {
+      // Segunda linha de defesa (o gateway já barra antes de emitir): posição
+      // reprovada não entra no histórico. Um ponto LBS gravado aqui vira rota
+      // falsa no replay e prova falsa numa investigação de roubo.
+      if (!isTrustworthyPosition(position)) return;
+
       const attrs = (position.attributes ?? {}) as TraccarPositionAttributes;
       const ignition = typeof attrs.ignition === 'boolean' ? attrs.ignition : null;
       const speedKmh = (position.speed ?? 0) * 1.852;
@@ -70,6 +79,12 @@ export class PositionsService {
           tenantId,
           traccarPositionId: position.id,
           deviceTime: new Date(position.deviceTime || position.serverTime),
+          // Carimbo do fix real — é o que prova "o veículo estava aqui neste
+          // instante". deviceTime pode avançar em keep-alive sem GPS novo.
+          fixTime: new Date(
+            position.fixTime || position.deviceTime || position.serverTime,
+          ),
+          valid: true,
           latitude: position.latitude,
           longitude: position.longitude,
           speed: speedKmh,
@@ -110,9 +125,56 @@ export class PositionsService {
 
       await this.detectFuelTheft(vehicleId, tenantId, attrs, ignition, position);
     } catch (error) {
+      // P2002 = posição já gravada. Acontece a cada reconexão do WebSocket do
+      // Traccar, que reemite o estado atual de todos os devices. Esperado e
+      // inofensivo: a trava única é justamente o que evita o ponto duplicado.
+      if ((error as { code?: string }).code === 'P2002') return;
       this.logger.warn(
         `persistIfRelevant falhou (vehicle ${vehicleId}): ${(error as Error).message}`,
       );
+    }
+  }
+
+  /**
+   * Limpeza do histórico. Sem isto a tabela cresce pra sempre e o disco do
+   * droplet enche — e disco cheio derruba a plataforma inteira (Regra 0).
+   *
+   * Roda às 03:20 de Brasília (fora do pico) e apaga em blocos, pra não segurar
+   * lock longo numa tabela que recebe escrita o tempo todo.
+   */
+  @Cron('0 20 3 * * *', { timeZone: 'America/Sao_Paulo' })
+  async purgeOldPositions(): Promise<number> {
+    const dias = this.config.get<number>('positions.retentionDays') ?? 90;
+    if (!dias || dias <= 0) return 0;
+
+    const corte = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+    const LOTE = 10_000;
+    let total = 0;
+
+    try {
+      for (let volta = 0; volta < 100; volta++) {
+        const removidas = await this.prisma.$executeRaw`
+          DELETE FROM positions
+          WHERE ctid IN (
+            SELECT ctid FROM positions
+            WHERE device_time < ${corte}
+            LIMIT ${LOTE}
+          )
+        `;
+        total += removidas;
+        if (removidas < LOTE) break;
+      }
+      if (total > 0) {
+        this.logger.log(
+          `Limpeza de histórico: ${total} posição(ões) anterior(es) a ${corte.toISOString().slice(0, 10)} removida(s).`,
+        );
+      }
+      return total;
+    } catch (erro) {
+      this.logger.error(
+        `Limpeza de histórico falhou: ${erro instanceof Error ? erro.message : erro}`,
+      );
+      return total;
     }
   }
 
