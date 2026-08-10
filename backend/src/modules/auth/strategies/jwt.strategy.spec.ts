@@ -29,6 +29,13 @@ describe('JwtStrategy', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
+  it('recusa token do PWA do técnico', async () => {
+    const strategy = build(false, ativo);
+    await expect(
+      strategy.validate({ sub: 'u1', type: 'technician' } as any),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
   it('aceita token do painel com type user', async () => {
     const strategy = build(false, ativo);
     await expect(
