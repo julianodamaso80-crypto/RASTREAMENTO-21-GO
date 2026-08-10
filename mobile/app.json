@@ -49,6 +49,12 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 120
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use o Face ID para abrir o painel de trabalho da 21 GO."
+        }
       ]
     ],
     "experiments": {
