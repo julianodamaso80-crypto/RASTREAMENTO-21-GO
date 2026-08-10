@@ -2,9 +2,11 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { diag } from './diag';
 
-const TOKEN_KEY = 'r21go.associate.token';
-const NAME_KEY = 'r21go.associate.name';
-const MUST_CHANGE_KEY = 'r21go.associate.mustChangePassword';
+import {
+  ASSOCIATE_TOKEN_KEY as TOKEN_KEY,
+  ASSOCIATE_NAME_KEY as NAME_KEY,
+  ASSOCIATE_MUST_CHANGE_KEY as MUST_CHANGE_KEY,
+} from './session-keys';
 
 interface AuthState {
   token: string | null;
