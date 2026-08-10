@@ -72,6 +72,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       tenantId: user.tenantId,
+      type: 'user' as const,
     };
 
     const { password: _, ...userWithoutPassword } = user;
