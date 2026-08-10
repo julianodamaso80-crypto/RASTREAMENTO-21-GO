@@ -38,9 +38,11 @@ import { ScoringModule } from './modules/scoring/scoring.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
 import { AppAssociateModule } from './modules/app/app-associate.module';
 import { LegalModule } from './modules/legal/legal.module';
+import { UsersModule } from './modules/users/users.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
+import { RouteAccessGuard } from './common/guards/route-access.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
@@ -116,11 +118,13 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     AssistantModule,
     AppAssociateModule,
     LegalModule,
+    UsersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: TenantThrottlerGuard },
+    { provide: APP_GUARD, useClass: RouteAccessGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
   ],

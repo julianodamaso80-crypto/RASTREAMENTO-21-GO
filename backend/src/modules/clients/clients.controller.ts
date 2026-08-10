@@ -1,5 +1,6 @@
 import { Controller, Get, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { RequireRoute } from '../../common/decorators';
 import { ClientsService } from './clients.service';
 
 interface AuthenticatedRequest {
@@ -8,6 +9,7 @@ interface AuthenticatedRequest {
 
 @ApiTags('Clientes Ativos')
 @ApiBearerAuth()
+@RequireRoute('clientes')
 @Controller('clients')
 export class ClientsController {
   constructor(private clientsService: ClientsService) {}

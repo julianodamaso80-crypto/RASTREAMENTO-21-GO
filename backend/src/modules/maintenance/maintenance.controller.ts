@@ -10,6 +10,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
+import { RequireRoute } from '../../common/decorators';
 import { MaintenanceService, type CreatePlanDto } from './maintenance.service';
 
 interface AuthenticatedRequest {
@@ -17,6 +18,7 @@ interface AuthenticatedRequest {
   user: { id: string; tenantId: string; role: string };
 }
 
+@RequireRoute('manutencao', 'mapa')
 @Controller('maintenance-plans')
 export class MaintenanceController {
   constructor(private service: MaintenanceService) {}

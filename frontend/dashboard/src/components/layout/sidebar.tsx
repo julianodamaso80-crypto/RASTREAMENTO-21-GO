@@ -22,8 +22,10 @@ import {
   HardHat,
   ClipboardList,
   Route,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { canAccessRoute, type ManageableRouteKey } from '@/lib/manageable-routes';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import {
@@ -38,6 +40,8 @@ type NavItem = {
   icon: any;
   disabled?: boolean;
   roles?: Array<'SUPER_ADMIN' | 'ADMIN' | 'OPERATOR' | 'VIEWER' | 'CLIENT'>;
+  /** Tela correspondente em `allowedRoutes`. Sem isso, o item é sempre visível. */
+  route?: ManageableRouteKey;
 };
 
 const NON_CLIENT_ROLES: NonNullable<NavItem['roles']> = [
@@ -48,27 +52,30 @@ const NON_CLIENT_ROLES: NonNullable<NavItem['roles']> = [
 ];
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: NON_CLIENT_ROLES },
-  { href: '/mapa', label: 'Mapa / Veículos', icon: Map },
-  { href: '/alertas', label: 'Alertas', icon: Bell },
-  { href: '/relatorios/condutores', label: 'Ranking de condutores', icon: Trophy, roles: NON_CLIENT_ROLES },
-  { href: '/manutencao', label: 'Manutenção', icon: Wrench, roles: NON_CLIENT_ROLES },
-  { href: '/dispositivos', label: 'Dispositivos', icon: Radio, roles: NON_CLIENT_ROLES },
-  { href: '/estoque', label: 'Estoque', icon: Boxes, roles: NON_CLIENT_ROLES },
-  { href: '/clientes', label: 'Clientes Ativos', icon: Users, roles: NON_CLIENT_ROLES },
-  { href: '/pendencias', label: 'Pendentes de Instalação', icon: ClipboardList, roles: NON_CLIENT_ROLES },
-  { href: '/rotas', label: 'Rota Inteligente', icon: Route, roles: NON_CLIENT_ROLES },
-  { href: '/tecnicos', label: 'Técnicos', icon: HardHat, roles: NON_CLIENT_ROLES },
-  { href: '/configuracoes', label: 'Configurações', icon: Settings },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: NON_CLIENT_ROLES, route: 'dashboard' },
+  { href: '/mapa', label: 'Mapa / Veículos', icon: Map, route: 'mapa' },
+  { href: '/alertas', label: 'Alertas', icon: Bell, route: 'alertas' },
+  { href: '/relatorios/condutores', label: 'Ranking de condutores', icon: Trophy, roles: NON_CLIENT_ROLES, route: 'relatorios' },
+  { href: '/manutencao', label: 'Manutenção', icon: Wrench, roles: NON_CLIENT_ROLES, route: 'manutencao' },
+  { href: '/dispositivos', label: 'Dispositivos', icon: Radio, roles: NON_CLIENT_ROLES, route: 'dispositivos' },
+  { href: '/estoque', label: 'Estoque', icon: Boxes, roles: NON_CLIENT_ROLES, route: 'estoque' },
+  { href: '/clientes', label: 'Clientes Ativos', icon: Users, roles: NON_CLIENT_ROLES, route: 'clientes' },
+  { href: '/pendencias', label: 'Pendentes de Instalação', icon: ClipboardList, roles: NON_CLIENT_ROLES, route: 'pendencias' },
+  { href: '/rotas', label: 'Rota Inteligente', icon: Route, roles: NON_CLIENT_ROLES, route: 'rotas' },
+  { href: '/tecnicos', label: 'Técnicos', icon: HardHat, roles: NON_CLIENT_ROLES, route: 'tecnicos' },
+  { href: '/usuarios', label: 'Usuários e Acessos', icon: ShieldCheck, roles: ['SUPER_ADMIN', 'ADMIN'], route: 'usuarios' },
+  { href: '/configuracoes', label: 'Configurações', icon: Settings, route: 'configuracoes' },
 ];
 
 function NavContent({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const role = user?.role;
-  const visibleItems = navItems.filter(
-    (item) => !item.roles || (role && item.roles.includes(role)),
-  );
+  const visibleItems = navItems.filter((item) => {
+    if (item.roles && !(role && item.roles.includes(role))) return false;
+    if (!item.route) return true;
+    return canAccessRoute(item.route, role, user?.allowedRoutes);
+  });
 
   return (
     <nav className="flex flex-col gap-0.5 px-3">

@@ -15,6 +15,8 @@ export interface User {
   role: Role;
   tenantId: string;
   tenant: Tenant;
+  /** Telas liberadas. Vazio = todas as telas que o perfil já permite. */
+  allowedRoutes?: string[];
   createdAt: string;
 }
 

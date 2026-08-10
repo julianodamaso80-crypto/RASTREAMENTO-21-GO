@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Role } from '.prisma/client';
-import { Roles } from '../../common/decorators';
+import { Roles, RequireRoute } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ChipsService } from './chips.service';
 import { CreateChipDto } from './dto/create-chip.dto';
@@ -26,6 +26,7 @@ interface AuthenticatedRequest {
 
 @ApiTags('Chips M2M')
 @ApiBearerAuth()
+@RequireRoute('chips', 'dispositivos', 'configuracoes')
 @Controller('chips')
 export class ChipsController {
   constructor(private chipsService: ChipsService) {}

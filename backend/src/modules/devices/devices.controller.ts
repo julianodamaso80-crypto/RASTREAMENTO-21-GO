@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Role } from '.prisma/client';
-import { Roles } from '../../common/decorators';
+import { Roles, RequireRoute } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { DevicesService } from './devices.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
@@ -27,6 +27,7 @@ interface AuthenticatedRequest {
 
 @ApiTags('Dispositivos')
 @ApiBearerAuth()
+@RequireRoute('dispositivos')
 @Controller('devices')
 export class DevicesController {
   constructor(private devicesService: DevicesService) {}

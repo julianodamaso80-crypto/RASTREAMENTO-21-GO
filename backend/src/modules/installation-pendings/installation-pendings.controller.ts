@@ -12,7 +12,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Role } from '.prisma/client';
-import { Roles } from '../../common/decorators';
+import { Roles, RequireRoute } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { InstallationPendingsService } from './installation-pendings.service';
 import { InstallationPendingsExportService } from './installation-pendings-export.service';
@@ -35,6 +35,7 @@ const DIAS_PADRAO = 60;
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
 @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
+@RequireRoute('pendencias', 'rotas')
 @Controller('installation-pendings')
 export class InstallationPendingsController {
   constructor(

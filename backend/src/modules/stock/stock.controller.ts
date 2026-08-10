@@ -20,7 +20,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Role } from '.prisma/client';
-import { Roles } from '../../common/decorators';
+import { Roles, RequireRoute } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StockService } from './stock.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
@@ -34,6 +34,7 @@ interface AuthenticatedRequest {
 
 @ApiTags('Estoque')
 @ApiBearerAuth()
+@RequireRoute('estoque')
 @Controller('stock')
 export class StockController {
   constructor(private stockService: StockService) {}

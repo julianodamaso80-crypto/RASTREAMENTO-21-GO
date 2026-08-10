@@ -371,6 +371,9 @@ model User {
   name                String
   role                Role      @default(VIEWER)
   active              Boolean   @default(true)
+  /// Telas liberadas pra este usuário (chaves de `MANAGEABLE_ROUTES`).
+  /// Lista vazia = todas as telas que o `role` já permite (comportamento antigo).
+  allowedRoutes       String[]  @default([]) @map("allowed_routes")
   traccarUserId       Int?      @map("traccar_user_id")
   tenantId            String    @map("tenant_id") @db.Uuid
   resetTokenHash      String?   @map("reset_token_hash")

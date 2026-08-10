@@ -37,6 +37,12 @@ import type {
   InstallationRoute,
   RouteFilters,
 } from '@/types/route';
+import type {
+  ManagedUser,
+  CreateUserPayload,
+  UpdateUserPayload,
+  UserWithPassword,
+} from '@/types/user';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
@@ -701,6 +707,36 @@ export const routesApi = {
   },
   cancel: async (id: string): Promise<void> => {
     await api.post(`/installation-pendings/routes/${id}/cancel`, {});
+  },
+};
+
+export const usersApi = {
+  getAll: async (search?: string): Promise<ManagedUser[]> => {
+    const res = await api.get<ApiResponse<ManagedUser[]>>('/users', {
+      params: search ? { search } : undefined,
+    });
+    return res.data.data;
+  },
+  create: async (payload: CreateUserPayload): Promise<UserWithPassword> => {
+    const res = await api.post<ApiResponse<UserWithPassword>>('/users', payload);
+    return res.data.data;
+  },
+  update: async (
+    id: string,
+    payload: UpdateUserPayload,
+  ): Promise<ManagedUser> => {
+    const res = await api.patch<ApiResponse<ManagedUser>>(`/users/${id}`, payload);
+    return res.data.data;
+  },
+  resetPassword: async (id: string): Promise<UserWithPassword> => {
+    const res = await api.post<ApiResponse<UserWithPassword>>(
+      `/users/${id}/reset-password`,
+      {},
+    );
+    return res.data.data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await api.delete(`/users/${id}`);
   },
 };
 

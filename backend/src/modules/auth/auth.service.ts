@@ -231,6 +231,7 @@ export class AuthService {
         name: true,
         role: true,
         tenantId: true,
+        allowedRoutes: true,
         tenant: {
           select: {
             id: true,

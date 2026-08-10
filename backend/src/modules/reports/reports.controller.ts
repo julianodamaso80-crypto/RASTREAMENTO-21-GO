@@ -9,6 +9,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequireRoute } from '../../common/decorators';
 import { ReportsService } from './reports.service';
 import { ReportQueryDto, ExportQueryDto } from './dto/report-query.dto';
 
@@ -18,6 +19,7 @@ interface AuthenticatedRequest {
 
 @ApiTags('Relatórios')
 @ApiBearerAuth()
+@RequireRoute('relatorios')
 @Controller('reports')
 export class ReportsController {
   constructor(

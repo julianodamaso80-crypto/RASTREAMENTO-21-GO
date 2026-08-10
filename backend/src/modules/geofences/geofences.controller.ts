@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Role } from '.prisma/client';
-import { Roles } from '../../common/decorators';
+import { Roles, RequireRoute } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { GeofencesService } from './geofences.service';
@@ -29,6 +29,7 @@ interface AuthenticatedRequest {
 
 @ApiTags('Geofencing')
 @ApiBearerAuth()
+@RequireRoute('geofencing')
 @Controller('geofences')
 export class GeofencesController {
   constructor(private geofencesService: GeofencesService) {}

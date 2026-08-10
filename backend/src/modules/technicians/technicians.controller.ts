@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '.prisma/client';
-import { Roles } from '../../common/decorators';
+import { Roles, RequireRoute } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { TechniciansService } from './technicians.service';
 import { CreateTechnicianDto } from './dto/create-technician.dto';
@@ -25,6 +25,7 @@ interface AuthenticatedRequest {
 
 @ApiTags('Técnicos')
 @ApiBearerAuth()
+@RequireRoute('tecnicos', 'rotas')
 @Controller('technicians')
 export class TechniciansController {
   constructor(private service: TechniciansService) {}
