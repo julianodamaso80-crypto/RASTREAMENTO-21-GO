@@ -15,7 +15,7 @@ import { TraccarModule } from '../traccar/traccar.module';
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('jwt.secret')!,
         signOptions: {
-          expiresIn: config.get<string>('jwt.expiration')! as any,
+          expiresIn: config.get<string>('jwt.internalExpiration')! as any,
         },
       }),
     }),

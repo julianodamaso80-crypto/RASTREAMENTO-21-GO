@@ -41,7 +41,7 @@ export class AssociateJwtGuard implements CanActivate {
     let payload: AssociatePayload;
     try {
       payload = this.jwt.verify<AssociatePayload>(token, {
-        secret: this.config.get<string>('jwt.secret')!,
+        secret: this.config.get<string>('jwt.associateSecret')!,
       });
     } catch {
       throw new UnauthorizedException('Token inválido ou expirado');

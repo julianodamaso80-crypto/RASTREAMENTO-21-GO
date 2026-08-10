@@ -18,7 +18,9 @@ import { AssociateJwtGuard } from './guards/associate-jwt.guard';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('jwt.secret')!,
+        // Segredo PRÓPRIO. Não é o do painel — é isso que torna um token de
+        // cliente inválido do outro lado já na verificação da assinatura.
+        secret: config.get<string>('jwt.associateSecret')!,
         signOptions: {
           expiresIn: config.get<string>('jwt.expiration')! as any,
         },
