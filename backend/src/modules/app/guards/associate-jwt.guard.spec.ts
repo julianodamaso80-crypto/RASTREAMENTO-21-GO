@@ -51,7 +51,11 @@ describe('AssociateJwtGuard', () => {
 
   it('verifica o token com o segredo do mundo do associado, não com o do painel', async () => {
     const payload = { sub: 'a1', type: 'associate', tenantId: 't1' };
-    const jwt = { verify: jest.fn(() => payload) };
+    // Assinatura explícita: sem ela o TypeScript infere uma tupla vazia em
+    // mock.calls e a leitura das opções abaixo não compila.
+    const jwt = {
+      verify: jest.fn((_token: string, _options: { secret: string }) => payload),
+    };
     // Mock que devolve o próprio nome da chave, não um valor genérico
     const config = { get: jest.fn((key: string) => key) };
     const prisma = {
