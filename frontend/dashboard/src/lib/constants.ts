@@ -36,7 +36,7 @@ interface BasemapDef {
 // Satélite Esri World Imagery — nítido (estilo Google), grátis e SEM API key.
 // Camada de imagery + overlay de ruas/labels (World_Transportation) = "híbrido"
 // igual ao satélite do Google Maps. Substitui o MapTiler hybrid, que era menos nítido.
-const ESRI_SATELLITE_STYLE = {
+export const ESRI_SATELLITE_STYLE = {
   version: 8,
   sources: {
     'esri-imagery': {
@@ -45,6 +45,10 @@ const ESRI_SATELLITE_STYLE = {
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
+      // Acima de z19 o Esri não tem imagery no Brasil — devolve um tile cinza
+      // "Map data not yet available". Com maxzoom o MapLibre reescala o z19
+      // em vez de pedir o tile inexistente: borra um pouco, mas nunca some.
+      maxzoom: 19,
       attribution: 'Esri, Maxar, Earthstar Geographics',
     },
     'esri-places': {

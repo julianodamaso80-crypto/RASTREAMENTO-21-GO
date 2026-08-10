@@ -19,8 +19,11 @@ import {
   type BasemapId,
 } from '@/lib/constants';
 import { formatSpeed, formatRelativeTime } from '@/lib/utils';
+import { resolveSatelliteStyle, type SatelliteProvider } from '@/lib/basemap';
+import { mapApi } from '@/lib/api';
 import type { VehicleWithTracking } from '@/types/vehicle';
 import { BasemapToggle } from './basemap-toggle';
+import { GoogleMapsAttribution } from './google-attribution';
 
 export interface MapContainerRef {
   flyTo: (
@@ -53,6 +56,10 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     const mapRef = useRef<maplibregl.Map | null>(null);
     const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
     const [basemap, setBasemap] = useState<BasemapId>('streets');
+    // Só preenchido quando o satélite ativo é o do Google — dispara a
+    // atribuição obrigatória (logo + copyright do viewport).
+    const [satProvider, setSatProvider] = useState<SatelliteProvider | null>(null);
+    const [googleCopyright, setGoogleCopyright] = useState('');
 
     useImperativeHandle(ref, () => ({
       flyTo: (lng: number, lat: number, zoom = 15, paddingRight = 0) => {
@@ -111,23 +118,84 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       const def = BASEMAPS.find((b) => b.id === basemap);
       if (!def || !def.url) return;
 
-      const snapshot = Array.from(markersRef.current.entries()).map(
-        ([id, marker]) => ({ id, lngLat: marker.getLngLat(), el: marker.getElement() }),
-      );
+      let cancelled = false;
 
-      map.setStyle(def.url);
+      const applyStyle = (style: Parameters<typeof map.setStyle>[0]) => {
+        if (cancelled) return;
 
-      map.once('styledata', () => {
-        snapshot.forEach(({ id, lngLat, el }) => {
-          const existing = markersRef.current.get(id);
-          existing?.remove();
-          const newMarker = new maplibregl.Marker({ element: el })
-            .setLngLat(lngLat)
-            .addTo(map);
-          markersRef.current.set(id, newMarker);
+        const snapshot = Array.from(markersRef.current.entries()).map(
+          ([id, marker]) => ({ id, lngLat: marker.getLngLat(), el: marker.getElement() }),
+        );
+
+        map.setStyle(style);
+
+        map.once('styledata', () => {
+          snapshot.forEach(({ id, lngLat, el }) => {
+            const existing = markersRef.current.get(id);
+            existing?.remove();
+            const newMarker = new maplibregl.Marker({ element: el })
+              .setLngLat(lngLat)
+              .addTo(map);
+            markersRef.current.set(id, newMarker);
+          });
         });
-      });
+      };
+
+      if (basemap === 'satellite') {
+        // A sessão do Google é criada no backend; se falhar, resolve() já
+        // devolve o Esri e o mapa continua de pé.
+        resolveSatelliteStyle().then(({ provider, style }) => {
+          if (cancelled) return;
+          setSatProvider(provider);
+          applyStyle(style);
+        });
+      } else {
+        setSatProvider(null);
+        setGoogleCopyright('');
+        applyStyle(def.url);
+      }
+
+      return () => {
+        cancelled = true;
+      };
     }, [basemap]);
+
+    // ─────────────────────────────────────────────────────────────────
+    // Atribuição do viewport (exigida pela política do Google). Segundo a
+    // doc, esta chamada não consome cota de tiles. Debounce evita um
+    // request por frame durante o pan.
+    // ─────────────────────────────────────────────────────────────────
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || satProvider !== 'google') return;
+
+      let timer: ReturnType<typeof setTimeout>;
+
+      const refresh = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          const b = map.getBounds();
+          mapApi
+            .getAttribution({
+              zoom: Math.round(map.getZoom()),
+              north: b.getNorth(),
+              south: b.getSouth(),
+              east: b.getEast(),
+              west: b.getWest(),
+            })
+            .then(({ copyright }) => setGoogleCopyright(copyright))
+            .catch(() => setGoogleCopyright('Google'));
+        }, 600);
+      };
+
+      refresh();
+      map.on('moveend', refresh);
+
+      return () => {
+        clearTimeout(timer);
+        map.off('moveend', refresh);
+      };
+    }, [satProvider]);
 
     // ─────────────────────────────────────────────────────────────────
     // Cria o elemento DOM do marker (seta direcional com cor por status)
@@ -252,6 +320,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       <div className="relative w-full h-full">
         <div ref={mapContainerRef} className="w-full h-full" />
         <BasemapToggle current={basemap} onChange={setBasemap} />
+        {satProvider === 'google' && <GoogleMapsAttribution copyright={googleCopyright} />}
       </div>
     );
   },

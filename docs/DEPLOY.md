@@ -72,8 +72,27 @@ Nunca commitar valores reais em arquivos, issues ou comentários. Use o 1Passwor
 | Hostinger | — | `.mcp.json` (token API) + 1Password |
 | SSH key | `~/.ssh/claude_21go` | Máquina local do desenvolvedor |
 | GitHub | `julianodamaso80-crypto` | — |
+| Google Maps Platform (Map Tiles API) | projeto GCP `21go-maps` | Google Cloud Console + 1Password |
 
 **Nunca documente:** senhas, tokens, connection strings completas, chaves privadas, JWT secrets.
+
+### Satélite do Google (Map Tiles API)
+
+O satélite de alta resolução do dashboard usa a **Map Tiles API 2D** do Google, consumida como source raster pelo MapLibre. Sem a variável abaixo o backend responde `provider: "esri"` e o front cai no Esri automaticamente — o mapa nunca quebra.
+
+| Variável | Serviço | Obrigatória | Descrição |
+|---|---|---|---|
+| `GOOGLE_MAPS_API_KEY` | backend-rastreamento | não | Chave do GCP com **Map Tiles API** habilitada. Sem ela → fallback Esri. |
+| `GOOGLE_MAPS_HIGH_DPI` | backend-rastreamento | não | `false` desliga tiles 2x. Default ligado (nitidez em tela retina). |
+
+Passos no Google Cloud Console:
+
+1. Criar projeto, ativar **billing** e habilitar a **Map Tiles API**.
+2. Criar chave de API e **restringir por API** (só Map Tiles API) e **por referrer HTTP**: `https://trackgo.site/*` e `https://www.trackgo.site/*`.
+3. Definir **alerta de orçamento** e **cota diária** de requisições — o SKU cobra por tile após 100k/mês grátis.
+4. Setar `GOOGLE_MAPS_API_KEY` no serviço `backend-rastreamento` e redeployar (não precisa rebuildar o frontend — a chave chega via API, não via build arg).
+
+Regras da política do Google respeitadas pelo código: logo Google visível no mapa ([google-attribution.tsx](../frontend/dashboard/src/components/map/google-attribution.tsx)), atribuição do viewport buscada dinamicamente e **nenhum cache de tiles**.
 
 ---
 

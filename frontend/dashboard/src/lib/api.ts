@@ -8,6 +8,7 @@ import type { Geofence, CreateGeofencePayload } from '@/types/geofence';
 import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, ServerInfo } from '@/types/device';
 import type { DashboardOverview, DashboardPeriod } from '@/types/dashboard';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
+import type { GoogleTileSource } from '@/types/map';
 import type { BleTag, BleSighting } from '@/types/ble-tag';
 import type {
   StockItem,
@@ -492,6 +493,32 @@ export const dashboardApi = {
   getOverview: async (period: DashboardPeriod): Promise<DashboardOverview> => {
     const res = await api.get<ApiResponse<DashboardOverview>>('/dashboard/overview', {
       params: { period },
+    });
+    return res.data.data;
+  },
+};
+
+export const mapApi = {
+  /** Source de tiles do Google. `provider: 'esri'` = chave não configurada. */
+  getTiles: async (
+    type: 'satellite' | 'roadmap' = 'satellite',
+  ): Promise<GoogleTileSource | { provider: 'esri'; enabled: false }> => {
+    const res = await api.get<ApiResponse<GoogleTileSource | { provider: 'esri'; enabled: false }>>(
+      '/map/tiles',
+      { params: { type } },
+    );
+    return res.data.data;
+  },
+
+  getAttribution: async (bounds: {
+    zoom: number;
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  }): Promise<{ copyright: string }> => {
+    const res = await api.get<ApiResponse<{ copyright: string }>>('/map/attribution', {
+      params: bounds,
     });
     return res.data.data;
   },

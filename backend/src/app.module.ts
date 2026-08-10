@@ -39,6 +39,7 @@ import { AssistantModule } from './modules/assistant/assistant.module';
 import { AppAssociateModule } from './modules/app/app-associate.module';
 import { LegalModule } from './modules/legal/legal.module';
 import { UsersModule } from './modules/users/users.module';
+import { MapModule } from './modules/map/map.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
@@ -119,6 +120,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     AppAssociateModule,
     LegalModule,
     UsersModule,
+    MapModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
