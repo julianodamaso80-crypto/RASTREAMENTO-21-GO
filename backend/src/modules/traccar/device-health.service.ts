@@ -35,7 +35,18 @@ export const FAIXA_24V = { min: 23.0, max: 30.0 };
 /** Distância máxima entre rastreador e quem está conferindo em campo. */
 export const DISTANCIA_MAX_M = 500;
 
-export type FaixaEnergia = 'ok' | 'baixa' | 'alta' | 'ausente';
+/**
+ * `sem-leitura`: o equipamento confirma que está alimentado pelo veículo, mas
+ * não mede tensão (caso do gt06/J16). Passa na conferência — mas a tela avisa.
+ * `cortada`: evidência de que a alimentação caiu. `ausente`: silêncio total.
+ */
+export type FaixaEnergia =
+  | 'ok'
+  | 'baixa'
+  | 'alta'
+  | 'sem-leitura'
+  | 'cortada'
+  | 'ausente';
 
 export interface EnergiaDiagnostico {
   /** Tensão da bateria do veículo, em volts. `null` = não reportada. */
@@ -90,7 +101,20 @@ export interface DiagnoseOptions {
 }
 
 /**
- * Volts a partir do atributo `power`. Protocolo que reporta em milivolts
+ * Nomes de atributo que já vimos carregando a tensão da bateria do veículo.
+ * Varia por protocolo e por firmware; o primeiro que existir vale.
+ */
+const CHAVES_VOLTAGEM = [
+  'power',
+  'powerVoltage',
+  'batteryVoltage',
+  'externalPower',
+  'externalPowerVoltage',
+  'adc1',
+] as const;
+
+/**
+ * Volts a partir dos atributos da posição. Protocolo que reporta em milivolts
  * (12630) apareceria como tensão absurda; acima de 100 divide por mil.
  */
 export function normalizarVolts(bruto: unknown): number | null {
@@ -101,17 +125,49 @@ export function normalizarVolts(bruto: unknown): number | null {
   return Math.round(volts * 100) / 100;
 }
 
-/** Classifica a tensão, detectando sozinho se o veículo é 12 V ou 24 V. */
-export function classificarEnergia(volts: number | null): {
-  sistema: '12V' | '24V' | null;
-  faixa: FaixaEnergia;
-} {
-  if (volts === null) return { sistema: null, faixa: 'ausente' };
-  const sistema = volts > CORTE_24V ? '24V' : '12V';
-  const faixa = sistema === '24V' ? FAIXA_24V : FAIXA_12V;
-  if (volts < faixa.min) return { sistema, faixa: 'baixa' };
-  if (volts > faixa.max) return { sistema, faixa: 'alta' };
-  return { sistema, faixa: 'ok' };
+/** Procura a tensão entre os nomes conhecidos. */
+export function extrairVolts(attrs: Record<string, unknown>): number | null {
+  for (const chave of CHAVES_VOLTAGEM) {
+    const volts = normalizarVolts(attrs[chave]);
+    if (volts !== null) return volts;
+  }
+  return null;
+}
+
+/**
+ * Classifica a alimentação do rastreador.
+ *
+ * Medido em produção (10/08/2026): em 50.749 posições do parque atual, todas do
+ * protocolo **gt06** (os J16), o atributo `power` NUNCA veio — a tensão em volts
+ * simplesmente não faz parte do que esse equipamento manda. O que ele manda é
+ * `charge` (alimentação externa presente) e `batteryLevel`. Reprovar por
+ * "não reporta voltagem" reprovaria 100% do parque, todo dia, sem defeito nenhum.
+ *
+ * Por isso a regra tem dois níveis:
+ * - **Com volts:** confere a faixa de verdade (12 V ou 24 V, detectado sozinho).
+ * - **Sem volts:** aceita a evidência indireta — `charge`/`powerCut` dizem se a
+ *   alimentação do veículo está chegando. Vira `sem-leitura`, que passa na
+ *   conferência mas deixa claro na tela que ninguém mediu a tensão.
+ *
+ * Só reprova com evidência NEGATIVA: tensão fora de faixa ou corte de energia.
+ */
+export function classificarEnergia(
+  volts: number | null,
+  sinais: { charge?: unknown; powerCut?: unknown } = {},
+): { sistema: '12V' | '24V' | null; faixa: FaixaEnergia } {
+  if (volts !== null) {
+    const sistema = volts > CORTE_24V ? '24V' : '12V';
+    const faixa = sistema === '24V' ? FAIXA_24V : FAIXA_12V;
+    if (volts < faixa.min) return { sistema, faixa: 'baixa' };
+    if (volts > faixa.max) return { sistema, faixa: 'alta' };
+    return { sistema, faixa: 'ok' };
+  }
+
+  // Corte de energia é evidência negativa direta: o fio de alimentação caiu.
+  if (sinais.powerCut === true) return { sistema: null, faixa: 'cortada' };
+  if (sinais.charge === true) return { sistema: null, faixa: 'sem-leitura' };
+  if (sinais.charge === false) return { sistema: null, faixa: 'cortada' };
+  return { sistema: null, faixa: 'ausente' };
 }
 
 @Injectable()
@@ -198,7 +254,11 @@ export class DeviceHealthService {
     const fixFresco = Number.isFinite(idadeMs) && idadeMs <= FIX_FRESCO_MS;
 
     const attrs = posicao.attributes ?? {};
-    const satellites = attrs.sat ?? attrs.satellites ?? null;
+    // `sat: 0` no gt06 é campo não preenchido, não "zero satélites" — medido em
+    // produção: a mesma sessão alterna entre sat 15 e sat 0 sem perder o fix.
+    // Tratar como ausente evita semáforo piscando sem defeito nenhum.
+    const satBruto = attrs.sat ?? attrs.satellites ?? null;
+    const satellites = satBruto && satBruto > 0 ? satBruto : null;
     // Satélite ausente não reprova: muitos protocolos simplesmente não mandam.
     // Reprova quem REPORTA menos de 4 — aí o próprio aparelho está dizendo que
     // não tem fix 3D.
@@ -206,8 +266,11 @@ export class DeviceHealthService {
 
     const gpsOk = qualidade.trustworthy && fixFresco && satelitesOk;
 
-    const volts = normalizarVolts(attrs.power);
-    const { sistema, faixa } = classificarEnergia(volts);
+    const volts = extrairVolts(attrs);
+    const { sistema, faixa } = classificarEnergia(volts, {
+      charge: attrs.charge,
+      powerCut: attrs.powerCut,
+    });
 
     const ignicaoReportada = typeof attrs.ignition === 'boolean';
 
@@ -267,10 +330,12 @@ export class DeviceHealthService {
       velocidade: typeof posicao.speed === 'number' ? posicao.speed : null,
       direcao: typeof posicao.course === 'number' ? posicao.course : null,
       distanceM,
+      // `sem-leitura` passa: o equipamento confirma alimentação externa, só não
+      // mede tensão. Exigir volts reprovaria o parque gt06 inteiro sem defeito.
       checkOk:
         comunicando &&
         gpsOk &&
-        faixa === 'ok' &&
+        (faixa === 'ok' || faixa === 'sem-leitura') &&
         ignicaoReportada &&
         pertoDaReferencia,
       motivos,
@@ -337,9 +402,13 @@ export class DeviceHealthService {
       );
     }
 
-    if (d.faixa === 'ausente') {
+    if (d.faixa === 'cortada') {
       motivos.push(
-        'o rastreador não está reportando voltagem — confira o fio de alimentação',
+        'o rastreador está sem alimentação do veículo — confira o fio de força',
+      );
+    } else if (d.faixa === 'ausente') {
+      motivos.push(
+        'o rastreador não informa nada sobre a alimentação — confira o fio de força',
       );
     } else if (d.faixa === 'baixa') {
       motivos.push(

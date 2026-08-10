@@ -194,13 +194,30 @@ export function InstallCheckSheet({ item, open, onOpenChange, onValidated }: Pro
     }
   };
 
+  const faixa = health?.energia.faixa;
+  // `sem-leitura` não é defeito: o equipamento diz que está alimentado, só não
+  // mede tensão (parque gt06/J16). Pintar de vermelho ensinaria o operador a
+  // ignorar o alerta que importa.
+  const energiaOk = faixa === 'ok' || faixa === 'sem-leitura';
   const energiaTom = !health
     ? 'neutro'
-    : health.energia.faixa === 'ok'
+    : faixa === 'ok'
       ? 'ok'
-      : health.energia.faixa === 'ausente'
-        ? 'ruim'
-        : 'atencao';
+      : faixa === 'sem-leitura'
+        ? 'neutro'
+        : faixa === 'ausente' || faixa === 'cortada'
+          ? 'ruim'
+          : 'atencao';
+
+  const textoVoltagem = !health
+    ? '—'
+    : health.energia.volts !== null
+      ? `${health.energia.volts.toFixed(2).replace('.', ',')} V`
+      : faixa === 'sem-leitura'
+        ? 'Alimentado'
+        : faixa === 'cortada'
+          ? 'Sem energia'
+          : 'Não informa';
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -303,11 +320,7 @@ export function InstallCheckSheet({ item, open, onOpenChange, onValidated }: Pro
                 <Campo
                   icone={Zap}
                   rotulo="Voltagem"
-                  valor={
-                    health.energia.volts === null
-                      ? 'Não reporta'
-                      : `${health.energia.volts.toFixed(2).replace('.', ',')} V`
-                  }
+                  valor={textoVoltagem}
                   tom={energiaTom}
                 />
                 <Campo
@@ -352,12 +365,16 @@ export function InstallCheckSheet({ item, open, onOpenChange, onValidated }: Pro
                   }
                 />
                 <Checagem
-                  ok={health.energia.faixa === 'ok'}
+                  ok={energiaOk}
                   titulo="Alimentação"
                   detalhe={
-                    health.energia.faixa === 'ausente'
-                      ? 'o rastreador não reporta voltagem'
-                      : `${health.energia.volts?.toFixed(2).replace('.', ',')} V — sistema ${health.energia.sistema}`
+                    faixa === 'sem-leitura'
+                      ? 'alimentado pelo veículo — esse modelo não mede a tensão'
+                      : faixa === 'cortada'
+                        ? 'a alimentação do veículo caiu'
+                        : faixa === 'ausente'
+                          ? 'o rastreador não informa nada sobre a alimentação'
+                          : `${health.energia.volts?.toFixed(2).replace('.', ',')} V — sistema ${health.energia.sistema}`
                   }
                 />
                 <Checagem

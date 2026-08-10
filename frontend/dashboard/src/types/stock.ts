@@ -43,7 +43,11 @@ export interface DeviceHealth {
   energia: {
     volts: number | null;
     sistema: '12V' | '24V' | null;
-    faixa: 'ok' | 'baixa' | 'alta' | 'ausente';
+    /**
+     * `sem-leitura`: o equipamento confirma alimentação do veículo mas não mede
+     * tensão — é o caso do parque gt06/J16. `cortada`: alimentação caiu.
+     */
+    faixa: 'ok' | 'baixa' | 'alta' | 'sem-leitura' | 'cortada' | 'ausente';
     bateriaInterna: number | null;
   };
   ignicao: { reportada: boolean; ligada: boolean | null };

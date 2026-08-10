@@ -94,11 +94,26 @@ describe('classificarEnergia', () => {
     expect(classificarEnergia(18.1).sistema).toBe('24V');
   });
 
-  it('sem voltagem reportada a faixa é ausente', () => {
+  it('sem voltagem e sem nenhum sinal de alimentação, a faixa é ausente', () => {
     expect(classificarEnergia(null)).toEqual({
       sistema: null,
       faixa: 'ausente',
     });
+  });
+
+  // Medido em produção (10/08/2026): nas 50.749 posições do parque, todas gt06
+  // (J16), o atributo `power` nunca veio — vem `charge`. Exigir volts
+  // reprovaria todo equipamento, todo dia, sem defeito nenhum.
+  it('sem volts, mas com alimentação externa confirmada, é sem-leitura', () => {
+    expect(classificarEnergia(null, { charge: true })).toEqual({
+      sistema: null,
+      faixa: 'sem-leitura',
+    });
+  });
+
+  it('corte de energia é evidência negativa direta', () => {
+    expect(classificarEnergia(null, { powerCut: true }).faixa).toBe('cortada');
+    expect(classificarEnergia(null, { charge: false }).faixa).toBe('cortada');
   });
 });
 
@@ -208,7 +223,7 @@ describe('DeviceHealthService.diagnose', () => {
     expect(health.checkOk).toBe(true);
   });
 
-  it('reprova quando o rastreador não reporta voltagem — fio de alimentação', async () => {
+  it('reprova quando nada indica alimentação — fio de força', async () => {
     const semPower = posicao();
     delete (semPower as unknown as { attributes: Record<string, unknown> })
       .attributes.power;
@@ -219,9 +234,81 @@ describe('DeviceHealthService.diagnose', () => {
 
     expect(health.energia.faixa).toBe('ausente');
     expect(health.checkOk).toBe(false);
-    expect(health.motivos.some((m) => m.includes('fio de alimentação'))).toBe(
+    expect(health.motivos.some((m) => m.includes('fio de força'))).toBe(true);
+  });
+
+  it('reprova corte de energia mesmo sem volts', async () => {
+    const cortado = posicao({ attributes: { powerCut: true } });
+    delete (cortado as unknown as { attributes: Record<string, unknown> })
+      .attributes.power;
+    const health = await servico({
+      getDeviceByUniqueId: jest.fn().mockResolvedValue(device()),
+      getPositions: jest.fn().mockResolvedValue([cortado]),
+    }).diagnose('866557084669664');
+
+    expect(health.energia.faixa).toBe('cortada');
+    expect(health.checkOk).toBe(false);
+    expect(health.motivos.some((m) => m.includes('sem alimentação'))).toBe(
       true,
     );
+  });
+
+  /**
+   * Cenário REAL medido em produção: gt06 (J16) manda ignition/sat/charge e
+   * nunca manda power. Tem que passar na conferência — o que não pode é a tela
+   * dizer que a instalação está errada quando ela está certa.
+   */
+  it('aprova o parque gt06 real, que informa alimentação sem medir tensão', async () => {
+    const gt06 = posicao({
+      attributes: {
+        type: 34,
+        sat: 15,
+        ignition: false,
+        charge: true,
+        batteryLevel: 90,
+        motion: false,
+      },
+    });
+    delete (gt06 as unknown as { attributes: Record<string, unknown> })
+      .attributes.power;
+    const health = await servico({
+      getDeviceByUniqueId: jest.fn().mockResolvedValue(device()),
+      getPositions: jest.fn().mockResolvedValue([gt06]),
+    }).diagnose('866557084669664');
+
+    expect(health.energia.faixa).toBe('sem-leitura');
+    expect(health.energia.volts).toBeNull();
+    expect(health.checkOk).toBe(true);
+    expect(health.motivos).toEqual([]);
+  });
+
+  /** `sat: 0` no gt06 é campo vazio, não "sem satélite". Não pode reprovar. */
+  it('trata sat 0 como não reportado, sem reprovar o GPS', async () => {
+    const health = await servico({
+      getDeviceByUniqueId: jest.fn().mockResolvedValue(device()),
+      getPositions: jest
+        .fn()
+        .mockResolvedValue([posicao({ attributes: { sat: 0 } })]),
+    }).diagnose('866557084669664');
+
+    expect(health.gps.satellites).toBeNull();
+    expect(health.gps.ok).toBe(true);
+  });
+
+  it('lê a tensão também quando o protocolo usa outro nome de atributo', async () => {
+    const outroNome = posicao({ attributes: { batteryVoltage: 13.8 } });
+    delete (outroNome as unknown as { attributes: Record<string, unknown> })
+      .attributes.power;
+    const health = await servico({
+      getDeviceByUniqueId: jest.fn().mockResolvedValue(device()),
+      getPositions: jest.fn().mockResolvedValue([outroNome]),
+    }).diagnose('866557084669664');
+
+    expect(health.energia).toMatchObject({
+      volts: 13.8,
+      sistema: '12V',
+      faixa: 'ok',
+    });
   });
 
   it('reprova quando o rastreador não informa a ignição — fio de ignição', async () => {

@@ -44,12 +44,31 @@ ignição virar e a voltagem subir de ~12,6 V para ~14 V → **Aprovar** → sel
 |---|---|---|
 | Comunicando | reportou nos últimos 5 min | chip mudo |
 | GPS real | `assessPosition` aprova, fix ≤ 5 min, ≥ 4 satélites | LBS, fix velho, sem posição |
-| Alimentação | 11,5–15,0 V (12 V) ou 23,0–30,0 V (24 V) | fora de faixa **ou não reportada** |
+| Alimentação | 11,5–15,0 V (12 V) ou 23,0–30,0 V (24 V), **ou** alimentação externa confirmada sem medição | fora de faixa, corte de energia, ou silêncio total |
 | Ignição | o equipamento reporta o estado | atributo ausente (fio não ligado) |
 
 Detecção do sistema elétrico: `power > 18 V` → 24 V, senão 12 V.
 Ignição **desligada não reprova** — carro parado é o normal. Reprova é o rastreador não saber
 informar.
+
+### Correção feita com dado de produção (10/08/2026)
+
+A regra original reprovava quem "não reporta voltagem". Medição no Traccar de produção
+derrubou a premissa: em **50.749 posições, todas do protocolo `gt06`** (os J16 do parque),
+o atributo `power` **nunca apareceu**. O que aparece é `charge`, `batteryLevel`, `blocked` e
+`rssi`, e só nas mensagens de status. A regra como estava reprovaria 100% do parque, todo
+dia, sem defeito nenhum — e alerta que sempre acende é alerta que ninguém lê.
+
+A faixa passou a ter dois níveis:
+
+- **Com volts** (protocolo que mede): confere a faixa de verdade. Lê `power`,
+  `powerVoltage`, `batteryVoltage`, `externalPower`, `externalPowerVoltage` ou `adc1`.
+- **Sem volts:** vale a evidência indireta. `charge: true` → `sem-leitura`, que **passa** na
+  conferência e a tela mostra "Alimentado — esse modelo não mede a tensão". `powerCut: true`
+  ou `charge: false` → `cortada`, que reprova. Nada disso → `ausente`, que reprova.
+
+Na mesma medição: `sat: 0` no `gt06` é campo não preenchido, não "zero satélites" — a mesma
+sessão alterna entre 15 e 0 sem perder o fix. Passou a contar como não reportado.
 
 ## Arquitetura
 
