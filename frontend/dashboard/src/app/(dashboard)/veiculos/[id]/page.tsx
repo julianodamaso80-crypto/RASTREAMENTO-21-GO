@@ -33,6 +33,8 @@ import { TelemetryCharts } from '@/components/vehicles/telemetry-charts';
 import { TripReplay } from '@/components/vehicles/trip-replay';
 import { BlockConfirmModal } from '@/components/vehicles/block-confirm-modal';
 import { useTracking } from '@/contexts/tracking-context';
+import { useAuth } from '@/contexts/auth-context';
+import { canBlockVehicle } from '@/lib/manageable-routes';
 import { formatRelativeTime, formatSpeed } from '@/lib/utils';
 
 export default function VehicleCockpitPage() {
@@ -40,6 +42,8 @@ export default function VehicleCockpitPage() {
   const router = useRouter();
   const vehicleId = params?.id as string;
   const { vehicles: trackedVehicles } = useTracking();
+  const { user } = useAuth();
+  const canBlock = canBlockVehicle(user?.role);
 
   const [vehicleBase, setVehicleBase] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,24 +151,26 @@ export default function VehicleCockpitPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant={isBlocked ? 'default' : 'destructive'}
-              size="sm"
-              onClick={() => setShowBlockModal(true)}
-              className={isBlocked ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
-            >
-              {isBlocked ? (
-                <>
-                  <Unlock className="h-4 w-4 mr-2" />
-                  Desbloquear
-                </>
-              ) : (
-                <>
-                  <Lock className="h-4 w-4 mr-2" />
-                  Bloquear
-                </>
-              )}
-            </Button>
+            {canBlock && (
+              <Button
+                variant={isBlocked ? 'default' : 'destructive'}
+                size="sm"
+                onClick={() => setShowBlockModal(true)}
+                className={isBlocked ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+              >
+                {isBlocked ? (
+                  <>
+                    <Unlock className="h-4 w-4 mr-2" />
+                    Desbloquear
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4 mr-2" />
+                    Bloquear
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -236,7 +242,7 @@ export default function VehicleCockpitPage() {
       </div>
 
       <BlockConfirmModal
-        open={showBlockModal}
+        open={canBlock && showBlockModal}
         onClose={() => setShowBlockModal(false)}
         vehicle={vehicle}
         isBlocking={!isBlocked}

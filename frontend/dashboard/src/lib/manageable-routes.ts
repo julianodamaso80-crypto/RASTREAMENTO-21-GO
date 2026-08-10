@@ -61,6 +61,15 @@ export const DEFAULT_ROUTES_BY_ROLE: Record<Role, ManageableRouteKey[]> = {
 export const ROLES_THAT_MANAGE_USERS: Role[] = ['SUPER_ADMIN', 'ADMIN'];
 
 /**
+ * Bloqueio/desbloqueio de veículo corta o motor — só Super Admin.
+ * Espelha `@Roles(Role.SUPER_ADMIN)` em `vehicles.controller.ts`; mexeu num,
+ * mexe no outro. Cliente final (app) nunca enxerga esse botão.
+ */
+export function canBlockVehicle(role: Role | undefined): boolean {
+  return role === 'SUPER_ADMIN';
+}
+
+/**
  * Decide se o usuário pode abrir uma tela.
  * `allowedRoutes` vazio mantém o comportamento antigo: vale só o perfil.
  */

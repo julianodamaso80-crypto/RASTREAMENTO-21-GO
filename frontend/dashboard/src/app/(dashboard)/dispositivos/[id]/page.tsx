@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
 import { devicesApi } from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
+import { canBlockVehicle } from '@/lib/manageable-routes';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +27,8 @@ import {
 export default function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
+  const canBlock = canBlockVehicle(user?.role);
   const [device, setDevice] = useState<Device | null>(null);
   const [commands, setCommands] = useState<GeneratedCommandsResponse | null>(null);
   const [history, setHistory] = useState<SmsCommand[]>([]);
@@ -299,12 +303,16 @@ export default function DeviceDetailPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <Button variant="destructive" size="sm" onClick={() => setConfirmAction('BLOCK')}>
-              <Lock className="h-4 w-4 mr-1" /> Bloquear
-            </Button>
-            <Button variant="outline" size="sm" className="border-emerald-500/50 text-emerald-400" onClick={() => setConfirmAction('UNBLOCK')}>
-              <Unlock className="h-4 w-4 mr-1" /> Desbloquear
-            </Button>
+            {canBlock && (
+              <>
+                <Button variant="destructive" size="sm" onClick={() => setConfirmAction('BLOCK')}>
+                  <Lock className="h-4 w-4 mr-1" /> Bloquear
+                </Button>
+                <Button variant="outline" size="sm" className="border-emerald-500/50 text-emerald-400" onClick={() => setConfirmAction('UNBLOCK')}>
+                  <Unlock className="h-4 w-4 mr-1" /> Desbloquear
+                </Button>
+              </>
+            )}
             <Button variant="outline" size="sm" onClick={() => setConfirmAction('GET_LOCATION')}>
               <MapPin className="h-4 w-4 mr-1" /> Localização
             </Button>

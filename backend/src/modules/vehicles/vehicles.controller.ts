@@ -118,9 +118,12 @@ export class VehiclesController {
     return this.vehiclesService.remove(id, req.tenantId);
   }
 
+  // Bloqueio/desbloqueio corta o motor de um carro que pode estar em
+  // movimento — risco de vida e de processo. Fica só com SUPER_ADMIN.
+  // Nunca liberar pra ADMIN/OPERATOR/CLIENT sem decisão explícita do dono.
   @Post(':id/block')
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Bloquear veículo (envia comando ao rastreador)' })
   async block(
     @Param('id', ParseUUIDPipe) id: string,
@@ -131,7 +134,7 @@ export class VehiclesController {
 
   @Post(':id/unblock')
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Desbloquear veículo' })
   async unblock(
     @Param('id', ParseUUIDPipe) id: string,

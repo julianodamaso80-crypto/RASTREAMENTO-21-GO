@@ -16,6 +16,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useTracking } from '@/contexts/tracking-context';
+import { useAuth } from '@/contexts/auth-context';
+import { canBlockVehicle } from '@/lib/manageable-routes';
 import { cn, maskCPF, formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
 import { STATUS_COLORS, STATUS_HINTS } from '@/lib/constants';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
@@ -31,6 +33,8 @@ interface VehicleDetailPanelProps {
 
 export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   const { vehicles, selectedVehicleId, selectVehicle } = useTracking();
+  const { user } = useAuth();
+  const canBlock = canBlockVehicle(user?.role);
   const [showBlockModal, setShowBlockModal] = useState(false);
 
   const vehicle = useMemo(
@@ -261,28 +265,30 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
               Abrir cockpit completo
             </Button>
           </Link>
-          <Button
-            variant={isBlocked ? 'default' : 'destructive'}
-            className={cn('w-full', isBlocked && 'bg-emerald-600 hover:bg-emerald-700')}
-            onClick={() => setShowBlockModal(true)}
-          >
-            {isBlocked ? (
-              <>
-                <Unlock className="h-4 w-4 mr-2" />
-                Desbloquear Veículo
-              </>
-            ) : (
-              <>
-                <Lock className="h-4 w-4 mr-2" />
-                Bloquear Veículo
-              </>
-            )}
-          </Button>
+          {canBlock && (
+            <Button
+              variant={isBlocked ? 'default' : 'destructive'}
+              className={cn('w-full', isBlocked && 'bg-emerald-600 hover:bg-emerald-700')}
+              onClick={() => setShowBlockModal(true)}
+            >
+              {isBlocked ? (
+                <>
+                  <Unlock className="h-4 w-4 mr-2" />
+                  Desbloquear Veículo
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4 mr-2" />
+                  Bloquear Veículo
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
       <BlockConfirmModal
-        open={showBlockModal}
+        open={canBlock && showBlockModal}
         onClose={() => setShowBlockModal(false)}
         vehicle={vehicle}
         isBlocking={!isBlocked}

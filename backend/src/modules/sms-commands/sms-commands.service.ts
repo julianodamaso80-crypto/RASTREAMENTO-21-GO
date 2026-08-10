@@ -409,6 +409,14 @@ export class SmsCommandsService {
       );
     }
 
+    // Corte/religamento de motor por SMS segue a mesma regra do
+    // POST /vehicles/:id/block — exclusivo do SUPER_ADMIN.
+    if ((type === 'BLOCK' || type === 'UNBLOCK') && userRole !== 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'Apenas o Super Admin pode bloquear ou desbloquear veículos',
+      );
+    }
+
     const generated = await this.generateCommands(deviceId, tenantId, type);
     const commandText = customCommand || (generated.commands[0]?.command ?? '');
 
