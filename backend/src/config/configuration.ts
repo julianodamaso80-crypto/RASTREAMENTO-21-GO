@@ -9,6 +9,15 @@ export default () => ({
   jwt: {
     secret: process.env.JWT_SECRET || 'dev-secret',
     expiration: process.env.JWT_EXPIRATION || '24h',
+    // Segredo PRÓPRIO do mundo do associado. Diferente do interno de propósito:
+    // é o que torna um token de cliente matematicamente inválido no painel.
+    associateSecret: process.env.JWT_ASSOCIATE_SECRET || 'dev-associate-secret',
+    // Sessão do time interno é mais curta que a do cliente — o celular de quem
+    // trabalha carrega o sistema inteiro no bolso.
+    internalExpiration: process.env.JWT_INTERNAL_EXPIRATION || '12h',
+    // Vira 'true' no segundo deploy, quando todo token legado (sem `type`)
+    // já expirou. Antes disso, exigir o campo derrubaria quem está logado.
+    requireType: process.env.JWT_REQUIRE_TYPE === 'true',
   },
   traccar: {
     url: process.env.TRACCAR_URL || 'http://localhost:8082',

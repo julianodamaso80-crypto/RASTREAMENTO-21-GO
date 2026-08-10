@@ -5,8 +5,11 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { assertJwtGuardRails } from './config/jwt-guard-rails';
 
 async function bootstrap() {
+  assertJwtGuardRails(process.env);
+
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   // Pino logger
