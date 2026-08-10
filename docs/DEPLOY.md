@@ -84,7 +84,7 @@ O satélite de alta resolução do dashboard usa a **Map Tiles API 2D** do Googl
 |---|---|---|---|
 | `GOOGLE_MAPS_API_KEY` | backend-rastreamento | não | Chave do GCP com **Map Tiles API** habilitada. Sem ela → fallback Esri. |
 | `GOOGLE_MAPS_HIGH_DPI` | backend-rastreamento | não | `false` desliga tiles 2x. Default ligado (nitidez em tela retina). |
-| `GOOGLE_MAPS_MIN_ZOOM` | backend-rastreamento | não | Default `20`. Abaixo desse zoom o mapa usa o Esri (grátis). `0` cobra o Google em todos os zooms. |
+| `GOOGLE_MAPS_MIN_ZOOM` | backend-rastreamento | não | Default `0` = Google em todos os zooms (é o que está em prod). `20` volta a usar Esri abaixo desse zoom, cobrando só onde o Esri não tem imagery. |
 | `GOOGLE_MAPS_REFERRER` | backend-rastreamento | não | Default `https://trackgo.site/`. Header `Referer` que o backend envia ao Google. **Precisa bater com uma das entradas de "Websites" na restrição da chave**, senão `createSession` toma 403. |
 
 **Economia por faixa de zoom.** O satélite é montado em duas camadas: Esri por baixo em todos os zooms e Google por cima só de `GOOGLE_MAPS_MIN_ZOOM` pra cima — que é exatamente onde o Esri deixa de ter imagery no Brasil. O MapLibre não baixa tiles de layer fora da faixa, então navegar de longe não gera custo nenhum.

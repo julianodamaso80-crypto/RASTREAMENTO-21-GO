@@ -57,8 +57,13 @@ export class MapService {
   private readonly logger = new Logger(MapService.name);
   private readonly apiKey = process.env.GOOGLE_MAPS_API_KEY ?? '';
   private readonly highDpi = process.env.GOOGLE_MAPS_HIGH_DPI !== 'false';
-  /** 20 = só cobra do zoom onde o Esri acaba. 0 desliga a economia. */
-  private readonly minZoom = Number(process.env.GOOGLE_MAPS_MIN_ZOOM ?? 20);
+  /**
+   * 0 = Google em todos os zooms. É o default desde que o satélite do Google
+   * virou um botão próprio: quem clica nele quer a imagem dele, e ver a foto
+   * velha esticada parece defeito. Quem quer economizar usa "Satélite grátis".
+   * Subir pra 20 volta a cobrar só onde o Esri não tem imagery.
+   */
+  private readonly minZoom = Number(process.env.GOOGLE_MAPS_MIN_ZOOM ?? 0);
   /**
    * A chave deve ser restrita a "Websites" no Google Cloud, senão vaza pela
    * URL do tile. Só que essa restrição olha o header Referer, que servidor
