@@ -59,6 +59,10 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     // Só preenchido quando o satélite ativo é o do Google — dispara a
     // atribuição obrigatória (logo + copyright do viewport).
     const [satProvider, setSatProvider] = useState<SatelliteProvider | null>(null);
+    const [googleMinZoom, setGoogleMinZoom] = useState<number | null>(null);
+    // Google só entra do minzoom pra cima — o logo e o copyright dele
+    // acompanham isso, senão estaríamos creditando o Google numa imagem Esri.
+    const [googleVisible, setGoogleVisible] = useState(false);
     const [googleCopyright, setGoogleCopyright] = useState('');
 
     useImperativeHandle(ref, () => ({
@@ -144,13 +148,16 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       if (basemap === 'satellite') {
         // A sessão do Google é criada no backend; se falhar, resolve() já
         // devolve o Esri e o mapa continua de pé.
-        resolveSatelliteStyle().then(({ provider, style }) => {
+        resolveSatelliteStyle().then(({ provider, style, googleMinZoom: minZoom }) => {
           if (cancelled) return;
           setSatProvider(provider);
+          setGoogleMinZoom(minZoom);
           applyStyle(style);
         });
       } else {
         setSatProvider(null);
+        setGoogleMinZoom(null);
+        setGoogleVisible(false);
         setGoogleCopyright('');
         applyStyle(def.url);
       }
@@ -161,13 +168,33 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     }, [basemap]);
 
     // ─────────────────────────────────────────────────────────────────
+    // Acompanha o zoom pra saber se a camada do Google está em cena.
+    // ─────────────────────────────────────────────────────────────────
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || googleMinZoom === null) {
+        setGoogleVisible(false);
+        return;
+      }
+
+      const check = () => setGoogleVisible(map.getZoom() >= googleMinZoom);
+
+      check();
+      map.on('zoomend', check);
+
+      return () => {
+        map.off('zoomend', check);
+      };
+    }, [googleMinZoom]);
+
+    // ─────────────────────────────────────────────────────────────────
     // Atribuição do viewport (exigida pela política do Google). Segundo a
     // doc, esta chamada não consome cota de tiles. Debounce evita um
     // request por frame durante o pan.
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
       const map = mapRef.current;
-      if (!map || satProvider !== 'google') return;
+      if (!map || !googleVisible) return;
 
       let timer: ReturnType<typeof setTimeout>;
 
@@ -195,7 +222,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         clearTimeout(timer);
         map.off('moveend', refresh);
       };
-    }, [satProvider]);
+    }, [googleVisible]);
 
     // ─────────────────────────────────────────────────────────────────
     // Cria o elemento DOM do marker (seta direcional com cor por status)
@@ -320,7 +347,9 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       <div className="relative w-full h-full">
         <div ref={mapContainerRef} className="w-full h-full" />
         <BasemapToggle current={basemap} onChange={setBasemap} />
-        {satProvider === 'google' && <GoogleMapsAttribution copyright={googleCopyright} />}
+        {satProvider === 'google' && googleVisible && (
+          <GoogleMapsAttribution copyright={googleCopyright} />
+        )}
       </div>
     );
   },

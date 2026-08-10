@@ -7,6 +7,8 @@ export type SatelliteProvider = 'google' | 'esri';
 export interface ResolvedSatellite {
   provider: SatelliteProvider;
   style: StyleSpecification;
+  /** A partir de que zoom o Google entra em cena (null = nunca). */
+  googleMinZoom: number | null;
 }
 
 /**
@@ -19,6 +21,7 @@ let cached: { value: ResolvedSatellite; expiresAt: number } | null = null;
 const esriFallback = (): ResolvedSatellite => ({
   provider: 'esri',
   style: ESRI_SATELLITE_STYLE,
+  googleMinZoom: null,
 });
 
 export async function resolveSatelliteStyle(): Promise<ResolvedSatellite> {
@@ -28,9 +31,15 @@ export async function resolveSatelliteStyle(): Promise<ResolvedSatellite> {
     const source = await mapApi.getTiles('satellite');
     if (source.provider !== 'google') return esriFallback();
 
+    // Estilo em duas camadas: Esri por baixo (grátis, cobre todos os zooms) e
+    // Google por cima só a partir de minzoom. O MapLibre não baixa tiles de
+    // uma layer fora da faixa de zoom, então longe de perto NÃO gera custo.
+    // O Esri continua embaixo de propósito: se um tile do Google falhar,
+    // aparece a imagem antiga em vez de um buraco preto.
     const style = {
-      version: 8,
+      ...ESRI_SATELLITE_STYLE,
       sources: {
+        ...ESRI_SATELLITE_STYLE.sources,
         'google-satellite': {
           type: 'raster',
           tiles: source.tiles,
@@ -42,10 +51,22 @@ export async function resolveSatelliteStyle(): Promise<ResolvedSatellite> {
           attribution: '',
         },
       },
-      layers: [{ id: 'google-satellite', type: 'raster', source: 'google-satellite' }],
+      layers: [
+        ...ESRI_SATELLITE_STYLE.layers,
+        {
+          id: 'google-satellite',
+          type: 'raster',
+          source: 'google-satellite',
+          minzoom: source.minzoom,
+        },
+      ],
     } as StyleSpecification;
 
-    const value: ResolvedSatellite = { provider: 'google', style };
+    const value: ResolvedSatellite = {
+      provider: 'google',
+      style,
+      googleMinZoom: source.minzoom,
+    };
     // Renova bem antes do expiry do token pra nunca servir sessão morta.
     cached = { value, expiresAt: Math.min(source.expiresAt, Date.now() + 60 * 60 * 1000) };
     return value;

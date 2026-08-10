@@ -29,6 +29,12 @@ export interface MapTileSource {
   tiles: string[];
   /** Área coberta por tile em CSS px. Com highDpi a imagem vem 2x maior. */
   tileSize: number;
+  /**
+   * Abaixo deste zoom o mapa usa o Esri (grátis). Medição de uma sessão real
+   * de operador: 31% dos tiles ficam em z>=20 — é só nessa faixa que o Esri
+   * não tem imagery e o Google faz diferença. Cobrar só aí corta ~2/3 da conta.
+   */
+  minzoom: number;
   maxzoom: number;
   attribution: string;
   expiresAt: number;
@@ -51,6 +57,8 @@ export class MapService {
   private readonly logger = new Logger(MapService.name);
   private readonly apiKey = process.env.GOOGLE_MAPS_API_KEY ?? '';
   private readonly highDpi = process.env.GOOGLE_MAPS_HIGH_DPI !== 'false';
+  /** 20 = só cobra do zoom onde o Esri acaba. 0 desliga a economia. */
+  private readonly minZoom = Number(process.env.GOOGLE_MAPS_MIN_ZOOM ?? 20);
   private readonly sessions = new Map<MapBasemapType, CachedSession>();
   private readonly inFlight = new Map<MapBasemapType, Promise<CachedSession>>();
 
@@ -71,6 +79,7 @@ export class MapService {
       // A imagem highDpi vem 512px cobrindo a mesma área de um tile 256:
       // declarar 256 mantém o nível de zoom certo e dobra a nitidez em tela retina.
       tileSize: 256,
+      minzoom: Number.isFinite(this.minZoom) ? this.minZoom : 20,
       maxzoom: 22,
       attribution: 'Google',
       expiresAt: session.expiresAt,

@@ -84,6 +84,19 @@ O satélite de alta resolução do dashboard usa a **Map Tiles API 2D** do Googl
 |---|---|---|---|
 | `GOOGLE_MAPS_API_KEY` | backend-rastreamento | não | Chave do GCP com **Map Tiles API** habilitada. Sem ela → fallback Esri. |
 | `GOOGLE_MAPS_HIGH_DPI` | backend-rastreamento | não | `false` desliga tiles 2x. Default ligado (nitidez em tela retina). |
+| `GOOGLE_MAPS_MIN_ZOOM` | backend-rastreamento | não | Default `20`. Abaixo desse zoom o mapa usa o Esri (grátis). `0` cobra o Google em todos os zooms. |
+
+**Economia por faixa de zoom.** O satélite é montado em duas camadas: Esri por baixo em todos os zooms e Google por cima só de `GOOGLE_MAPS_MIN_ZOOM` pra cima — que é exatamente onde o Esri deixa de ter imagery no Brasil. O MapLibre não baixa tiles de layer fora da faixa, então navegar de longe não gera custo nenhum.
+
+Medições que embasam o default (sessão de operador em tela 1600×900, Campo Grande/RJ):
+
+| Medição | Valor |
+|---|---|
+| Tiles de uma sessão com 3 veículos consultados | 508 |
+| Fatia em z≥20 (única faixa em que o Esri não tem imagem) | 31% |
+| Chamadas ao Google em z≤19 (verificado no navegador) | **0** |
+
+Se um tile do Google falhar, o Esri continua embaixo — aparece a imagem antiga, nunca um buraco.
 
 Passos no Google Cloud Console:
 
