@@ -29,8 +29,8 @@
 |---|---|
 | `backend/src/config/jwt-guard-rails.ts` | Valida na subida que os dois segredos existem e são diferentes |
 | `backend/src/config/jwt-guard-rails.spec.ts` | Testes da validação |
-| `backend/src/common/constants/internal-route-prefixes.ts` | Lista única dos prefixos de rota do mundo interno |
-| `backend/src/common/constants/internal-route-prefixes.spec.ts` | Varre os controllers e falha se alguém criar rota fora da lista |
+| `backend/src/common/constants/auth-worlds.ts` | Mapa dos três mundos de autenticação e as sondas do leak-check |
+| `backend/src/common/constants/auth-worlds.spec.ts` | Varre os controllers e falha se alguém criar rota fora do mapa |
 | `backend/src/modules/auth/strategies/jwt.strategy.spec.ts` | Prova que a strategy recusa token de associado |
 | `backend/src/modules/app/guards/associate-jwt.guard.spec.ts` | Prova que o guard recusa token interno |
 | `backend/scripts/leak-check.ts` | Roda contra a API viva e prova a matriz de vazamento |
@@ -590,67 +590,141 @@ git commit -m "feat(auth): mundo do associado assina com segredo próprio e pain
 ## Task 4: Suíte de vazamento que cobre rota nova sozinha
 
 **Files:**
-- Create: `backend/src/common/constants/internal-route-prefixes.ts`
-- Create: `backend/src/common/constants/internal-route-prefixes.spec.ts`
+- Create: `backend/src/common/constants/auth-worlds.ts`
+- Create: `backend/src/common/constants/auth-worlds.spec.ts`
 - Create: `backend/scripts/leak-check.ts`
 
 **Interfaces:**
-- Consumes: nada em runtime; lê os controllers do repositório.
-- Produces: `INTERNAL_ROUTE_PREFIXES: readonly string[]` — a lista canônica de prefixos do mundo interno, consumida pelo `leak-check.ts`.
+- Consumes: nada em runtime; o spec lê os controllers do repositório.
+- Produces:
+  - `INTERNAL_ROUTE_PREFIXES`, `ASSOCIATE_ROUTE_PREFIXES`, `TECHNICIAN_ROUTE_PREFIXES`, `PUBLIC_ROUTE_PREFIXES: readonly string[]`
+  - `LEAK_PROBES: readonly LeakProbe[]` onde `LeakProbe = { world: 'internal' | 'associate' | 'technician'; prefix: string; path: string }`
+
+### Por que três mundos, e não dois
+
+Durante a Task 2 descobrimos um terceiro mundo de autenticação que a spec não previa: o **PWA do técnico** (`modules/tech/`), que assina `type: 'technician'` e tem guard próprio (`TechnicianJwtGuard`). Ele já é isolado, mas precisa entrar na matriz — senão a varredura de controllers acusa os controllers dele como órfãos, e um token de associado batendo em `/tech/*` fica sem prova de que é recusado.
+
+Nesta fase o mundo do técnico continua assinando com o segredo do painel (`jwt.secret`). Isso é intencional e está fora do escopo da Fase 1 — o isolamento dele vem do `type` e do guard, não do segredo.
 
 - [ ] **Step 1: Levantar os prefixos reais dos controllers**
 
+O `grep -P` não funciona em toda máquina (falha com `-P supports only unibyte and UTF-8 locales` dependendo do locale). Use o Node, que é portável:
+
 ```bash
-cd backend && grep -rhoP "@Controller\(\s*'\K[^']*" src/modules --include=*.controller.ts | sort -u
+cd backend && node -e "
+const {readdirSync,readFileSync,statSync}=require('fs');const {join}=require('path');
+const walk=(d)=>readdirSync(d).flatMap((e)=>{const f=join(d,e);return statSync(f).isDirectory()?walk(f):(e.endsWith('.controller.ts')?[f]:[])});
+const achados=walk('src/modules').map((f)=>{const m=readFileSync(f,'utf8').match(/@Controller\(\s*'([^']*)'/);return m?m[1]:null}).filter(Boolean);
+console.log([...new Set(achados)].sort().join('\n'));
+"
 ```
 
-Anotar a saída — ela alimenta o próximo passo. Prefixos que começam com `app/` são do mundo do associado; o resto é interno.
+Anotar a saída. Ela é a fonte de verdade do Step 2 — **não confie na lista escrita neste plano**, ela pode ter envelhecido. Se a saída divergir do Step 2, a saída ganha.
 
-- [ ] **Step 2: Escrever a lista canônica**
+- [ ] **Step 2: Escrever o mapa dos mundos**
 
-Criar `backend/src/common/constants/internal-route-prefixes.ts` com os prefixos internos que o comando acima devolveu (substituir a lista abaixo pela saída real, mantendo o comentário):
+Criar `backend/src/common/constants/auth-worlds.ts`. Os quatro grupos abaixo refletem a varredura de 2026-08-10 — confira contra a saída do Step 1 e ajuste o que tiver mudado:
 
 ```ts
 /**
- * Prefixos de rota do MUNDO INTERNO (painel). Tudo que não está sob `app/`
- * mora aqui e jamais pode responder a um token de associado.
+ * Mapa dos mundos de autenticação do backend.
  *
- * Esta lista é a fonte única consumida pelo `scripts/leak-check.ts`. O spec ao
- * lado varre os controllers do repositório e falha se alguém criar uma rota
- * que não esteja aqui — assim rota nova nasce coberta em vez de nascer furada.
+ * O projeto atende três públicos com três tipos de token que nunca podem
+ * cruzar: o time interno (`type: 'user'`), o cliente final (`type:
+ * 'associate'`) e o técnico de campo (`type: 'technician'`). Este arquivo é a
+ * fonte única consumida pelo `scripts/leak-check.ts`, e o spec ao lado varre
+ * os controllers do repositório e falha se alguém criar rota que não esteja
+ * classificada aqui — assim rota nova nasce coberta em vez de nascer furada.
  */
+
+/** Painel do time interno. Token `type: 'user'`. */
 export const INTERNAL_ROUTE_PREFIXES: readonly string[] = [
+  'admin',
+  'admin/audit',
   'alerts',
+  'assistant',
   'auth',
+  'ble-tags',
   'chips',
   'clients',
   'dashboard',
   'devices',
+  'devices/:deviceId/commands',
   'geofences',
+  'hinova',
   'installation-pendings',
-  'maintenance',
+  'maintenance-plans',
+  'map',
   'reports',
+  'server',
+  'settings',
   'stock',
   'technicians',
+  'tenants',
+  'traccar',
   'users',
   'vehicles',
 ];
 
-/** Prefixos do mundo do associado. Só o app do cliente fala com eles. */
-export const ASSOCIATE_ROUTE_PREFIX = 'app';
+/** App do cliente final. Token `type: 'associate'`. */
+export const ASSOCIATE_ROUTE_PREFIXES: readonly string[] = ['app', 'app/auth'];
+
+/** PWA do técnico de campo. Token `type: 'technician'`. */
+export const TECHNICIAN_ROUTE_PREFIXES: readonly string[] = [
+  'tech',
+  'tech/auth',
+];
+
+/**
+ * Sem autenticação por desenho. `health` é sondado pelo Docker e pelo
+ * monitoramento — exigir token ali derrubaria o healthcheck do container.
+ */
+export const PUBLIC_ROUTE_PREFIXES: readonly string[] = ['health'];
+
+export type AuthWorld = 'internal' | 'associate' | 'technician';
+
+export interface LeakProbe {
+  world: AuthWorld;
+  /** Prefixo do controller que esta sonda cobre. */
+  prefix: string;
+  /** Caminho GET real e existente, que exige autenticação. */
+  path: string;
+}
+
+/**
+ * Caminhos concretos que o `leak-check` dispara. Precisam ser rotas GET que
+ * EXISTEM: uma rota inexistente devolve 404 antes de o guard rodar, e 404 de
+ * rota inexistente pareceria "protegido" sem nada ter sido protegido.
+ */
+export const LEAK_PROBES: readonly LeakProbe[] = [
+  // Preenchido no Step 3.
+];
 ```
 
-- [ ] **Step 3: Escrever o teste que varre os controllers**
+- [ ] **Step 3: Montar as sondas lendo os controllers**
 
-Criar `backend/src/common/constants/internal-route-prefixes.spec.ts`:
+Para **cada** prefixo de `INTERNAL_ROUTE_PREFIXES`, `ASSOCIATE_ROUTE_PREFIXES` e `TECHNICIAN_ROUTE_PREFIXES`, abrir o controller correspondente e escolher **uma rota GET que exista e exija autenticação**. Preencher `LEAK_PROBES` com uma entrada por prefixo.
+
+Regras ao escolher:
+- Se o controller só tem POST/PATCH/DELETE, **não invente um GET**. Registre o prefixo numa constante `PROBES_SEM_GET: readonly string[]` no mesmo arquivo, com um comentário dizendo por quê, e deixe-o fora de `LEAK_PROBES`.
+- Rota com parâmetro de caminho pode usar um id inexistente (ex.: `/devices/00000000-0000-0000-0000-000000000000/commands`) — o guard roda antes do handler, então o 401 vem primeiro.
+- Rota marcada `@Public()` não serve de sonda: ela responde sem token e não prova nada. Se o prefixo inteiro só tiver rotas públicas, ele vai pra `PROBES_SEM_GET`.
+
+- [ ] **Step 4: Escrever o teste que varre os controllers**
+
+Criar `backend/src/common/constants/auth-worlds.spec.ts`:
 
 ```ts
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import {
-  ASSOCIATE_ROUTE_PREFIX,
+  ASSOCIATE_ROUTE_PREFIXES,
   INTERNAL_ROUTE_PREFIXES,
-} from './internal-route-prefixes';
+  LEAK_PROBES,
+  PROBES_SEM_GET,
+  PUBLIC_ROUTE_PREFIXES,
+  TECHNICIAN_ROUTE_PREFIXES,
+} from './auth-worlds';
 
 const MODULES_DIR = join(__dirname, '..', '..', 'modules');
 
@@ -667,54 +741,108 @@ function prefixOf(file: string): string | null {
   return match ? match[1] : null;
 }
 
-describe('cobertura de rotas contra vazamento', () => {
-  it('todo controller pertence ao mundo do associado ou está na lista interna', () => {
-    const orfas = controllerFiles(MODULES_DIR)
-      .map((file) => ({ file, prefix: prefixOf(file) }))
-      .filter(({ prefix }) => prefix !== null)
-      .filter(
-        ({ prefix }) =>
-          !prefix!.startsWith(`${ASSOCIATE_ROUTE_PREFIX}/`) &&
-          prefix !== ASSOCIATE_ROUTE_PREFIX &&
-          !INTERNAL_ROUTE_PREFIXES.includes(prefix!.split('/')[0]),
-      );
+const TODOS_OS_MUNDOS = [
+  ...INTERNAL_ROUTE_PREFIXES,
+  ...ASSOCIATE_ROUTE_PREFIXES,
+  ...TECHNICIAN_ROUTE_PREFIXES,
+  ...PUBLIC_ROUTE_PREFIXES,
+];
 
-    expect(
-      orfas.map((o) => `${o.prefix} (${o.file})`),
-    ).toEqual([]);
+describe('mapa dos mundos de autenticação', () => {
+  const prefixos = controllerFiles(MODULES_DIR)
+    .map((file) => ({ file, prefix: prefixOf(file) }))
+    .filter((c): c is { file: string; prefix: string } => c.prefix !== null);
+
+  it('todo controller está classificado em exatamente um mundo', () => {
+    const naoClassificados = prefixos
+      .filter(({ prefix }) => !TODOS_OS_MUNDOS.includes(prefix))
+      .map(({ prefix, file }) => `${prefix} (${file})`);
+
+    expect(naoClassificados).toEqual([]);
+  });
+
+  it('nenhum prefixo aparece em mais de um mundo', () => {
+    const vistos = new Map<string, number>();
+    for (const p of TODOS_OS_MUNDOS) {
+      vistos.set(p, (vistos.get(p) ?? 0) + 1);
+    }
+    const duplicados = [...vistos.entries()]
+      .filter(([, n]) => n > 1)
+      .map(([p]) => p);
+
+    expect(duplicados).toEqual([]);
+  });
+
+  it('todo prefixo com autenticação tem sonda ou justificativa registrada', () => {
+    const comAuth = [
+      ...INTERNAL_ROUTE_PREFIXES,
+      ...ASSOCIATE_ROUTE_PREFIXES,
+      ...TECHNICIAN_ROUTE_PREFIXES,
+    ];
+    const cobertos = new Set([
+      ...LEAK_PROBES.map((s) => s.prefix),
+      ...PROBES_SEM_GET,
+    ]);
+    const semCobertura = comAuth.filter((p) => !cobertos.has(p));
+
+    expect(semCobertura).toEqual([]);
+  });
+
+  it('cada sonda aponta pro mundo do próprio prefixo', () => {
+    const mundoDe = (prefix: string) =>
+      INTERNAL_ROUTE_PREFIXES.includes(prefix)
+        ? 'internal'
+        : ASSOCIATE_ROUTE_PREFIXES.includes(prefix)
+          ? 'associate'
+          : 'technician';
+
+    const errados = LEAK_PROBES.filter((s) => s.world !== mundoDe(s.prefix)).map(
+      (s) => `${s.prefix} declarado como ${s.world}`,
+    );
+
+    expect(errados).toEqual([]);
   });
 });
 ```
 
-- [ ] **Step 4: Rodar e ajustar a lista até passar**
+- [ ] **Step 5: Rodar e ajustar até passar**
 
 ```bash
-cd backend && npx jest src/common/constants/internal-route-prefixes.spec.ts
+cd backend && npx jest src/common/constants/auth-worlds.spec.ts
 ```
 
-Esperado: PASS. Se falhar, o teste imprime exatamente qual prefixo ficou de fora — acrescentar em `INTERNAL_ROUTE_PREFIXES` e rodar de novo.
+Esperado: PASS, 4 testes. Cada falha imprime exatamente o que ficou de fora — acrescentar ao grupo certo e rodar de novo. **Não relaxe a asserção pra fazer o teste passar**; o valor do teste está justamente em ele reclamar.
 
-- [ ] **Step 5: Escrever o verificador contra a API viva**
+- [ ] **Step 6: Escrever o verificador contra a API viva**
 
 Criar `backend/scripts/leak-check.ts`:
 
 ```ts
 /**
- * Prova, contra a API DE VERDADE, que nenhum token cruza a fronteira dos dois
- * mundos. Roda antes de cada deploy.
+ * Prova, contra a API DE VERDADE, que nenhum token cruza a fronteira dos três
+ * mundos de autenticação. Roda antes de cada deploy.
  *
  *   npx ts-node scripts/leak-check.ts
  *
  * Variáveis:
- *   LEAK_API_URL   base da API (default https://api.trackgo.site/api/v1)
- *   LEAK_CPF       CPF de um associado de teste
- *   LEAK_CPF_PASS  senha dele
- *   LEAK_EMAIL     e-mail de um usuário interno de teste
- *   LEAK_EMAIL_PASS senha dele
+ *   LEAK_API_URL     base da API (default https://api.trackgo.site/api/v1)
+ *   LEAK_CPF         CPF de um associado de teste
+ *   LEAK_CPF_PASS    senha dele
+ *   LEAK_EMAIL       e-mail de um usuário interno de teste
+ *   LEAK_EMAIL_PASS  senha dele
  */
-import { INTERNAL_ROUTE_PREFIXES } from '../src/common/constants/internal-route-prefixes';
+import { LEAK_PROBES } from '../src/common/constants/auth-worlds';
 
 const API = process.env.LEAK_API_URL || 'https://api.trackgo.site/api/v1';
+
+function exigir(nome: string): string {
+  const valor = process.env[nome];
+  if (!valor) {
+    console.error(`Falta a variável ${nome}.`);
+    process.exit(1);
+  }
+  return valor;
+}
 
 async function login(path: string, body: unknown): Promise<string> {
   const res = await fetch(`${API}${path}`, {
@@ -722,9 +850,12 @@ async function login(path: string, body: unknown): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const json: any = await res.json();
+  const json: any = await res.json().catch(() => ({}));
   const token = json?.data?.accessToken ?? json?.accessToken;
-  if (!token) throw new Error(`Login falhou em ${path}: ${res.status}`);
+  if (!token) {
+    console.error(`Login falhou em ${path}: HTTP ${res.status}`);
+    process.exit(1);
+  }
   return token;
 }
 
@@ -735,42 +866,57 @@ async function status(path: string, token: string): Promise<number> {
   return res.status;
 }
 
+/**
+ * 401 e 403 são recusa. 404 é ambíguo — pode ser guard recusando ou rota que
+ * não existe — e por isso conta como FALHA aqui: sonda que não prova nada não
+ * pode passar por prova.
+ */
+function recusou(code: number): boolean {
+  return code === 401 || code === 403;
+}
+
 async function main() {
-  const associado = await login('/app/auth/login', {
-    cpf: process.env.LEAK_CPF,
-    password: process.env.LEAK_CPF_PASS,
-  });
-  const interno = await login('/auth/login', {
-    email: process.env.LEAK_EMAIL,
-    password: process.env.LEAK_EMAIL_PASS,
-  });
+  const cpf = exigir('LEAK_CPF');
+  const cpfPass = exigir('LEAK_CPF_PASS');
+  const email = exigir('LEAK_EMAIL');
+  const emailPass = exigir('LEAK_EMAIL_PASS');
+
+  const associado = await login('/app/auth/login', { cpf, password: cpfPass });
+  const interno = await login('/auth/login', { email, password: emailPass });
 
   const falhas: string[] = [];
 
-  for (const prefixo of INTERNAL_ROUTE_PREFIXES) {
-    if (prefixo === 'auth') continue; // tem rotas públicas de propósito
-    const code = await status(`/${prefixo}`, associado);
-    const ok = code === 401 || code === 403 || code === 404;
-    console.log(`associado -> /${prefixo}: ${code} ${ok ? 'OK' : 'VAZOU'}`);
-    if (!ok) falhas.push(`/${prefixo} respondeu ${code} a token de associado`);
+  async function conferir(
+    rotulo: string,
+    token: string,
+    path: string,
+  ): Promise<void> {
+    const code = await status(path, token);
+    const ok = recusou(code);
+    console.log(`${rotulo} -> ${path}: ${code} ${ok ? 'OK' : 'VAZOU'}`);
+    if (!ok) falhas.push(`${rotulo} recebeu ${code} em ${path}`);
   }
 
-  for (const rota of ['/app/vehicles', '/app/alerts', '/app/auth/me']) {
-    const code = await status(rota, interno);
-    const ok = code === 401;
-    console.log(`interno -> ${rota}: ${code} ${ok ? 'OK' : 'VAZOU'}`);
-    if (!ok) falhas.push(`${rota} respondeu ${code} a token interno`);
+  // Token de associado não pode tocar em NADA fora do mundo dele.
+  for (const sonda of LEAK_PROBES) {
+    if (sonda.world === 'associate') continue;
+    await conferir('associado', associado, sonda.path);
   }
 
-  const forjado = await status('/devices', `${interno}tampered`);
-  console.log(`token adulterado -> /devices: ${forjado}`);
-  if (forjado !== 401) falhas.push(`token adulterado respondeu ${forjado}`);
+  // Token interno não pode tocar no mundo do cliente nem no do técnico.
+  for (const sonda of LEAK_PROBES) {
+    if (sonda.world === 'internal') continue;
+    await conferir('interno', interno, sonda.path);
+  }
+
+  // Assinatura adulterada tem que morrer na verificação.
+  await conferir('token adulterado', `${interno}x`, '/devices');
 
   if (falhas.length) {
     console.error('\nVAZAMENTO DETECTADO:\n' + falhas.join('\n'));
     process.exit(1);
   }
-  console.log('\nNenhum vazamento. Fronteira intacta.');
+  console.log(`\n${LEAK_PROBES.length} sondas conferidas. Fronteira intacta.`);
 }
 
 main().catch((e) => {
@@ -779,25 +925,30 @@ main().catch((e) => {
 });
 ```
 
-- [ ] **Step 6: Rodar o verificador contra o backend local**
+- [ ] **Step 7: Conferir que o script compila**
+
+Não há backend local nem credenciais nesta máquina, então o script **não roda** aqui — a execução real acontece na Task 5, contra produção. O que dá pra provar agora é que ele compila e que as sondas estão coerentes:
 
 ```bash
-cd backend && LEAK_API_URL=http://localhost:3001/api/v1 \
-  LEAK_CPF=<cpf> LEAK_CPF_PASS=<senha> \
-  LEAK_EMAIL=<email> LEAK_EMAIL_PASS=<senha> \
-  npx ts-node scripts/leak-check.ts
+cd backend && npx tsc --noEmit -p tsconfig.json
 ```
 
-Esperado: toda linha `OK` e a mensagem final `Nenhum vazamento. Fronteira intacta.`
+Esperado: nenhum erro. Se `scripts/` estiver fora do `include` do tsconfig, rodar `npx tsc --noEmit scripts/leak-check.ts --esModuleInterop --target es2021 --module commonjs --moduleResolution node` e registrar qual comando foi usado.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Rodar a suíte completa**
+
+```bash
+cd backend && npm test
+```
+
+Esperado: tudo passando, saída limpa.
+
+- [ ] **Step 9: Commit**
 
 ```bash
 git add backend/src/common/constants backend/scripts/leak-check.ts
-git commit -m "test(auth): suíte de vazamento que cobre rota nova automaticamente"
+git commit -m "test(auth): mapa dos três mundos de autenticação e suíte de vazamento"
 ```
-
----
 
 ## Task 5: Deploy A do backend e validação em produção
 
