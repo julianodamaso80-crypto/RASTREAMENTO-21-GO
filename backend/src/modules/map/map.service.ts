@@ -59,6 +59,13 @@ export class MapService {
   private readonly highDpi = process.env.GOOGLE_MAPS_HIGH_DPI !== 'false';
   /** 20 = só cobra do zoom onde o Esri acaba. 0 desliga a economia. */
   private readonly minZoom = Number(process.env.GOOGLE_MAPS_MIN_ZOOM ?? 20);
+  /**
+   * A chave deve ser restrita a "Websites" no Google Cloud, senão vaza pela
+   * URL do tile. Só que essa restrição olha o header Referer, que servidor
+   * nenhum manda sozinho — sem isto o createSession leva 403 mesmo com a
+   * chave certa. Aqui o backend se identifica com o mesmo domínio do painel.
+   */
+  private readonly referrer = process.env.GOOGLE_MAPS_REFERRER ?? 'https://trackgo.site/';
   private readonly sessions = new Map<MapBasemapType, CachedSession>();
   private readonly inFlight = new Map<MapBasemapType, Promise<CachedSession>>();
 
@@ -101,6 +108,7 @@ export class MapService {
 
     const { data } = await axios.get(VIEWPORT_URL, {
       params: { session: session.token, key: this.apiKey, ...params },
+      headers: { Referer: this.referrer },
       timeout: 10_000,
     });
 
@@ -139,7 +147,11 @@ export class MapService {
           ...(type === 'satellite' ? { layerTypes: ['layerRoadmap'] } : {}),
           ...(this.highDpi ? { highDpi: true, scale: 'scaleFactor2x' } : {}),
         },
-        { params: { key: this.apiKey }, timeout: 15_000 },
+        {
+          params: { key: this.apiKey },
+          headers: { Referer: this.referrer },
+          timeout: 15_000,
+        },
       );
 
       const session: CachedSession = {
