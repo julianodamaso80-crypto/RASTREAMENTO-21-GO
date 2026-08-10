@@ -70,11 +70,33 @@ export class UsersService {
 
     const email = dto.email.trim().toLowerCase();
     const existing = await this.prisma.user.findUnique({ where: { email } });
+    const password = generateAccessPassword();
+
+    // E-mail é unique global. Se o acesso foi excluído antes (soft delete), o
+    // caminho certo é ressuscitá-lo — senão o e-mail ficava queimado pra sempre.
+    if (existing?.deletedAt && existing.tenantId === tenantId) {
+      const revived = await this.prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          name: dto.name.trim(),
+          role: dto.role,
+          allowedRoutes: dto.allowedRoutes ?? [],
+          password: await bcrypt.hash(password, BCRYPT_ROUNDS),
+          active: true,
+          deletedAt: null,
+          resetTokenHash: null,
+          resetTokenExpiresAt: null,
+        },
+        select: USER_SELECT,
+      });
+      this.logger.log(`Acesso reativado: ${revived.email} por=${actor.id}`);
+      return { user: revived, password };
+    }
+
     if (existing) {
       throw new ConflictException(`Já existe um acesso com o e-mail ${email}.`);
     }
 
-    const password = generateAccessPassword();
     const user = await this.prisma.user.create({
       data: {
         tenantId,
