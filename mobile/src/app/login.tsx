@@ -14,7 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { BrandLockup } from '@/components/brand-logo';
 import { AppApi } from '@/lib/api';
+import { InternalApi } from '@/lib/internal-api';
 import { useAuth } from '@/lib/auth-store';
+import { useInternalAuth } from '@/lib/internal-auth-store';
+import { resolveLoginTarget } from '@/lib/login-router';
 import { maskCpf, onlyDigits } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 import { diag } from '@/lib/diag';
@@ -22,31 +25,54 @@ import { diag } from '@/lib/diag';
 export default function LoginScreen() {
   diag('05-login-render');
   const router = useRouter();
-  const signIn = useAuth((s) => s.signIn);
-  const [cpf, setCpf] = useState('');
+  const signInAssociado = useAuth((s) => s.signIn);
+  const signInInterno = useInternalAuth((s) => s.signIn);
+  const [identificador, setIdentificador] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = onlyDigits(cpf).length === 11 && password.length >= 6;
+  const destino = resolveLoginTarget(identificador);
+  const canSubmit = destino !== 'invalid' && password.length >= 6;
+
+  /**
+   * Máscara de CPF só enquanto o texto for numérico. No instante em que o
+   * usuário digita uma letra ou arroba, o campo vira e-mail e para de mascarar.
+   */
+  function handleChange(texto: string) {
+    const pareceCpf = /^[\d.\-\s]*$/.test(texto);
+    setIdentificador(pareceCpf ? maskCpf(texto) : texto);
+  }
 
   async function handleLogin() {
     if (!canSubmit || loading) return;
     setLoading(true);
     try {
-      const { accessToken, associate } = await AppApi.login(
-        onlyDigits(cpf),
-        password,
+      if (destino === 'associate') {
+        const { accessToken, associate } = await AppApi.login(
+          onlyDigits(identificador),
+          password,
+        );
+        await signInAssociado(
+          accessToken,
+          associate.name,
+          associate.mustChangePassword ?? false,
+        );
+      } else {
+        const { accessToken, user } = await InternalApi.login(
+          identificador.trim(),
+          password,
+        );
+        await signInInterno(accessToken, user);
+        router.replace('/interno/painel');
+      }
+    } catch {
+      // Mensagem IDÊNTICA nos dois caminhos. Se variasse, o app viraria um
+      // verificador de quais e-mails pertencem ao time — e uma lista dessas é
+      // o primeiro passo de qualquer ataque dirigido.
+      RNAlert.alert(
+        'Não foi possível entrar',
+        'CPF/e-mail ou senha inválidos. Confira e tente de novo.',
       );
-      await signIn(
-        accessToken,
-        associate.name,
-        associate.mustChangePassword ?? false,
-      );
-      // o gate no _layout leva pro app — ou pra troca de senha, no 1º acesso
-    } catch (e: any) {
-      const msg =
-        e?.response?.data?.message || 'CPF ou senha inválidos. Tente de novo.';
-      RNAlert.alert('Não foi possível entrar', msg);
     } finally {
       setLoading(false);
     }
@@ -69,15 +95,17 @@ export default function LoginScreen() {
           </Text>
 
           <View style={styles.field}>
-            <Text style={styles.label}>CPF</Text>
+            <Text style={styles.label}>CPF ou e-mail</Text>
             <TextInput
-              value={cpf}
-              onChangeText={(t) => setCpf(maskCpf(t))}
+              value={identificador}
+              onChangeText={handleChange}
               placeholder="000.000.000-00"
               placeholderTextColor={colors.textFaint}
-              keyboardType="number-pad"
+              keyboardType="default"
+              autoCapitalize="none"
+              autoCorrect={false}
               style={styles.input}
-              maxLength={14}
+              maxLength={80}
               autoComplete="off"
             />
           </View>
