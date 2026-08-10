@@ -1882,17 +1882,29 @@ export default function PainelInterno() {
         // Nada sobrevive ao fim da sessão: celular emprestado não reabre o
         // painel de quem usou antes.
         incognito
-        // Só o painel carrega aqui dentro. Qualquer outro destino sai pro
-        // navegador do sistema — WebView autenticada nunca renderiza terceiro.
+        // Segunda barreira, no nível da própria WebView.
+        originWhitelist={[PAINEL_ORIGIN]}
+        // Só o painel carrega aqui dentro. A comparação é por ORIGEM, nunca por
+        // prefixo de string: `startsWith` deixaria passar `trackgo.site.evil.com`
+        // e `trackgo.site@evil.com` (host real `evil.com`), e como o script
+        // injetado roda em TODO documento de main frame, o JWT do funcionário
+        // seria escrito no localStorage da origem do atacante.
         onShouldStartLoadWithRequest={(req) => {
-          if (!req.url.startsWith(PAINEL_ORIGIN)) return false;
-          // Sessão morta: o painel tenta mandar pro login dele. Quem manda no
-          // login é o app — duas fontes de sessão é onde a bagunça vira vazamento.
-          if (req.url.startsWith(`${PAINEL_ORIGIN}/login`)) {
+          if (ehLoginDoPainel(req.url)) {
+            // Sessão morta: o painel tenta mandar pro login dele. Quem manda no
+            // login é o app — duas fontes de sessão é onde a bagunça vira vazamento.
             sair();
             return false;
           }
-          return true;
+          if (ehDoPainel(req.url)) return true;
+          if (/^(blob|data):/.test(req.url)) return true; // download do próprio painel
+          Linking.openURL(req.url).catch(() => {});
+          return false;
+        }}
+        // pushState do Next não dispara o callback acima no iOS, e é por ele que
+        // o painel vai pro próprio /login quando o token some do localStorage.
+        onNavigationStateChange={(nav) => {
+          if (ehLoginDoPainel(nav.url)) sair();
         }}
         style={styles.web}
       />
