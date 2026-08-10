@@ -7,23 +7,13 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockService } from '../stock/stock.service';
-import { TraccarService } from '../traccar/traccar.service';
+import { StockTraccarService } from '../stock/stock-traccar.service';
 import {
-  assessPosition,
-  distanceMeters,
-} from '../traccar/position-quality';
+  DeviceHealthService,
+  type EnergiaDiagnostico,
+} from '../traccar/device-health.service';
 import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
 import { FinishInstallDto } from './dto/finish-install.dto';
-
-/** Acima disso a posição não serve pra confirmar a instalação. */
-const FIX_FRESCO_MS = 5 * 60 * 1000;
-
-/**
- * Distância máxima aceitável entre o rastreador e o celular do técnico.
- * 500m cobre folgadamente erro de GPS urbano (prédio, garagem coberta) sem
- * deixar passar "o rastreador está em outro bairro".
- */
-const DISTANCIA_MAX_M = 500;
 
 export interface SignalResult {
   /** Heartbeat: o módulo/chip está conversando com o servidor. */
@@ -36,7 +26,11 @@ export interface SignalResult {
   satellites: number | null;
   /** Distância até o técnico, quando ele mandou a própria coordenada. */
   distanceM: number | null;
-  /** A conferência completa passou (GPS ok E, se informado, perto do técnico). */
+  /** Tensão da bateria do veículo — prova o fio de alimentação. */
+  energia: EnergiaDiagnostico;
+  /** Estado da ignição — prova o fio de ignição. */
+  ignicao: { reportada: boolean; ligada: boolean | null };
+  /** A conferência completa passou (GPS, energia, ignição e distância). */
   checkOk: boolean;
   /** Frase pronta pra tela — linguagem do técnico, não do sistema. */
   motivo: string | null;
@@ -49,7 +43,8 @@ export class TechFieldService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stock: StockService,
-    private readonly traccar: TraccarService,
+    private readonly stockTraccar: StockTraccarService,
+    private readonly deviceHealth: DeviceHealthService,
     @Inject(HINOVA_CLIENT) private readonly hinova: IHinovaClient,
   ) {}
 
@@ -103,130 +98,39 @@ export class TechFieldService {
       tenantId,
     );
 
-    const vazio = (motivo: string): SignalResult => ({
-      online: false,
-      lastUpdate: null,
-      gpsOk: false,
-      position: null,
-      satellites: null,
-      distanceM: null,
-      checkOk: false,
-      motivo,
+    // Garante o equipamento no servidor GPS antes de perguntar: rastreador que
+    // nunca foi cadastrado lá tem tudo o que manda descartado pelo Traccar.
+    await this.stockTraccar.ensureDevice(item);
+
+    const health = await this.deviceHealth.diagnose(item.imei, {
+      refLat: techLat,
+      refLng: techLng,
+      ensureDevice: true,
     });
 
-    let device: Awaited<ReturnType<typeof this.traccar.getDeviceByUniqueId>>;
-    try {
-      device = await this.traccar.getDeviceByUniqueId(item.imei);
-    } catch {
-      return vazio('servidor GPS indisponível — tente de novo em instantes');
-    }
-    if (!device) {
-      return vazio('rastreador ainda não apareceu no servidor GPS');
-    }
-
-    const online = device.status === 'online';
-
-    let posicao: Awaited<ReturnType<typeof this.traccar.getPositions>>[number] | undefined;
-    try {
-      const posicoes = await this.traccar.getPositions(device.id);
-      posicao = posicoes[posicoes.length - 1];
-    } catch {
-      posicao = undefined;
-    }
-
-    if (!posicao) {
-      return {
-        ...vazio(
-          online
-            ? 'chip conectado, mas o GPS ainda não mandou posição — aguarde a céu aberto'
-            : 'rastreador ainda não se conectou',
-        ),
-        online,
-        lastUpdate: device.lastUpdate ?? null,
-      };
-    }
-
-    const qualidade = assessPosition(posicao);
-    const fix = posicao.fixTime || posicao.deviceTime;
-    const idadeFix = fix ? Date.now() - Date.parse(fix) : Infinity;
-    const fixFresco = Number.isFinite(idadeFix) && idadeFix <= FIX_FRESCO_MS;
-    const gpsOk = qualidade.trustworthy && fixFresco;
-
-    const satellites =
-      (posicao.attributes?.sat as number | undefined) ??
-      (posicao.attributes?.satellites as number | undefined) ??
-      null;
-
-    const temCoordTecnico =
-      typeof techLat === 'number' && typeof techLng === 'number';
-    const distanceM =
-      gpsOk && temCoordTecnico
-        ? distanceMeters(
-            { lat: posicao.latitude, lng: posicao.longitude },
-            { lat: techLat!, lng: techLng! },
-          )
-        : null;
-
-    const pertoDoTecnico = distanceM === null || distanceM <= DISTANCIA_MAX_M;
-    const checkOk = gpsOk && pertoDoTecnico;
-
     return {
-      online,
-      lastUpdate: device.lastUpdate ?? null,
-      gpsOk,
-      position: gpsOk
-        ? {
-            latitude: posicao.latitude,
-            longitude: posicao.longitude,
-            fixTime: fix,
-          }
-        : null,
-      satellites,
-      distanceM,
-      checkOk,
-      motivo: this.explicar({
-        online,
-        qualidadeOk: qualidade.trustworthy,
-        motivoQualidade: qualidade.reason,
-        fixFresco,
-        distanceM,
-        pertoDoTecnico,
-      }),
+      online: health.comunicando,
+      lastUpdate: health.lastUpdate,
+      gpsOk: health.gps.ok,
+      position:
+        health.gps.ok &&
+        health.gps.latitude !== null &&
+        health.gps.longitude !== null
+          ? {
+              latitude: health.gps.latitude,
+              longitude: health.gps.longitude,
+              fixTime: health.gps.fixTime ?? '',
+            }
+          : null,
+      satellites: health.gps.satellites,
+      distanceM: health.distanceM,
+      energia: health.energia,
+      ignicao: health.ignicao,
+      checkOk: health.checkOk,
+      // A tela do técnico mostra uma frase só: a primeira é a mais grave, já
+      // que o diagnóstico devolve na ordem chip → GPS → energia → ignição.
+      motivo: health.motivos[0] ?? null,
     };
-  }
-
-  /** Traduz o diagnóstico técnico pra frase que o instalador entende. */
-  private explicar(d: {
-    online: boolean;
-    qualidadeOk: boolean;
-    motivoQualidade?: string;
-    fixFresco: boolean;
-    distanceM: number | null;
-    pertoDoTecnico: boolean;
-  }): string | null {
-    if (!d.qualidadeOk) {
-      if (d.motivoQualidade === 'approximate' || d.motivoQualidade === 'bad-accuracy') {
-        return 'posição veio por antena de celular, não por GPS — leve o veículo pra céu aberto';
-      }
-      if (d.motivoQualidade === 'null-island' || d.motivoQualidade === 'invalid') {
-        return 'GPS sem sinal válido — confira a antena';
-      }
-      return 'posição não confiável — confira a instalação da antena';
-    }
-    if (!d.fixFresco) {
-      return 'a última posição de GPS está velha — aguarde o rastreador atualizar';
-    }
-    if (!d.pertoDoTecnico) {
-      return `o rastreador está a ${this.formatarDistancia(d.distanceM!)} de você — confira se é o equipamento certo`;
-    }
-    if (!d.online) {
-      return 'GPS confirmado, mas o chip está fora do ar no momento';
-    }
-    return null;
-  }
-
-  private formatarDistancia(m: number): string {
-    return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
   }
 
   /**
@@ -312,7 +216,7 @@ export class TechFieldService {
         associatedAt: null,
         deletedAt: null,
       },
-      select: { id: true, imei: true },
+      select: { id: true, imei: true, traccarDeviceId: true },
     });
     if (!item) throw new NotFoundException('Equipamento não está na sua lista');
     return item;

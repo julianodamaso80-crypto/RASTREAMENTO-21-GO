@@ -14,8 +14,14 @@ import { AssignStockDto } from './dto/assign-stock.dto';
 import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
+import {
+  DeviceHealthService,
+  type DeviceHealth,
+} from '../traccar/device-health.service';
 import { InstallationPendingsService } from '../installation-pendings/installation-pendings.service';
 import { RoutesService } from '../installation-pendings/routes.service';
+import { StockTraccarService } from './stock-traccar.service';
+import { ValidateStockDto } from './dto/validate-stock.dto';
 
 type ParsedRow = {
   imei: string;
@@ -72,9 +78,94 @@ export class StockService {
     @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
     private traccar: TraccarService,
     private deviceRegistry: DeviceRegistryService,
+    private deviceHealth: DeviceHealthService,
+    private stockTraccar: StockTraccarService,
     private installationPendings: InstallationPendingsService,
     private routes: RoutesService,
   ) {}
+
+  /**
+   * Conferência de instalação ao vivo de um item do estoque.
+   *
+   * Garante o device no Traccar antes de perguntar: rastreador que nunca foi
+   * cadastrado lá tem tudo o que manda descartado, e a tela mostraria "não
+   * reportou" pra sempre.
+   */
+  async signal(
+    id: string,
+    tenantId: string,
+    refLat?: number,
+    refLng?: number,
+  ): Promise<DeviceHealth> {
+    const item = await this.prisma.stockItem.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      select: { id: true, imei: true, traccarDeviceId: true },
+    });
+    if (!item) throw new NotFoundException('Item de estoque não encontrado');
+
+    await this.stockTraccar.ensureDevice(item);
+
+    return this.deviceHealth.diagnose(item.imei, {
+      refLat,
+      refLng,
+      ensureDevice: true,
+    });
+  }
+
+  /**
+   * Carimba a conferência: quem aprovou (ou reprovou), quando e com que
+   * telemetria. Não bloqueia nada — decisão do dono: o selo informa, o operador
+   * decide. O retrato é o que dá defesa no dia em que o cliente disser que o
+   * rastreador nunca funcionou.
+   */
+  async validate(
+    id: string,
+    tenantId: string,
+    dto: ValidateStockDto,
+    userId: string,
+    userName: string,
+  ) {
+    const item = await this.prisma.stockItem.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      select: { id: true, imei: true, traccarDeviceId: true },
+    });
+    if (!item) throw new NotFoundException('Item de estoque não encontrado');
+
+    const health = await this.deviceHealth.diagnose(item.imei, {
+      ensureDevice: true,
+    });
+
+    const atualizado = await this.prisma.stockItem.update({
+      where: { id: item.id },
+      data: {
+        validatedAt: new Date(),
+        validatedById: userId,
+        validatedByName: userName,
+        validationOk: dto.approved,
+        validationNotes: dto.notes?.trim() || null,
+        validationSnapshot: health as unknown as object,
+      },
+      select: {
+        id: true,
+        validatedAt: true,
+        validatedByName: true,
+        validationOk: true,
+        validationNotes: true,
+      },
+    });
+
+    this.logger.log(
+      `Instalação ${dto.approved ? 'APROVADA' : 'REPROVADA'}: IMEI ${item.imei} por ${userName}` +
+        (health.motivos.length ? ` — ${health.motivos.join('; ')}` : ''),
+    );
+
+    return { ...atualizado, health };
+  }
+
+  /** Conectividade do estoque: cards e pontinho por linha. */
+  connectivity(tenantId: string) {
+    return this.stockTraccar.connectivity(tenantId);
+  }
 
   async findAll(tenantId: string, filters: FilterStockDto) {
     const { page, perPage, search, status, operator, assignment } = filters;
@@ -334,6 +425,21 @@ export class StockService {
       let traccarDevice = await this.traccar.getDeviceByUniqueId(item.imei);
       if (!traccarDevice) {
         traccarDevice = await this.traccar.createDevice(placa, item.imei);
+      } else if (traccarDevice.name !== placa) {
+        // O estoque agora entra no Traccar com o IMEI como nome. Sem renomear
+        // aqui, o veículo instalado apareceria no mapa chamado "8665570846...".
+        try {
+          await this.traccar.updateDevice(traccarDevice.id, {
+            ...traccarDevice,
+            name: placa,
+          });
+        } catch (error) {
+          this.logger.warn(
+            `Não consegui renomear o device ${item.imei} pra placa ${placa} no Traccar: ${
+              error instanceof Error ? error.message : error
+            }`,
+          );
+        }
       }
       if (traccarDevice?.id) {
         await this.prisma.$transaction([
@@ -477,7 +583,9 @@ export class StockService {
     });
     if (!technician) throw new NotFoundException('Técnico não encontrado');
     if (!technician.active) {
-      throw new UnprocessableEntityException(`${technician.name} está inativo.`);
+      throw new UnprocessableEntityException(
+        `${technician.name} está inativo.`,
+      );
     }
     if (!technician.canReceiveEquipment) {
       throw new UnprocessableEntityException(
@@ -548,7 +656,11 @@ export class StockService {
         deletedAt: null,
         associatedAt: null,
       },
-      data: { assignedTechnicianId: null, assignedAt: null, assignedById: null },
+      data: {
+        assignedTechnicianId: null,
+        assignedAt: null,
+        assignedById: null,
+      },
     });
     return {
       ok: result.count,
@@ -562,7 +674,6 @@ export class StockService {
   ): Promise<ImportResult> {
     const workbook = new ExcelJS.Workbook();
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await workbook.xlsx.load(buffer as any);
     } catch {
       throw new BadRequestException(
@@ -679,6 +790,17 @@ export class StockService {
     this.logger.log(
       `Import estoque tenant=${tenantId}: ${imported} novos, ${updated} atualizados, ${skipped} ignorados`,
     );
+
+    // Cadastra o que entrou no servidor GPS, em segundo plano: sem device no
+    // Traccar não há como conferir instalação antes de vincular. Falha aqui não
+    // pode derrubar a importação — o cron de 30 min pega o que sobrar.
+    void this.stockTraccar.ensurePending(tenantId).catch((erro) => {
+      this.logger.warn(
+        `Cadastro do estoque importado no Traccar falhou: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+    });
 
     return { imported, updated, skipped, total: rows.length };
   }

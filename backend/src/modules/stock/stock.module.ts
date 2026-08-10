@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { StockService } from './stock.service';
+import { StockTraccarService } from './stock-traccar.service';
 import { StockController } from './stock.controller';
 import { HinovaModule } from '../hinova/hinova.module';
 import { TraccarModule } from '../traccar/traccar.module';
@@ -8,7 +9,7 @@ import { InstallationPendingsModule } from '../installation-pendings/installatio
 @Module({
   imports: [HinovaModule, TraccarModule, InstallationPendingsModule],
   controllers: [StockController],
-  providers: [StockService],
-  exports: [StockService],
+  providers: [StockService, StockTraccarService],
+  exports: [StockService, StockTraccarService],
 })
 export class StockModule {}

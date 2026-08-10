@@ -18,6 +18,8 @@ import {
   Send,
   Ban,
   AlertTriangle,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatDateOnlyBR } from '@/lib/utils';
@@ -39,7 +41,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog';
 import { AssignTechnicianDialog } from '@/components/stock/assign-technician-dialog';
-import type { StockItem, StockStats } from '@/types/stock';
+import { InstallCheckSheet } from '@/components/stock/install-check-sheet';
+import type { StockConnectivity, StockItem, StockStats } from '@/types/stock';
 
 // Cor do badge por status (case-insensitive, com fallback neutro).
 function statusColor(status: string | null): string {
@@ -70,6 +73,9 @@ export default function EstoquePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assignItems, setAssignItems] = useState<StockItem[]>([]);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [checkItem, setCheckItem] = useState<StockItem | null>(null);
+  const [checkOpen, setCheckOpen] = useState(false);
+  const [conn, setConn] = useState<StockConnectivity | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadStock = useCallback(async () => {
@@ -96,12 +102,27 @@ export default function EstoquePage() {
     }
   }, []);
 
+  // Conectividade no servidor GPS: quem está falando, quem sumiu e quem fala
+  // sem GPS. Recarrega sozinha porque o estado muda o tempo todo em campo.
+  const loadConnectivity = useCallback(async () => {
+    try {
+      setConn(await stockApi.connectivity());
+    } catch {
+      /* silencioso: os cards somem, a lista continua */
+    }
+  }, []);
+
   useEffect(() => {
     loadStock();
   }, [loadStock]);
   useEffect(() => {
     loadStats();
   }, [loadStats]);
+  useEffect(() => {
+    loadConnectivity();
+    const timer = setInterval(loadConnectivity, 30_000);
+    return () => clearInterval(timer);
+  }, [loadConnectivity]);
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -136,6 +157,11 @@ export default function EstoquePage() {
   const openAssociate = (item: StockItem) => {
     setAssociItem(item);
     setAssociOpen(true);
+  };
+
+  const openCheck = (item: StockItem) => {
+    setCheckItem(item);
+    setCheckOpen(true);
   };
 
   const toggleOne = (id: string) => {
@@ -222,6 +248,40 @@ export default function EstoquePage() {
           {importing ? 'Importando...' : 'Importar planilha'}
         </Button>
       </div>
+
+      {/* Conectividade no servidor GPS */}
+      {conn && !conn.indisponivel && (
+        <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="text-xs text-muted-foreground">Conectados</span>
+            <span className="text-lg font-bold text-emerald-400">{conn.conectados}</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+            <span className="h-2 w-2 rounded-full bg-red-400" />
+            <span className="text-xs text-muted-foreground">Desconectados</span>
+            <span className="text-lg font-bold text-red-400">{conn.desconectados}</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <span className="h-2 w-2 rounded-full bg-amber-400" />
+            <span className="text-xs text-muted-foreground">Sem sinal GPS</span>
+            <span className="text-lg font-bold text-amber-400">{conn.semGps}</span>
+          </div>
+          {conn.semCadastro > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
+              <span className="text-xs text-muted-foreground">Entrando no servidor GPS</span>
+              <span className="text-lg font-bold">{conn.semCadastro}</span>
+            </div>
+          )}
+        </div>
+      )}
+      {conn?.indisponivel && (
+        <p className="flex items-center gap-1.5 text-xs text-amber-400">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Servidor GPS indisponível — a conectividade do estoque não pode ser conferida agora.
+        </p>
+      )}
 
       {/* Stats */}
       {stats && (
@@ -345,7 +405,29 @@ export default function EstoquePage() {
                       />
                     </td>
                   )}
-                  <td className="px-3 py-2 font-mono text-xs">{item.imei}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <ConnDot estado={conn?.statuses[item.imei]} />
+                      <span className="font-mono text-xs">{item.imei}</span>
+                    </div>
+                    {item.validatedAt && (
+                      <span
+                        className={cn(
+                          'mt-0.5 flex items-center gap-1 text-[11px]',
+                          item.validationOk ? 'text-emerald-400' : 'text-red-400',
+                        )}
+                      >
+                        {item.validationOk ? (
+                          <CheckCircle2 className="h-3 w-3" />
+                        ) : (
+                          <XCircle className="h-3 w-3" />
+                        )}
+                        {item.validationOk ? 'Validado' : 'Reprovado'}{' '}
+                        {formatDateOnlyBR(item.validatedAt)}
+                        {item.validatedByName ? ` · ${item.validatedByName.split(' ')[0]}` : ''}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                     {item.iccid ?? '—'}
                   </td>
@@ -387,6 +469,15 @@ export default function EstoquePage() {
                           size="sm"
                           variant="outline"
                           className="h-8"
+                          onClick={() => openCheck(item)}
+                        >
+                          <SignalHigh className="h-3.5 w-3.5 mr-1" />
+                          Validar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
                           onClick={() => openAssociate(item)}
                         >
                           <UserCheck className="h-3.5 w-3.5 mr-1" />
@@ -397,6 +488,7 @@ export default function EstoquePage() {
                           canDelete={canDelete}
                           onAssociate={() => openAssociate(item)}
                           onAssign={() => openAssign([item])}
+                          onCheck={() => openCheck(item)}
                           onDelete={() => handleDelete(item)}
                           onSoon={soon}
                         />
@@ -451,7 +543,52 @@ export default function EstoquePage() {
         onOpenChange={setAssociOpen}
         onAssociated={() => Promise.all([loadStock(), loadStats()])}
       />
+
+      <InstallCheckSheet
+        item={checkItem}
+        open={checkOpen}
+        onOpenChange={setCheckOpen}
+        onValidated={() => Promise.all([loadStock(), loadConnectivity()])}
+      />
     </div>
+  );
+}
+
+/**
+ * Pontinho de conectividade: verde falando com GPS, âmbar falando sem GPS,
+ * vermelho mudo, cinza ainda entrando no servidor GPS.
+ */
+function ConnDot({ estado }: { estado?: { conhecido: boolean; comunicando: boolean; gpsOk: boolean } }) {
+  if (!estado || !estado.conhecido) {
+    return (
+      <span
+        className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40"
+        title="Ainda entrando no servidor GPS"
+      />
+    );
+  }
+  if (!estado.comunicando) {
+    return (
+      <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" title="Desconectado" />
+    );
+  }
+  if (!estado.gpsOk) {
+    return (
+      <span
+        className="h-2 w-2 shrink-0 rounded-full bg-amber-400"
+        title="Conectado, mas sem sinal de GPS"
+      />
+    );
+  }
+  return <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" title="Conectado com GPS" />;
+}
+
+/** Selo das ações que ainda não existem. Fora do render pra não recriar o componente. */
+function Soon() {
+  return (
+    <DropdownMenuShortcut className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+      em breve
+    </DropdownMenuShortcut>
   );
 }
 
@@ -463,6 +600,7 @@ function StockRowMenu({
   canDelete,
   onAssociate,
   onAssign,
+  onCheck,
   onDelete,
   onSoon,
 }: {
@@ -470,15 +608,10 @@ function StockRowMenu({
   canDelete: boolean;
   onAssociate: () => void;
   onAssign: () => void;
+  onCheck: () => void;
   onDelete: () => void;
   onSoon: () => void;
 }) {
-  const Soon = () => (
-    <DropdownMenuShortcut className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-      em breve
-    </DropdownMenuShortcut>
-  );
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -492,8 +625,8 @@ function StockRowMenu({
         <DropdownMenuItem disabled onClick={onSoon}>
           <MapPin className="h-4 w-4" /> Abrir no mapa <Soon />
         </DropdownMenuItem>
-        <DropdownMenuItem disabled onClick={onSoon}>
-          <SignalHigh className="h-4 w-4" /> Validar instalação <Soon />
+        <DropdownMenuItem onClick={onCheck}>
+          <SignalHigh className="h-4 w-4" /> Validar instalação
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onAssociate}>
           <UserCheck className="h-4 w-4" /> Associar um cliente e ativo

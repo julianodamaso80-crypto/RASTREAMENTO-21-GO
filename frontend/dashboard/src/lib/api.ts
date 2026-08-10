@@ -18,6 +18,9 @@ import type {
   StockAssociateResult,
   StockAssignResult,
   ActiveClient,
+  DeviceHealth,
+  StockConnectivity,
+  StockValidateResult,
 } from '@/types/stock';
 import type {
   Technician,
@@ -598,6 +601,27 @@ export const stockApi = {
     const res = await api.post<ApiResponse<StockAssignResult>>('/stock/unassign', {
       stockItemIds,
     });
+    return res.data.data;
+  },
+  /** Conferência de instalação ao vivo: GPS, satélites, voltagem e ignição. */
+  signal: async (id: string): Promise<DeviceHealth> => {
+    const res = await api.get<ApiResponse<DeviceHealth>>(`/stock/${id}/signal`);
+    return res.data.data;
+  },
+  /** Carimba a conferência (aprovada ou reprovada) com o retrato do momento. */
+  validate: async (
+    id: string,
+    payload: { approved: boolean; notes?: string },
+  ): Promise<StockValidateResult> => {
+    const res = await api.post<ApiResponse<StockValidateResult>>(
+      `/stock/${id}/validate`,
+      payload,
+    );
+    return res.data.data;
+  },
+  /** Cards de conectividade e estado item a item no servidor GPS. */
+  connectivity: async (): Promise<StockConnectivity> => {
+    const res = await api.get<ApiResponse<StockConnectivity>>('/stock/connectivity');
     return res.data.data;
   },
 };

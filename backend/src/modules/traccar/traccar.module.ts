@@ -6,6 +6,7 @@ import { TraccarController } from './traccar.controller';
 import { TraccarGateway } from './traccar.gateway';
 import { DeviceRegistryService } from './device-registry.service';
 import { TraccarReconcileService } from './traccar-reconcile.service';
+import { DeviceHealthService } from './device-health.service';
 import { BleTagsModule } from '../ble-tags/ble-tags.module';
 import { AlertsModule } from '../alerts/alerts.module';
 
@@ -29,7 +30,13 @@ import { AlertsModule } from '../alerts/alerts.module';
     TraccarGateway,
     DeviceRegistryService,
     TraccarReconcileService,
+    DeviceHealthService,
   ],
-  exports: [TraccarService, DeviceRegistryService, TraccarReconcileService],
+  exports: [
+    TraccarService,
+    DeviceRegistryService,
+    TraccarReconcileService,
+    DeviceHealthService,
+  ],
 })
 export class TraccarModule {}

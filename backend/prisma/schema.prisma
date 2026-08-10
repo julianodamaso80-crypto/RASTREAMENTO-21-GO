@@ -833,6 +833,20 @@ model StockItem {
   assignedTechnician   Technician? @relation(fields: [assignedTechnicianId], references: [id])
   assignedAt           DateTime?   @map("assigned_at")
   assignedById         String?     @map("assigned_by_id") @db.Uuid
+  // Device correspondente no Traccar. O estoque inteiro é cadastrado lá pra que
+  // dê pra conferir a instalação ANTES de vincular no SGA — sem device, o
+  // Traccar descarta o que o rastreador manda.
+  traccarDeviceId      Int?        @map("traccar_device_id")
+  // Selo da conferência de instalação. Informativo: não bloqueia o vínculo.
+  // `validationSnapshot` guarda o retrato da telemetria no momento do aceite
+  // (voltagem, ignição, satélites, coordenada, motivos) — é o que responde,
+  // meses depois, como o rastreador estava no dia da entrega.
+  validatedAt          DateTime?   @map("validated_at")
+  validatedById        String?     @map("validated_by_id") @db.Uuid
+  validatedByName      String?     @map("validated_by_name")
+  validationOk         Boolean?    @map("validation_ok")
+  validationNotes      String?     @map("validation_notes")
+  validationSnapshot   Json?       @map("validation_snapshot")
   deletedAt    DateTime? @map("deleted_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")

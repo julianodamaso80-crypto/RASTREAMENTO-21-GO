@@ -26,10 +26,11 @@ import { StockService } from './stock.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
 import { AssignStockDto } from './dto/assign-stock.dto';
+import { ValidateStockDto } from './dto/validate-stock.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
-  user: { id: string };
+  user: { id: string; name?: string; email?: string };
 }
 
 @ApiTags('Estoque')
@@ -49,6 +50,58 @@ export class StockController {
   @ApiOperation({ summary: 'Totais do estoque por status' })
   stats(@Req() req: AuthenticatedRequest) {
     return this.stockService.stats(req.tenantId);
+  }
+
+  @Get('connectivity')
+  @ApiOperation({
+    summary:
+      'Conectividade do estoque no servidor GPS (cards e pontinho por linha)',
+  })
+  connectivity(@Req() req: AuthenticatedRequest) {
+    return this.stockService.connectivity(req.tenantId);
+  }
+
+  @Get(':id/signal')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Conferência de instalação ao vivo: GPS, satélites, voltagem e ignição',
+  })
+  signal(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('lat') lat: string | undefined,
+    @Query('lng') lng: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const refLat = lat === undefined ? undefined : Number(lat);
+    const refLng = lng === undefined ? undefined : Number(lng);
+    return this.stockService.signal(
+      id,
+      req.tenantId,
+      Number.isFinite(refLat as number) ? refLat : undefined,
+      Number.isFinite(refLng as number) ? refLng : undefined,
+    );
+  }
+
+  @Post(':id/validate')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary: 'Carimba a conferência de instalação (aprovada ou reprovada)',
+  })
+  validate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ValidateStockDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.validate(
+      id,
+      req.tenantId,
+      dto,
+      req.user.id,
+      req.user.name || req.user.email || 'Operador',
+    );
   }
 
   @Post('import')
@@ -72,7 +125,8 @@ export class StockController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
   @ApiOperation({
-    summary: 'Associar cliente e ativo: vincula o rastreador a uma placa do SGA',
+    summary:
+      'Associar cliente e ativo: vincula o rastreador a uma placa do SGA',
   })
   associate(
     @Param('id', ParseUUIDPipe) id: string,

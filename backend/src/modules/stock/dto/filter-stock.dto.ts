@@ -3,7 +3,9 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 
 export class FilterStockDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Busca por IMEI, ICCID, linha ou operadora' })
+  @ApiPropertyOptional({
+    description: 'Busca por IMEI, ICCID, linha ou operadora',
+  })
   @IsOptional()
   @IsString()
   search?: string;
