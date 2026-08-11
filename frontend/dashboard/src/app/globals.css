@@ -190,3 +190,22 @@
 .maplibregl-ctrl-group button {
   filter: none;
 }
+
+/*
+ * Atribuição do mapa recolhida no "i".
+ *
+ * O crédito ao OpenStreetMap/CARTO é exigido pela licença dos dados (ODbL) e
+ * não pode sair da tela — mas não precisa ficar aberto ocupando o rodapé. O
+ * modo compacto do MapLibre é o padrão aceito: fica só o ícone, e o texto
+ * completo aparece ao clicar. Some do caminho sem descumprir a licença.
+ */
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner {
+  display: none;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner {
+  display: block;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  background: rgba(255, 255, 255, 0.75) !important;
+  min-height: 24px;
+}

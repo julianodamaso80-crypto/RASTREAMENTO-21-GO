@@ -7,6 +7,9 @@ import { BASEMAPS, type BasemapId } from '@/lib/constants';
 interface BasemapToggleProps {
   current: BasemapId;
   onChange: (id: BasemapId) => void;
+  /** Reposiciona o seletor. No mapa do estoque o painel de detalhe ocupa o
+   *  canto direito e cobriria os botões. */
+  className?: string;
 }
 
 const ICONS: Record<BasemapId, typeof MapIcon> = {
@@ -23,9 +26,18 @@ const ICONS: Record<BasemapId, typeof MapIcon> = {
  *
  * Em tela estreita fica só o ícone; o nome volta a partir do sm.
  */
-export function BasemapToggle({ current, onChange }: BasemapToggleProps) {
+export function BasemapToggle({
+  current,
+  onChange,
+  className,
+}: BasemapToggleProps) {
   return (
-    <div className="absolute top-3 right-3 z-10 flex items-center rounded-lg border border-border/40 bg-background/85 p-0.5 shadow-lg backdrop-blur-md">
+    <div
+      className={cn(
+        'absolute top-3 right-3 z-10 flex items-center rounded-lg border border-border/40 bg-background/85 p-0.5 shadow-lg backdrop-blur-md',
+        className,
+      )}
+    >
       {BASEMAPS.map((b) => {
         const Icon = ICONS[b.id];
         return (

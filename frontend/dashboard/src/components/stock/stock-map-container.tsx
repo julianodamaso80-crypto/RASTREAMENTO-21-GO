@@ -278,7 +278,13 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
     return (
       <div className="relative h-full w-full">
         <div ref={containerRef} className="h-full w-full" />
-        <BasemapToggle current={basemap} onChange={setBasemap} />
+        {/* À esquerda: o painel de detalhe abre no canto direito e cobriria
+            os três botões justamente quando o operador quer trocar o mapa. */}
+        <BasemapToggle
+          current={basemap}
+          onChange={setBasemap}
+          className="right-auto left-3"
+        />
         {satProvider === 'google' && googleVisible && (
           <GoogleMapsAttribution copyright={googleCopyright} />
         )}
