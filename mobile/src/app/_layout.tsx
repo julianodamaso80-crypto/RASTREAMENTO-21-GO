@@ -3,6 +3,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuth } from '@/lib/auth-store';
+import { useInternalAuth } from '@/lib/internal-auth-store';
+import { resolveBootWorld } from '@/lib/session-keys';
 import { colors } from '@/lib/theme';
 import { diag } from '@/lib/diag';
 
@@ -17,43 +19,67 @@ export default function RootLayout() {
   diag('02-root-render');
   const router = useRouter();
   const segments = useSegments();
-  const { token, hydrated, hydrate, mustChangePassword } = useAuth();
+  const { token, hydrated, hydrate, mustChangePassword, logout } = useAuth();
+  const interno = useInternalAuth();
 
   // Carrega o login salvo no boot.
   useEffect(() => {
     diag('03-effect-hydrate');
     hydrate();
+    interno.hydrate();
   }, [hydrate]);
 
   // Gate de auth: protege as rotas conforme o login.
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !interno.hydrated) return;
+
+    const mundo = resolveBootWorld(token, interno.token);
+    const noInterno = segments[0] === 'interno';
     const inApp = segments[0] === '(tabs)' || segments[0] === 'vehicle';
     const naTrocaDeSenha = segments[0] === 'change-password';
-    // Recuperação de senha é pra quem NÃO consegue entrar: fica fora do gate.
     const naRecuperacao = segments[0] === 'forgot-password';
 
-    if (!token) {
-      if (inApp || naTrocaDeSenha) router.replace('/login');
+    // Estado impossível (os dois tokens vivos): apaga tudo e volta pro login.
+    if (token && interno.token) {
+      logout();
+      interno.logout();
+      router.replace('/login');
       return;
     }
 
-    // Já logado não tem o que fazer na recuperação.
+    if (mundo === 'internal') {
+      if (!noInterno) router.replace('/interno/painel');
+      return;
+    }
+
+    if (mundo === 'none') {
+      if (inApp || naTrocaDeSenha || noInterno) router.replace('/login');
+      return;
+    }
+
+    // Daqui pra baixo é o mundo do associado — regras idênticas às de hoje.
+    if (noInterno) {
+      router.replace('/(tabs)');
+      return;
+    }
     if (naRecuperacao) {
       router.replace('/(tabs)');
       return;
     }
-
-    // Primeiro acesso: nada do app abre antes de o cliente criar a senha dele.
     if (mustChangePassword) {
       if (!naTrocaDeSenha) router.replace('/change-password');
       return;
     }
-
-    // Trocar a senha de novo, por vontade própria (pelo perfil), é permitido —
-    // sem esta ressalva o gate expulsaria o usuário de volta pras abas.
     if (!inApp && !naTrocaDeSenha) router.replace('/(tabs)');
-  }, [token, hydrated, mustChangePassword, segments, router]);
+  }, [
+    token,
+    interno.token,
+    hydrated,
+    interno.hydrated,
+    mustChangePassword,
+    segments,
+    router,
+  ]);
 
   // SEMPRE renderiza — o app nunca fica preso em branco. A rota inicial "/"
   // (index) mostra um carregamento visível enquanto hidrata e então redireciona.
@@ -66,6 +92,7 @@ export default function RootLayout() {
         <Stack.Screen name="forgot-password" />
         <Stack.Screen name="change-password" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="interno" />
         <Stack.Screen
           name="vehicle/[id]"
           options={{
