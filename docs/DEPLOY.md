@@ -67,6 +67,9 @@ Nunca commitar valores reais em arquivos, issues ou comentários. Use o 1Passwor
 | Traccar Admin | `admin@rastreamento21go.com.br` | 1Password → Rastreamento 21GO |
 | PostgreSQL | `postgres` | EasyPanel env vars |
 | JWT_SECRET | (gerado via `openssl rand -base64 48`) | EasyPanel env vars + 1Password |
+| JWT_ASSOCIATE_SECRET | (gerado via `openssl rand -base64 48`) — **diferente** do JWT_SECRET | EasyPanel env vars + 1Password |
+| JWT_INTERNAL_EXPIRATION | não é segredo — valor `12h` | EasyPanel env vars |
+| JWT_REQUIRE_TYPE | não é segredo — `false` no primeiro deploy, `true` depois | EasyPanel env vars |
 | EasyPanel Admin | `marketing21goprotpatri@gmail.com` | 1Password → Infra |
 | Cloudflare | `marketing21goprotpatri@gmail.com` | 1Password → Infra |
 | Hostinger | — | `.mcp.json` (token API) + 1Password |
@@ -75,6 +78,37 @@ Nunca commitar valores reais em arquivos, issues ou comentários. Use o 1Passwor
 | Google Maps Platform (Map Tiles API) | projeto GCP `21go-maps` | Google Cloud Console + 1Password |
 
 **Nunca documente:** senhas, tokens, connection strings completas, chaves privadas, JWT secrets.
+
+### Dois segredos JWT — o backend recusa subir sem eles
+
+O mesmo binário atende três públicos: painel do time interno (`type: 'user'`), app do cliente final (`type: 'associate'`) e PWA do técnico (`type: 'technician'`). O que impede um token de cliente de valer no painel **não é um `if`** — é o segredo de assinatura ser outro.
+
+| Variável | Obrigatória em produção | Regra |
+|---|---|---|
+| `JWT_SECRET` | sim | Mín. **32 caracteres**. Assina painel e PWA do técnico. |
+| `JWT_ASSOCIATE_SECRET` | sim | Mín. **32 caracteres** e **diferente** de `JWT_SECRET`. Assina só o app do cliente. |
+| `JWT_INTERNAL_EXPIRATION` | não (default `12h`) | Sessão do time interno, mais curta que a do cliente. |
+| `JWT_REQUIRE_TYPE` | não (default `false`) | `true` passa a exigir o campo `type` no token. |
+
+`assertJwtGuardRails` ([backend/src/config/jwt-guard-rails.ts](../backend/src/config/jwt-guard-rails.ts)) roda **antes** do `NestFactory.create` e **lança** se qualquer regra acima for violada em produção. Isso é proposital: subir com os dois segredos iguais transformaria o isolamento em decoração e ninguém perceberia. O preço é que subir sem `JWT_ASSOCIATE_SECRET` derruba `api.trackgo.site` em crash-loop — e junto vão o painel, o app, o PWA do técnico e a API que atende os rastreadores. **Setar as duas variáveis no EasyPanel ANTES do deploy, não depois.**
+
+#### Item de ação datado — virar `JWT_REQUIRE_TYPE` para `true`
+
+Tokens emitidos antes desta versão não têm o campo `type` e valem por até 24h. Enquanto existirem, exigir o campo deslogaria todo mundo que está trabalhando — por isso a flag nasce `false`, e o backend trata token sem `type` como token de painel.
+
+- **Deploy da separação de segredos:** 2026-08-10
+- **Virar `JWT_REQUIRE_TYPE=true`:** **2026-08-11**, 24h depois — nesse ponto nenhum token legado sobrevive.
+
+```bash
+# No EasyPanel: backend-rastreamento → env vars → JWT_REQUIRE_TYPE=true → redeploy
+# Conferir depois: login no painel, no app e no /tecnico devem continuar funcionando.
+```
+
+Se este item não for executado, a segunda camada de defesa (exigir `type`) **nunca liga** e o sistema fica dependendo só da separação de segredos. Não é "recomendação" — é tarefa com data.
+
+#### Efeito no suporte: a rotação desloga o app uma vez
+
+Trocar o segredo do associado invalida todos os tokens do app já emitidos. No primeiro acesso depois do deploy, **todo cliente cai na tela de login uma vez** — entram de novo com a mesma senha, nada é perdido e nenhum cadastro precisa ser refeito. Avisar o suporte antes do deploy, senão vira enxurrada de chamado de "app deslogou sozinho".
 
 ### Satélite do Google (Map Tiles API)
 

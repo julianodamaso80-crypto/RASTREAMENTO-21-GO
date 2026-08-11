@@ -92,29 +92,85 @@ export class TraccarGateway
         return;
       }
 
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('jwt.secret'),
+      // `decode` NÃO autentica nada: não confere assinatura, não confere
+      // expiração. Serve só pra ler de qual mundo o token DIZ ser e escolher o
+      // segredo certo. A barreira continua sendo o `verify` logo abaixo — um
+      // token de associado forjado com o segredo do painel (ou o contrário)
+      // morre ali. Esse roteamento é obrigatório porque o mundo do associado
+      // assina com `jwt.associateSecret`: verificar tudo com `jwt.secret`
+      // derrubaria o tempo real de todo cliente do app já publicado.
+      const cru = this.jwtService.decode<HandshakePayload | null>(token);
+      const segredo =
+        cru?.type === 'associate'
+          ? this.configService.get<string>('jwt.associateSecret')!
+          : this.configService.get<string>('jwt.secret')!;
+
+      const payload = this.jwtService.verify<HandshakePayload>(token, {
+        secret: segredo,
       });
 
-      // App do associado: entra SÓ na sua própria sala, nunca na do tenant —
-      // assim recebe em tempo real apenas os veículos que são dele.
-      if (payload.type === 'associate') {
-        client.join(`associate:${payload.sub}`);
-        client.data.associateId = payload.sub;
-        this.logger.log(
-          `Associado conectado: ${payload.name} (assoc: ${payload.sub})`,
-        );
-        return;
+      // Roteamento exaustivo por mundo. Nada de "qualquer token que verificou
+      // entra na sala do tenant": o token do técnico também é assinado com
+      // `jwt.secret` e carrega `tenantId`, então o fallback antigo entregava a
+      // frota inteira da empresa a quem entrou só com CPF + senha provisória.
+      //
+      // Token legado (emitido antes da separação de segredos, válido por até
+      // 24h) não tem `type`; tratá-lo como 'user' mantém o painel web com
+      // tempo real durante a janela de rollout. Esse `?? 'user'` sai quando
+      // `JWT_REQUIRE_TYPE` virar `true`.
+      switch (payload.type ?? 'user') {
+        case 'associate': {
+          // Sala própria, nunca a do tenant — o cliente final só pode receber
+          // os veículos dele, não a frota da empresa.
+          client.join(`associate:${payload.sub}`);
+          client.data.associateId = payload.sub;
+          this.logger.log(
+            `Associado conectado: ${payload.name} (assoc: ${payload.sub})`,
+          );
+          return;
+        }
+
+        case 'user': {
+          const tenantId = payload.tenantId;
+          if (!tenantId) {
+            // Sem tenant não existe sala legítima; `tenant:undefined` seria
+            // uma sala coletiva fora do modelo multi-tenant.
+            this.logger.warn('Cliente rejeitado: token de painel sem tenantId');
+            client.disconnect();
+            return;
+          }
+          client.join(`tenant:${tenantId}`);
+          client.data.tenantId = tenantId;
+          client.data.userId = payload.sub;
+          this.logger.log(
+            `Cliente conectado: ${payload.email} (tenant: ${tenantId})`,
+          );
+          return;
+        }
+
+        case 'technician': {
+          // O PWA do técnico (`/tecnico`) não consome WebSocket — só REST via
+          // `frontend/dashboard/src/lib/tech-api.ts` — e o backend não emite
+          // nenhum evento destinado a técnico. Colocá-lo na sala do tenant
+          // (o que o código fazia antes) entregaria a posição em tempo real de
+          // TODA a frota a quem autentica só com CPF + senha provisória.
+          // Se um dia o PWA precisar de tempo real, a sala é `technician:<id>`
+          // com emissão restrita aos serviços dele — nunca `tenant:<id>`.
+          this.logger.warn(
+            `Técnico rejeitado no WebSocket (sem realtime por desenho): ${payload.sub}`,
+          );
+          client.disconnect();
+          return;
+        }
+
+        default: {
+          this.logger.warn(
+            `Cliente rejeitado: type de token desconhecido (${String(payload.type)})`,
+          );
+          client.disconnect();
+          return;
+        }
       }
-
-      const tenantId = payload.tenantId;
-      client.join(`tenant:${tenantId}`);
-      client.data.tenantId = tenantId;
-      client.data.userId = payload.sub;
-
-      this.logger.log(
-        `Cliente conectado: ${payload.email} (tenant: ${tenantId})`,
-      );
     } catch {
       this.logger.warn('Cliente rejeitado: token inválido');
       client.disconnect();
@@ -311,6 +367,20 @@ export class TraccarGateway
       }
     }
   }
+}
+
+/**
+ * Payload do token no handshake do WebSocket. Tudo opcional de propósito: o
+ * conteúdo vem de fora e nem todo mundo emite os mesmos campos (`type` falta
+ * nos tokens legados, `email` só existe no painel). Tipar aqui evita tratar o
+ * payload como `any` justamente onde se decide em que sala o cliente entra.
+ */
+interface HandshakePayload {
+  sub?: string;
+  type?: string;
+  tenantId?: string;
+  email?: string;
+  name?: string;
 }
 
 interface TraccarWsMessage {

@@ -77,6 +77,28 @@ export const PUBLIC_CONTROLLERS: readonly string[] = [
   'legal/legal.controller.ts',
 ];
 
+/**
+ * Gateways WebSocket que atendem MAIS DE UM mundo pelo mesmo socket.
+ *
+ * Entrar nesta lista é decisão consciente, nunca default: um arquivo aqui
+ * PRECISA rotear explicitamente por `payload.type` — escolher o segredo de
+ * verificação pelo tipo declarado e mandar cada mundo pra sala dele, com
+ * `default` que desconecta. Um gateway não tem guard por rota nem status 403
+ * pra avisar que errou: se o roteamento falhar, o cliente errado simplesmente
+ * passa a receber o stream de posição em tempo real de quem não é dele.
+ *
+ * `traccar/traccar.gateway.ts` é o único socket do projeto e é onde painel
+ * (`type: 'user'`) e app do cliente (`type: 'associate'`) se encontram. Token
+ * de técnico chega até ele — é assinado com o mesmo `jwt.secret` do painel —
+ * e é recusado de propósito: o PWA do técnico não consome realtime.
+ *
+ * Se um gateway novo servir um mundo só, ele NÃO entra aqui — entra na lista
+ * do mundo dele.
+ */
+export const MULTI_WORLD_GATEWAYS: readonly string[] = [
+  'traccar/traccar.gateway.ts',
+];
+
 export type AuthWorld = 'internal' | 'associate' | 'technician';
 
 export interface LeakProbe {

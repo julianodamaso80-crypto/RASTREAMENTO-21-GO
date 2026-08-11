@@ -10,6 +10,12 @@
  *   LEAK_CPF_PASS    senha dele
  *   LEAK_EMAIL       e-mail de um usuário interno de teste
  *   LEAK_EMAIL_PASS  senha dele
+ *   LEAK_TECH_CPF    CPF de um técnico de teste (opcional — ver aviso abaixo)
+ *   LEAK_TECH_PASS   senha dele
+ *
+ * Sem LEAK_TECH_CPF/LEAK_TECH_PASS a direção `technician -> internal` NÃO é
+ * exercida e o script avisa em voz alta. Passar sem esse par não é prova de
+ * fronteira intacta: é prova parcial.
  */
 import { LEAK_PROBES } from '../src/common/constants/auth-worlds';
 
@@ -61,8 +67,19 @@ async function main() {
   const email = exigir('LEAK_EMAIL');
   const emailPass = exigir('LEAK_EMAIL_PASS');
 
+  // Par do técnico é opcional pra não travar quem ainda não criou o técnico de
+  // teste — mas a ausência vira aviso explícito no fim, nunca silêncio.
+  const techCpf = process.env.LEAK_TECH_CPF;
+  const techPass = process.env.LEAK_TECH_PASS;
+
   const associado = await login('/app/auth/login', { cpf, password: cpfPass });
   const interno = await login('/auth/login', { email, password: emailPass });
+  // Mesmo formato do painel do técnico: POST /tech/auth/login { cpf, password }
+  // — ver backend/src/modules/tech/tech-auth.controller.ts.
+  const tecnico =
+    techCpf && techPass
+      ? await login('/tech/auth/login', { cpf: techCpf, password: techPass })
+      : null;
 
   const falhas: string[] = [];
 
@@ -89,6 +106,16 @@ async function main() {
     await conferir('interno', interno, sonda.path);
   }
 
+  // Token de técnico não pode tocar no painel interno nem no app do cliente.
+  // É a direção onde mora o risco real: o token do técnico é assinado com o
+  // MESMO segredo do painel e carrega `tenantId`, então só o `type` o separa.
+  if (tecnico) {
+    for (const sonda of LEAK_PROBES) {
+      if (sonda.world === 'technician') continue;
+      await conferir('técnico', tecnico, sonda.path);
+    }
+  }
+
   // Assinatura adulterada tem que morrer na verificação.
   await conferir('token adulterado', `${interno}x`, '/devices');
 
@@ -96,7 +123,20 @@ async function main() {
     console.error('\nVAZAMENTO DETECTADO:\n' + falhas.join('\n'));
     process.exit(1);
   }
-  console.log(`\n${LEAK_PROBES.length} sondas conferidas. Fronteira intacta.`);
+
+  if (!tecnico) {
+    console.warn(
+      '\nATENÇÃO: LEAK_TECH_CPF/LEAK_TECH_PASS não definidos.\n' +
+        'A direção técnico -> interno NÃO foi verificada. Este resultado ' +
+        'cobre 2 dos 3 mundos — não use como prova de fronteira completa.',
+    );
+  }
+
+  const direcoes = tecnico ? 3 : 2;
+  console.log(
+    `\n${LEAK_PROBES.length} sondas conferidas em ${direcoes} de 3 mundos de origem. ` +
+      (tecnico ? 'Fronteira intacta.' : 'Cobertura PARCIAL.'),
+  );
 }
 
 main().catch((e) => {
