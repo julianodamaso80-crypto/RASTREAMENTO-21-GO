@@ -1,11 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { TraccarService } from '../traccar/traccar.service';
+import {
+  TraccarService,
+  type TraccarDevice,
+  type TraccarPosition,
+} from '../traccar/traccar.service';
 import { assessPosition } from '../traccar/position-quality';
 import {
   COMUNICANDO_MS,
   FIX_FRESCO_MS,
+  classificarEnergia,
+  extrairVolts,
+  type FaixaEnergia,
 } from '../traccar/device-health.service';
 
 /**
@@ -200,6 +207,137 @@ export class StockTraccarService {
     };
   }
 
+  /**
+   * Estoque no mapa: cada rastreador com a última posição conhecida e a
+   * telemetria do momento.
+   *
+   * Mostra a última posição MESMO velha (rastreador na prateleira reportou pela
+   * última vez há dias) — com `idadeSegundos` e `gpsConfiavel` explícitos, pra
+   * tela nunca vender posição velha como atual. É o que o operador precisa pra
+   * saber onde o equipamento está: pode estar com o técnico a caminho.
+   */
+  async mapPoints(tenantId: string): Promise<StockMapResult> {
+    const itens = await this.prisma.stockItem.findMany({
+      where: { tenantId, deletedAt: null, associatedAt: null },
+      select: {
+        id: true,
+        imei: true,
+        iccid: true,
+        line: true,
+        operator: true,
+        server: true,
+        status: true,
+        validatedAt: true,
+        validationOk: true,
+        assignedTechnician: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let devices: TraccarDevice[];
+    let positions: TraccarPosition[];
+    try {
+      [devices, positions] = await Promise.all([
+        this.traccar.getDevices(),
+        this.traccar.getPositions(),
+      ]);
+    } catch (erro) {
+      this.logger.warn(
+        `Traccar indisponível ao montar o mapa do estoque: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+      return { indisponivel: true, pontos: [] };
+    }
+
+    const porImei = new Map(devices.map((d) => [d.uniqueId, d]));
+    const porDeviceId = new Map(positions.map((p) => [p.deviceId, p]));
+    const agora = Date.now();
+
+    const pontos = itens.map((item): StockMapPoint => {
+      const device = porImei.get(item.imei);
+      const posicao = device ? porDeviceId.get(device.id) : undefined;
+      const attrs = posicao?.attributes ?? {};
+
+      const lastUpdate = device?.lastUpdate ?? null;
+      const idadeComunicacao =
+        lastUpdate && Number.isFinite(Date.parse(lastUpdate))
+          ? Math.round((agora - Date.parse(lastUpdate)) / 1000)
+          : null;
+
+      const fixTime = posicao?.fixTime || posicao?.deviceTime || null;
+      const idadeSegundos =
+        fixTime && Number.isFinite(Date.parse(fixTime))
+          ? Math.max(0, Math.round((agora - Date.parse(fixTime)) / 1000))
+          : null;
+
+      const gpsConfiavel = posicao
+        ? assessPosition(posicao, agora).trustworthy
+        : false;
+
+      const satBruto = attrs.sat ?? attrs.satellites ?? null;
+
+      return {
+        id: item.id,
+        imei: item.imei,
+        iccid: item.iccid,
+        line: item.line,
+        operator: item.operator,
+        server: item.server,
+        statusChip: item.status,
+        validatedAt: item.validatedAt ? item.validatedAt.toISOString() : null,
+        validationOk: item.validationOk,
+        tecnico: item.assignedTechnician?.name ?? null,
+        conexao: this.classificarConexao(device, attrs, idadeComunicacao),
+        lastUpdate,
+        fixTime,
+        idadeSegundos,
+        latitude: posicao?.latitude ?? null,
+        longitude: posicao?.longitude ?? null,
+        endereco: posicao?.address ?? null,
+        gpsConfiavel,
+        ignicao: typeof attrs.ignition === 'boolean' ? attrs.ignition : null,
+        velocidade: typeof posicao?.speed === 'number' ? posicao.speed : null,
+        direcao: typeof posicao?.course === 'number' ? posicao.course : null,
+        volts: extrairVolts(attrs),
+        faixaEnergia: classificarEnergia(extrairVolts(attrs), {
+          charge: attrs.charge,
+          powerCut: attrs.powerCut,
+        }).faixa,
+        satelites: satBruto && satBruto > 0 ? satBruto : null,
+        bateriaInterna:
+          typeof attrs.batteryLevel === 'number' ? attrs.batteryLevel : null,
+        bloqueado: attrs.blocked === true,
+      };
+    });
+
+    return { indisponivel: false, pontos };
+  }
+
+  /**
+   * ONLINE / SLEEP / OFFLINE / NUNCA, na linguagem do operador.
+   *
+   * `SLEEP` sai do atributo que o próprio equipamento reporta — não é derivado
+   * de "faz tempo que não fala", que seria chute. No parque de hoje ninguém
+   * reporta sleep, então o contador fica em zero, igual ao da referência.
+   */
+  private classificarConexao(
+    device: TraccarDevice | undefined,
+    attrs: Record<string, unknown>,
+    idadeComunicacao: number | null,
+  ): StockConexao {
+    if (!device) return 'NUNCA';
+    if (attrs.sleep === true) return 'SLEEP';
+    if (device.status === 'online') return 'ONLINE';
+    if (
+      idadeComunicacao !== null &&
+      idadeComunicacao * 1000 <= COMUNICANDO_MS
+    ) {
+      return 'ONLINE';
+    }
+    return device.lastUpdate ? 'OFFLINE' : 'NUNCA';
+  }
+
   /** Retrato da frota no Traccar, com cache de 30s. */
   private async snapshot(): Promise<DeviceSnapshot[]> {
     const agora = Date.now();
@@ -253,6 +391,46 @@ export interface StockConnectivityItem {
   comunicando: boolean;
   gpsOk: boolean;
   lastUpdate: string | null;
+}
+
+export type StockConexao = 'ONLINE' | 'OFFLINE' | 'SLEEP' | 'NUNCA';
+
+export interface StockMapPoint {
+  id: string;
+  imei: string;
+  iccid: string | null;
+  line: string | null;
+  operator: string | null;
+  server: string | null;
+  /** Status comercial do chip vindo da planilha (ATIVO, SUSPENSO...). */
+  statusChip: string | null;
+  validatedAt: string | null;
+  validationOk: boolean | null;
+  tecnico: string | null;
+  conexao: StockConexao;
+  lastUpdate: string | null;
+  fixTime: string | null;
+  /** Idade da posição, em segundos. A tela mostra pra ninguém confundir
+   *  última posição conhecida com posição atual. */
+  idadeSegundos: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  endereco: string | null;
+  /** A posição passa no juiz de qualidade (não é LBS, não é null island). */
+  gpsConfiavel: boolean;
+  ignicao: boolean | null;
+  velocidade: number | null;
+  direcao: number | null;
+  volts: number | null;
+  faixaEnergia: FaixaEnergia;
+  satelites: number | null;
+  bateriaInterna: number | null;
+  bloqueado: boolean;
+}
+
+export interface StockMapResult {
+  indisponivel: boolean;
+  pontos: StockMapPoint[];
 }
 
 export interface StockConnectivity {

@@ -77,6 +77,46 @@ export interface StockConnectivity {
   statuses: Record<string, StockConnectivityItem>;
 }
 
+/** Como o rastreador está no servidor GPS agora. */
+export type StockConexao = 'ONLINE' | 'OFFLINE' | 'SLEEP' | 'NUNCA';
+
+/** Um rastreador do estoque no mapa, com a última posição conhecida. */
+export interface StockMapPoint {
+  id: string;
+  imei: string;
+  iccid: string | null;
+  line: string | null;
+  operator: string | null;
+  server: string | null;
+  statusChip: string | null;
+  validatedAt: string | null;
+  validationOk: boolean | null;
+  tecnico: string | null;
+  conexao: StockConexao;
+  lastUpdate: string | null;
+  fixTime: string | null;
+  /** Idade da posição em segundos — a tela mostra pra ninguém confundir
+   *  última posição conhecida com posição atual. */
+  idadeSegundos: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  endereco: string | null;
+  gpsConfiavel: boolean;
+  ignicao: boolean | null;
+  velocidade: number | null;
+  direcao: number | null;
+  volts: number | null;
+  faixaEnergia: 'ok' | 'baixa' | 'alta' | 'sem-leitura' | 'cortada' | 'ausente';
+  satelites: number | null;
+  bateriaInterna: number | null;
+  bloqueado: boolean;
+}
+
+export interface StockMapResult {
+  indisponivel: boolean;
+  pontos: StockMapPoint[];
+}
+
 export interface StockValidateResult {
   id: string;
   validatedAt: string;

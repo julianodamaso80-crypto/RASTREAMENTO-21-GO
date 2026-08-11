@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Boxes,
   Search,
@@ -54,6 +55,7 @@ function statusColor(status: string | null): string {
 }
 
 export default function EstoquePage() {
+  const router = useRouter();
   const { user } = useAuth();
   const canManage =
     user?.role === 'SUPER_ADMIN' ||
@@ -162,6 +164,12 @@ export default function EstoquePage() {
   const openCheck = (item: StockItem) => {
     setCheckItem(item);
     setCheckOpen(true);
+  };
+
+  // Abre o mapa do estoque já centrado neste rastreador — é onde o operador vê
+  // onde ele está (pode estar com o técnico a caminho), voltagem e ignição.
+  const abrirNoMapa = (item: StockItem) => {
+    router.push(`/estoque/mapa?imei=${encodeURIComponent(item.imei)}`);
   };
 
   const toggleOne = (id: string) => {
@@ -489,6 +497,7 @@ export default function EstoquePage() {
                           onAssociate={() => openAssociate(item)}
                           onAssign={() => openAssign([item])}
                           onCheck={() => openCheck(item)}
+                          onMapa={() => abrirNoMapa(item)}
                           onDelete={() => handleDelete(item)}
                           onSoon={soon}
                         />
@@ -601,6 +610,7 @@ function StockRowMenu({
   onAssociate,
   onAssign,
   onCheck,
+  onMapa,
   onDelete,
   onSoon,
 }: {
@@ -609,6 +619,7 @@ function StockRowMenu({
   onAssociate: () => void;
   onAssign: () => void;
   onCheck: () => void;
+  onMapa: () => void;
   onDelete: () => void;
   onSoon: () => void;
 }) {
@@ -622,8 +633,8 @@ function StockRowMenu({
         }
       />
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuItem disabled onClick={onSoon}>
-          <MapPin className="h-4 w-4" /> Abrir no mapa <Soon />
+        <DropdownMenuItem onClick={onMapa}>
+          <MapPin className="h-4 w-4" /> Abrir no mapa
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onCheck}>
           <SignalHigh className="h-4 w-4" /> Validar instalação

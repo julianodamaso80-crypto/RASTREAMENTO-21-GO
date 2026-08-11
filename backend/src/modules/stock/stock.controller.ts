@@ -61,6 +61,15 @@ export class StockController {
     return this.stockService.connectivity(req.tenantId);
   }
 
+  @Get('map')
+  @ApiOperation({
+    summary:
+      'Estoque no mapa: última posição conhecida e telemetria de cada rastreador',
+  })
+  map(@Req() req: AuthenticatedRequest) {
+    return this.stockService.map(req.tenantId);
+  }
+
   @Get(':id/signal')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)

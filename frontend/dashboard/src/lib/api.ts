@@ -21,6 +21,7 @@ import type {
   DeviceHealth,
   StockConnectivity,
   StockValidateResult,
+  StockMapResult,
 } from '@/types/stock';
 import type {
   Technician,
@@ -622,6 +623,11 @@ export const stockApi = {
   /** Cards de conectividade e estado item a item no servidor GPS. */
   connectivity: async (): Promise<StockConnectivity> => {
     const res = await api.get<ApiResponse<StockConnectivity>>('/stock/connectivity');
+    return res.data.data;
+  },
+  /** Estoque no mapa: última posição conhecida + telemetria de cada rastreador. */
+  map: async (): Promise<StockMapResult> => {
+    const res = await api.get<ApiResponse<StockMapResult>>('/stock/map');
     return res.data.data;
   },
 };

@@ -32,8 +32,11 @@ import type { DeviceHealth, StockItem } from '@/types/stock';
 /** De quanto em quanto tempo a tela repergunta ao servidor GPS. */
 const REFRESH_MS = 10_000;
 
+/** Só o que o painel usa — o mapa do estoque reusa este mesmo fluxo. */
+type ItemConferivel = Pick<StockItem, 'id' | 'imei'>;
+
 type Props = {
-  item: StockItem | null;
+  item: ItemConferivel | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onValidated: () => void;

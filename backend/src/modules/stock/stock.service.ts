@@ -167,6 +167,11 @@ export class StockService {
     return this.stockTraccar.connectivity(tenantId);
   }
 
+  /** Estoque no mapa: última posição conhecida + telemetria de cada rastreador. */
+  map(tenantId: string) {
+    return this.stockTraccar.mapPoints(tenantId);
+  }
+
   async findAll(tenantId: string, filters: FilterStockDto) {
     const { page, perPage, search, status, operator, assignment } = filters;
     // associatedAt: null → só rastreadores disponíveis (associados saíram do estoque).

@@ -17,8 +17,15 @@ import {
 } from '@/components/ui/dialog';
 import type { StockItem, HinovaLookup } from '@/types/stock';
 
+/**
+ * Só o que o diálogo realmente usa. Aceitar o mínimo (em vez do `StockItem`
+ * inteiro) deixa o mapa do estoque reusar este fluxo sem inventar um objeto
+ * falso só pra satisfazer o tipo.
+ */
+type ItemAssociavel = Pick<StockItem, 'id' | 'imei' | 'line'>;
+
 type Props = {
-  item: StockItem | null;
+  item: ItemAssociavel | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAssociated: () => void;
