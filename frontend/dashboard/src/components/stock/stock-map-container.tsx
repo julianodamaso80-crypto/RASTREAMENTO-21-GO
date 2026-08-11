@@ -288,6 +288,14 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
         {satProvider === 'google' && googleVisible && (
           <GoogleMapsAttribution copyright={googleCopyright} />
         )}
+        {basemap === 'satellite-google' && satProvider === 'google' && !googleVisible && (
+          // Sem isto o operador escolhe "Satélite Google", vê a mesma imagem
+          // Esri de antes e conclui que o botão não funcionou — foi exatamente
+          // o que aconteceu na primeira versão desta tela.
+          <div className="pointer-events-none absolute bottom-8 left-2 z-10 rounded-md bg-background/85 px-2 py-1 text-[11px] text-muted-foreground shadow-md backdrop-blur-md">
+            Aproxime o zoom para a imagem em alta do Google
+          </div>
+        )}
       </div>
     );
   },
