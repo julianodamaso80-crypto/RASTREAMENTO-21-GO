@@ -207,15 +207,9 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
 
         const cor = corDaConexao(ponto);
         const giro = ponto.direcao ?? 0;
-        // Posição não confiável (LBS/antena de celular) vira um círculo vazado
-        // em vez de seta: o operador tem que ver que ali é aproximado.
-        const forma = ponto.gpsConfiavel
-          ? `<svg width="26" height="26" viewBox="0 0 24 24" style="transform:rotate(${giro}deg)">
-               <path d="M12 2 L19 21 L12 17 L5 21 Z" fill="${cor}" stroke="#0f172a" stroke-width="1.2" stroke-linejoin="round"/>
-             </svg>`
-          : `<svg width="22" height="22" viewBox="0 0 24 24">
-               <circle cx="12" cy="12" r="8" fill="none" stroke="${cor}" stroke-width="3" stroke-dasharray="4 3"/>
-             </svg>`;
+        const forma = `<svg width="26" height="26" viewBox="0 0 24 24" style="transform:rotate(${giro}deg)">
+             <path d="M12 2 L19 21 L12 17 L5 21 Z" fill="${cor}" stroke="#0f172a" stroke-width="1.2" stroke-linejoin="round"/>
+           </svg>`;
 
         el.innerHTML = `
           <div style="position:absolute;width:${selecionado ? 42 : 34}px;height:${selecionado ? 42 : 34}px;border-radius:50%;border:2px solid ${cor};background:rgba(15,23,42,0.35);box-shadow:0 2px 8px rgba(0,0,0,0.5);"></div>

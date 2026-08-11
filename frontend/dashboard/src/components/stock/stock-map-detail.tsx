@@ -114,12 +114,6 @@ export function StockMapDetail({ ponto, onClose, onValidar, onAssociar }: Props)
         </Button>
       </div>
 
-      {!ponto.gpsConfiavel && ponto.latitude !== null && (
-        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-400">
-          Posição aproximada, por antena de celular — não é a localização exata.
-        </p>
-      )}
-
       {streetView && (
         <a
           href={streetView}
@@ -163,15 +157,13 @@ export function StockMapDetail({ ponto, onClose, onValidar, onAssociar }: Props)
         <Item
           icone={Zap}
           rotulo="Voltagem"
-          valor={textoVoltagem(ponto.volts, ponto.faixaEnergia)}
+          valor={textoVoltagem(ponto.volts)}
           tom={
             ponto.faixaEnergia === 'ok'
               ? 'ok'
-              : ponto.faixaEnergia === 'cortada'
-                ? 'ruim'
-                : ponto.faixaEnergia === 'baixa' || ponto.faixaEnergia === 'alta'
-                  ? 'atencao'
-                  : 'neutro'
+              : ponto.faixaEnergia === 'baixa' || ponto.faixaEnergia === 'alta'
+                ? 'atencao'
+                : 'neutro'
           }
         />
         <Item

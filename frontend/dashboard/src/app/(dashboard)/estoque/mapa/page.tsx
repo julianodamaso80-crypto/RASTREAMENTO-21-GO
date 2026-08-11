@@ -46,7 +46,7 @@ const REFRESH_MS = 15_000;
 const FOCO_ZOOM = 16;
 const PAINEL_LARGURA = 360;
 
-type Filtro = 'todos' | 'ONLINE' | 'OFFLINE' | 'SEM_GPS';
+type Filtro = 'todos' | 'ONLINE' | 'OFFLINE' | 'SEM_GPS' | 'SLEEP' | 'LIGADOS';
 
 export default function EstoqueMapaPage() {
   const router = useRouter();
@@ -108,18 +108,21 @@ export default function EstoqueMapaPage() {
     }
   }, [imeiInicial, pontos]);
 
+  // Os mesmos cinco contadores da referência.
   const contagem = useMemo(() => {
     let online = 0;
     let offline = 0;
     let semGps = 0;
     let sleep = 0;
+    let ligados = 0;
     for (const p of pontos) {
       if (p.conexao === 'ONLINE') online++;
       else if (p.conexao === 'SLEEP') sleep++;
       else offline++;
-      if (p.conexao === 'ONLINE' && !p.gpsConfiavel) semGps++;
+      if (!p.gpsConfiavel) semGps++;
+      if (p.ignicao === true) ligados++;
     }
-    return { online, offline, semGps, sleep };
+    return { online, offline, semGps, sleep, ligados };
   }, [pontos]);
 
   const lista = useMemo(() => {
@@ -127,9 +130,9 @@ export default function EstoqueMapaPage() {
     return pontos.filter((p) => {
       if (filtro === 'ONLINE' && p.conexao !== 'ONLINE') return false;
       if (filtro === 'OFFLINE' && p.conexao === 'ONLINE') return false;
-      if (filtro === 'SEM_GPS' && !(p.conexao === 'ONLINE' && !p.gpsConfiavel)) {
-        return false;
-      }
+      if (filtro === 'SEM_GPS' && p.gpsConfiavel) return false;
+      if (filtro === 'SLEEP' && p.conexao !== 'SLEEP') return false;
+      if (filtro === 'LIGADOS' && p.ignicao !== true) return false;
       if (!termo) return true;
       return (
         p.imei.toLowerCase().includes(termo) ||
@@ -182,34 +185,41 @@ export default function EstoqueMapaPage() {
             />
           </div>
 
-          <div className="grid grid-cols-4 gap-1 text-center text-[11px]">
-            <FiltroChip
-              ativo={filtro === 'todos'}
-              onClick={() => setFiltro('todos')}
-              rotulo="Todos"
-              valor={pontos.length}
-              cor="text-foreground"
-            />
+          <div className="grid grid-cols-5 gap-1 text-center text-[11px]">
             <FiltroChip
               ativo={filtro === 'ONLINE'}
-              onClick={() => setFiltro('ONLINE')}
+              onClick={() => setFiltro(filtro === 'ONLINE' ? 'todos' : 'ONLINE')}
               rotulo="Conectados"
               valor={contagem.online}
               cor="text-emerald-400"
             />
             <FiltroChip
               ativo={filtro === 'OFFLINE'}
-              onClick={() => setFiltro('OFFLINE')}
+              onClick={() => setFiltro(filtro === 'OFFLINE' ? 'todos' : 'OFFLINE')}
               rotulo="Desconect."
               valor={contagem.offline}
               cor="text-red-400"
             />
             <FiltroChip
               ativo={filtro === 'SEM_GPS'}
-              onClick={() => setFiltro('SEM_GPS')}
+              onClick={() => setFiltro(filtro === 'SEM_GPS' ? 'todos' : 'SEM_GPS')}
               rotulo="Sem GPS"
               valor={contagem.semGps}
-              cor="text-amber-400"
+              cor="text-foreground"
+            />
+            <FiltroChip
+              ativo={filtro === 'SLEEP'}
+              onClick={() => setFiltro(filtro === 'SLEEP' ? 'todos' : 'SLEEP')}
+              rotulo="Sleep"
+              valor={contagem.sleep}
+              cor="text-sky-400"
+            />
+            <FiltroChip
+              ativo={filtro === 'LIGADOS'}
+              onClick={() => setFiltro(filtro === 'LIGADOS' ? 'todos' : 'LIGADOS')}
+              rotulo="Ligados"
+              valor={contagem.ligados}
+              cor="text-emerald-400"
             />
           </div>
         </div>
@@ -379,11 +389,7 @@ function CardEstoque({
             ponto.velocidade === null ? '—' : `${Math.round(ponto.velocidade)} Km/h`
           }
         />
-        <Mini
-          icone={Zap}
-          rotulo="Voltagem"
-          valor={textoVoltagem(ponto.volts, ponto.faixaEnergia)}
-        />
+        <Mini icone={Zap} rotulo="Voltagem" valor={textoVoltagem(ponto.volts)} />
         <Mini
           icone={Satellite}
           rotulo="Satélites"

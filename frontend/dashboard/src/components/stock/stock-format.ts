@@ -63,17 +63,11 @@ export function badgeConexao(conexao: StockConexao): {
 }
 
 /**
- * Voltagem em texto. O parque gt06/J16 não mede tensão — nesse caso mostra o
- * estado da alimentação em vez de fingir um número.
+ * Voltagem no formato da referência: `12.63v`, e `0.00v` quando o equipamento
+ * não manda leitura (é o valor cru que ele reporta).
  */
-export function textoVoltagem(
-  volts: number | null,
-  faixa: StockMapPoint['faixaEnergia'],
-): string {
-  if (volts !== null) return `${volts.toFixed(2).replace('.', ',')} V`;
-  if (faixa === 'sem-leitura') return 'Alimentado';
-  if (faixa === 'cortada') return 'Sem energia';
-  return '—';
+export function textoVoltagem(volts: number | null): string {
+  return `${(volts ?? 0).toFixed(2)}v`;
 }
 
 export function textoIgnicao(ignicao: boolean | null): string {
