@@ -51,10 +51,10 @@ export default function PainelInterno() {
         // Nada sobrevive ao fim da sessão: celular emprestado não reabre o
         // painel de quem usou antes.
         incognito
-        // Segunda barreira além do onShouldStartLoadWithRequest abaixo: esse
-        // callback tem lacunas conhecidas (iframe, target="_blank" no
-        // Android) e a WebView carrega sessão injetada — a checagem precisa
-        // ser dupla.
+        // A lib compila isso como regex de PREFIXO sobre a origem — não barra
+        // `https://trackgo.site.evil.com`, só filtra esquema (bloqueia
+        // file:/intent: etc.). Quem barra host forjado de verdade é o
+        // onShouldStartLoadWithRequest abaixo.
         originWhitelist={[PAINEL_ORIGIN]}
         onMessage={(evento) => {
           if (evento.nativeEvent.data === 'injecao-falhou') {
@@ -77,9 +77,6 @@ export default function PainelInterno() {
             }
             return true;
           }
-          // blob:/data: são download do próprio painel (relatório
-          // exportado), não navegação pra um terceiro — deixa passar.
-          if (req.url.startsWith('blob:') || req.url.startsWith('data:')) return true;
           // Qualquer outro destino (Waze, Google Maps etc.) sai pro
           // navegador/app do sistema — a WebView autenticada nunca renderiza
           // terceiro.

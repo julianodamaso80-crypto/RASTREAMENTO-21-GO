@@ -11,11 +11,16 @@ export default function InternoLayout() {
   const router = useRouter();
   const { token, logout } = useInternalAuth();
   const [liberado, setLiberado] = useState(false);
+  const [aguardando, setAguardando] = useState(false);
   const ultimaAtividade = useRef<number | null>(null);
   const tentativas = useRef(0);
   const emAndamento = useRef(false);
+  // Só vira true quando um unlock foi de fato aprovado — sem ela, sair e
+  // voltar do foco (ex.: Central de Controle) valeria como autorização.
+  const jaAutorizou = useRef(false);
 
   async function sair() {
+    jaAutorizou.current = false;
     await logout();
     router.replace('/login');
   }
@@ -25,6 +30,7 @@ export default function InternoLayout() {
     // desbloquear() de novo com o primeiro prompt ainda pendente.
     if (emAndamento.current) return;
     emAndamento.current = true;
+    setAguardando(true);
     try {
       let r: UnlockResult;
       try {
@@ -36,6 +42,7 @@ export default function InternoLayout() {
       }
 
       if (r === 'granted') {
+        jaAutorizou.current = true;
         tentativas.current = 0;
         ultimaAtividade.current = Date.now();
         // Pode resolver com o app já em segundo plano; sem essa checagem o
@@ -57,6 +64,7 @@ export default function InternoLayout() {
       }
     } finally {
       emAndamento.current = false;
+      setAguardando(false);
     }
   }
 
@@ -75,15 +83,19 @@ export default function InternoLayout() {
       // 'inactive' — o painel com posições em tempo real não pode ficar
       // visível ali, então esconde no 'inactive' também, não só 'background'.
       if (estado === 'background' || estado === 'inactive') {
-        ultimaAtividade.current = Date.now();
+        // Só conta como "atividade" se já houve autorização — senão negar o
+        // Face ID e recolher a Central de Controle liberaria sem prompt.
+        if (jaAutorizou.current) {
+          ultimaAtividade.current = Date.now();
+        }
         setLiberado(false);
         return;
       }
       if (estado === 'active' && !liberado) {
-        if (shouldRelock(ultimaAtividade.current, Date.now())) {
-          desbloquear();
-        } else {
+        if (jaAutorizou.current && !shouldRelock(ultimaAtividade.current, Date.now())) {
           setLiberado(true);
+        } else {
+          desbloquear();
         }
       }
     });
@@ -93,10 +105,14 @@ export default function InternoLayout() {
   if (!liberado) {
     return (
       <View style={styles.gate}>
-        <ActivityIndicator size="large" color={colors.orange} />
+        {aguardando && <ActivityIndicator size="large" color={colors.orange} />}
         <Text style={styles.texto}>Confirme que é você para continuar</Text>
         <View style={styles.acoes}>
-          <TouchableOpacity onPress={desbloquear} style={styles.botao}>
+          <TouchableOpacity
+            onPress={desbloquear}
+            style={[styles.botao, aguardando && styles.botaoDesabilitado]}
+            disabled={aguardando}
+          >
             <Text style={styles.botaoTexto}>Tentar de novo</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={sair} hitSlop={12}>
@@ -126,6 +142,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
+  botaoDesabilitado: { opacity: 0.5 },
   botaoTexto: { color: colors.white, fontSize: 15, fontWeight: '700' },
   sairTexto: { color: colors.orangeSoft, fontSize: 14, fontWeight: '600' },
 });
