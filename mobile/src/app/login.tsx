@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import { Ionicons } from '@expo/vector-icons';
 import { BrandLockup } from '@/components/brand-logo';
 import { AppApi } from '@/lib/api';
 import { InternalApi } from '@/lib/internal-api';
@@ -32,6 +33,7 @@ export default function LoginScreen() {
   const [identificador, setIdentificador] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [senhaVisivel, setSenhaVisivel] = useState(false);
 
   const destino = resolveLoginTarget(identificador);
   const canSubmit = destino !== 'invalid' && password.length >= 6;
@@ -136,16 +138,31 @@ export default function LoginScreen() {
 
           <View style={styles.field}>
             <Text style={styles.label}>Senha</Text>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Sua senha"
-              placeholderTextColor={colors.textFaint}
-              secureTextEntry
-              style={styles.input}
-              autoComplete="password"
-              textContentType="password"
-            />
+            <View style={styles.passwordWrap}>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Sua senha"
+                placeholderTextColor={colors.textFaint}
+                secureTextEntry={!senhaVisivel}
+                style={[styles.input, styles.passwordInput]}
+                autoComplete="password"
+                textContentType="password"
+              />
+              <TouchableOpacity
+                onPress={() => setSenhaVisivel((v) => !v)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={styles.eyeButton}
+                accessibilityRole="button"
+                accessibilityLabel={senhaVisivel ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                <Ionicons
+                  name={senhaVisivel ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color={colors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -206,6 +223,17 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
+  },
+  passwordWrap: { justifyContent: 'center' },
+  // Espaço reservado à direita pra senha longa nunca passar por baixo do olhinho.
+  passwordInput: { paddingRight: 48 },
+  eyeButton: {
+    position: 'absolute',
+    right: 4,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
   },
   button: {
     backgroundColor: colors.orange,
