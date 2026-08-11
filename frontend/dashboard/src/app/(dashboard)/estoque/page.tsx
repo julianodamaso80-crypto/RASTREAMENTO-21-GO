@@ -477,10 +477,10 @@ export default function EstoquePage() {
                           size="sm"
                           variant="outline"
                           className="h-8"
-                          onClick={() => openCheck(item)}
+                          onClick={() => abrirNoMapa(item)}
                         >
-                          <SignalHigh className="h-3.5 w-3.5 mr-1" />
-                          Validar
+                          <MapPin className="h-3.5 w-3.5 mr-1" />
+                          Abrir no mapa
                         </Button>
                         <Button
                           size="sm"
