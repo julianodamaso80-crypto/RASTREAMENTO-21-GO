@@ -15,12 +15,11 @@ export default function InternoLayout() {
   const ultimaAtividade = useRef<number | null>(null);
   const tentativas = useRef(0);
   const emAndamento = useRef(false);
-  // Só vira true quando um unlock foi de fato aprovado — sem ela, sair e
-  // voltar do foco (ex.: Central de Controle) valeria como autorização.
-  const jaAutorizou = useRef(false);
 
   async function sair() {
-    jaAutorizou.current = false;
+    // logout() já zera jaAutorizou no store — fonte única de verdade,
+    // também usada pelo sair() do painel. Qualquer encerramento de sessão
+    // interna passa por aqui.
     await logout();
     router.replace('/login');
   }
@@ -42,7 +41,9 @@ export default function InternoLayout() {
       }
 
       if (r === 'granted') {
-        jaAutorizou.current = true;
+        // Só vira true quando um unlock foi de fato aprovado — sem ela, sair e
+        // voltar do foco (ex.: Central de Controle) valeria como autorização.
+        useInternalAuth.getState().marcarAutorizado();
         tentativas.current = 0;
         ultimaAtividade.current = Date.now();
         // Pode resolver com o app já em segundo plano; sem essa checagem o
@@ -85,14 +86,19 @@ export default function InternoLayout() {
       if (estado === 'background' || estado === 'inactive') {
         // Só conta como "atividade" se já houve autorização — senão negar o
         // Face ID e recolher a Central de Controle liberaria sem prompt.
-        if (jaAutorizou.current) {
+        // Lido direto do store (não um ref local) pra sempre refletir o
+        // logout mais recente, venha ele deste gate ou do painel.
+        if (useInternalAuth.getState().jaAutorizou) {
           ultimaAtividade.current = Date.now();
         }
         setLiberado(false);
         return;
       }
       if (estado === 'active' && !liberado) {
-        if (jaAutorizou.current && !shouldRelock(ultimaAtividade.current, Date.now())) {
+        if (
+          useInternalAuth.getState().jaAutorizou &&
+          !shouldRelock(ultimaAtividade.current, Date.now())
+        ) {
           setLiberado(true);
         } else {
           desbloquear();

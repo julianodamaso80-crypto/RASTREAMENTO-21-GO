@@ -115,7 +115,7 @@ export default function LoginScreen() {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="Seu CPF"
+              placeholder="Sua senha"
               placeholderTextColor={colors.textFaint}
               secureTextEntry
               style={styles.input}

@@ -21,8 +21,17 @@ interface InternalAuthState {
   token: string | null;
   user: InternalUser | null;
   hydrated: boolean;
+  /**
+   * Biometria já aprovada nesta sessão. Vive no store — não num ref do
+   * gate biométrico — porque mais de uma tela pode encerrar a sessão
+   * interna (o próprio gate e o painel) e as duas precisam derrubar essa
+   * flag pela mesma porta: `logout()`. Um ref local em cada tela criaria
+   * duas fontes de verdade independentes.
+   */
+  jaAutorizou: boolean;
   hydrate: () => Promise<void>;
   signIn: (token: string, user: InternalUser) => Promise<void>;
+  marcarAutorizado: () => void;
   logout: () => Promise<void>;
 }
 
@@ -39,6 +48,7 @@ export const useInternalAuth = create<InternalAuthState>((set) => ({
   token: null,
   user: null,
   hydrated: false,
+  jaAutorizou: false,
 
   hydrate: async () => {
     // Mesmo failsafe do store do associado: SecureStore travado no iPhone não
@@ -72,14 +82,20 @@ export const useInternalAuth = create<InternalAuthState>((set) => ({
       SecureStore.setItemAsync(INTERNAL_TOKEN_KEY, token),
       SecureStore.setItemAsync(INTERNAL_USER_KEY, JSON.stringify(user)),
     ]);
-    set({ token, user });
+    // Sessão nova começa sem biometria aprovada — o gate decide isso, nunca o login.
+    set({ token, user, jaAutorizou: false });
   },
+
+  marcarAutorizado: () => set({ jaAutorizou: true }),
 
   logout: async () => {
     await Promise.all([
       SecureStore.deleteItemAsync(INTERNAL_TOKEN_KEY),
       SecureStore.deleteItemAsync(INTERNAL_USER_KEY),
     ]);
-    set({ token: null, user: null });
+    // Qualquer encerramento de sessão (gate ou painel) passa por aqui — é o
+    // único lugar que precisa zerar jaAutorizou pra próxima entrada exigir
+    // biometria de novo.
+    set({ token: null, user: null, jaAutorizou: false });
   },
 }));

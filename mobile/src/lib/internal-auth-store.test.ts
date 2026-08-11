@@ -28,7 +28,7 @@ describe('useInternalAuth', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     // Store é singleton do zustand — precisa voltar ao estado inicial a cada teste.
-    useInternalAuth.setState({ token: null, user: null, hydrated: false });
+    useInternalAuth.setState({ token: null, user: null, hydrated: false, jaAutorizou: false });
   });
 
   describe('signIn', () => {
@@ -88,6 +88,24 @@ describe('useInternalAuth', () => {
       expect(estado.token).toBe('token-interno');
       expect(estado.user).toEqual(usuarioInterno);
     });
+
+    it('começa com jaAutorizou zerado — biometria nunca é herdada de sessão anterior', async () => {
+      secureStoreMock.deleteItemAsync.mockResolvedValue();
+      secureStoreMock.setItemAsync.mockResolvedValue();
+      useInternalAuth.setState({ jaAutorizou: true });
+
+      await useInternalAuth.getState().signIn('token-interno', usuarioInterno);
+
+      expect(useInternalAuth.getState().jaAutorizou).toBe(false);
+    });
+  });
+
+  describe('marcarAutorizado', () => {
+    it('liga jaAutorizou', () => {
+      useInternalAuth.getState().marcarAutorizado();
+
+      expect(useInternalAuth.getState().jaAutorizou).toBe(true);
+    });
   });
 
   describe('logout', () => {
@@ -103,6 +121,20 @@ describe('useInternalAuth', () => {
       const estado = useInternalAuth.getState();
       expect(estado.token).toBeNull();
       expect(estado.user).toBeNull();
+    });
+
+    it('zera jaAutorizou — é a porta única que o gate biométrico e o painel usam pra encerrar sessão', async () => {
+      secureStoreMock.deleteItemAsync.mockResolvedValue();
+      useInternalAuth.setState({
+        token: 'token-interno',
+        user: usuarioInterno,
+        hydrated: true,
+        jaAutorizou: true,
+      });
+
+      await useInternalAuth.getState().logout();
+
+      expect(useInternalAuth.getState().jaAutorizou).toBe(false);
     });
   });
 

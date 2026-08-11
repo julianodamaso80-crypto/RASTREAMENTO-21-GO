@@ -59,7 +59,9 @@ export default function RootLayout() {
 
     // Daqui pra baixo é o mundo do associado — regras idênticas às de hoje.
     if (noInterno) {
-      router.replace('/(tabs)');
+      // Deep link pra /interno/* não pode furar a troca de senha obrigatória
+      // passando por /(tabs) antes — manda direto pro destino final certo.
+      router.replace(mustChangePassword ? '/change-password' : '/(tabs)');
       return;
     }
     if (naRecuperacao) {
