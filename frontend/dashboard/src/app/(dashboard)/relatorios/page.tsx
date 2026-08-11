@@ -17,6 +17,13 @@ const RouteMap = dynamic(
 );
 
 export default function ReportsPage() {
+  // Quem chega de "Histórico de viagens" já traz o veículo escolhido. Lido do
+  // location em vez de useSearchParams pra não exigir Suspense na rota.
+  const [initialVehicleId] = useState(() =>
+    typeof window === 'undefined'
+      ? ''
+      : (new URLSearchParams(window.location.search).get('veiculo') ?? ''),
+  );
   const [loading, setLoading] = useState(false);
   const [positions, setPositions] = useState<TraccarPosition[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -72,6 +79,7 @@ export default function ReportsPage() {
           onGenerate={handleGenerate}
           loading={loading}
           selectedVehicle={selectedVehicle}
+          initialVehicleId={initialVehicleId}
         />
 
         {selectedVehicle && (

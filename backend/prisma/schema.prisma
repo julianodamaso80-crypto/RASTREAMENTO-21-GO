@@ -425,6 +425,19 @@ model Vehicle {
   associateId     String?       @map("associate_id") @db.Uuid
   hinovaCode      String?       @map("hinova_code")
   lastSync        DateTime?     @map("last_sync")
+
+  /// Situação financeira espelhada do SGA: ADIMPLENTE | INADIMPLENTE. Null =
+  /// nunca consultada. Vem do lookup por placa (no vínculo e no cron diário) ou
+  /// de override manual do operador.
+  financialStatus   String?   @map("financial_status")
+  financialStatusAt DateTime? @map("financial_status_at")
+  /// Descrição da situação do veículo no SGA (ATIVO, CANCELADO, SUBSTITUIDO...).
+  /// É o que o card estampa ao lado do código — o `status` acima é o nosso.
+  sgaStatusLabel    String?   @map("sga_status_label")
+  /// Corta o acesso do associado a ESTE ativo no app, sem mexer na senha nem
+  /// nos outros veículos dele.
+  appAccessBlocked  Boolean   @default(false) @map("app_access_blocked")
+
   deletedAt       DateTime?     @map("deleted_at")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")

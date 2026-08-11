@@ -14,11 +14,18 @@ interface ReportFiltersProps {
   onGenerate: (vehicle: VehicleWithTracking, from: string, to: string) => void;
   loading: boolean;
   selectedVehicle: VehicleWithTracking | null;
+  /** Veículo já escolhido na origem — quem chega de "Histórico de viagens". */
+  initialVehicleId?: string;
 }
 
-export function ReportFilters({ onGenerate, loading, selectedVehicle }: ReportFiltersProps) {
+export function ReportFilters({
+  onGenerate,
+  loading,
+  selectedVehicle,
+  initialVehicleId,
+}: ReportFiltersProps) {
   const { vehicles } = useTracking();
-  const [vehicleId, setVehicleId] = useState('');
+  const [vehicleId, setVehicleId] = useState(initialVehicleId ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [search, setSearch] = useState('');

@@ -2,10 +2,11 @@
 
 import { useRef, useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { ChevronLeft, X } from 'lucide-react';
+import { ChevronLeft, List, X } from 'lucide-react';
 import { useTracking } from '@/contexts/tracking-context';
 import { VehicleSidebar } from '@/components/vehicles/vehicle-sidebar';
 import { VehicleDetailPanel } from '@/components/vehicles/vehicle-detail-panel';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { STATUS_COLORS } from '@/lib/constants';
 import type { MapContainerRef } from '@/components/map/map-container';
 
@@ -28,8 +29,26 @@ export default function MapaPage() {
   // Painel nasce RECOLHIDO: a prioridade é ver o máximo do mapa. Quem quiser
   // informação extra abre pela aba lateral.
   const [panelOpen, setPanelOpen] = useState(false);
+  // Placa vinda de "Abrir no mapa" em outra tela. Lida do location em vez de
+  // useSearchParams pra não exigir Suspense na rota.
+  const [placaInicial] = useState(() =>
+    typeof window === 'undefined'
+      ? ''
+      : (new URLSearchParams(window.location.search).get('placa') ?? ''),
+  );
+  const focouInicial = useRef(false);
+  // Abaixo de lg a VehicleSidebar (lista pra selecionar veículo) some da
+  // tela — sem esta gaveta, no celular só sobra tocar em pins minúsculos no
+  // mapa, e foi exatamente isso que ficou impossível de usar.
+  const [vehicleListOpen, setVehicleListOpen] = useState(false);
 
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
+
+  // Selecionou um veículo na lista (mobile) → fecha a gaveta pra revelar o
+  // mapa já centrado nele, sem precisar de um segundo toque no X.
+  useEffect(() => {
+    if (selectedVehicleId) setVehicleListOpen(false);
+  }, [selectedVehicleId]);
 
   const handleVehicleClick = useCallback(
     (vehicleId: string) => {
@@ -46,6 +65,19 @@ export default function MapaPage() {
     },
     [selectVehicle, vehicles, panelOpen],
   );
+
+  // A lista de veículos chega assíncrona, então a seleção inicial só pode
+  // acontecer depois dela. `focouInicial` garante que isso rode uma vez só —
+  // senão o mapa voltaria pro veículo da URL a cada atualização do WebSocket.
+  useEffect(() => {
+    if (focouInicial.current || !placaInicial || vehicles.length === 0) return;
+    const alvo = vehicles.find(
+      (v) => v.plate?.toUpperCase() === placaInicial.toUpperCase(),
+    );
+    if (!alvo) return;
+    focouInicial.current = true;
+    selectVehicle(alvo.id);
+  }, [placaInicial, vehicles, selectVehicle]);
 
   // Quando seleciona veiculo, da flyTo. Depois disso, segue o veiculo em
   // tempo real: a cada mudanca em vehicles (WS updates), faz easeTo suave
@@ -76,6 +108,20 @@ export default function MapaPage() {
           vehicles={filteredVehicles}
           onVehicleClick={handleVehicleClick}
         />
+
+        {/* Abaixo de lg a VehicleSidebar ao lado do mapa desaparece — este
+            botão + gaveta é a única forma de buscar/listar veículos no
+            celular, já que tocar em pins isolados no mapa não basta. */}
+        <button
+          type="button"
+          onClick={() => setVehicleListOpen(true)}
+          aria-label="Listar veículos"
+          title="Listar veículos"
+          className="lg:hidden absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-full glass-light border border-border/40 px-4 py-2.5 shadow-lg text-sm font-medium hover:bg-muted/40 transition-colors"
+        >
+          <List className="h-4 w-4" />
+          Veículos
+        </button>
 
         {/* Aba pra abrir os detalhes — só aparece com veículo selecionado
             e painel recolhido */}
@@ -116,6 +162,15 @@ export default function MapaPage() {
           </div>
         )}
       </div>
+
+      {/* Gaveta mobile com a mesma lista/busca/filtros da VehicleSidebar de
+          desktop — reaproveitada como está, só muda o container. */}
+      <Sheet open={vehicleListOpen} onOpenChange={setVehicleListOpen}>
+        <SheetContent side="left" className="w-[85vw] max-w-sm p-0 lg:hidden">
+          <SheetTitle className="sr-only">Veículos</SheetTitle>
+          <VehicleSidebar />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

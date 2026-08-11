@@ -12,6 +12,10 @@ import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
 import { AssignStockDto } from './dto/assign-stock.dto';
 import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
+import {
+  normalizeFinancialStatus,
+  normalizeSgaStatusLabel,
+} from '../hinova/sga-status';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
@@ -350,6 +354,15 @@ export class StockService {
           OR: [{ plate: placa }, { uniqueId: item.imei }],
         },
       });
+      // A situação no SGA sai de graça aqui: o lookup por placa já foi feito
+      // pra validar o vínculo. Sem isto, o ativo nasceria sem situação e só
+      // ganharia uma no próximo cron.
+      const situacaoSga = {
+        financialStatus: normalizeFinancialStatus(lookup.situacao.financeira),
+        financialStatusAt: new Date(),
+        sgaStatusLabel: normalizeSgaStatusLabel(lookup.situacao.descricao),
+      };
+
       if (vehicle) {
         vehicle = await tx.vehicle.update({
           where: { id: vehicle.id },
@@ -361,6 +374,7 @@ export class StockService {
             associateId: associate.id,
             hinovaCode: lookup.veiculo.codigoVeiculo ?? vehicle.hinovaCode,
             lastSync: new Date(),
+            ...situacaoSga,
           },
         });
       } else {
@@ -375,6 +389,7 @@ export class StockService {
             associateId: associate.id,
             hinovaCode: lookup.veiculo.codigoVeiculo,
             lastSync: new Date(),
+            ...situacaoSga,
           },
         });
       }

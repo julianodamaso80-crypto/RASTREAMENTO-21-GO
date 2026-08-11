@@ -23,6 +23,7 @@ import type {
   StockValidateResult,
   StockMapResult,
 } from '@/types/stock';
+import type { ClientAsset, AssetsSummary } from '@/types/assets';
 import type {
   Technician,
   TechnicianAssignment,
@@ -675,6 +676,44 @@ export const hinovaApi = {
 };
 
 export const clientsApi = {
+  /** Lista paginada de ativos — um item por veículo com cliente vinculado. */
+  getAssets: async (params: {
+    search?: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginatedResponse<ClientAsset>> => {
+    const res = await api.get<PaginatedResponse<ClientAsset>>('/clients/assets', {
+      params: {
+        ...(params.search ? { search: params.search } : {}),
+        page: params.page ?? 1,
+        perPage: params.perPage ?? 20,
+      },
+    });
+    return res.data;
+  },
+  getAssetsSummary: async (weekOffset = 0): Promise<AssetsSummary> => {
+    const res = await api.get<ApiResponse<AssetsSummary>>(
+      '/clients/assets/summary',
+      { params: { weekOffset } },
+    );
+    return res.data.data;
+  },
+  /** Corta ou devolve o acesso do cliente a ESTE ativo no app. */
+  setAppAccess: async (vehicleId: string, blocked: boolean): Promise<void> => {
+    await api.patch(`/clients/assets/${vehicleId}/app-access`, { blocked });
+  },
+  setFinancialStatus: async (
+    vehicleId: string,
+    status: 'ADIMPLENTE' | 'INADIMPLENTE',
+  ): Promise<void> => {
+    await api.patch(`/clients/assets/${vehicleId}/financial-status`, { status });
+  },
+  setTechnician: async (
+    vehicleId: string,
+    technicianId: string,
+  ): Promise<void> => {
+    await api.patch(`/clients/assets/${vehicleId}/technician`, { technicianId });
+  },
   getActive: async (search?: string): Promise<ActiveClient[]> => {
     const res = await api.get<ApiResponse<ActiveClient[]>>('/clients', {
       params: search ? { search } : undefined,
