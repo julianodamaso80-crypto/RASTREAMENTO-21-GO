@@ -910,3 +910,21 @@ model AuditLog {
   @@index([action, createdAt(sort: Desc)])
   @@map("audit_logs")
 }
+
+/// Endereço de uma coordenada, resolvido sob demanda e guardado pra sempre.
+///
+/// A coordenada entra arredondada a 4 casas (~11 m): rastreador parado na
+/// prateleira resolve uma vez só, e o Nominatim (1 req/s por política do OSM)
+/// não vira gargalo da tela. Sem `tenantId` de propósito — rua é rua, o dado
+/// não pertence a ninguém e o cache aproveita entre empresas.
+model GeoAddress {
+  id        String   @id @default(uuid()) @db.Uuid
+  latKey    Float    @map("lat_key")
+  lngKey    Float    @map("lng_key")
+  address   String
+  provider  String   @default("nominatim")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([latKey, lngKey])
+  @@map("geo_addresses")
+}

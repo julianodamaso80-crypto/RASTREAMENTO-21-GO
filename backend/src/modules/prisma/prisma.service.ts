@@ -201,6 +201,11 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get routeStop() {
     return this.base.routeStop;
   }
+  // Cache de geocodificação reversa: coordenada → endereço. Sem tenant e sem
+  // soft delete — rua é rua, o dado não pertence a ninguém.
+  get geoAddress() {
+    return this.base.geoAddress;
+  }
 
   // Raw queries — sempre pelo base (extension não afeta raw)
   $queryRaw<T = unknown>(

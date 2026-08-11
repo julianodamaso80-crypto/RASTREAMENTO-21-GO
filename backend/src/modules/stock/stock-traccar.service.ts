@@ -14,6 +14,7 @@ import {
   extrairVolts,
   type FaixaEnergia,
 } from '../traccar/device-health.service';
+import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 
 /**
  * Mantém o estoque inteiro cadastrado no servidor GPS.
@@ -47,6 +48,7 @@ export class StockTraccarService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly traccar: TraccarService,
+    private readonly geocode: ReverseGeocodeService,
   ) {}
 
   /**
@@ -311,7 +313,47 @@ export class StockTraccarService {
       };
     });
 
+    await this.preencherEnderecos(pontos);
+
     return { indisponivel: false, pontos };
+  }
+
+  /**
+   * Coloca o endereço em quem só tem coordenada.
+   *
+   * O Traccar entrega `address` vazio (o geocoder dele nunca gravou nada), e
+   * latitude/longitude não respondem "onde o rastreador está" pra quem vai
+   * instalar. O que já foi resolvido antes entra na hora; o resto é resolvido em
+   * segundo plano e aparece na próxima atualização da tela (15s).
+   */
+  private async preencherEnderecos(pontos: StockMapPoint[]): Promise<void> {
+    const semEndereco = pontos.filter(
+      (p) => !p.endereco && p.latitude !== null && p.longitude !== null,
+    );
+    if (semEndereco.length === 0) return;
+
+    try {
+      const enderecos = await this.geocode.lookupCached(
+        semEndereco.map((p) => ({
+          latitude: p.latitude as number,
+          longitude: p.longitude as number,
+        })),
+      );
+      for (const ponto of semEndereco) {
+        const chave = this.geocode.chave({
+          latitude: ponto.latitude as number,
+          longitude: ponto.longitude as number,
+        });
+        if (chave) ponto.endereco = enderecos.get(chave) ?? null;
+      }
+    } catch (erro) {
+      // Endereço é conforto, não requisito: a tela continua com a posição.
+      this.logger.warn(
+        `Não consegui resolver endereços do estoque: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+    }
   }
 
   /**
