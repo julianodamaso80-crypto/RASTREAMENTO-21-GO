@@ -50,7 +50,7 @@ export default function CondutoresPage() {
     : 0;
 
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4 md:p-6">
       <div className="max-w-5xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -77,7 +77,10 @@ export default function CondutoresPage() {
 
         {!loading && !error && rows.length > 0 && (
           <>
-            <div className="grid grid-cols-4 gap-3">
+            {/* No celular, 4 colunas fixas espremiam o número dentro do card com
+                overflow-hidden (shadcn Card), cortando o valor. 2 colunas até md
+                dá espaço; volta ao layout de sempre a partir daí. */}
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <Summary label="Veículos" value={String(rows.length)} />
               <Summary label="Score médio" value={String(avg)} accent={scoreColor(avg)} />
               <Summary
@@ -122,7 +125,9 @@ export default function CondutoresPage() {
                           />
                         </div>
                       </div>
-                      <div className="mt-2 grid grid-cols-6 gap-2 text-[10px]">
+                      {/* Mesma lógica: 6 colunas em ~38px cada cortava rótulos como
+                          "Consist." dentro do card com overflow-hidden. */}
+                      <div className="mt-2 grid grid-cols-3 gap-1.5 text-[10px] md:grid-cols-6 md:gap-2">
                         <BreakdownCell icon={<Gauge className="h-3 w-3" />} label="Vel" value={r.breakdown.speed} />
                         <BreakdownCell
                           icon={<AlertTriangle className="h-3 w-3" />}

@@ -62,9 +62,12 @@ export default function GeofencingPage() {
   );
 
   return (
-    <div className="flex h-full">
+    // No celular a barra lateral de 320px sozinha já toma a tela inteira e
+    // espreme o mapa a nada — empilha lista sobre mapa abaixo de md, volta a
+    // ser lado a lado (largura e bordas idênticas a antes) do md pra cima.
+    <div className="flex h-full flex-col md:flex-row">
       {/* Lista lateral */}
-      <div className="w-[320px] shrink-0 border-r border-border/30 flex flex-col glass-light">
+      <div className="w-full shrink-0 max-h-[40vh] border-b border-border/30 flex flex-col glass-light md:h-full md:w-[320px] md:max-h-none md:border-b-0 md:border-r">
         <div className="flex items-center justify-between p-3 border-b border-border/30">
           <h2 className="font-semibold text-sm">Cercas Geográficas</h2>
           <Button
@@ -94,7 +97,7 @@ export default function GeofencingPage() {
       </div>
 
       {/* Mapa */}
-      <div className="flex-1">
+      <div className="flex-1 min-h-0">
         <GeofenceMap geofences={geofences} selectedId={selectedId} />
       </div>
 

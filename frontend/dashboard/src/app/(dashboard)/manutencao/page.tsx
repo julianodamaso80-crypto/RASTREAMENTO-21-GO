@@ -78,7 +78,9 @@ export default function ManutencaoPage() {
 
         {!loading && !error && (
           <>
-            <div className="grid grid-cols-4 gap-3">
+            {/* grid-cols-4 fixo espreme demais no celular; vira rolagem
+                horizontal compacta abaixo de md, grid normal do md pra cima. */}
+            <div className="flex gap-2 overflow-x-auto pb-0.5 md:grid md:grid-cols-4 md:gap-3 md:overflow-visible md:pb-0">
               <SummaryCard label="Vencidas" count={grouped.overdue.length} accent="text-red-500" />
               <SummaryCard label="No prazo" count={grouped.due.length} accent="text-orange-500" />
               <SummaryCard label="Próximas" count={grouped.upcoming.length} accent="text-amber-500" />
@@ -105,9 +107,9 @@ export default function ManutencaoPage() {
                     {rows.map((p) => (
                       <div
                         key={p.id}
-                        className="flex items-center justify-between border rounded-md p-3 text-sm"
+                        className="flex flex-col gap-2 border rounded-md p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
                       >
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="font-medium">{p.name}</div>
                           <div className="text-xs text-muted-foreground">
                             {p.vehicle?.plate ?? '—'} ·{' '}
@@ -116,18 +118,23 @@ export default function ManutencaoPage() {
                             {p.intervalMonths ? ` · ${p.intervalMonths} meses` : ''}
                           </div>
                         </div>
-                        <Badge variant="outline" className={SEVERITY_COLOR[sev]}>
-                          {SEVERITY_LABEL[sev]}
-                        </Badge>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="ml-3 gap-1"
-                          onClick={() => handleMarkDone(p.id)}
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Marcar feito
-                        </Button>
+                        {/* badge + botão agrupados: no celular ficam numa linha
+                            abaixo do texto, do sm pra cima voltam a ficar coladas
+                            ao texto (mesmo espaçamento de antes, via gap-3). */}
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className={SEVERITY_COLOR[sev]}>
+                            {SEVERITY_LABEL[sev]}
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => handleMarkDone(p.id)}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Marcar feito
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </CardContent>
@@ -176,7 +183,9 @@ export default function ManutencaoPage() {
 
 function SummaryCard({ label, count, accent }: { label: string; count: number; accent: string }) {
   return (
-    <Card>
+    // Largura fixa só existe dentro da faixa de rolagem do celular; do md pra
+    // cima o grid volta a controlar a largura como sempre foi (w-auto).
+    <Card className="w-[110px] shrink-0 md:w-auto md:shrink">
       <CardContent className="pt-4">
         <div className="text-xs text-muted-foreground">{label}</div>
         <div className={`text-2xl font-semibold tabular-nums ${accent}`}>{count}</div>

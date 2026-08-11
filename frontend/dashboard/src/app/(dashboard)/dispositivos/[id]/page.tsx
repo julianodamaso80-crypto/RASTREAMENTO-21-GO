@@ -116,21 +116,23 @@ export default function DeviceDetailPage() {
 
   return (
     <div className="flex flex-col h-full p-4 md:p-6 gap-4 overflow-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3">
+      {/* Header — flex-wrap + truncate: status "Aguardando Instalação" +
+          IMEI de 15 dígitos não cabem numa linha só em ~375px; sem isso o
+          badge saía da tela em vez de descer pra segunda linha. */}
+      <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon-sm" onClick={() => router.push('/dispositivos')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-bold flex items-center gap-2">
-            <Radio className="h-5 w-5 text-emerald-400" />
-            {device.imei}
+            <Radio className="h-5 w-5 text-emerald-400 shrink-0" />
+            <span className="truncate">{device.imei}</span>
           </h1>
           <p className="text-sm text-muted-foreground">
             {DEVICE_MODEL_LABELS[device.model]}{device.brand ? ` • ${device.brand}` : ''}
           </p>
         </div>
-        <Badge className={cn('ml-auto', DEVICE_STATUS_COLORS[device.status])}>
+        <Badge className={cn('ml-auto shrink-0', DEVICE_STATUS_COLORS[device.status])}>
           {DEVICE_STATUS_LABELS[device.status]}
         </Badge>
       </div>
@@ -422,15 +424,18 @@ function InfoRow({
   label: string; value: string; mono?: boolean; copyable?: boolean; onCopy?: (v: string) => void; icon?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-muted-foreground flex items-center gap-1.5">
+    // No celular empilha (label em cima, valor embaixo) pra "Notas" ou nome
+    // de técnico longos não estourarem a largura do card; do sm pra cima
+    // volta a ser uma linha só, igual sempre foi.
+    <div className="flex flex-col gap-0.5 py-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+      <span className="text-muted-foreground flex items-center gap-1.5 shrink-0">
         {icon}
         {label}
       </span>
       <span className={cn('flex items-center gap-1', mono && 'font-mono text-xs')}>
-        {value}
+        <span className="min-w-0 break-words">{value}</span>
         {copyable && onCopy && (
-          <button onClick={() => onCopy(value)} className="text-muted-foreground hover:text-emerald-400 transition-colors">
+          <button onClick={() => onCopy(value)} className="shrink-0 text-muted-foreground hover:text-emerald-400 transition-colors">
             <Copy className="h-3 w-3" />
           </button>
         )}

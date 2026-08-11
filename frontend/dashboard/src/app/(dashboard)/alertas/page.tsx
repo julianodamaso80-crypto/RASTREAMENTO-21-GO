@@ -11,9 +11,11 @@ export default function AlertsPage() {
   const { alerts, unreadCount, markAlertRead, markAllAlertsRead } = useTracking();
 
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4 md:p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        {/* flex-wrap: no celular o botão desce pra linha de baixo em vez de
+            espremer contra o título ou sair da tela. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <div>
             <h1 className="text-2xl font-bold">Alertas</h1>
             <p className="text-sm text-muted-foreground mt-1">
@@ -49,7 +51,9 @@ export default function AlertsPage() {
                   style={{ backgroundColor: ALERT_TYPE_COLORS[alert.type] }}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  {/* flex-wrap: badge + placa + marca/modelo cabem justos no
+                      celular; sem isso o card estourava a largura da tela. */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
                     <Badge
                       variant="outline"
                       className="text-[10px]"

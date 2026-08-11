@@ -65,7 +65,10 @@ export default function EtiquetasBlePage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+      {/* No celular o título + badge + botão não cabem numa linha só (título
+          já passa de 170px, badge+botão passam de 200px); empilha abaixo de
+          sm, volta a ser uma linha só do sm pra cima como sempre foi. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Tag className="h-6 w-6 text-brand-orange-500" />

@@ -257,29 +257,31 @@ export default function EstoquePage() {
         </Button>
       </div>
 
-      {/* Conectividade no servidor GPS */}
+      {/* Conectividade no servidor GPS — no celular vira faixa com rolagem
+          horizontal e chips compactos: informação de relance sem empurrar a
+          tabela pra fora da tela. Do md pra cima, tamanho normal de sempre. */}
       {conn && !conn.indisponivel && (
-        <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
+          <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 md:gap-2 md:px-3 md:py-2">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="text-xs text-muted-foreground">Conectados</span>
-            <span className="text-lg font-bold text-emerald-400">{conn.conectados}</span>
+            <span className="text-[10px] text-muted-foreground md:text-xs">Conectados</span>
+            <span className="text-sm font-bold text-emerald-400 md:text-lg">{conn.conectados}</span>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+          <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 md:gap-2 md:px-3 md:py-2">
             <span className="h-2 w-2 rounded-full bg-red-400" />
-            <span className="text-xs text-muted-foreground">Desconectados</span>
-            <span className="text-lg font-bold text-red-400">{conn.desconectados}</span>
+            <span className="text-[10px] text-muted-foreground md:text-xs">Desconectados</span>
+            <span className="text-sm font-bold text-red-400 md:text-lg">{conn.desconectados}</span>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+          <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 md:gap-2 md:px-3 md:py-2">
             <span className="h-2 w-2 rounded-full bg-amber-400" />
-            <span className="text-xs text-muted-foreground">Sem sinal GPS</span>
-            <span className="text-lg font-bold text-amber-400">{conn.semGps}</span>
+            <span className="text-[10px] text-muted-foreground md:text-xs">Sem sinal GPS</span>
+            <span className="text-sm font-bold text-amber-400 md:text-lg">{conn.semGps}</span>
           </div>
           {conn.semCadastro > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
               <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
-              <span className="text-xs text-muted-foreground">Entrando no servidor GPS</span>
-              <span className="text-lg font-bold">{conn.semCadastro}</span>
+              <span className="text-[10px] text-muted-foreground md:text-xs">Entrando no servidor GPS</span>
+              <span className="text-sm font-bold md:text-lg">{conn.semCadastro}</span>
             </div>
           )}
         </div>
@@ -293,20 +295,20 @@ export default function EstoquePage() {
 
       {/* Stats */}
       {stats && (
-        <div className="flex flex-wrap gap-2">
-          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
-            <span className="text-xs text-muted-foreground">Total</span>
-            <span className="text-lg font-bold">{stats.total}</span>
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
+          <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
+            <span className="text-[10px] text-muted-foreground md:text-xs">Total</span>
+            <span className="text-sm font-bold md:text-lg">{stats.total}</span>
           </div>
           {stats.byStatus.map((s) => (
             <div
               key={s.status}
-              className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2"
             >
-              <Badge className={cn('text-xs border', statusColor(s.status))}>
+              <Badge className={cn('text-[10px] border md:text-xs', statusColor(s.status))}>
                 {s.status}
               </Badge>
-              <span className="text-lg font-bold">{s.count}</span>
+              <span className="text-sm font-bold md:text-lg">{s.count}</span>
             </div>
           ))}
         </div>

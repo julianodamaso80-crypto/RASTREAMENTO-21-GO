@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -188,6 +188,15 @@ function ProPromo() {
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Fecha o drawer mobile sempre que a rota muda — cobre clique em Link,
+  // navegação por voltar/avançar do navegador e qualquer outra forma de
+  // navegação, não só o onClick direto no item do menu.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
     <>
@@ -216,7 +225,7 @@ export function Sidebar() {
       </aside>
 
       {/* Mobile drawer */}
-      <Sheet>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetTrigger className="md:hidden fixed top-3 left-3 z-50 p-2 rounded-md bg-[#293c82] text-slate-100 hover:bg-[#1f2d63] transition-colors">
           <Menu className="h-5 w-5" />
         </SheetTrigger>
