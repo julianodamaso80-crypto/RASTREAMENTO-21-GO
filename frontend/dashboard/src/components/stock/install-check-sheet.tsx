@@ -197,6 +197,10 @@ export function InstallCheckSheet({ item, open, onOpenChange, onValidated }: Pro
     }
   };
 
+  // Só faz sentido aprovar ou reprovar quando o equipamento chegou a falar com
+  // o servidor. Desligado na prateleira, não há conferência nenhuma pra assinar.
+  const podeDecidir = Boolean(health && !health.indisponivel && health.jaReportou);
+
   const faixa = health?.energia.faixa;
   // `sem-leitura` não é defeito: o equipamento diz que está alimentado, só não
   // mede tensão (parque gt06/J16). Pintar de vermelho ensinaria o operador a
@@ -254,32 +258,50 @@ export function InstallCheckSheet({ item, open, onOpenChange, onValidated }: Pro
             </div>
           ) : (
             <>
-              {/* Veredito */}
+              {/* Veredito. Rastreador desligado não é instalação com defeito —
+                  é rastreador desligado. Pintar de vermelho e listar quatro
+                  reprovações assusta sem motivo e foi o que confundiu o dono. */}
               <div
                 className={cn(
                   'flex items-start gap-2 rounded-lg border p-3',
                   health.checkOk
                     ? 'border-emerald-500/30 bg-emerald-500/10'
-                    : 'border-red-500/30 bg-red-500/10',
+                    : !health.jaReportou
+                      ? 'border-slate-500/30 bg-slate-500/10'
+                      : 'border-red-500/30 bg-red-500/10',
                 )}
               >
                 {health.checkOk ? (
                   <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
                 ) : (
-                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+                  <AlertTriangle
+                    className={cn(
+                      'mt-0.5 h-5 w-5 shrink-0',
+                      health.jaReportou ? 'text-red-400' : 'text-slate-400',
+                    )}
+                  />
                 )}
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">
                     {health.checkOk
                       ? 'Instalação conferida — pode liberar'
-                      : 'Instalação com pendência'}
+                      : !health.jaReportou
+                        ? 'Rastreador desligado'
+                        : 'Instalação com pendência'}
                   </p>
-                  {health.motivos.length > 0 && (
-                    <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                      {health.motivos.map((m) => (
-                        <li key={m}>• {m}</li>
-                      ))}
-                    </ul>
+                  {!health.jaReportou ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Ele nunca se conectou ao servidor. Ligue o equipamento no
+                      veículo e a conferência aparece aqui em cerca de 1 minuto.
+                    </p>
+                  ) : (
+                    health.motivos.length > 0 && (
+                      <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                        {health.motivos.map((m) => (
+                          <li key={m}>• {m}</li>
+                        ))}
+                      </ul>
+                    )
                   )}
                 </div>
               </div>
@@ -347,8 +369,8 @@ export function InstallCheckSheet({ item, open, onOpenChange, onValidated }: Pro
                 <p className="text-xs text-muted-foreground">{health.gps.address}</p>
               )}
 
-              {/* As quatro checagens */}
-              <div className="rounded-lg border p-3">
+              {/* As quatro checagens — só quando há o que checar. */}
+              <div className={cn('rounded-lg border p-3', !health.jaReportou && 'hidden')}>
                 <Checagem
                   ok={health.comunicando}
                   titulo="Comunicando"
@@ -415,40 +437,68 @@ export function InstallCheckSheet({ item, open, onOpenChange, onValidated }: Pro
                 />
               )}
 
-              <div className="flex items-center justify-between gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void carregar(true)}
-                  disabled={carregando}
-                >
-                  <RefreshCw className={cn('h-4 w-4 mr-1', carregando && 'animate-spin')} />
-                  Atualizar
-                </Button>
-                <div className="flex gap-2">
+              {/* Aparelho que nunca falou com o servidor não tem o que ser
+                  conferido — aprovar aqui seria carimbar um "está tudo certo"
+                  sem nenhuma prova, que foi exatamente o que confundiu na
+                  primeira versão. Sem conferência, sem botão. */}
+              {!podeDecidir ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                  <p className="text-xs text-amber-400">
+                    Ligue o rastreador para conferir. Enquanto ele estiver
+                    desligado não há o que aprovar.
+                  </p>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    disabled={salvando}
-                    onClick={() => (reprovando ? void registrar(false) : setReprovando(true))}
+                    onClick={() => void carregar(true)}
+                    disabled={carregando}
                   >
-                    {salvando && reprovando ? (
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    ) : (
-                      <XCircle className="h-4 w-4 mr-1" />
-                    )}
-                    Reprovar
-                  </Button>
-                  <Button size="sm" disabled={salvando} onClick={() => void registrar(true)}>
-                    {salvando && !reprovando ? (
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                    )}
-                    Aprovar instalação
+                    <RefreshCw
+                      className={cn('h-4 w-4 mr-1', carregando && 'animate-spin')}
+                    />
+                    Atualizar
                   </Button>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void carregar(true)}
+                    disabled={carregando}
+                  >
+                    <RefreshCw
+                      className={cn('h-4 w-4 mr-1', carregando && 'animate-spin')}
+                    />
+                    Atualizar
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={salvando}
+                      onClick={() =>
+                        reprovando ? void registrar(false) : setReprovando(true)
+                      }
+                    >
+                      {salvando && reprovando ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <XCircle className="h-4 w-4 mr-1" />
+                      )}
+                      Reprovar
+                    </Button>
+                    <Button size="sm" disabled={salvando} onClick={() => void registrar(true)}>
+                      {salvando && !reprovando ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                      )}
+                      Aprovar instalação
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
