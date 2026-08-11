@@ -1,6 +1,7 @@
 import {
   ASSOCIATE_TOKEN_KEY,
   INTERNAL_TOKEN_KEY,
+  LAST_IDENTIFIER_KEY,
   resolveBootWorld,
 } from './session-keys';
 
@@ -23,5 +24,10 @@ describe('resolveBootWorld', () => {
 
   it('as chaves dos dois mundos são diferentes', () => {
     expect(ASSOCIATE_TOKEN_KEY).not.toBe(INTERNAL_TOKEN_KEY);
+  });
+
+  it('a chave do identificador lembrado não colide com nenhum token de sessão', () => {
+    expect(LAST_IDENTIFIER_KEY).not.toBe(ASSOCIATE_TOKEN_KEY);
+    expect(LAST_IDENTIFIER_KEY).not.toBe(INTERNAL_TOKEN_KEY);
   });
 });

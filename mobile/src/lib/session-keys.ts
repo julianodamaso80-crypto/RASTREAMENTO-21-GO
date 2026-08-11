@@ -12,6 +12,14 @@ export const ASSOCIATE_MUST_CHANGE_KEY = 'r21go.associate.mustChangePassword';
 export const INTERNAL_TOKEN_KEY = 'r21go.internal.token';
 export const INTERNAL_USER_KEY = 'r21go.internal.user';
 
+/**
+ * Último identificador (CPF ou e-mail) digitado com sucesso na tela de login.
+ * É conveniência de preenchimento, não sessão: sobrevive ao logout dos dois
+ * mundos porque logout apaga token, não a lembrança de "quem costuma entrar
+ * neste aparelho".
+ */
+export const LAST_IDENTIFIER_KEY = 'r21go.login.lastIdentifier';
+
 export type World = 'associate' | 'internal' | 'none';
 
 /**

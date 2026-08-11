@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { BrandLockup } from '@/components/brand-logo';
 import { AppApi } from '@/lib/api';
 import { InternalApi } from '@/lib/internal-api';
@@ -21,6 +22,7 @@ import { resolveLoginTarget } from '@/lib/login-router';
 import { maskCpf, onlyDigits } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 import { diag } from '@/lib/diag';
+import { LAST_IDENTIFIER_KEY } from '@/lib/session-keys';
 
 export default function LoginScreen() {
   diag('05-login-render');
@@ -33,6 +35,21 @@ export default function LoginScreen() {
 
   const destino = resolveLoginTarget(identificador);
   const canSubmit = destino !== 'invalid' && password.length >= 6;
+
+  // Pré-preenche com o último identificador que deu certo neste aparelho.
+  // Roda depois do primeiro render — a tela nunca espera essa leitura pra
+  // aparecer, e se o SecureStore falhar ou demorar o campo só continua vazio.
+  useEffect(() => {
+    let cancelado = false;
+    SecureStore.getItemAsync(LAST_IDENTIFIER_KEY)
+      .then((valor) => {
+        if (!cancelado && valor) setIdentificador(valor);
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, []);
 
   /**
    * Máscara de CPF só enquanto o texto for numérico. No instante em que o
@@ -65,6 +82,10 @@ export default function LoginScreen() {
         await signInInterno(accessToken, user);
         router.replace('/interno/painel');
       }
+      // Lembrança é conveniência, não sessão: guarda como foi digitado (CPF já
+      // vem mascarado do estado, e-mail vem do jeito que a pessoa escreveu) e
+      // sem aguardar — não pode atrasar a navegação pós-login.
+      SecureStore.setItemAsync(LAST_IDENTIFIER_KEY, identificador).catch(() => {});
     } catch {
       // Mensagem IDÊNTICA nos dois caminhos. Se variasse, o app viraria um
       // verificador de quais e-mails pertencem ao time — e uma lista dessas é
@@ -106,7 +127,10 @@ export default function LoginScreen() {
               autoCorrect={false}
               style={styles.input}
               maxLength={80}
-              autoComplete="off"
+              // "username" (não "email"): o campo aceita CPF também, e "email"
+              // forçaria teclado/autocorreção de e-mail no iOS.
+              autoComplete="username"
+              textContentType="username"
             />
           </View>
 
@@ -119,6 +143,8 @@ export default function LoginScreen() {
               placeholderTextColor={colors.textFaint}
               secureTextEntry
               style={styles.input}
+              autoComplete="password"
+              textContentType="password"
             />
           </View>
 
