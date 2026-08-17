@@ -234,7 +234,7 @@ export default function EstoquePage() {
   return (
     <div className="flex flex-col h-full p-4 md:p-6 gap-4 overflow-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Boxes className="h-5 w-5 text-brand-orange-500" />
@@ -269,7 +269,7 @@ export default function EstoquePage() {
           horizontal e chips compactos: informação de relance sem empurrar a
           tabela pra fora da tela. Do md pra cima, tamanho normal de sempre. */}
       {conn && !conn.indisponivel && (
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
+        <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
           <AbaConexao
             ativa={conexaoFilter === ''}
             onClick={() => setConexaoFilter('')}
@@ -314,7 +314,7 @@ export default function EstoquePage() {
       )}
 
       {conexaoFilter !== '' && (
-        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <p className="shrink-0 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <SignalHigh className="h-3.5 w-3.5 text-brand-orange-500" />
           Mostrando <strong className="text-foreground">{totalFiltrado}</strong>{' '}
           {conexaoFilter === 'online'
@@ -340,7 +340,7 @@ export default function EstoquePage() {
 
       {/* Stats */}
       {stats && (
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
+        <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
           <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
             <span className="text-[10px] text-muted-foreground md:text-xs">Total</span>
             <span className="text-sm font-bold md:text-lg">{stats.total}</span>
@@ -360,7 +360,7 @@ export default function EstoquePage() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="shrink-0 flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
