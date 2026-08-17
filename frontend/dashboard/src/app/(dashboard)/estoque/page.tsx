@@ -70,6 +70,11 @@ export default function EstoquePage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [assignmentFilter, setAssignmentFilter] = useState('');
+  // Estado no servidor GPS. Vai pro backend, não filtra aqui: a lista é
+  // paginada e os online estão espalhados por todas as páginas.
+  const [conexaoFilter, setConexaoFilter] = useState<
+    '' | 'online' | 'offline' | 'sem-gps'
+  >('');
   const [associItem, setAssociItem] = useState<StockItem | null>(null);
   const [associOpen, setAssociOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -78,6 +83,7 @@ export default function EstoquePage() {
   const [checkItem, setCheckItem] = useState<StockItem | null>(null);
   const [checkOpen, setCheckOpen] = useState(false);
   const [conn, setConn] = useState<StockConnectivity | null>(null);
+  const [totalFiltrado, setTotalFiltrado] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadStock = useCallback(async () => {
@@ -86,15 +92,17 @@ export default function EstoquePage() {
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
       if (assignmentFilter) params.assignment = assignmentFilter;
+      if (conexaoFilter) params.conexao = conexaoFilter;
       const res = await stockApi.getAll(params);
       setItems(res.data);
+      setTotalFiltrado(res.meta?.total ?? res.data.length);
       setSelected(new Set()); // recarregou a lista, seleção antiga não vale mais
     } catch {
       toast.error('Erro ao carregar estoque');
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, assignmentFilter]);
+  }, [search, statusFilter, assignmentFilter, conexaoFilter]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -262,21 +270,39 @@ export default function EstoquePage() {
           tabela pra fora da tela. Do md pra cima, tamanho normal de sempre. */}
       {conn && !conn.indisponivel && (
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
-          <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 md:gap-2 md:px-3 md:py-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="text-[10px] text-muted-foreground md:text-xs">Conectados</span>
-            <span className="text-sm font-bold text-emerald-400 md:text-lg">{conn.conectados}</span>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 md:gap-2 md:px-3 md:py-2">
-            <span className="h-2 w-2 rounded-full bg-red-400" />
-            <span className="text-[10px] text-muted-foreground md:text-xs">Desconectados</span>
-            <span className="text-sm font-bold text-red-400 md:text-lg">{conn.desconectados}</span>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 md:gap-2 md:px-3 md:py-2">
-            <span className="h-2 w-2 rounded-full bg-amber-400" />
-            <span className="text-[10px] text-muted-foreground md:text-xs">Sem sinal GPS</span>
-            <span className="text-sm font-bold text-amber-400 md:text-lg">{conn.semGps}</span>
-          </div>
+          <AbaConexao
+            ativa={conexaoFilter === ''}
+            onClick={() => setConexaoFilter('')}
+            rotulo="Todos"
+            valor={conn.total}
+          />
+          <AbaConexao
+            ativa={conexaoFilter === 'online'}
+            onClick={() =>
+              setConexaoFilter(conexaoFilter === 'online' ? '' : 'online')
+            }
+            rotulo="Online"
+            valor={conn.conectados}
+            cor="emerald"
+          />
+          <AbaConexao
+            ativa={conexaoFilter === 'offline'}
+            onClick={() =>
+              setConexaoFilter(conexaoFilter === 'offline' ? '' : 'offline')
+            }
+            rotulo="Offline"
+            valor={conn.desconectados}
+            cor="red"
+          />
+          <AbaConexao
+            ativa={conexaoFilter === 'sem-gps'}
+            onClick={() =>
+              setConexaoFilter(conexaoFilter === 'sem-gps' ? '' : 'sem-gps')
+            }
+            rotulo="Sem sinal GPS"
+            valor={conn.semGps}
+            cor="amber"
+          />
           {conn.semCadastro > 0 && (
             <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
               <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
@@ -285,6 +311,25 @@ export default function EstoquePage() {
             </div>
           )}
         </div>
+      )}
+
+      {conexaoFilter !== '' && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <SignalHigh className="h-3.5 w-3.5 text-brand-orange-500" />
+          Mostrando <strong className="text-foreground">{totalFiltrado}</strong>{' '}
+          {conexaoFilter === 'online'
+            ? 'rastreadores falando com o servidor agora'
+            : conexaoFilter === 'offline'
+              ? 'rastreadores calados'
+              : 'rastreadores falando sem posição confiável'}
+          <button
+            type="button"
+            onClick={() => setConexaoFilter('')}
+            className="underline hover:text-foreground"
+          >
+            limpar filtro
+          </button>
+        </p>
       )}
       {conn?.indisponivel && (
         <p className="flex items-center gap-1.5 text-xs text-amber-400">
@@ -569,6 +614,48 @@ export default function EstoquePage() {
  * Pontinho de conectividade: verde falando com GPS, âmbar falando sem GPS,
  * vermelho mudo, cinza ainda entrando no servidor GPS.
  */
+/**
+ * Aba de conexão: o card de contagem virou botão de filtro. O número já estava
+ * na tela; o que faltava era poder clicar nele pra ver QUEM são.
+ */
+function AbaConexao({
+  ativa,
+  onClick,
+  rotulo,
+  valor,
+  cor,
+}: {
+  ativa: boolean;
+  onClick: () => void;
+  rotulo: string;
+  valor: number;
+  cor?: 'emerald' | 'red' | 'amber';
+}) {
+  const tons = {
+    emerald: { borda: 'border-emerald-500/30', fundo: 'bg-emerald-500/10', ponto: 'bg-emerald-400', texto: 'text-emerald-400' },
+    red: { borda: 'border-red-500/30', fundo: 'bg-red-500/10', ponto: 'bg-red-400', texto: 'text-red-400' },
+    amber: { borda: 'border-amber-500/30', fundo: 'bg-amber-500/10', ponto: 'bg-amber-400', texto: 'text-amber-400' },
+  };
+  const tom = cor ? tons[cor] : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativa}
+      className={cn(
+        'flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 transition-colors hover:bg-muted/40 md:gap-2 md:px-3 md:py-2',
+        tom ? cn(tom.borda, tom.fundo) : 'bg-card',
+        ativa && 'ring-2 ring-brand-orange-500/70',
+      )}
+    >
+      {tom && <span className={cn('h-2 w-2 rounded-full', tom.ponto)} />}
+      <span className="text-[10px] text-muted-foreground md:text-xs">{rotulo}</span>
+      <span className={cn('text-sm font-bold md:text-lg', tom?.texto)}>{valor}</span>
+    </button>
+  );
+}
+
 function ConnDot({ estado }: { estado?: { conhecido: boolean; comunicando: boolean; gpsOk: boolean } }) {
   if (!estado || !estado.conhecido) {
     return (

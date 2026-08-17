@@ -177,13 +177,35 @@ export class StockService {
   }
 
   async findAll(tenantId: string, filters: FilterStockDto) {
-    const { page, perPage, search, status, operator, assignment } = filters;
+    const { page, perPage, search, status, operator, assignment, conexao } =
+      filters;
     // associatedAt: null → só rastreadores disponíveis (associados saíram do estoque).
     const where: Record<string, unknown> = {
       tenantId,
       deletedAt: null,
       associatedAt: null,
     };
+
+    // Filtro por estado no servidor GPS. Precisa entrar no `where` (e não sair
+    // filtrando no navegador) porque a lista é paginada: com 1.000 itens, os
+    // online estão espalhados por todas as páginas.
+    if (conexao) {
+      let vivos: { comunicando: string[]; semGps: string[] };
+      try {
+        vivos = await this.stockTraccar.imeisComunicando();
+      } catch {
+        // Servidor GPS fora: não dá pra dizer quem está online. Devolver a
+        // lista inteira fingindo que o filtro valeu seria mentira.
+        return {
+          data: [],
+          meta: { total: 0, page, perPage, gpsIndisponivel: true },
+        };
+      }
+
+      if (conexao === 'online') where.imei = { in: vivos.comunicando };
+      else if (conexao === 'offline') where.imei = { notIn: vivos.comunicando };
+      else where.imei = { in: vivos.semGps };
+    }
 
     if (status) where.status = { equals: status, mode: 'insensitive' };
     if (operator) where.operator = { equals: operator, mode: 'insensitive' };
@@ -211,7 +233,7 @@ export class StockService {
       this.prisma.stockItem.count({ where }),
     ]);
 
-    return { data, meta: { total, page, perPage } };
+    return { data, meta: { total, page, perPage, gpsIndisponivel: false } };
   }
 
   /**

@@ -210,6 +210,27 @@ export class StockTraccarService {
   }
 
   /**
+   * Quem está falando com o servidor GPS agora, e quem fala sem posição
+   * confiável. Serve pro filtro da lista de estoque: como a lista é paginada,
+   * filtrar "online" no navegador só pegaria a página aberta.
+   *
+   * Devolve sempre a lista dos que COMUNICAM (algumas dezenas), nunca a dos
+   * calados (centenas) — offline se resolve com `notIn` sobre esta.
+   */
+  async imeisComunicando(): Promise<{
+    comunicando: string[];
+    semGps: string[];
+  }> {
+    const snapshot = await this.snapshot();
+    return {
+      comunicando: snapshot.filter((d) => d.comunicando).map((d) => d.uniqueId),
+      semGps: snapshot
+        .filter((d) => d.comunicando && !d.gpsOk)
+        .map((d) => d.uniqueId),
+    };
+  }
+
+  /**
    * Estoque no mapa: cada rastreador com a última posição conhecida e a
    * telemetria do momento.
    *

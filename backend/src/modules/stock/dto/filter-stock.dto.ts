@@ -27,4 +27,14 @@ export class FilterStockDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(['free', 'assigned'])
   assignment?: 'free' | 'assigned';
+
+  @ApiPropertyOptional({
+    enum: ['online', 'offline', 'sem-gps'],
+    description:
+      'Estado no servidor GPS: online = falando agora; offline = calado; ' +
+      'sem-gps = falando mas sem posição confiável',
+  })
+  @IsOptional()
+  @IsIn(['online', 'offline', 'sem-gps'])
+  conexao?: 'online' | 'offline' | 'sem-gps';
 }
