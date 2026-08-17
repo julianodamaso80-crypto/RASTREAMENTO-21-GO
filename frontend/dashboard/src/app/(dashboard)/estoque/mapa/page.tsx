@@ -195,7 +195,12 @@ export default function EstoqueMapaPage() {
           variant="outline"
           size="sm"
           className="absolute bottom-24 right-2 z-10 h-8 gap-1 bg-background/90 text-xs backdrop-blur"
-          onClick={() => mapRef.current?.fitAll()}
+          onClick={() => {
+            // Com um rastreador escolhido o mapa mostra só ele; "Ver todos"
+            // precisa desfazer a escolha, senão o botão não faz nada visível.
+            setSelecionadoId(null);
+            mapRef.current?.fitAll();
+          }}
         >
           <Crosshair className="h-3.5 w-3.5" />
           Ver todos
@@ -348,7 +353,7 @@ function SidebarContent({
             onClick={() => onFiltroChange(filtro === 'ONLINE' ? 'todos' : 'ONLINE')}
             rotulo="Conectados"
             valor={contagem.online}
-            cor="text-emerald-400"
+            cor="text-brand-green-600"
           />
           <FiltroChip
             ativo={filtro === 'OFFLINE'}
@@ -376,7 +381,7 @@ function SidebarContent({
             onClick={() => onFiltroChange(filtro === 'LIGADOS' ? 'todos' : 'LIGADOS')}
             rotulo="Ligados"
             valor={contagem.ligados}
-            cor="text-emerald-400"
+            cor="text-brand-green-600"
           />
         </div>
       </div>

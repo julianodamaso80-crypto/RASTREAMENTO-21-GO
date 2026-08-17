@@ -40,7 +40,7 @@ function Item({
 }) {
   const cor =
     tom === 'ok'
-      ? 'text-emerald-400'
+      ? 'text-brand-green-600'
       : tom === 'ruim'
         ? 'text-red-400'
         : tom === 'atencao'

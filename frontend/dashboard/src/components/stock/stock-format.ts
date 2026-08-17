@@ -27,13 +27,15 @@ export function badgeConexao(conexao: StockConexao): {
   ponto: string;
 } {
   switch (conexao) {
+    // `emerald` no tema é alias do laranja da marca (globals.css). ONLINE tem
+    // que ler como online à distância, então usa o verde oficial da 21 GO.
     case 'ONLINE':
       return {
         rotulo: 'ONLINE',
-        fundo: 'bg-emerald-500/15',
-        texto: 'text-emerald-400',
-        borda: 'border-emerald-500',
-        ponto: 'bg-emerald-400',
+        fundo: 'bg-brand-green-500/15',
+        texto: 'text-brand-green-600',
+        borda: 'border-brand-green-500',
+        ponto: 'bg-brand-green-500',
       };
     case 'SLEEP':
       return {

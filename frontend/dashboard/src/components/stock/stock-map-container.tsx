@@ -57,9 +57,16 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
     const [googleVisible, setGoogleVisible] = useState(false);
     const [googleCopyright, setGoogleCopyright] = useState('');
 
-    const comPosicao = pontos.filter(
+    const todosComPosicao = pontos.filter(
       (p) => p.latitude !== null && p.longitude !== null,
     );
+
+    // Escolheu um rastreador → o mapa mostra só ele. Com centenas de
+    // equipamentos na mesma rua, o pino do escolhido some no meio dos outros e
+    // o operador não sabe qual está olhando.
+    const comPosicao = selecionadoId
+      ? todosComPosicao.filter((p) => p.id === selecionadoId)
+      : todosComPosicao;
 
     useImperativeHandle(ref, () => ({
       flyTo: (lng, lat, zoom = 16, paddingRight = 0) => {
@@ -72,9 +79,9 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
       },
       fitAll: () => {
         const map = mapRef.current;
-        if (!map || comPosicao.length === 0) return;
+        if (!map || todosComPosicao.length === 0) return;
         const bounds = new maplibregl.LngLatBounds();
-        comPosicao.forEach((p) => bounds.extend([p.longitude!, p.latitude!]));
+        todosComPosicao.forEach((p) => bounds.extend([p.longitude!, p.latitude!]));
         map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 800 });
       },
     }));

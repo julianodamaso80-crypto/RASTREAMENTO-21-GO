@@ -338,26 +338,9 @@ export default function EstoquePage() {
         </p>
       )}
 
-      {/* Stats */}
-      {stats && (
-        <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
-          <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
-            <span className="text-[10px] text-muted-foreground md:text-xs">Total</span>
-            <span className="text-sm font-bold md:text-lg">{stats.total}</span>
-          </div>
-          {stats.byStatus.map((s) => (
-            <div
-              key={s.status}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2"
-            >
-              <Badge className={cn('text-[10px] border md:text-xs', statusColor(s.status))}>
-                {s.status}
-              </Badge>
-              <span className="text-sm font-bold md:text-lg">{s.count}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* A faixa "Total / ATIVO" saiu daqui: repetia o total que já aparece na
+          aba Todos, e o status comercial do chip continua na coluna Status e no
+          seletor de filtro. Duas faixas de números embolavam a leitura. */}
 
       {/* Filters */}
       <div className="shrink-0 flex flex-col sm:flex-row gap-2">
@@ -631,8 +614,10 @@ function AbaConexao({
   valor: number;
   cor?: 'emerald' | 'red' | 'amber';
 }) {
+  // `emerald` no tema é alias do laranja da marca (ver globals.css). Online
+  // precisa ler como online, então usa o verde oficial: brand-green.
   const tons = {
-    emerald: { borda: 'border-emerald-500/30', fundo: 'bg-emerald-500/10', ponto: 'bg-emerald-400', texto: 'text-emerald-400' },
+    emerald: { borda: 'border-brand-green-500/40', fundo: 'bg-brand-green-500/10', ponto: 'bg-brand-green-500', texto: 'text-brand-green-600' },
     red: { borda: 'border-red-500/30', fundo: 'bg-red-500/10', ponto: 'bg-red-400', texto: 'text-red-400' },
     amber: { borda: 'border-amber-500/30', fundo: 'bg-amber-500/10', ponto: 'bg-amber-400', texto: 'text-amber-400' },
   };
