@@ -256,13 +256,24 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
         const existente = markersRef.current.get(ponto.id);
 
         if (existente) {
-          existente.setLngLat(lngLat);
           const el = existente.getElement();
-          if (el.dataset.chave !== chave) {
+          if (el.dataset.chave === chave) {
+            existente.setLngLat(lngLat);
+          } else {
+            // Trocar o nó por dentro (replaceWith + reatribuir `_element`)
+            // deixava o marcador sem o transform que o MapLibre aplica na
+            // posição: o pino ia parar no canto do mapa, atrás dos controles,
+            // e o operador via o mapa certo sem pino nenhum. Refazer o
+            // marcador é o caminho que o MapLibre suporta.
+            existente.remove();
             const novoEl = criarMarcador(ponto, selecionado);
             novoEl.dataset.chave = chave;
-            el.replaceWith(novoEl);
-            (existente as unknown as { _element: HTMLElement })._element = novoEl;
+            markersRef.current.set(
+              ponto.id,
+              new maplibregl.Marker({ element: novoEl })
+                .setLngLat(lngLat)
+                .addTo(map),
+            );
           }
         } else {
           const el = criarMarcador(ponto, selecionado);

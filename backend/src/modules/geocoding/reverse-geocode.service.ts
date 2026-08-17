@@ -19,8 +19,16 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ReverseGeocodeService {
   private readonly logger = new Logger(ReverseGeocodeService.name);
 
-  /** ~11 m. Rastreador parado resolve uma vez só, pra sempre. */
-  private static readonly CASAS_DECIMAIS = 4;
+  /**
+   * ~110 m por célula.
+   *
+   * Começou em 4 casas (~11 m) e isso funcionava só pra equipamento parado:
+   * rastreador andando muda de coordenada a cada envio, cada uma virava uma
+   * chave nova, e o endereço nunca chegava a aparecer — o operador via
+   * "ONLINE" com o campo de endereço vazio. Com célula de ~110 m o mesmo
+   * quarteirão reaproveita o endereço já resolvido.
+   */
+  private static readonly CASAS_DECIMAIS = 3;
 
   /** Política do OSM: no máximo uma chamada por segundo, com User-Agent seu. */
   private static readonly INTERVALO_MS = 1_100;
