@@ -192,13 +192,20 @@ export class AlertsCron {
         if (positionAge < GPS_SILENT_THRESHOLD_MS) continue;
 
         // Guard contra falso positivo de carro estacionado: só dispara se a
-        // última posição mostrava o veículo EM USO (ignição ligada OU em
-        // movimento). Carro com ignição off parado é normal — rastreador
-        // reduz/pára os fixes pra economizar bateria, GPS_SILENT aqui é
-        // ruído. Suspeita real = "estava rodando e o GPS sumiu".
+        // última posição mostrava o veículo EM USO. Carro com ignição off
+        // parado é normal — GPS_SILENT aqui é ruído. Suspeita real = "estava
+        // rodando e o GPS sumiu".
+        //
+        // Ignição é bit de status, sempre fresco. Velocidade NÃO: sem sinal de
+        // GPS o GT06 repete o fix antigo (fixTime velho, outdated=false) com
+        // 2–6 nós de lixo — em 18/08/2026 isso disparou 15 alertas em 30 min
+        // pra carro parado em garagem com ignição desligada. Numa posição com
+        // fix de 15+ min a velocidade fala do passado; só serve de fallback
+        // quando o protocolo não informa ignição.
         const lastIgnition = (position?.attributes as { ignition?: boolean } | undefined)?.ignition;
         const lastSpeed = position?.speed ?? 0;
-        const wasInUse = lastIgnition === true || lastSpeed > 1;
+        const wasInUse =
+          lastIgnition === true || (lastIgnition == null && lastSpeed > 1);
         if (!wasInUse) continue;
 
         const recent = await this.prisma.alert.findFirst({
