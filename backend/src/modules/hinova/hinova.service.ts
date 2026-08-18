@@ -70,7 +70,13 @@ export class HinovaService implements IHinovaClient {
     );
     this.tokenUsuario = data?.token_usuario ?? null;
     if (!this.tokenUsuario) {
-      throw new Error('Hinova SGA: autenticação sem token_usuario.');
+      // O SGA recusa autenticação com HTTP 200 e o motivo no corpo (ex.:
+      // "Usuário com restrição de horário"). Sem repassar, o operador vê
+      // "Placa não encontrada" e procura erro na placa.
+      throw new Error(
+        HinovaService.extractError(data) ||
+          'Hinova SGA: autenticação sem token_usuario.',
+      );
     }
     this.logger.log('Hinova SGA autenticado.');
   }
@@ -163,8 +169,15 @@ export class HinovaService implements IHinovaClient {
       raw = await this.get(`/buscar/situacao-financeira-veiculo/${p}`);
     } catch (error: unknown) {
       // O SGA retorna 406/erro para placa inexistente. Tratamos como não achado.
+      // Sem corpo de resposta (autenticação recusada, rede fora) o motivo é a
+      // mensagem do erro — "SGA fora do ar" não pode virar "placa não existe".
       const body = (error as { response?: { data?: unknown } }).response?.data;
-      const motivo = HinovaService.extractError(body) || 'Placa não encontrada no SGA.';
+      const motivo =
+        HinovaService.extractError(body) ||
+        (!body && error instanceof Error && error.message
+          ? `SGA indisponível: ${error.message}`
+          : null) ||
+        'Placa não encontrada no SGA.';
       return HinovaService.emptyLookup(motivo);
     }
 
@@ -202,6 +215,13 @@ export class HinovaService implements IHinovaClient {
     const b = body as { error?: unknown; mensagem?: unknown };
     if (Array.isArray(b.error) && b.error.length) return String(b.error[0]);
     if (typeof b.error === 'string') return b.error;
+    // Erro de autenticação vem aninhado: { error: { mensagem, codigo_erro } }.
+    // É assim que o SGA avisa "Usuário com restrição de horário" — sem ler
+    // isto, o operador via "Placa não encontrada" e procurava erro na placa.
+    if (b.error && typeof b.error === 'object') {
+      const m = (b.error as { mensagem?: unknown }).mensagem;
+      if (typeof m === 'string') return m;
+    }
     if (typeof b.mensagem === 'string') return b.mensagem;
     return null;
   }
