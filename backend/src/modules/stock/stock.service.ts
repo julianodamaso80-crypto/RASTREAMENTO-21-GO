@@ -11,7 +11,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
 import { AssignStockDto } from './dto/assign-stock.dto';
-import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
+import {
+  HINOVA_CLIENT,
+  type HinovaLookupResult,
+  type IHinovaClient,
+} from '../hinova/hinova.interface';
 import {
   normalizeFinancialStatus,
   normalizeSgaStatusLabel,
@@ -25,6 +29,7 @@ import {
 import { InstallationPendingsService } from '../installation-pendings/installation-pendings.service';
 import { RoutesService } from '../installation-pendings/routes.service';
 import { StockTraccarService } from './stock-traccar.service';
+import { PositionsService } from '../positions/positions.service';
 import { ValidateStockDto } from './dto/validate-stock.dto';
 
 type ParsedRow = {
@@ -86,6 +91,7 @@ export class StockService {
     private stockTraccar: StockTraccarService,
     private installationPendings: InstallationPendingsService,
     private routes: RoutesService,
+    private positions: PositionsService,
   ) {}
 
   /**
@@ -286,6 +292,33 @@ export class StockService {
    * - Placa INATIVA no SGA → bloqueia (422).
    * - Técnico e local de instalação obrigatórios (validados no DTO).
    */
+  /**
+   * Consulta do vínculo: SGA ao vivo primeiro; se ele não conhece a placa
+   * (veículo novo sem boleto — ver InstallationPendingsService.lookupNoEspelho),
+   * o espelho de pendências. Um só caminho pro painel, pro PWA do técnico e
+   * pro associate — senão o botão habilita numa tela e o servidor recusa na
+   * outra.
+   */
+  async lookupSga(
+    tenantId: string,
+    placaOuChassi: string,
+  ): Promise<HinovaLookupResult> {
+    const vivo = await this.hinova.lookupByPlate(placaOuChassi);
+    if (vivo.encontrado) return { ...vivo, fonte: 'sga' };
+
+    const espelho = await this.installationPendings.lookupNoEspelho(
+      tenantId,
+      placaOuChassi,
+    );
+    if (espelho) {
+      this.logger.log(
+        `Lookup ${placaOuChassi}: SGA ao vivo disse "${vivo.motivo}"; respondendo pelo espelho de pendências.`,
+      );
+      return espelho;
+    }
+    return vivo;
+  }
+
   async associate(id: string, tenantId: string, dto: AssociateStockDto) {
     const item = await this.prisma.stockItem.findFirst({
       where: { id, tenantId, deletedAt: null, associatedAt: null },
@@ -297,7 +330,7 @@ export class StockService {
     }
 
     // Fonte da verdade: o servidor rebusca no SGA (não confia no que veio da tela).
-    const lookup = await this.hinova.lookupByPlate(dto.placa);
+    const lookup = await this.lookupSga(tenantId, dto.placa);
     if (!lookup.encontrado) {
       throw new UnprocessableEntityException(
         lookup.motivo || 'Placa não encontrada no SGA.',
@@ -322,7 +355,9 @@ export class StockService {
     // o registro alheio. Ver P1.1 do plano.
     await this.assertImeiLivreNoTenant(item.imei, tenantId);
 
-    const placa = (lookup.veiculo.placa ?? dto.placa)
+    // Moto nova sem placa: o SGA devolve placa vazia e o técnico vincula pelo
+    // chassi — que vira a "placa" do ativo até o emplacamento.
+    const placa = (lookup.veiculo.placa || dto.placa)
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, '');
     // Sempre só dígitos: o CPF é o login (e a senha) do associado no app.
@@ -463,6 +498,8 @@ export class StockService {
     });
 
     // 5) Traccar (best-effort — não derruba o vínculo se estiver indisponível).
+    let traccarDeviceId: number | null = null;
+    let traccarLastUpdate: string | null = null;
     try {
       let traccarDevice = await this.traccar.getDeviceByUniqueId(item.imei);
       if (!traccarDevice) {
@@ -484,6 +521,8 @@ export class StockService {
         }
       }
       if (traccarDevice?.id) {
+        traccarDeviceId = traccarDevice.id;
+        traccarLastUpdate = traccarDevice.lastUpdate ?? null;
         await this.prisma.$transaction([
           this.prisma.vehicle.update({
             where: { id: result.vehicle.id },
@@ -501,6 +540,36 @@ export class StockService {
           error instanceof Error ? error.message : error
         }). Device vinculado sem traccarDeviceId.`,
       );
+    }
+
+    // 5b) Primeira posição na hora. O histórico do painel só nasce a partir do
+    // vínculo, e um carro parado pode levar horas até o próximo fix — até lá o
+    // card do cliente dizia "Nunca comunicou" e o app abria vazio, mesmo com o
+    // rastreador reportando há dias. Copia a última posição já conhecida do
+    // Traccar, pelo mesmo juiz de qualidade de sempre (persistIfRelevant).
+    if (traccarDeviceId) {
+      try {
+        const [ultima] = await this.traccar.getPositions(traccarDeviceId);
+        if (ultima) {
+          await this.positions.persistIfRelevant(
+            ultima,
+            result.vehicle.id,
+            tenantId,
+          );
+        }
+        if (traccarLastUpdate) {
+          await this.prisma.device.update({
+            where: { id: result.device.id },
+            data: { lastConnection: new Date(traccarLastUpdate) },
+          });
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Associação ${item.imei}: não consegui copiar a última posição do Traccar (${
+            error instanceof Error ? error.message : error
+          }).`,
+        );
+      }
     }
 
     // 6) A placa deixa de ser pendência no mesmo instante. Sem isso ela ficaria

@@ -44,9 +44,12 @@ export class TechFieldController {
   }
 
   @Get('lookup')
-  @ApiOperation({ summary: 'Consulta a placa no SGA' })
-  lookup(@Query('placa') placa: string) {
-    return this.service.lookup(placa);
+  @ApiOperation({ summary: 'Consulta a placa (ou chassi) no SGA' })
+  lookup(
+    @Query('placa') placa: string,
+    @CurrentTechnician() tech: TechnicianContext,
+  ) {
+    return this.service.lookup(tech.tenantId, placa);
   }
 
   @Get('assignments/:id/signal')

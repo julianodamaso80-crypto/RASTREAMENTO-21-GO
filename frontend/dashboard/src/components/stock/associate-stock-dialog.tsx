@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Loader2, Search, UserCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { hinovaApi, stockApi } from '@/lib/api';
+import { stockApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -65,18 +65,20 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
   const handleSearch = async () => {
     const p = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (p.length < 7) {
-      toast.error('Digite a placa completa (7 caracteres).');
+      toast.error('Digite a placa completa (7 caracteres) ou o chassi (17).');
       return;
     }
     setSearching(true);
     setLookup(null);
     try {
-      const res = await hinovaApi.lookup(p);
+      const res = await stockApi.sgaLookup(p);
       setLookup(res);
       if (!res.encontrado) {
         toast.error(res.motivo || 'Placa não encontrada no SGA.');
       } else if (!res.ativo) {
         toast.error('Placa INATIVA no SGA — vínculo bloqueado.');
+      } else if (res.fonte === 'espelho') {
+        toast.info('Veículo novo, ainda sem boleto no SGA — dados vindos do espelho de pendências.');
       }
     } catch {
       toast.error('Erro ao consultar o SGA. Tente novamente.');
@@ -140,13 +142,13 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
 
           {/* Busca de placa no SGA */}
           <div className="space-y-1.5">
-            <Label htmlFor="assoc-placa" required>Placa do veículo (SGA)</Label>
+            <Label htmlFor="assoc-placa" required>Placa ou chassi do veículo (SGA)</Label>
             <div className="flex gap-2">
               <Input
                 id="assoc-placa"
-                placeholder="ABC1D23"
+                placeholder="ABC1D23 ou chassi"
                 value={placa}
-                onChange={(e) => setPlaca(e.target.value.toUpperCase().slice(0, 8))}
+                onChange={(e) => setPlaca(e.target.value.toUpperCase().slice(0, 17))}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 className="font-mono uppercase"
                 autoComplete="off"

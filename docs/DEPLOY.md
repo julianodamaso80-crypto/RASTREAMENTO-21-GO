@@ -180,6 +180,32 @@ docker service update \
   rastreamento-21-go_backend-rastreamento
 ```
 
+### ⚠️ Traccar: `traccar.xml` só vale depois de reiniciar — e o reinício precisa ser `stop-first`
+
+O `traccar.xml` é bind-mount de `/etc/easypanel/projects/rastreamento-21-go/traccar-rastreamento/traccar.xml`. Editar o arquivo **não** muda nada até o container reiniciar (o Traccar lê a config só no boot).
+
+O service publica as portas 5001–5055 em **modo host**. Com `UpdateConfig.Order = start-first` (padrão do EasyPanel), o Swarm tenta subir o container novo antes de parar o velho, as portas estão ocupadas e a atualização fica em `Pending — "host-mode port already in use"` **para sempre**. Foi assim que em 2026-08-18 se descobriu que o Traccar rodava uma task de 6 semanas atrás e os filtros de precisão de 10/08 nunca tinham entrado em vigor.
+
+```bash
+# uma vez (persistente no spec do service):
+docker service update --update-order stop-first rastreamento-21-go_traccar-rastreamento
+# reiniciar depois de editar o traccar.xml:
+docker service update --force rastreamento-21-go_traccar-rastreamento
+# se ficar Pending mesmo assim (reserva de porta presa): scale 0 → 1
+docker service scale rastreamento-21-go_traccar-rastreamento=0 && sleep 5 && \
+docker service scale rastreamento-21-go_traccar-rastreamento=1
+# conferir que a config nova está no container:
+docker exec $(docker ps -q -f name=traccar-rastreamento) grep -c skipLimit /opt/traccar/conf/traccar.xml
+```
+
+Janela sem GPS durante o reinício: ~30 s. Rastreadores GT06 reconectam sozinhos (4.000+ conexões em ~1 min).
+
+### ⚠️ SGA Hinova em produção
+
+- `HINOVA_MOCK=false` e as env `HINOVA_SGA_USUARIO/SENHA/TOKEN/BASE_URL` no backend são **obrigatórias**. Com `HINOVA_MOCK=true` o vínculo do estoque recusa qualquer placa real ("Placa não encontrada no SGA (mock)") e o sync de pendências carrega 34 registros falsos. Aplicadas em 2026-08-18 via `docker service update --env-add`; **precisam ser replicadas na UI do EasyPanel** senão um Deploy pela UI reverte.
+- O usuário de integração do SGA tem **restrição de horário** cadastrada no próprio SGA: fora da janela a autenticação responde `"Usuário com restrição de horário"` e todo vínculo/sync falha. Ajuste é no cadastro do usuário dentro do SGA, não aqui.
+- O lookup ao vivo (`/buscar/situacao-financeira-veiculo`) é financeiro: veículo novo sem boleto retorna 406. O vínculo cai então no espelho de pendências (`installation_pendings`), que aceita placa ou chassi — por isso o sync 9h/17h precisa estar rodando com credencial real.
+
 ### ⚠️ Drift com o EasyPanel UI
 
 `docker service update` altera o estado runtime do Swarm, mas o EasyPanel mantém a fonte de verdade em seu próprio LMDB. Se alguém abrir o painel e clicar em "Deploy" no service, o EasyPanel pode **reverter** env vars modificadas via linha de comando.

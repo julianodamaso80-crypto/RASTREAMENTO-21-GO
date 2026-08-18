@@ -149,6 +149,8 @@ export interface HinovaLookup {
   encontrado: boolean;
   ativo: boolean;
   motivo?: string;
+  /** sga = consulta ao vivo; espelho = veículo novo sem boleto, dados do espelho de pendências. */
+  fonte?: 'sga' | 'espelho';
   cliente: { nome: string | null; cpf: string | null };
   veiculo: {
     placa: string | null;

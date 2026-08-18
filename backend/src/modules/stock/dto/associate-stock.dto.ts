@@ -14,11 +14,15 @@ import {
  * dois, o vínculo não é ativado.
  */
 export class AssociateStockDto {
-  @ApiProperty({ example: 'ABC1D23', description: 'Placa a consultar no SGA' })
+  @ApiProperty({
+    example: 'ABC1D23',
+    description:
+      'Placa (7) ou chassi (17) a consultar no SGA. Moto nova ainda sem placa é vinculada pelo chassi.',
+  })
   @IsString()
-  @IsNotEmpty({ message: 'Informe a placa.' })
-  @MinLength(7, { message: 'Placa inválida.' })
-  @MaxLength(10)
+  @IsNotEmpty({ message: 'Informe a placa ou o chassi.' })
+  @MinLength(7, { message: 'Placa ou chassi inválido.' })
+  @MaxLength(17)
   placa!: string;
 
   @ApiProperty({ description: 'Nome do técnico que instalou o rastreador' })

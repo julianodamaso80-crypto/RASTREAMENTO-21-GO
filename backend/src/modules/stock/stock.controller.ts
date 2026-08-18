@@ -70,6 +70,20 @@ export class StockController {
     return this.stockService.map(req.tenantId);
   }
 
+  @Get('sga-lookup/:placaOuChassi')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Consulta do vínculo: SGA ao vivo e, se o veículo ainda não tem boleto, o espelho de pendências. Aceita placa ou chassi.',
+  })
+  sgaLookup(
+    @Param('placaOuChassi') placaOuChassi: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.lookupSga(req.tenantId, placaOuChassi);
+  }
+
   @Get(':id/signal')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)

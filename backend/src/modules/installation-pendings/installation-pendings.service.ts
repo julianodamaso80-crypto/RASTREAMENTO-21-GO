@@ -2,7 +2,11 @@ import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
+import {
+  HINOVA_CLIENT,
+  type HinovaLookupResult,
+  type IHinovaClient,
+} from '../hinova/hinova.interface';
 import { montarFila, diasPendente } from './installation-pendings.mapper';
 import { GeocodingService } from './geocoding.service';
 import type {
@@ -147,6 +151,53 @@ export class InstallationPendingsService implements OnModuleInit {
   }
 
   /**
+   * Segunda fonte pro vínculo do estoque quando o lookup ao vivo do SGA falha.
+   *
+   * `/buscar/situacao-financeira-veiculo` é um endpoint FINANCEIRO: responde
+   * 406 "Não foram encontrados boletos" enquanto o primeiro boleto não sai — o
+   * caso normal do veículo recém-vendido que está recebendo rastreador (55% das
+   * instalações de ago/2026). O espelho vem do /listar/veiculo do próprio SGA,
+   * só entra veículo ATIVO nele, e traz CPF, nome, telefone e código do veículo.
+   * Aceita placa OU chassi (moto nova sem placa só tem chassi).
+   *
+   * Devolve null quando o veículo não está no espelho — aí o motivo do SGA
+   * ao vivo é o que vale.
+   */
+  async lookupNoEspelho(
+    tenantId: string,
+    placaOuChassi: string,
+  ): Promise<HinovaLookupResult | null> {
+    const ident = (placaOuChassi || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (ident.length < 7) return null;
+
+    const p = await this.prisma.installationPending.findFirst({
+      where: { tenantId, OR: [{ plate: ident }, { chassi: ident }] },
+      orderBy: { syncedAt: 'desc' },
+    });
+    if (!p) return null;
+
+    return {
+      encontrado: true,
+      ativo: true,
+      fonte: 'espelho',
+      cliente: { nome: p.associateName || null, cpf: p.cpf || null },
+      veiculo: {
+        placa: p.plate || null,
+        chassi: p.chassi || null,
+        codigoModelo: null,
+        modelo: p.brandModel || null,
+        codigoVeiculo: p.hinovaVehicleCode || null,
+      },
+      situacao: {
+        codigo: '1',
+        descricao: 'ATIVO',
+        financeira: null,
+        dataVencimento: null,
+      },
+    };
+  }
+
+  /**
    * Tira a placa da fila no instante em que o rastreador é instalado, sem
    * esperar o próximo sync. Chamado pelo vínculo do estoque (painel e técnico).
    *
@@ -158,8 +209,13 @@ export class InstallationPendingsService implements OnModuleInit {
     if (!normalizada) return 0;
 
     try {
+      // Placa OU chassi: moto nova ainda sem placa entra na fila só com o
+      // chassi, e é pelo chassi que o técnico a vincula.
       const { count } = await this.prisma.installationPending.deleteMany({
-        where: { tenantId, plate: normalizada },
+        where: {
+          tenantId,
+          OR: [{ plate: normalizada }, { chassi: normalizada }],
+        },
       });
       if (count > 0) {
         this.logger.log(

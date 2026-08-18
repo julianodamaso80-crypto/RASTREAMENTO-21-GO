@@ -84,19 +84,31 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Todos os veículos do tenant, página a página. Um único GET com perPage
+  // fixo (200) escondia em silêncio quem passasse desse número — a frota já
+  // beira isso e o mapa não pode "perder" veículo.
+  // CLIENT vê apenas seus veículos via /vehicles/mine; demais roles veem todos
+  // do tenant. /mine é safe pro server forçar isolamento.
+  const loadAllVehicles = useCallback(async (): Promise<Vehicle[]> => {
+    const isClient = user?.role === 'CLIENT';
+    const perPage = 200;
+    const all: Vehicle[] = [];
+    for (let page = 1; page <= 50; page++) {
+      const res = isClient
+        ? await vehiclesApi.getMine({ perPage, page })
+        : await vehiclesApi.getAll({ perPage, page });
+      all.push(...res.data);
+      if (res.data.length < perPage || all.length >= res.meta.total) break;
+    }
+    return all;
+  }, [user?.role]);
+
   // Carregar dados iniciais
   useEffect(() => {
     async function loadData() {
       try {
-        // CLIENT vê apenas seus veículos via /vehicles/mine; demais roles
-        // veem todos do tenant. /mine é safe pro server forçar isolamento.
-        const isClient = user?.role === 'CLIENT';
-        const vehiclesPromise = isClient
-          ? vehiclesApi.getMine({ perPage: 200 })
-          : vehiclesApi.getAll({ perPage: 200 });
-
-        const [vehiclesRes, devices, positions, alertsRes, unread] = await Promise.all([
-          vehiclesPromise,
+        const [vehiclesList, devices, positions, alertsRes, unread] = await Promise.all([
+          loadAllVehicles(),
           traccarApi.getDevices(),
           traccarApi.getPositions(),
           alertsApi.getAll({ perPage: 50 }),
@@ -107,7 +119,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         setUnreadCount(unread);
 
         const vMap = new Map<string, Vehicle>();
-        vehiclesRes.data.forEach((v) => vMap.set(v.id, v));
+        vehiclesList.forEach((v) => vMap.set(v.id, v));
 
         const dMap = new Map<number, TraccarDevice>();
         devices.forEach((d) => dMap.set(d.id, d));
@@ -137,7 +149,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       }
     }
     loadData();
-  }, []);
+  }, [loadAllVehicles]);
 
   // Polling de GARANTIA. O WebSocket dá updates instantâneos, mas se ele cair,
   // não reconectar, ou o backend não emitir `position:update` (ex.: device fora
@@ -148,15 +160,25 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
+    let tick = 0;
     const poll = async () => {
       try {
-        const [devices, positions] = await Promise.all([
+        // A lista de veículos também precisa acompanhar: um vínculo feito no
+        // estoque (outra aba ou outra rota) criava veículo que só aparecia no
+        // mapa depois de F5. A cada 4 ciclos (~32s) recarrega a lista.
+        tick++;
+        const refreshVehicles = tick % 4 === 0;
+        const [devices, positions, vehiclesList] = await Promise.all([
           traccarApi.getDevices(),
           traccarApi.getPositions(),
+          refreshVehicles ? loadAllVehicles() : Promise.resolve(null),
         ]);
         if (cancelled) return;
         setDeviceMap(new Map(devices.map((d) => [d.id, d])));
         setPositionMap(new Map(positions.map((p) => [p.deviceId, p])));
+        if (vehiclesList) {
+          setVehicleMap(new Map(vehiclesList.map((v) => [v.id, v])));
+        }
       } catch {
         // silencia — mantém os últimos dados até a próxima tentativa
       }
@@ -166,7 +188,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [token]);
+  }, [token, loadAllVehicles]);
 
   // WebSocket
   const handlePositionUpdate = useCallback((position: TraccarPosition) => {

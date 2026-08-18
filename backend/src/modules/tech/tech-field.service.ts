@@ -1,5 +1,4 @@
 import {
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -12,7 +11,6 @@ import {
   DeviceHealthService,
   type EnergiaDiagnostico,
 } from '../traccar/device-health.service';
-import { HINOVA_CLIENT, type IHinovaClient } from '../hinova/hinova.interface';
 import { FinishInstallDto } from './dto/finish-install.dto';
 
 export interface SignalResult {
@@ -45,7 +43,6 @@ export class TechFieldService {
     private readonly stock: StockService,
     private readonly stockTraccar: StockTraccarService,
     private readonly deviceHealth: DeviceHealthService,
-    @Inject(HINOVA_CLIENT) private readonly hinova: IHinovaClient,
   ) {}
 
   /** Equipamentos reservados pro técnico logado. Nunca vaza item de outro. */
@@ -71,9 +68,12 @@ export class TechFieldService {
     });
   }
 
-  /** Consulta a placa no SGA antes de finalizar. */
-  async lookup(placa: string) {
-    return this.hinova.lookupByPlate(placa);
+  /**
+   * Consulta a placa (ou chassi) antes de finalizar. Mesmo caminho do painel:
+   * SGA ao vivo e, se o veículo ainda não tem boleto, o espelho de pendências.
+   */
+  async lookup(tenantId: string, placaOuChassi: string) {
+    return this.stock.lookupSga(tenantId, placaOuChassi);
   }
 
   /**

@@ -17,6 +17,12 @@ export interface HinovaLookupResult {
   ativo: boolean;
   /** Motivo quando não encontrado/indisponível (ex.: mensagem de erro do SGA). */
   motivo?: string;
+  /**
+   * De onde saiu a resposta. `sga` = consulta ao vivo. `espelho` = o lookup ao
+   * vivo falhou (veículo novo ainda sem boleto) e os dados vieram do espelho
+   * de pendências, que o próprio SGA alimenta via /listar/veiculo.
+   */
+  fonte?: 'sga' | 'espelho';
   cliente: {
     nome: string | null;
     cpf: string | null;

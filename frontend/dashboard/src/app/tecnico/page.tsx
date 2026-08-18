@@ -533,7 +533,7 @@ function InstallScreen({
   const buscar = async () => {
     const p = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (p.length < 7) {
-      toast.error('Digite a placa completa.');
+      toast.error('Digite a placa completa ou o chassi.');
       return;
     }
     setSearching(true);
@@ -543,6 +543,7 @@ function InstallScreen({
       setLookup(res);
       if (!res.encontrado) toast.error(res.motivo || 'Placa não encontrada no SGA.');
       else if (!res.ativo) toast.error('Placa inativa no SGA — vínculo bloqueado.');
+      else if (res.fonte === 'espelho') toast.info('Veículo novo, ainda sem boleto no SGA — dados do espelho de pendências.');
     } catch (err) {
       toast.error(apiMessage(err, 'Erro ao consultar o SGA'));
     } finally {
@@ -629,7 +630,7 @@ function InstallScreen({
               setPlaca(e.target.value.toUpperCase());
               setLookup(null);
             }}
-            placeholder="ABC1D23"
+            placeholder="ABC1D23 ou chassi"
             autoCapitalize="characters"
             className="h-12 flex-1 font-mono text-lg tracking-widest"
           />

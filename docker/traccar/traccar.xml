@@ -51,6 +51,15 @@
     <entry key='filter.duplicate'>true</entry>
     <entry key='filter.zero'>true</entry>
     <entry key='filter.distance'>10</entry>
+    <!--
+      Carro parado: sem isto o filtro de distância descarta TODAS as posições
+      (todas a menos de 10 m da anterior) e o painel acusa "GPS silenciado"
+      pra sempre — o alerta de sabotagem virava falso positivo em massa
+      (168 alertas no veículo de teste em 7 dias). A cada 10 min uma posição
+      passa mesmo sem deslocamento; quem NÃO tem fix de GPS continua repetindo
+      o fixTime antigo e continua sinalizado, corretamente.
+    -->
+    <entry key='filter.skipLimit'>600</entry>
     <!-- Descarta fix marcado como inválido pelo próprio protocolo. -->
     <entry key='filter.invalid'>true</entry>
     <!-- Descarta posição por torre de celular (LBS / cell tower). -->

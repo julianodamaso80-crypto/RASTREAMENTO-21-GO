@@ -562,6 +562,14 @@ export const bleTagsApi = {
 };
 
 export const stockApi = {
+  // Consulta do vínculo: SGA ao vivo e, se o veículo ainda não tem boleto, o
+  // espelho de pendências. Aceita placa ou chassi.
+  sgaLookup: async (placaOuChassi: string): Promise<HinovaLookup> => {
+    const res = await api.get<ApiResponse<HinovaLookup>>(
+      `/stock/sga-lookup/${encodeURIComponent(placaOuChassi)}`,
+    );
+    return res.data.data;
+  },
   getAll: async (params?: Record<string, string | number>): Promise<PaginatedResponse<StockItem>> => {
     const res = await api.get<PaginatedResponse<StockItem>>('/stock', { params });
     return res.data;
