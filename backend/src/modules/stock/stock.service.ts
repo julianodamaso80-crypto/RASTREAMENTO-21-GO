@@ -231,7 +231,10 @@ export class StockService {
         where,
         skip: (page - 1) * perPage,
         take: perPage,
-        orderBy: { createdAt: 'desc' },
+        // Desempate obrigatório: o estoque entra em lote e centenas de itens
+        // dividem o mesmo createdAt — só por ele, o Postgres devolve ordem
+        // diferente a cada página e itens somem/repetem ao paginar.
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         include: {
           assignedTechnician: { select: { id: true, name: true } },
         },
