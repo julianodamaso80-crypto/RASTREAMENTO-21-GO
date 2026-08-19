@@ -513,6 +513,24 @@ export const dashboardApi = {
   },
 };
 
+export const geocodeApi = {
+  /**
+   * Endereço da coordenada, resolvido no backend.
+   *
+   * Existe para o painel do veículo no mapa não bater no Nominatim direto do
+   * navegador: ali o cache era por distância percorrida (50 m) e o texto ficava
+   * na rua anterior enquanto o ícone já tinha andado, além de o formato do
+   * endereço divergir do que o Estoque mostra para a mesma posição.
+   */
+  reverse: async (lat: number, lng: number): Promise<string | null> => {
+    const res = await api.get<ApiResponse<{ address: string | null }>>(
+      '/geocode/reverse',
+      { params: { lat, lng } },
+    );
+    return res.data.data.address;
+  },
+};
+
 export const mapApi = {
   /** Source de tiles do Google. `provider: 'esri'` = chave não configurada. */
   getTiles: async (

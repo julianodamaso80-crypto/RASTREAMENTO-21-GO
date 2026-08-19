@@ -18,6 +18,7 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { BleTagsModule } from './modules/ble-tags/ble-tags.module';
 import { ChipsModule } from './modules/chips/chips.module';
 import { StockModule } from './modules/stock/stock.module';
+import { GeocodingModule } from './modules/geocoding/geocoding.module';
 import { TechniciansModule } from './modules/technicians/technicians.module';
 import { InstallationPendingsModule } from './modules/installation-pendings/installation-pendings.module';
 import { TechModule } from './modules/tech/tech.module';
@@ -99,6 +100,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     BleTagsModule,
     ChipsModule,
     StockModule,
+    GeocodingModule,
     TechniciansModule,
     TechModule,
     ClientsModule,

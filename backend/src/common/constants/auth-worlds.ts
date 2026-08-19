@@ -31,6 +31,7 @@ export const INTERNAL_CONTROLLERS: readonly string[] = [
   'dashboard/dashboard.controller.ts',
   'devices/devices.controller.ts',
   'sms-commands/sms-commands.controller.ts',
+  'geocoding/geocoding.controller.ts',
   'geofences/geofences.controller.ts',
   'hinova/hinova.controller.ts',
   'installation-pendings/installation-pendings.controller.ts',
@@ -151,6 +152,7 @@ export const LEAK_PROBES: readonly LeakProbe[] = [
     controller: 'sms-commands/sms-commands.controller.ts',
     path: '/devices/00000000-0000-0000-0000-000000000000/commands',
   },
+  { world: 'internal', controller: 'geocoding/geocoding.controller.ts', path: '/geocode/reverse' },
   { world: 'internal', controller: 'geofences/geofences.controller.ts', path: '/geofences' },
   { world: 'internal', controller: 'hinova/hinova.controller.ts', path: '/hinova/sync/status' },
   {

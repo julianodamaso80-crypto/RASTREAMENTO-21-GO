@@ -44,6 +44,10 @@ export class TraccarGateway
     string,
     { loggedAt: number; count: number }
   >();
+  // Rastreador que respirou desde o último flush: traccarDeviceId -> instante.
+  // Ver `flushLastConnection()`.
+  private respiros = new Map<number, Date>();
+  private readonly FLUSH_LAST_CONNECTION_MS = 60_000;
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
   private readonly WS_BACKOFF_MIN_MS = 2_000;
@@ -225,6 +229,43 @@ export class TraccarGateway
   }
 
   /**
+   * Grava em lote o último respiro de cada rastreador.
+   *
+   * `devices.last_connection` só era escrito quando alguém abria a tela de
+   * Estoque. Em 19/08/2026 o campo estava parado às 12:33 enquanto 21
+   * rastreadores tinham mandado posição nos últimos 10 minutos — e como o
+   * Dashboard conta "online agora / offline +1h / sem comunicação +24h" em
+   * cima dele, ele mostrava a frota inteira muda enquanto o Mapa, que lê o
+   * Traccar ao vivo, mostrava 14 ligados. Os dois números não batiam.
+   *
+   * Em lote a cada minuto, e não a cada posição: são ~3 mil posições por hora e
+   * o Dashboard trabalha com limiar de 5 minutos — todo mundo que respirou na
+   * janela recebe o mesmo carimbo, com erro máximo de 1 minuto, e o banco leva
+   * um UPDATE por minuto em vez de um por posição.
+   */
+  @Interval(60_000)
+  async flushLastConnection() {
+    if (this.respiros.size === 0) return;
+
+    const ids = [...this.respiros.keys()];
+    const quando = new Date();
+    this.respiros.clear();
+
+    try {
+      await this.prisma.device.updateMany({
+        where: { traccarDeviceId: { in: ids } },
+        data: { lastConnection: quando },
+      });
+    } catch (erro) {
+      this.logger.error(
+        `Falha ao gravar last_connection de ${ids.length} rastreadores: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+    }
+  }
+
+  /**
    * Contabiliza posição descartada por qualidade. Log agregado (1x por minuto
    * por device+motivo) — um rastreador sem GPS gera dezenas de posições ruins
    * por minuto e logar uma a uma afogaria o resto.
@@ -309,6 +350,11 @@ export class TraccarGateway
   private handleTraccarMessage(data: TraccarWsMessage) {
     if (data.positions) {
       for (const position of data.positions) {
+        // O chip respirou. Vale mesmo quando a posição é reprovada logo abaixo:
+        // GPS ruim não é a mesma coisa que aparelho mudo, e é `lastConnection`
+        // que responde "está comunicando?" no Dashboard e na tela de clientes.
+        this.respiros.set(position.deviceId, new Date());
+
         // PORTÃO DE ENTRADA DO TEMPO REAL. Posição reprovada (LBS por torre,
         // fix inválido, 0,0) não pode chegar ao mapa nem ao app: seria exibida
         // como localização exata e mandaria a equipe pro lugar errado num

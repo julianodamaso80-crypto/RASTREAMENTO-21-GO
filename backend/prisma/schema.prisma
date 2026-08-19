@@ -922,6 +922,10 @@ model GeoAddress {
   id        String   @id @default(uuid()) @db.Uuid
   latKey    Float    @map("lat_key")
   lngKey    Float    @map("lng_key")
+  /// Coordenada que foi de fato geocodificada. A chave acima é só o índice da
+  /// célula; é esta que diz a que distância do ponto pedido o endereço vale.
+  lat       Float?
+  lng       Float?
   address   String
   provider  String   @default("nominatim")
   createdAt DateTime @default(now()) @map("created_at")

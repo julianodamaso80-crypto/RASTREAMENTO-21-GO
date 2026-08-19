@@ -14,21 +14,38 @@ import { PrismaService } from '../prisma/prisma.service';
  * roda em segundo plano, uma por segundo — é o limite que a política de uso do
  * Nominatim (OpenStreetMap) impõe. Como a tela recarrega sozinha a cada 15s, o
  * endereço aparece na atualização seguinte sem nunca segurar a requisição.
+ *
+ * O cache reaproveita endereço por PROXIMIDADE REAL, não por célula de grade.
+ * A versão anterior arredondava a coordenada a 3 casas (~110 m) e devolvia o
+ * endereço do centro da célula: em 2 de 5 posições reais medidas em 19/08/2026
+ * isso trocava a rua, e numa delas trocava até o bairro (Barra da Tijuca virava
+ * Recreio dos Bandeirantes). Era a causa de "o mapa mostra uma rua e o texto
+ * mostra outra". Agora cada linha guarda a coordenada que foi de fato
+ * geocodificada e só é reaproveitada para pontos a até TOLERANCIA_M dela.
  */
 @Injectable()
 export class ReverseGeocodeService {
   private readonly logger = new Logger(ReverseGeocodeService.name);
 
   /**
-   * ~110 m por célula.
-   *
-   * Começou em 4 casas (~11 m) e isso funcionava só pra equipamento parado:
-   * rastreador andando muda de coordenada a cada envio, cada uma virava uma
-   * chave nova, e o endereço nunca chegava a aparecer — o operador via
-   * "ONLINE" com o campo de endereço vazio. Com célula de ~110 m o mesmo
-   * quarteirão reaproveita o endereço já resolvido.
+   * ~11 m por célula. A célula é só o índice que permite achar candidatos com
+   * uma busca por igualdade (rápida, usa o índice único); quem decide se o
+   * endereço serve é a distância real até a coordenada guardada, não a célula.
    */
-  private static readonly CASAS_DECIMAIS = 3;
+  private static readonly CASAS_DECIMAIS = 4;
+
+  /**
+   * Distância máxima entre o ponto pedido e o ponto que gerou o endereço.
+   *
+   * 25 m é o que separa "mesmo lugar" de "rua de trás". GPS parado oscila
+   * tipicamente 5–15 m, então equipamento no depósito continua reaproveitando
+   * o endereço e não gera chamada nova; equipamento andando passa dos 25 m e é
+   * resolvido de novo — que é o certo, porque ele mudou de rua de verdade.
+   */
+  private static readonly TOLERANCIA_M = 25;
+
+  /** Alcance da varredura: a célula do ponto e as 8 vizinhas (~33 m de raio). */
+  private static readonly VIZINHANCA = [-1, 0, 1];
 
   /** Política do OSM: no máximo uma chamada por segundo, com User-Agent seu. */
   private static readonly INTERVALO_MS = 1_100;
@@ -52,36 +69,91 @@ export class ReverseGeocodeService {
   async lookupCached(
     coordenadas: Coordenada[],
   ): Promise<Map<string, string>> {
-    const chaves = new Map<string, Coordenada>();
+    /** Chave de grade do ponto pedido -> coordenada crua dele. */
+    const pedidos = new Map<string, Coordenada>();
     for (const coord of coordenadas) {
       const chave = this.chave(coord);
-      if (chave) chaves.set(chave, this.arredondar(coord));
+      if (chave) pedidos.set(chave, coord);
     }
-    if (chaves.size === 0) return new Map();
+    if (pedidos.size === 0) return new Map();
+
+    // Varre a célula do ponto e as 8 vizinhas: o endereço pode ter sido
+    // resolvido a 12 m dali, do outro lado da borda da célula.
+    const celulas = new Map<string, { latitude: number; longitude: number }>();
+    const passo = 1 / 10 ** ReverseGeocodeService.CASAS_DECIMAIS;
+    for (const coord of pedidos.values()) {
+      const centro = this.arredondar(coord);
+      for (const dl of ReverseGeocodeService.VIZINHANCA) {
+        for (const dg of ReverseGeocodeService.VIZINHANCA) {
+          const c = this.arredondar({
+            latitude: centro.latitude + dl * passo,
+            longitude: centro.longitude + dg * passo,
+          });
+          const k = this.chaveDeValores(c.latitude, c.longitude);
+          if (k) celulas.set(k, { latitude: c.latitude, longitude: c.longitude });
+        }
+      }
+    }
 
     const achados = await this.prisma.geoAddress.findMany({
       where: {
-        OR: [...chaves.values()].map((c) => ({
+        OR: [...celulas.values()].map((c) => ({
           latKey: c.latitude,
           lngKey: c.longitude,
         })),
       },
-      select: { latKey: true, lngKey: true, address: true },
+      select: {
+        latKey: true,
+        lngKey: true,
+        lat: true,
+        lng: true,
+        address: true,
+      },
     });
 
+    // Para cada ponto pedido, o endereço mais próximo dentro da tolerância.
     const resultado = new Map<string, string>();
-    for (const achado of achados) {
-      resultado.set(
-        this.chaveDeValores(achado.latKey, achado.lngKey)!,
-        achado.address,
-      );
-    }
-
-    for (const [chave, coord] of chaves) {
-      if (!resultado.has(chave)) this.enfileirar(chave, coord);
+    for (const [chave, coord] of pedidos) {
+      let melhor: { distancia: number; address: string } | null = null;
+      for (const achado of achados) {
+        const distancia = distanciaMetros(
+          coord.latitude,
+          coord.longitude,
+          achado.lat ?? achado.latKey,
+          achado.lng ?? achado.lngKey,
+        );
+        if (distancia > ReverseGeocodeService.TOLERANCIA_M) continue;
+        if (!melhor || distancia < melhor.distancia) {
+          melhor = { distancia, address: achado.address };
+        }
+      }
+      if (melhor) resultado.set(chave, melhor.address);
+      else this.enfileirar(chave, coord);
     }
 
     return resultado;
+  }
+
+  /**
+   * Endereço da coordenada exata, esperando a resposta.
+   *
+   * Existe para a tela que mostra UM ponto (o painel do veículo aberto no
+   * mapa): ali dá para segurar a requisição, e o operador não pode ver o texto
+   * de uma posição antiga enquanto o ícone já andou. O caminho em lote
+   * (`lookupCached`) continua sendo o certo para listas.
+   */
+  async lookupNow(coord: Coordenada): Promise<string | null> {
+    const chave = this.chave(coord);
+    if (!chave) return null;
+
+    const cache = await this.lookupCached([coord]);
+    const doCache = cache.get(chave);
+    if (doCache) return doCache;
+
+    // Não estava no cache: `lookupCached` já o pôs na fila de fundo. Resolver
+    // aqui na frente é o que faz o texto acompanhar o ícone.
+    this.fila.delete(chave);
+    return this.resolver(coord);
   }
 
   /** Chave do cache pra uma coordenada crua — quem chama usa pra ler o Map. */
@@ -130,8 +202,11 @@ export class ReverseGeocodeService {
     }
   }
 
-  /** Uma chamada ao Nominatim. Falha aqui não estoura pra tela — fica sem endereço. */
-  private async resolver(coord: Coordenada): Promise<void> {
+  /**
+   * Uma chamada ao Nominatim, na coordenada EXATA. Falha aqui não estoura pra
+   * tela — fica sem endereço.
+   */
+  private async resolver(coord: Coordenada): Promise<string | null> {
     const url =
       `${ReverseGeocodeService.URL}?format=jsonv2&zoom=18&addressdetails=1` +
       `&lat=${coord.latitude}&lon=${coord.longitude}`;
@@ -148,30 +223,39 @@ export class ReverseGeocodeService {
         this.logger.warn(
           `Nominatim respondeu ${resposta.status} para ${coord.latitude},${coord.longitude}`,
         );
-        return;
+        return null;
       }
 
       const corpo = (await resposta.json()) as NominatimResposta;
       const endereco = formatarEndereco(corpo);
-      if (!endereco) return;
+      if (!endereco) return null;
 
+      const celula = this.arredondar(coord);
       await this.prisma.geoAddress.upsert({
         where: {
-          latKey_lngKey: { latKey: coord.latitude, lngKey: coord.longitude },
+          latKey_lngKey: { latKey: celula.latitude, lngKey: celula.longitude },
         },
         create: {
-          latKey: coord.latitude,
-          lngKey: coord.longitude,
+          latKey: celula.latitude,
+          lngKey: celula.longitude,
+          lat: coord.latitude,
+          lng: coord.longitude,
           address: endereco,
         },
-        update: { address: endereco },
+        update: {
+          lat: coord.latitude,
+          lng: coord.longitude,
+          address: endereco,
+        },
       });
+      return endereco;
     } catch (erro) {
       this.logger.warn(
         `Não consegui o endereço de ${coord.latitude},${coord.longitude}: ${
           erro instanceof Error ? erro.message : erro
         }`,
       );
+      return null;
     }
   }
 }
@@ -214,4 +298,24 @@ function siglaEstado(
 ): string | null {
   if (iso && iso.includes('-')) return iso.split('-').pop() ?? null;
   return estado ?? null;
+}
+
+/**
+ * Metros entre duas coordenadas (haversine). Precisão de sobra na escala de
+ * dezenas de metros, que é onde a decisão de reaproveitar o cache acontece.
+ */
+export function distanciaMetros(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6_371_000;
+  const rad = (x: number) => (x * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLng = rad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
