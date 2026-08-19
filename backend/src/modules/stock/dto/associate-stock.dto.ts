@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -39,6 +40,15 @@ export class AssociateStockDto {
   @IsOptional()
   @IsUUID()
   technicianId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Libera o vínculo mesmo com o veículo/associado INATIVO no SGA. ' +
+      'Só ADMIN/SUPER_ADMIN pode enviar — de qualquer outra origem o vínculo é recusado.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowInactive?: boolean;
 
   @ApiProperty({ description: 'Local onde o rastreador foi instalado' })
   @IsString()

@@ -30,7 +30,7 @@ import { ValidateStockDto } from './dto/validate-stock.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
-  user: { id: string; name?: string; email?: string };
+  user: { id: string; name?: string; email?: string; role: Role };
 }
 
 @ApiTags('Estoque')
@@ -149,14 +149,17 @@ export class StockController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
   @ApiOperation({
     summary:
-      'Associar cliente e ativo: vincula o rastreador a uma placa do SGA',
+      'Associar cliente e ativo: vincula o rastreador a uma placa do SGA. ' +
+      'Associado INATIVO só passa com `allowInactive` e usuário ADMIN.',
   })
   associate(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AssociateStockDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.stockService.associate(id, req.tenantId, dto);
+    const liberadorAdmin =
+      req.user.role === Role.SUPER_ADMIN || req.user.role === Role.ADMIN;
+    return this.stockService.associate(id, req.tenantId, dto, liberadorAdmin);
   }
 
   @Post('assign')

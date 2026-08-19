@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2, Search, UserCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { stockApi } from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -47,6 +48,12 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
   const [technicianName, setTechnicianName] = useState('');
   const [installLocation, setInstallLocation] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [liberarInativo, setLiberarInativo] = useState(false);
+
+  const { user } = useAuth();
+  // Liberar instalação de associado inativo é decisão de administrador. O
+  // backend recusa de qualquer outra origem — aqui é só a tela acompanhando.
+  const podeLiberarInativo = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
 
   const reset = () => {
     setPlaca('');
@@ -55,6 +62,7 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
     setTechnicianName('');
     setInstallLocation('');
     setSubmitting(false);
+    setLiberarInativo(false);
   };
 
   const handleClose = (o: boolean) => {
@@ -70,13 +78,18 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
     }
     setSearching(true);
     setLookup(null);
+    setLiberarInativo(false);
     try {
       const res = await stockApi.sgaLookup(p);
       setLookup(res);
       if (!res.encontrado) {
         toast.error(res.motivo || 'Placa não encontrada no SGA.');
       } else if (!res.ativo) {
-        toast.error('Placa INATIVA no SGA — vínculo bloqueado.');
+        toast.error(
+          podeLiberarInativo
+            ? 'Placa INATIVA no SGA — só com liberação de administrador.'
+            : 'Placa INATIVA no SGA — vínculo bloqueado.',
+        );
       } else if (res.fonte === 'espelho') {
         toast.info('Veículo novo, ainda sem boleto no SGA — dados vindos do espelho de pendências.');
       }
@@ -87,9 +100,12 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
     }
   };
 
+  const inativo = !!lookup?.encontrado && !lookup.ativo;
+  const inativoLiberado = inativo && podeLiberarInativo && liberarInativo;
+  const situacaoOk = !!lookup?.encontrado && (!!lookup.ativo || inativoLiberado);
+
   const canActivate =
-    !!lookup?.encontrado &&
-    !!lookup?.ativo &&
+    situacaoOk &&
     technicianName.trim().length > 0 &&
     installLocation.trim().length > 0 &&
     !submitting;
@@ -103,6 +119,7 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
         placa: placa.toUpperCase().replace(/[^A-Z0-9]/g, ''),
         technicianName: technicianName.trim(),
         installLocation: installLocation.trim(),
+        ...(inativoLiberado ? { allowInactive: true } : {}),
       });
       toast.success('Cliente ativado! Rastreador vinculado e movido para Clientes Ativos.', {
         id: toastId,
@@ -118,8 +135,6 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
       setSubmitting(false);
     }
   };
-
-  const inativo = lookup?.encontrado && !lookup.ativo;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -191,16 +206,33 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
                 <Field label="Modelo" value={lookup.veiculo.modelo} />
                 <Field label="Vencimento" value={lookup.situacao.dataVencimento} />
               </div>
-              {inativo && (
-                <p className="text-xs text-red-400">
-                  Veículo INATIVO no SGA. O vínculo só é permitido para veículos ATIVOS.
-                </p>
-              )}
+              {inativo &&
+                (podeLiberarInativo ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-red-400">
+                      Veículo INATIVO no SGA. Instalar assim mesmo é decisão do administrador e fica
+                      registrada.
+                    </p>
+                    <label className="flex items-start gap-2 text-xs font-medium cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 cursor-pointer accent-brand-orange-500"
+                        checked={liberarInativo}
+                        onChange={(e) => setLiberarInativo(e.target.checked)}
+                      />
+                      <span>Liberar a instalação mesmo com o associado inativo</span>
+                    </label>
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-400">
+                    Veículo INATIVO no SGA. Só um administrador pode liberar esta instalação.
+                  </p>
+                ))}
             </div>
           )}
 
           {/* Dados da instalação — obrigatórios */}
-          {lookup?.encontrado && lookup.ativo && (
+          {situacaoOk && (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="assoc-tec" required>Técnico que instalou</Label>

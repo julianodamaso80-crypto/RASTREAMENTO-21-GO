@@ -591,7 +591,13 @@ export const stockApi = {
   },
   associate: async (
     id: string,
-    payload: { placa: string; technicianName: string; installLocation: string },
+    payload: {
+      placa: string;
+      technicianName: string;
+      installLocation: string;
+      /** Liberação de administrador para associado INATIVO no SGA. */
+      allowInactive?: boolean;
+    },
   ): Promise<StockAssociateResult> => {
     const res = await api.post<ApiResponse<StockAssociateResult>>(
       `/stock/${id}/associate`,

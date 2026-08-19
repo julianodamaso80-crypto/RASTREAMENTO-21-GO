@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -292,7 +293,8 @@ export class StockService {
    *
    * Regras (decididas com o usuário):
    * - Placa não encontrada no SGA → bloqueia (422).
-   * - Placa INATIVA no SGA → bloqueia (422).
+   * - Placa INATIVA no SGA → bloqueia (422), salvo liberação de administrador
+   *   (`allowInactive` + `liberadorAdmin`); operador e técnico nunca liberam.
    * - Técnico e local de instalação obrigatórios (validados no DTO).
    */
   /**
@@ -322,7 +324,17 @@ export class StockService {
     return vivo;
   }
 
-  async associate(id: string, tenantId: string, dto: AssociateStockDto) {
+  async associate(
+    id: string,
+    tenantId: string,
+    dto: AssociateStockDto,
+    /**
+     * Quem chamou tem poder de liberar associado inativo. Só o controller do
+     * painel passa true (e só para ADMIN/SUPER_ADMIN); o PWA do técnico chama
+     * sem este argumento, então nunca libera.
+     */
+    liberadorAdmin = false,
+  ) {
     const item = await this.prisma.stockItem.findFirst({
       where: { id, tenantId, deletedAt: null, associatedAt: null },
     });
@@ -340,10 +352,21 @@ export class StockService {
       );
     }
     if (!lookup.ativo) {
-      throw new UnprocessableEntityException(
-        `Placa ${lookup.veiculo.placa ?? dto.placa} está ${
-          lookup.situacao.descricao ?? 'INATIVA'
-        } no SGA — vínculo bloqueado.`,
+      const situacao = lookup.situacao.descricao ?? 'INATIVA';
+      const placaSga = lookup.veiculo.placa ?? dto.placa;
+      if (!dto.allowInactive) {
+        throw new UnprocessableEntityException(
+          `Placa ${placaSga} está ${situacao} no SGA — vínculo bloqueado. ` +
+            'Só um administrador pode liberar a instalação assim mesmo.',
+        );
+      }
+      if (!liberadorAdmin) {
+        throw new ForbiddenException(
+          'Somente um administrador pode liberar a instalação com o associado inativo no SGA.',
+        );
+      }
+      this.logger.warn(
+        `Vínculo liberado por ADMIN com associado INATIVO: placa ${placaSga}, situação ${situacao}, IMEI ${item.imei}, técnico ${dto.technicianName}.`,
       );
     }
     if (!lookup.cliente.cpf) {
