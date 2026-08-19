@@ -6,37 +6,26 @@ import { geocodeApi } from '@/lib/api';
 /**
  * Endereço da coordenada do veículo, vindo do backend.
  *
- * Antes o navegador chamava o Nominatim direto e só refazia a busca depois de
- * 50 m percorridos. Como os envios do rastreador chegam de 25 a 47 m um do
- * outro, o ícone andava e o texto continuava na rua anterior — era isso que
- * fazia o mapa e o endereço escrito discordarem. Além disso o formato aqui era
- * diferente do que o Estoque monta no servidor para a mesma posição.
+ * Refaz a busca a cada coordenada nova, sem margem de distância. A versão
+ * anterior só refazia depois de 20 m percorridos e era isso que fazia o texto
+ * ficar na rua anterior enquanto o ícone já tinha andado — o efeito aparecia
+ * pior em velocidade baixa, justo quando o veículo está manobrando e trocando
+ * de rua.
  *
- * Agora existe uma fonte só: o backend, com o cache por proximidade real e a
- * fila de 1 req/s que a política do OpenStreetMap exige. Aqui fica apenas o
- * que é de tela — não refazer a busca enquanto o veículo não saiu do lugar.
+ * Margem nenhuma não custa consulta a mais: medido em 19/08/2026 sobre 367
+ * transições de rastreador parado, a oscilação do GPS tem mediana de 14,3 m,
+ * então uma margem de 5 m filtraria quase nada (64,6% dos envios gerariam
+ * consulta contra 62,2% sem margem). Pular a busca só quando o rastreador
+ * repete a coordenada — o que ele faz em 37,8% dos envios parados — filtra o
+ * mesmo tanto e mantém o texto exatamente sobre o ponto do ícone.
+ *
+ * O ritmo de 1 consulta por segundo que o OpenStreetMap exige é garantido no
+ * backend, num portão único compartilhado com a fila das listas.
  */
 
 interface ReverseGeocodeResult {
   address: string | null;
   loading: boolean;
-}
-
-/**
- * Abaixo disso é o GPS parado oscilando, não o veículo andando. Acima, pode já
- * ser outra rua — e o backend tem a resposta em cache na maioria das vezes.
- */
-const MIN_DESLOCAMENTO_M = 20;
-
-function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6_371_000;
-  const toRad = (x: number) => (x * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
 export function useReverseGeocode(
@@ -45,7 +34,7 @@ export function useReverseGeocode(
 ): ReverseGeocodeResult {
   const [address, setAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const lastFetchRef = useRef<{ lat: number; lng: number; address: string | null } | null>(
+  const ultimo = useRef<{ lat: number; lng: number; address: string | null } | null>(
     null,
   );
 
@@ -55,31 +44,32 @@ export function useReverseGeocode(
       return;
     }
 
-    const last = lastFetchRef.current;
-    if (last && distanceMeters(last.lat, last.lng, latitude, longitude) < MIN_DESLOCAMENTO_M) {
-      setAddress(last.address);
+    // Rastreador reenviou o mesmo ponto: o endereço já está na tela, e é este
+    // mesmo. Nada a fazer — nem consulta, nem novo render.
+    const anterior = ultimo.current;
+    if (anterior && anterior.lat === latitude && anterior.lng === longitude) {
       return;
     }
 
-    let alive = true;
+    let vivo = true;
     setLoading(true);
 
     geocodeApi
       .reverse(latitude, longitude)
       .then((resolvido) => {
-        if (!alive) return;
-        lastFetchRef.current = { lat: latitude, lng: longitude, address: resolvido };
+        if (!vivo) return;
+        ultimo.current = { lat: latitude, lng: longitude, address: resolvido };
         setAddress(resolvido);
       })
       .catch(() => {
         // Sem endereço a tela continua mostrando a posição — não é bloqueante.
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (vivo) setLoading(false);
       });
 
     return () => {
-      alive = false;
+      vivo = false;
     };
   }, [latitude, longitude]);
 

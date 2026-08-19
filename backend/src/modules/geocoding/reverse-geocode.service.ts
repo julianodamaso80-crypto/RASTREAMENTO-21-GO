@@ -64,6 +64,10 @@ export class ReverseGeocodeService {
 
   private readonly fila = new Map<string, Coordenada>();
   private processando = false;
+  /** Instante em que o Nominatim pode ser chamado de novo. Ver `aguardarVez`. */
+  private slotLivreEm = 0;
+  /** Quantos pedidos de tela estão esperando — a fila de fundo cede a vez. */
+  private prioritarios = 0;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -73,6 +77,7 @@ export class ReverseGeocodeService {
    */
   async lookupCached(
     coordenadas: Coordenada[],
+    toleranciaM: number = ReverseGeocodeService.TOLERANCIA_M,
   ): Promise<Map<string, string>> {
     /** Chave de grade do ponto pedido -> coordenada crua dele. */
     const pedidos = new Map<string, Coordenada>();
@@ -127,7 +132,7 @@ export class ReverseGeocodeService {
           achado.lat ?? achado.latKey,
           achado.lng ?? achado.lngKey,
         );
-        if (distancia > ReverseGeocodeService.TOLERANCIA_M) continue;
+        if (distancia > toleranciaM) continue;
         if (!melhor || distancia < melhor.distancia) {
           melhor = { distancia, address: achado.address };
         }
@@ -151,14 +156,23 @@ export class ReverseGeocodeService {
     const chave = this.chave(coord);
     if (!chave) return null;
 
-    const cache = await this.lookupCached([coord]);
+    // Tolerância ZERO: aqui o endereço vai aparecer ao lado da coordenada e do
+    // ícone no mapa, então ele tem que ser desta coordenada, não de um vizinho.
+    // Só reaproveita cache de coordenada idêntica — que é o caso do veículo
+    // parado, cujo rastreador repete o mesmo par de números.
+    const cache = await this.lookupCached([coord], 0);
     const doCache = cache.get(chave);
     if (doCache) return doCache;
 
     // Não estava no cache: `lookupCached` já o pôs na fila de fundo. Resolver
     // aqui na frente é o que faz o texto acompanhar o ícone.
     this.fila.delete(chave);
-    return this.resolver(coord);
+    this.prioritarios++;
+    try {
+      return await this.resolver(coord);
+    } finally {
+      this.prioritarios--;
+    }
   }
 
   /** Chave do cache pra uma coordenada crua — quem chama usa pra ler o Map. */
@@ -192,15 +206,21 @@ export class ReverseGeocodeService {
     this.processando = true;
     try {
       while (this.fila.size > 0) {
+        // Alguém está com o painel aberto esperando um endereço: a lista do
+        // estoque pode esperar mais um instante, quem está olhando não.
+        if (this.prioritarios > 0) {
+          await new Promise((r) => setTimeout(r, 200));
+          continue;
+        }
         const [chave, coord] = this.fila.entries().next().value as [
           string,
           Coordenada,
         ];
         this.fila.delete(chave);
+        // O ritmo de 1 chamada por vez é do portão em `resolver`, que vale
+        // também para os pedidos de tela — senão os dois caminhos somados
+        // passariam do limite do OpenStreetMap.
         await this.resolver(coord);
-        await new Promise((r) =>
-          setTimeout(r, ReverseGeocodeService.INTERVALO_MS),
-        );
       }
     } finally {
       this.processando = false;
@@ -208,10 +228,31 @@ export class ReverseGeocodeService {
   }
 
   /**
+   * Segura a chamada até o próximo horário livre.
+   *
+   * O OpenStreetMap permite uma consulta por segundo por aplicação, e existem
+   * dois caminhos que chamam o Nominatim: a fila de fundo (listas) e o pedido
+   * direto da tela (`lookupNow`). Antes cada um tinha seu próprio ritmo, então
+   * somados podiam passar do limite e levar bloqueio. Agora os dois reservam
+   * horário no mesmo portão.
+   */
+  private async aguardarVez(): Promise<void> {
+    const { esperaMs, novoSlotLivreEm } = proximoSlot(
+      Date.now(),
+      this.slotLivreEm,
+      ReverseGeocodeService.INTERVALO_MS,
+    );
+    this.slotLivreEm = novoSlotLivreEm;
+    if (esperaMs > 0) await new Promise((r) => setTimeout(r, esperaMs));
+  }
+
+  /**
    * Uma chamada ao Nominatim, na coordenada EXATA. Falha aqui não estoura pra
    * tela — fica sem endereço.
    */
   private async resolver(coord: Coordenada): Promise<string | null> {
+    await this.aguardarVez();
+
     const url =
       `${ReverseGeocodeService.URL}?format=jsonv2&zoom=18&addressdetails=1` +
       `&lat=${coord.latitude}&lon=${coord.longitude}`;
@@ -323,4 +364,20 @@ export function distanciaMetros(
     Math.sin(dLat / 2) ** 2 +
     Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * Quando a próxima chamada ao Nominatim pode sair.
+ *
+ * Pura de propósito: o ritmo de 1 por segundo é a regra que mais custa caro se
+ * quebrar (bloqueio do OpenStreetMap para o projeto inteiro) e precisa de teste
+ * sem depender de relógio.
+ */
+export function proximoSlot(
+  agora: number,
+  slotLivreEm: number,
+  intervaloMs: number,
+): { esperaMs: number; novoSlotLivreEm: number } {
+  const inicio = Math.max(agora, slotLivreEm);
+  return { esperaMs: inicio - agora, novoSlotLivreEm: inicio + intervaloMs };
 }

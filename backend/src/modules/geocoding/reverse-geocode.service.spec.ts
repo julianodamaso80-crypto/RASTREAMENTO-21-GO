@@ -2,6 +2,7 @@ import {
   ReverseGeocodeService,
   distanciaMetros,
   formatarEndereco,
+  proximoSlot,
 } from './reverse-geocode.service';
 
 describe('formatarEndereco', () => {
@@ -147,5 +148,55 @@ describe('distanciaMetros', () => {
 
   it('mede três casas decimais como ~111 m', () => {
     expect(distanciaMetros(-22.9058, -43.1795, -22.9048, -43.1795)).toBeCloseTo(111, 0);
+  });
+});
+
+describe('tolerância zero — o painel do veículo', () => {
+  it('recusa até o vizinho a 4 m quando a tolerância pedida é zero', async () => {
+    const prisma = {
+      geoAddress: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            latKey: -22.9058,
+            lngKey: -43.1795,
+            lat: -22.9058,
+            lng: -43.1795,
+            address: 'Rua Vizinha - Centro, Rio de Janeiro - RJ',
+          },
+        ]),
+      },
+    } as never;
+    const servico = new ReverseGeocodeService(prisma);
+
+    // ~4 m: aceito no lote do estoque, recusado quando se pede exatidão.
+    const pedido = { latitude: -22.90576, longitude: -43.1795 };
+    const comTolerancia = await servico.lookupCached([pedido]);
+    const semTolerancia = await servico.lookupCached([pedido], 0);
+
+    expect(comTolerancia.size).toBe(1);
+    expect(semTolerancia.size).toBe(0);
+  });
+});
+
+describe('proximoSlot — portão de 1 chamada por vez ao Nominatim', () => {
+  it('primeira chamada não espera', () => {
+    expect(proximoSlot(1_000, 0, 1_100)).toEqual({
+      esperaMs: 0,
+      novoSlotLivreEm: 2_100,
+    });
+  });
+
+  it('chamada imediatamente depois espera o intervalo cheio', () => {
+    expect(proximoSlot(1_000, 2_100, 1_100)).toEqual({
+      esperaMs: 1_100,
+      novoSlotLivreEm: 3_200,
+    });
+  });
+
+  it('slot vencido não gera espera nem acumula atraso', () => {
+    expect(proximoSlot(9_000, 2_100, 1_100)).toEqual({
+      esperaMs: 0,
+      novoSlotLivreEm: 10_100,
+    });
   });
 });
