@@ -107,6 +107,15 @@ export default function MapaPage() {
           ref={mapRef}
           vehicles={filteredVehicles}
           onVehicleClick={handleVehicleClick}
+          // O painel de detalhe cobre os 380px da direita e engolia o seletor
+          // de mapa (incluindo o Satélite Google). Com o painel aberto ele sai
+          // de baixo: à esquerda do painel no desktop, no canto esquerdo no
+          // celular, onde o painel toma quase a tela toda.
+          basemapToggleClassName={
+            selectedVehicleId && panelOpen
+              ? 'left-3 right-auto lg:left-auto lg:right-[392px]'
+              : undefined
+          }
         />
 
         {/* Abaixo de lg a VehicleSidebar ao lado do mapa desaparece — este

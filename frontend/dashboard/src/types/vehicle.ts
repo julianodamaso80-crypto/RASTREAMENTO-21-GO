@@ -48,6 +48,8 @@ export interface Vehicle {
   createdAt: string;
   updatedAt: string;
   associate: Associate | null;
+  /** Rastreador vinculado. Só o que o painel precisa mostrar. */
+  device?: { installLocation: string | null } | null;
 }
 
 export interface VehicleWithTracking extends Vehicle {

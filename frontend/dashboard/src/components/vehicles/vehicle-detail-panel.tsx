@@ -11,6 +11,7 @@ import {
   Lock,
   Unlock,
   Phone,
+  Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -66,6 +67,8 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   // Prioriza endereço do Nominatim; se falhou, usa o do Traccar (que pode
   // vir vazio se geocoder do servidor estiver lento/rate-limited).
   const displayAddress = reverseAddress || vehicle.address || null;
+  // Local físico no veículo informado na instalação (ex.: "atrás do porta-luvas").
+  const installLocation = vehicle.device?.installLocation?.trim() || null;
 
   return (
     <>
@@ -158,6 +161,26 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
               <p className="text-[10px] font-mono text-muted-foreground mt-1">
                 {vehicle.latitude.toFixed(5)}, {vehicle.longitude.toFixed(5)}
               </p>
+            </div>
+          </div>
+
+          {/* Onde o rastreador foi escondido no veículo — informado pelo
+              técnico na instalação. Vale ouro quando o carro é levado. */}
+          <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border/20">
+            <Wrench className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                Rastreador instalado em
+              </p>
+              {installLocation ? (
+                <p className="text-sm font-medium leading-tight mt-1">
+                  {installLocation}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground italic mt-1">
+                  Local não informado
+                </p>
+              )}
             </div>
           </div>
         </div>

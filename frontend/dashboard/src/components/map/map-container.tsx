@@ -37,6 +37,9 @@ export interface MapContainerRef {
 interface MapContainerProps {
   vehicles: VehicleWithTracking[];
   onVehicleClick?: (vehicleId: string) => void;
+  /** Reposiciona o seletor de mapa quando algo cobre o canto superior direito
+   *  — no /mapa é o painel de detalhe do veículo. */
+  basemapToggleClassName?: string;
 }
 
 /**
@@ -51,7 +54,7 @@ interface MapContainerProps {
  * componente como fallback pra clientes individuais (visão CLIENT).
  */
 const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
-  function MapContainer({ vehicles, onVehicleClick }, ref) {
+  function MapContainer({ vehicles, onVehicleClick, basemapToggleClassName }, ref) {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -346,7 +349,11 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     return (
       <div className="relative w-full h-full">
         <div ref={mapContainerRef} className="w-full h-full" />
-        <BasemapToggle current={basemap} onChange={setBasemap} />
+        <BasemapToggle
+          current={basemap}
+          onChange={setBasemap}
+          className={basemapToggleClassName}
+        />
         {satProvider === 'google' && googleVisible && (
           <GoogleMapsAttribution copyright={googleCopyright} />
         )}
