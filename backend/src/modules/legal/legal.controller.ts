@@ -6,7 +6,7 @@ const PRIVACY_HTML = `<!doctype html>
 <html lang="pt-BR"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Política de Privacidade — Track Go Rastreamento</title>
+<title>Política de Privacidade — 21 Tracker Rastreamento</title>
 <style>
   :root{--navy:#293c82;--orange:#f2911d;--text:#0f172a;--muted:#475569}
   *{box-sizing:border-box}
@@ -29,14 +29,19 @@ const PRIVACY_HTML = `<!doctype html>
   <div class="logo">
     <svg width="26" height="26" viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="none" stroke="#f2911d" stroke-width="8" stroke-linecap="round" stroke-dasharray="115 6" transform="rotate(-30 32 32)"/><path d="M22 36c0-4.4 3.6-8 8-8s8 3.6 8 8c0 6-8 14-8 14s-8-8-8-14z" fill="#c7d301"/><circle cx="30" cy="36" r="3" fill="#fff"/></svg>
   </div>
-  <div><h1>Track Go Rastreamento</h1><div class="tag">PROTEÇÃO VEICULAR</div></div>
+  <div><h1>21 Tracker Rastreamento</h1><div class="tag">PROTEÇÃO VEICULAR</div></div>
 </div></header>
 <main class="wrap">
   <h1 style="color:#0f172a">Política de Privacidade</h1>
-  <p class="upd">Última atualização: junho de 2026</p>
+  <p class="upd">Última atualização: agosto de 2026</p>
 
-  <p>Esta Política de Privacidade descreve como o aplicativo <strong>Track Go Rastreamento</strong>
-  (o "App"), oferecido pela 21 Go Proteção Veicular, coleta, usa e protege as informações dos
+  <p class="upd">Aplicativo: <strong>21 Tracker Rastreamento</strong>
+  (ID do pacote <strong>com.r21go.client</strong>) &middot;
+  Desenvolvedor: <strong>21 Tracker Rastreamento</strong> &mdash; 21 Go Proteção Veicular</p>
+
+  <p>Esta Política de Privacidade descreve como o aplicativo <strong>21 Tracker Rastreamento</strong>
+  (o "App"), publicado no Google Play sob o pacote <strong>com.r21go.client</strong> pelo
+  desenvolvedor <strong>21 Tracker Rastreamento</strong> (21 Go Proteção Veicular), coleta, usa e protege as informações dos
   associados que utilizam o serviço de rastreamento veicular.</p>
 
   <h2>1. Dados que coletamos</h2>
@@ -77,7 +82,7 @@ const PRIVACY_HTML = `<!doctype html>
   E-mail: <a href="mailto:contato@trackgo.site">contato@trackgo.site</a><br>
   Site: <a href="https://trackgo.site">trackgo.site</a></p>
 </main>
-<footer class="wrap">© 2026 21 Go Proteção Veicular — Track Go Rastreamento. Todos os direitos reservados.</footer>
+<footer class="wrap">© 2026 21 Go Proteção Veicular — 21 Tracker Rastreamento. Todos os direitos reservados.</footer>
 </body></html>`;
 
 // Página de exclusão de conta/dados exigida pelo Google Play (Data Safety):
@@ -87,7 +92,7 @@ const DELETE_HTML = `<!doctype html>
 <html lang="pt-BR"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Exclusão de conta e dados — Track Go Rastreamento</title>
+<title>Exclusão de conta e dados — 21 Tracker Rastreamento</title>
 <style>
   :root{--navy:#293c82;--orange:#f2911d;--text:#0f172a;--muted:#475569}
   *{box-sizing:border-box}
@@ -111,11 +116,11 @@ const DELETE_HTML = `<!doctype html>
   <div class="logo">
     <svg width="26" height="26" viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="none" stroke="#f2911d" stroke-width="8" stroke-linecap="round" stroke-dasharray="115 6" transform="rotate(-30 32 32)"/><path d="M22 36c0-4.4 3.6-8 8-8s8 3.6 8 8c0 6-8 14-8 14s-8-8-8-14z" fill="#c7d301"/><circle cx="30" cy="36" r="3" fill="#fff"/></svg>
   </div>
-  <div><h1>Track Go Rastreamento</h1><div class="tag">PROTEÇÃO VEICULAR</div></div>
+  <div><h1>21 Tracker Rastreamento</h1><div class="tag">PROTEÇÃO VEICULAR</div></div>
 </div></header>
 <main class="wrap">
   <h1 style="color:#0f172a">Exclusão de conta e dados</h1>
-  <p class="upd">Aplicativo: <strong>21 Tracker Rastreamento</strong> (Track Go Rastreamento) — 21 Go Proteção Veicular</p>
+  <p class="upd">Aplicativo: <strong>21 Tracker Rastreamento</strong> (ID do pacote <strong>com.r21go.client</strong>) — Desenvolvedor: <strong>21 Tracker Rastreamento</strong> / 21 Go Proteção Veicular</p>
 
   <p>Esta página explica como o associado pode solicitar a exclusão da sua conta e dos
   dados pessoais tratados pelo aplicativo <strong>21 Tracker Rastreamento</strong>.</p>
@@ -146,7 +151,7 @@ const DELETE_HTML = `<!doctype html>
   <p>E-mail: <a href="mailto:contato@trackgo.site">contato@trackgo.site</a><br>
   Site: <a href="https://trackgo.site">trackgo.site</a></p>
 </main>
-<footer class="wrap">© 2026 21 Go Proteção Veicular — Track Go Rastreamento. Todos os direitos reservados.</footer>
+<footer class="wrap">© 2026 21 Go Proteção Veicular — 21 Tracker Rastreamento. Todos os direitos reservados.</footer>
 </body></html>`;
 
 @ApiExcludeController()
