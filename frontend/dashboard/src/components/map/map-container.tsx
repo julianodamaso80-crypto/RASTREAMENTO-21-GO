@@ -32,6 +32,8 @@ export interface MapContainerRef {
     zoom?: number,
     paddingRight?: number,
   ) => void;
+  /** Traz o ponto de volta ao quadro se ele saiu — sem mexer no zoom. */
+  keepInView: (lng: number, lat: number, paddingRight?: number) => void;
 }
 
 interface MapContainerProps {
@@ -77,6 +79,41 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           center: [lng, lat],
           zoom,
           duration: 1000,
+          padding: { top: 0, bottom: 0, left: 0, right: paddingRight },
+        });
+      },
+
+      /**
+       * Seguir o veículo sem tomar o mapa de quem está olhando.
+       *
+       * O seguimento antigo chamava `flyTo` com zoom fixo a cada atualização —
+       * e como a lista de veículos inteira é recriada quando QUALQUER um dos 60
+       * reporta posição (~0,84 por segundo em 19/08/2026), isso reescrevia o
+       * zoom do operador uma vez por segundo e reiniciava uma animação de 1000
+       * ms que nunca chegava ao fim. Dava os dois sintomas ao mesmo tempo: o
+       * zoom voltava sozinho e o veículo aparecia fora do quadro.
+       *
+       * Aqui não há zoom no `easeTo` — o MapLibre preserva o atual — e a câmera
+       * só se mexe quando o ponto de fato saiu da área visível.
+       */
+      keepInView: (lng: number, lat: number, paddingRight = 0) => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        const canvas = map.getCanvas();
+        const ponto = map.project([lng, lat]);
+        // Margem pra não ficar colado na borda (e pro pin caber inteiro).
+        const margem = 80;
+        const dentro =
+          ponto.x > margem &&
+          ponto.x < canvas.clientWidth - paddingRight - margem &&
+          ponto.y > margem &&
+          ponto.y < canvas.clientHeight - margem;
+        if (dentro) return;
+
+        map.easeTo({
+          center: [lng, lat],
+          duration: 600,
           padding: { top: 0, bottom: 0, left: 0, right: paddingRight },
         });
       },

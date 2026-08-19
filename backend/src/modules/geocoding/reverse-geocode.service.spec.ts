@@ -92,13 +92,36 @@ describe('cache por proximidade', () => {
       ]),
     );
 
-    // ~11 m ao norte do ponto que gerou o endereço.
+    // ~4 m ao norte do ponto que gerou o endereço: dentro da tolerância.
     const achados = await servico.lookupCached([
-      { latitude: -22.9057, longitude: -43.1795 },
+      { latitude: -22.90576, longitude: -43.1795 },
     ]);
 
-    const chave = servico.chave({ latitude: -22.9057, longitude: -43.1795 })!;
+    const chave = servico.chave({ latitude: -22.90576, longitude: -43.1795 })!;
     expect(achados.get(chave)).toBe('Rua Certa - Centro, Rio de Janeiro - RJ');
+  });
+
+  it('recusa o vizinho a 17 m — o caso real do TTW5I01 em 19/08', async () => {
+    // Medido em produção: o ponto do veículo (-22.88186, -43.42077) é Rua
+    // Piraquara; a 17,2 m dali o Nominatim responde Rua Cristóvão de Barros,
+    // e era esse o endereço que a tela mostrava. Varrendo 5/10/15/20/25 m em
+    // torno de três veículos reais, nenhum caso mudou de rua a 5 m e a maioria
+    // mudou a partir de 15 m — por isso a tolerância é 5, não 25.
+    const servico = new ReverseGeocodeService(
+      prismaFake([
+        {
+          lat: -22.882002222222223,
+          lng: -43.42070277777778,
+          address: 'Rua Cristóvão de Barros - Realengo, Rio de Janeiro - RJ',
+        },
+      ]),
+    );
+
+    const achados = await servico.lookupCached([
+      { latitude: -22.88186, longitude: -43.42077 },
+    ]);
+
+    expect(achados.size).toBe(0);
   });
 
   it('recusa o endereço de um ponto longe demais — é onde nascia a rua errada', async () => {

@@ -79,20 +79,38 @@ export default function MapaPage() {
     selectVehicle(alvo.id);
   }, [placaInicial, vehicles, selectVehicle]);
 
-  // Quando seleciona veiculo, da flyTo. Depois disso, segue o veiculo em
-  // tempo real: a cada mudanca em vehicles (WS updates), faz easeTo suave
-  // pra acompanhar o movimento sem desorientar o operador.
+  // Coordenada do veículo selecionado, como número solto.
+  //
+  // Isto existe pra NÃO depender do array `vehicles` nos efeitos de câmera
+  // abaixo: ele é recriado inteiro sempre que qualquer um dos 60 veículos
+  // reporta posição (~0,84 vez por segundo em 19/08/2026), e era isso que
+  // fazia a câmera se mexer o tempo todo mesmo com o veículo selecionado
+  // parado.
+  const alvoLat = selectedVehicle?.latitude ?? null;
+  const alvoLng = selectedVehicle?.longitude ?? null;
+
+  // Foco inicial: acontece ao SELECIONAR o veículo e só aí. É o único momento
+  // em que o zoom é imposto — a partir daqui o zoom é de quem está olhando.
   useEffect(() => {
-    if (!selectedVehicleId) return;
-    const v = vehicles.find((veh) => veh.id === selectedVehicleId);
-    if (!v || !v.latitude || !v.longitude) return;
+    if (!selectedVehicleId || !alvoLat || !alvoLng) return;
     mapRef.current?.flyTo(
-      v.longitude,
-      v.latitude,
+      alvoLng,
+      alvoLat,
       FOCUS_ZOOM,
       panelOpen ? PANEL_WIDTH : 0,
     );
-  }, [selectedVehicleId, vehicles, panelOpen]);
+    // Dependências de propósito só na seleção: incluir a coordenada aqui faria
+    // o zoom voltar pro FOCUS_ZOOM a cada metro andado, que é o bug antigo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVehicleId]);
+
+  // Seguimento: mantém o veículo à vista enquanto ele anda, sem tocar no zoom
+  // e sem brigar com quem arrastou o mapa — a câmera só reage quando o veículo
+  // sai do quadro.
+  useEffect(() => {
+    if (!selectedVehicleId || !alvoLat || !alvoLng) return;
+    mapRef.current?.keepInView(alvoLng, alvoLat, panelOpen ? PANEL_WIDTH : 0);
+  }, [selectedVehicleId, alvoLat, alvoLng, panelOpen]);
 
   return (
     <div className="flex h-full">

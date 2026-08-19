@@ -37,12 +37,17 @@ export class ReverseGeocodeService {
   /**
    * Distância máxima entre o ponto pedido e o ponto que gerou o endereço.
    *
-   * 25 m é o que separa "mesmo lugar" de "rua de trás". GPS parado oscila
-   * tipicamente 5–15 m, então equipamento no depósito continua reaproveitando
-   * o endereço e não gera chamada nova; equipamento andando passa dos 25 m e é
-   * resolvido de novo — que é o certo, porque ele mudou de rua de verdade.
+   * 5 m, e o número é medido, não estimado. Em 19/08/2026 varri 5/10/15/20/25 m
+   * ao norte e ao sul de três veículos reais no Rio e perguntei a rua ao
+   * Nominatim em cada ponto: a 5 m nenhum dos seis casos mudou de rua, a 10 m
+   * um mudou, e a partir de 15 m quatro mudaram. Malha urbana densa não perdoa
+   * mais que isso.
+   *
+   * A tolerância anterior era 25 m e foi exatamente o que fez a tela mostrar
+   * "Rua Cristóvão de Barros" para um veículo que estava na Rua Piraquara: a
+   * entrada de cache estava a 17,2 m. Aumentar este número reabre esse bug.
    */
-  private static readonly TOLERANCIA_M = 25;
+  private static readonly TOLERANCIA_M = 5;
 
   /** Alcance da varredura: a célula do ponto e as 8 vizinhas (~33 m de raio). */
   private static readonly VIZINHANCA = [-1, 0, 1];
