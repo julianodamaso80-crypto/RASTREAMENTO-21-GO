@@ -353,13 +353,51 @@ export class StockTraccarService {
     );
     if (semEndereco.length === 0) return;
 
+    // Equipamento andando não entra na fila do geocoder.
+    //
+    // Esta tela recarrega a cada 15 s e monta o estoque inteiro; em 19/08/2026
+    // eram 359 rastreadores com posição e 195 deles em movimento, cada um numa
+    // coordenada nova a cada recarga. Isso é geocodificação em massa, que a
+    // política do OpenStreetMap proíbe — e rendeu HTTP 429 no IP do servidor,
+    // derrubando o endereço de TODAS as telas, inclusive o painel do veículo.
+    //
+    // O endereço de um equipamento em trânsito também não serve para nada:
+    // muda a cada minuto e ninguém lê 195 endereços de uma vez. O que responde
+    // "onde está esse rastreador?" é o endereço de onde ele parou. Quem anda
+    // continua mostrando o que já houver em cache, só não pede nada novo.
+    const parado = (p: StockMapPoint) => (p.velocidade ?? 0) <= 1;
+
     try {
       const enderecos = await this.geocode.lookupCached(
         semEndereco.map((p) => ({
           latitude: p.latitude as number,
           longitude: p.longitude as number,
         })),
+        undefined,
+        false,
       );
+
+      const faltando = semEndereco.filter(
+        (p) =>
+          parado(p) &&
+          !enderecos.has(
+            this.geocode.chave({
+              latitude: p.latitude as number,
+              longitude: p.longitude as number,
+            }) ?? '',
+          ),
+      );
+      if (faltando.length > 0) {
+        // Só os parados pedem resolução nova, e a resposta entra na recarga
+        // seguinte da tela.
+        await this.geocode.lookupCached(
+          faltando.map((p) => ({
+            latitude: p.latitude as number,
+            longitude: p.longitude as number,
+          })),
+        );
+      }
+
       for (const ponto of semEndereco) {
         const chave = this.geocode.chave({
           latitude: ponto.latitude as number,

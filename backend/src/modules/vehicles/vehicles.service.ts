@@ -126,11 +126,8 @@ export class VehiclesService {
           associate: {
             select: { id: true, name: true, cpf: true, phone: true },
           },
-          // Onde o técnico informou ter escondido o rastreador — o painel do
-          // mapa mostra junto da localização.
-          device: {
-            select: { installLocation: true },
-          },
+          // `installLocation` NÃO entra aqui: onde o rastreador foi escondido
+          // é informação do time interno. Cliente final nunca recebe.
         },
         skip: (page - 1) * perPage,
         take: perPage,

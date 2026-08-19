@@ -78,6 +78,7 @@ export class ReverseGeocodeService {
   async lookupCached(
     coordenadas: Coordenada[],
     toleranciaM: number = ReverseGeocodeService.TOLERANCIA_M,
+    enfileirarFaltantes = true,
   ): Promise<Map<string, string>> {
     /** Chave de grade do ponto pedido -> coordenada crua dele. */
     const pedidos = new Map<string, Coordenada>();
@@ -138,7 +139,7 @@ export class ReverseGeocodeService {
         }
       }
       if (melhor) resultado.set(chave, melhor.address);
-      else this.enfileirar(chave, coord);
+      else if (enfileirarFaltantes) this.enfileirar(chave, coord);
     }
 
     return resultado;

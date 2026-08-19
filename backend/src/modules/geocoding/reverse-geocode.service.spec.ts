@@ -200,3 +200,27 @@ describe('proximoSlot — portão de 1 chamada por vez ao Nominatim', () => {
     });
   });
 });
+
+describe('enfileirarFaltantes — freio da geocodificação em massa', () => {
+  it('não põe nada na fila quando o chamador pede só leitura de cache', async () => {
+    const prisma = {
+      geoAddress: { findMany: jest.fn().mockResolvedValue([]) },
+    } as never;
+    const servico = new ReverseGeocodeService(prisma);
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValue(new Error('rede desligada no teste'));
+
+    await servico.lookupCached(
+      [{ latitude: -22.9058, longitude: -43.1795 }],
+      undefined,
+      false,
+    );
+    // A fila roda fora do await; dar uma volta no event loop é suficiente pra
+    // provar que ninguém saiu chamando o Nominatim.
+    await new Promise((r) => setImmediate(r));
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});
