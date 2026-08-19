@@ -371,10 +371,30 @@ export class HinovaService implements IHinovaClient {
     offset: number,
     limit: number,
   ): Promise<HinovaRawVehicle[]> {
+    return this.listRawVehiclesBySituation(
+      HinovaService.SITUACAO_ATIVA,
+      offset,
+      limit,
+    );
+  }
+
+  /**
+   * Página crua de veículos numa situação qualquer do SGA.
+   *
+   * `codigo_situacao` é obrigatório no /listar/veiculo (ele recusa a chamada sem
+   * ele ou sem faixa de data) e o parâmetro `placa` é ignorado — verificado ao
+   * vivo em 2026-08-19: mandar {placa, codigo_situacao} devolve a base inteira.
+   * Por isso o espelho cadastral varre situação por situação.
+   */
+  async listRawVehiclesBySituation(
+    situacao: number,
+    offset: number,
+    limit: number,
+  ): Promise<HinovaRawVehicle[]> {
     const data = await this.postComRetry<{ veiculos?: HinovaRawVehicle[] }>(
       '/listar/veiculo',
       {
-        codigo_situacao: HinovaService.SITUACAO_ATIVA,
+        codigo_situacao: situacao,
         inicio_paginacao: offset,
         quantidade_por_pagina: limit,
       },

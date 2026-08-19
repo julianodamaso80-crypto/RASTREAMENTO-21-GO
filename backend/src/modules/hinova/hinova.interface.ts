@@ -11,18 +11,38 @@ export const HINOVA_CLIENT = 'HINOVA_CLIENT';
  * funciona com o token de integração — o /veiculo/buscar/:placa exige permissão
  * por cooperativa que a integração não tem).
  */
+/**
+ * Situações de veículo do SGA (codigo_situacao / codigo_situacao_veiculo),
+ * levantadas na API real em 2026-08-19 — a rota /situacao/listar/todos exige
+ * liberação que a integração não tem.
+ */
+export const SITUACOES_SGA: Record<string, string> = {
+  '1': 'ATIVO',
+  '2': 'INATIVO',
+  '3': 'PENDENTE',
+  '4': 'INADIMPLENTE',
+  '5': 'NEGADO',
+};
+
 export interface HinovaLookupResult {
   encontrado: boolean;
   /** codigo_situacao_veiculo === '1' (ATIVO no SGA). */
   ativo: boolean;
+  /**
+   * Mensalidade vencida (situacao_financeira === 'INADIMPLENTE'). Só o lookup ao
+   * vivo sabe disto; pelo espelho cadastral vem false. Não bloqueia sozinho —
+   * quem bloqueia é a regra do vínculo, e o admin pode liberar.
+   */
+  boletoVencido?: boolean;
   /** Motivo quando não encontrado/indisponível (ex.: mensagem de erro do SGA). */
   motivo?: string;
   /**
-   * De onde saiu a resposta. `sga` = consulta ao vivo. `espelho` = o lookup ao
-   * vivo falhou (veículo novo ainda sem boleto) e os dados vieram do espelho
-   * de pendências, que o próprio SGA alimenta via /listar/veiculo.
+   * De onde saiu a resposta. `sga` = consulta ao vivo. `cadastro` = espelho
+   * cadastral do SGA (todo veículo, qualquer situação). `espelho` = espelho da
+   * fila de pendências. Os dois espelhos vêm do /listar/veiculo do próprio SGA
+   * e cobrem o veículo novo, que o lookup ao vivo recusa por não ter boleto.
    */
-  fonte?: 'sga' | 'espelho';
+  fonte?: 'sga' | 'cadastro' | 'espelho';
   cliente: {
     nome: string | null;
     cpf: string | null;
@@ -61,6 +81,9 @@ export interface HinovaRawVehicle {
   tipo?: string;
   /** 1 = PENDENTE INSTALAÇÃO DE RASTREADOR · 10 = PENDENTE INSTALAÇÃO DE TAG. */
   codigo_tipo_adesao?: string;
+  /** 1 ATIVO · 2 INATIVO · 3 PENDENTE · 4 INADIMPLENTE · 5 NEGADO. */
+  codigo_situacao?: string;
+  descricao_situacao?: string;
   valor_fipe_protegido?: string;
   valor_fipe?: number;
   data_contrato?: string;
@@ -100,6 +123,12 @@ export interface IHinovaClient {
    * precisa de campos que o HinovaVehicleDto não carrega.
    */
   listRawActiveVehicles(offset: number, limit: number): Promise<HinovaRawVehicle[]>;
+  /** Página crua de veículos numa situação qualquer (espelho cadastral). */
+  listRawVehiclesBySituation(
+    situacao: number,
+    offset: number,
+    limit: number,
+  ): Promise<HinovaRawVehicle[]>;
   /** Página crua de associados ATIVOS (fonte de cidade/bairro). */
   listRawActiveAssociates(offset: number, limit: number): Promise<HinovaRawAssociate[]>;
 }

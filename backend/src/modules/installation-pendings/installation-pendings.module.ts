@@ -5,6 +5,7 @@ import { InstallationPendingsService } from './installation-pendings.service';
 import { InstallationPendingsExportService } from './installation-pendings-export.service';
 import { GeocodingService } from './geocoding.service';
 import { RoutesService } from './routes.service';
+import { SgaMirrorService } from './sga-mirror.service';
 
 @Module({
   imports: [HinovaModule],
@@ -14,7 +15,8 @@ import { RoutesService } from './routes.service';
     InstallationPendingsExportService,
     GeocodingService,
     RoutesService,
+    SgaMirrorService,
   ],
-  exports: [InstallationPendingsService, RoutesService],
+  exports: [InstallationPendingsService, RoutesService, SgaMirrorService],
 })
 export class InstallationPendingsModule {}

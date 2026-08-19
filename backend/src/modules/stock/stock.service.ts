@@ -28,6 +28,7 @@ import {
   type DeviceHealth,
 } from '../traccar/device-health.service';
 import { InstallationPendingsService } from '../installation-pendings/installation-pendings.service';
+import { SgaMirrorService } from '../installation-pendings/sga-mirror.service';
 import { RoutesService } from '../installation-pendings/routes.service';
 import { StockTraccarService } from './stock-traccar.service';
 import { PositionsService } from '../positions/positions.service';
@@ -91,6 +92,7 @@ export class StockService {
     private deviceHealth: DeviceHealthService,
     private stockTraccar: StockTraccarService,
     private installationPendings: InstallationPendingsService,
+    private mirror: SgaMirrorService,
     private routes: RoutesService,
     private positions: PositionsService,
   ) {}
@@ -298,18 +300,39 @@ export class StockService {
    * - Técnico e local de instalação obrigatórios (validados no DTO).
    */
   /**
-   * Consulta do vínculo: SGA ao vivo primeiro; se ele não conhece a placa
-   * (veículo novo sem boleto — ver InstallationPendingsService.lookupNoEspelho),
-   * o espelho de pendências. Um só caminho pro painel, pro PWA do técnico e
-   * pro associate — senão o botão habilita numa tela e o servidor recusa na
-   * outra.
+   * Consulta do vínculo. Três fontes, nesta ordem:
+   *
+   * 1. SGA ao vivo — é o dado mais fresco e o único que sabe de mensalidade
+   *    vencida, mas só responde veículo que já tem boleto emitido.
+   * 2. Espelho cadastral (SgaVehicle) — todo veículo do SGA, em qualquer
+   *    situação. É quem cobre o veículo recém-vendido, que é justamente o que
+   *    está indo receber rastreador.
+   * 3. Espelho da fila de pendências — histórico, cobre a janela em que o
+   *    cadastral ainda não sincronizou.
+   *
+   * Um só caminho pro painel, pro PWA do técnico e pro associate — senão o
+   * botão habilita numa tela e o servidor recusa na outra.
    */
   async lookupSga(
     tenantId: string,
     placaOuChassi: string,
   ): Promise<HinovaLookupResult> {
     const vivo = await this.hinova.lookupByPlate(placaOuChassi);
-    if (vivo.encontrado) return { ...vivo, fonte: 'sga' };
+    if (vivo.encontrado) {
+      return {
+        ...vivo,
+        fonte: 'sga',
+        boletoVencido: vivo.situacao.financeira === 'INADIMPLENTE',
+      };
+    }
+
+    const cadastro = await this.mirror.lookup(tenantId, placaOuChassi);
+    if (cadastro) {
+      this.logger.log(
+        `Lookup ${placaOuChassi}: SGA ao vivo disse "${vivo.motivo}"; respondendo pelo espelho cadastral (${cadastro.situacao.descricao}).`,
+      );
+      return cadastro;
+    }
 
     const espelho = await this.installationPendings.lookupNoEspelho(
       tenantId,
@@ -321,7 +344,54 @@ export class StockService {
       );
       return espelho;
     }
-    return vivo;
+
+    return { ...vivo, motivo: StockService.motivoAmigavel(vivo.motivo, placaOuChassi) };
+  }
+
+  /**
+   * O 406 de boleto é linguagem interna da API financeira do SGA e não diz nada
+   * a quem está com o rastreador na mão. Erro de indisponibilidade (SGA fora,
+   * restrição de horário) passa direto — ali a mensagem original é o diagnóstico.
+   */
+  private static motivoAmigavel(
+    motivo: string | undefined,
+    placa: string,
+  ): string {
+    const original = motivo ?? '';
+    const ehFaltaDeBoleto = /boleto/i.test(original);
+    const ehNaoEncontrado = /não encontrad|nao encontrad/i.test(original);
+    if (!ehFaltaDeBoleto && !ehNaoEncontrado && original) return original;
+
+    return (
+      `Não localizei ${placa.toUpperCase()} no SGA. Confira a placa ou o chassi; ` +
+      'se o cadastro é novo, atualize o espelho do SGA em Pendências de Instalação.'
+    );
+  }
+
+  /**
+   * Único juiz do "pode instalar". A decisão é pela SITUAÇÃO do cliente no
+   * cadastro — nunca pela existência de boleto:
+   *
+   * - ATIVO e em dia            → instala, sem perguntar nada;
+   * - mensalidade vencida       → avisa e só passa com liberação de admin;
+   * - inativo/pendente/negado   → mesma coisa.
+   */
+  private static motivoDeBloqueio(
+    lookup: HinovaLookupResult,
+    placaDigitada: string,
+  ): string | null {
+    const placa = lookup.veiculo.placa || placaDigitada.toUpperCase();
+    if (!lookup.ativo) {
+      const situacao = lookup.situacao.descricao ?? 'INATIVA';
+      return `Placa ${placa} está ${situacao} no SGA`;
+    }
+    if (lookup.boletoVencido) {
+      const vencimento = lookup.situacao.dataVencimento
+        ? ` (vencimento ${lookup.situacao.dataVencimento})`
+        : '';
+      return `Cliente da placa ${placa} está com mensalidade vencida no SGA${vencimento}`;
+    }
+    return null;
   }
 
   async associate(
@@ -351,22 +421,21 @@ export class StockService {
         lookup.motivo || 'Placa não encontrada no SGA.',
       );
     }
-    if (!lookup.ativo) {
-      const situacao = lookup.situacao.descricao ?? 'INATIVA';
-      const placaSga = lookup.veiculo.placa ?? dto.placa;
+    const bloqueio = StockService.motivoDeBloqueio(lookup, dto.placa);
+    if (bloqueio) {
       if (!dto.allowInactive) {
         throw new UnprocessableEntityException(
-          `Placa ${placaSga} está ${situacao} no SGA — vínculo bloqueado. ` +
+          `${bloqueio} — vínculo bloqueado. ` +
             'Só um administrador pode liberar a instalação assim mesmo.',
         );
       }
       if (!liberadorAdmin) {
         throw new ForbiddenException(
-          'Somente um administrador pode liberar a instalação com o associado inativo no SGA.',
+          `${bloqueio}. Somente um administrador pode liberar a instalação assim mesmo.`,
         );
       }
       this.logger.warn(
-        `Vínculo liberado por ADMIN com associado INATIVO: placa ${placaSga}, situação ${situacao}, IMEI ${item.imei}, técnico ${dto.technicianName}.`,
+        `Vínculo liberado por ADMIN: ${bloqueio}. IMEI ${item.imei}, técnico ${dto.technicianName}.`,
       );
     }
     if (!lookup.cliente.cpf) {
@@ -659,9 +728,19 @@ export class StockService {
           orderBy: { syncedAt: 'desc' },
         }));
 
+      if (pendencia?.phone?.trim() || pendencia?.email?.trim()) {
+        return {
+          phone: pendencia.phone?.trim() || null,
+          email: pendencia.email?.trim() || null,
+        };
+      }
+
+      // Fila de pendências não cobre veículo que nunca esteve nela (adesão já
+      // marcada como instalada no SGA, por exemplo). O espelho cadastral cobre.
+      const cadastro = await this.mirror.contato(tenantId, placa, cpf);
       return {
-        phone: pendencia?.phone?.trim() || null,
-        email: pendencia?.email?.trim() || null,
+        phone: cadastro?.phone?.trim() || null,
+        email: cadastro?.email?.trim() || null,
       };
     } catch (error) {
       this.logger.warn(

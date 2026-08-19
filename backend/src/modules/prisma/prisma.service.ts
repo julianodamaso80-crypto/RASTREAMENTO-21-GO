@@ -191,6 +191,11 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get installationPending() {
     return this.base.installationPending;
   }
+  // Espelho cadastral do SGA: mesma natureza — reescrito a cada sync, sem soft
+  // delete. Veículo que sumiu do SGA não pode continuar respondendo aqui.
+  get sgaVehicle() {
+    return this.base.sgaVehicle;
+  }
   // Rota inteligente de instalação (sem soft delete — rota é efêmera).
   get cepCoordinate() {
     return this.base.cepCoordinate;

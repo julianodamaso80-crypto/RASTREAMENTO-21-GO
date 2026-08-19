@@ -58,6 +58,16 @@ export class ReverseGeocodeService {
   /** Teto por rodada — a fila não pode crescer sem fim se o parque inteiro ligar. */
   private static readonly FILA_MAX = 2_000;
 
+  /**
+   * Quanto tempo parar de chamar depois de levar 429.
+   *
+   * Sem isto o serviço entra em ciclo vicioso, e foi o que aconteceu em
+   * 19/08/2026: o 429 impede gravar o endereço, o ponto continua sem cache, a
+   * tela recarrega em 15 s e o enfileira de novo, e a nova tentativa renova o
+   * bloqueio. Foram 25 respostas 429 em 3 minutos sem nenhum endereço resolvido.
+   */
+  private static readonly BACKOFF_429_MS = 10 * 60_000;
+
   private static readonly URL = 'https://nominatim.openstreetmap.org/reverse';
   private static readonly USER_AGENT =
     '21GO-Rastreamento/1.0 (https://trackgo.site)';
@@ -66,6 +76,8 @@ export class ReverseGeocodeService {
   private processando = false;
   /** Instante em que o Nominatim pode ser chamado de novo. Ver `aguardarVez`. */
   private slotLivreEm = 0;
+  /** Enquanto este instante não passar, ninguém fala com o Nominatim. Ver `resolver`. */
+  private bloqueadoAte = 0;
   /** Quantos pedidos de tela estão esperando — a fila de fundo cede a vez. */
   private prioritarios = 0;
 
@@ -161,13 +173,14 @@ export class ReverseGeocodeService {
     // ícone no mapa, então ele tem que ser desta coordenada, não de um vizinho.
     // Só reaproveita cache de coordenada idêntica — que é o caso do veículo
     // parado, cujo rastreador repete o mesmo par de números.
-    const cache = await this.lookupCached([coord], 0);
+    // Sem enfileirar: quem resolve este ponto é a linha de baixo, agora. Deixar
+    // `lookupCached` enfileirar também fazia a fila de fundo chamar o Nominatim
+    // pelo MESMO ponto em paralelo — duas consultas para um endereço só, e o
+    // dobro de consumo do limite do OpenStreetMap vindo do painel.
+    const cache = await this.lookupCached([coord], 0, false);
     const doCache = cache.get(chave);
     if (doCache) return doCache;
 
-    // Não estava no cache: `lookupCached` já o pôs na fila de fundo. Resolver
-    // aqui na frente é o que faz o texto acompanhar o ícone.
-    this.fila.delete(chave);
     this.prioritarios++;
     try {
       return await this.resolver(coord);
@@ -252,6 +265,9 @@ export class ReverseGeocodeService {
    * tela — fica sem endereço.
    */
   private async resolver(coord: Coordenada): Promise<string | null> {
+    // De castigo: insistir só renova o bloqueio e não resolve endereço nenhum.
+    if (Date.now() < this.bloqueadoAte) return null;
+
     await this.aguardarVez();
 
     const url =
@@ -266,6 +282,22 @@ export class ReverseGeocodeService {
         },
         signal: AbortSignal.timeout(15_000),
       });
+      if (resposta.status === 429) {
+        // O serviço pede para esperar; `Retry-After` vem em segundos quando vem.
+        const pedido = Number(resposta.headers.get('retry-after')) * 1_000;
+        const espera = Number.isFinite(pedido) && pedido > 0
+          ? pedido
+          : ReverseGeocodeService.BACKOFF_429_MS;
+        this.bloqueadoAte = Date.now() + espera;
+        // A fila acumulada seria só uma sequência de tentativas negadas.
+        this.fila.clear();
+        this.logger.warn(
+          `Nominatim recusou por excesso de chamadas — pausando o geocoder por ${Math.round(
+            espera / 1000,
+          )}s e limpando a fila`,
+        );
+        return null;
+      }
       if (!resposta.ok) {
         this.logger.warn(
           `Nominatim respondeu ${resposta.status} para ${coord.latitude},${coord.longitude}`,

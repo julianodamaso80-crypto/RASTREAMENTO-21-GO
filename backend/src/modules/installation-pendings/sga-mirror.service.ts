@@ -1,0 +1,274 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  HINOVA_CLIENT,
+  SITUACOES_SGA,
+  type HinovaLookupResult,
+  type HinovaRawVehicle,
+  type IHinovaClient,
+} from '../hinova/hinova.interface';
+
+/**
+ * Espelho cadastral do SGA — todo veículo, em qualquer situação.
+ *
+ * Por que existe: o SGA não oferece busca por placa. O único GET que aceita
+ * placa é o /buscar/situacao-financeira-veiculo, que é FINANCEIRO e responde
+ * 406 "Não foram encontrados boletos" enquanto o veículo não tem boleto
+ * emitido — justamente o veículo recém-vendido que está indo receber
+ * rastreador. Amarrar a instalação a esse endpoint faz "não tem boleto" virar
+ * "não pode instalar", que não é regra de negócio nenhuma.
+ *
+ * Com o espelho, quem decide é a SITUAÇÃO do veículo no cadastro:
+ * ativo instala; inadimplente, inativo, pendente ou negado avisa o motivo e só
+ * passa com liberação de administrador.
+ *
+ * A fonte é o POST /listar/veiculo, que já é varrido pelo sync de pendências e
+ * hoje tem 70% do resultado descartado.
+ */
+@Injectable()
+export class SgaMirrorService {
+  private readonly logger = new Logger(SgaMirrorService.name);
+
+  /** Mesmo lote e pausa do sync de pendências — o SGA responde 406 sob rajada. */
+  private static readonly LOTE = 1000;
+  private static readonly MAX_PAGINAS = 50;
+  private static readonly PAUSA_ENTRE_PAGINAS_MS = 2500;
+
+  /** Todas as situações conhecidas do SGA (ver SITUACOES_SGA). */
+  private static readonly SITUACOES = [1, 2, 3, 4, 5];
+
+  constructor(
+    @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
+    private prisma: PrismaService,
+  ) {}
+
+  /**
+   * Consulta por placa OU chassi. É a fonte primária do vínculo do estoque:
+   * responde sempre, com a situação cadastral, sem depender de boleto.
+   */
+  async lookup(
+    tenantId: string,
+    placaOuChassi: string,
+  ): Promise<HinovaLookupResult | null> {
+    const ident = (placaOuChassi || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (ident.length < 7) return null;
+
+    const v = await this.prisma.sgaVehicle.findFirst({
+      where: { tenantId, OR: [{ plate: ident }, { chassi: ident }] },
+      orderBy: { syncedAt: 'desc' },
+    });
+    if (!v) return null;
+
+    return {
+      encontrado: true,
+      ativo: v.situationCode === '1',
+      boletoVencido: false,
+      fonte: 'cadastro',
+      cliente: { nome: v.associateName || null, cpf: v.cpf || null },
+      veiculo: {
+        placa: v.plate || null,
+        chassi: v.chassi || null,
+        codigoModelo: null,
+        modelo: v.brandModel || null,
+        codigoVeiculo: v.hinovaVehicleCode || null,
+      },
+      situacao: {
+        codigo: v.situationCode,
+        descricao: v.situationLabel,
+        financeira: null,
+        dataVencimento: null,
+      },
+    };
+  }
+
+  /** Telefone/e-mail do associado — o lookup ao vivo do SGA não devolve nenhum dos dois. */
+  async contato(
+    tenantId: string,
+    placa: string,
+    cpf: string,
+  ): Promise<{ phone: string | null; email: string | null } | null> {
+    const v = await this.prisma.sgaVehicle.findFirst({
+      where: {
+        tenantId,
+        OR: [{ plate: placa }, { chassi: placa }, { cpf }],
+      },
+      orderBy: { syncedAt: 'desc' },
+      select: { phone: true, email: true },
+    });
+    return v ?? null;
+  }
+
+  /**
+   * Varre o SGA situação por situação e reescreve o espelho.
+   *
+   * Grava página a página em vez de acumular a base inteira em memória: são
+   * ~36 mil veículos, e o backend já morre de OOM com folga curta.
+   */
+  async sincronizar(
+    tenantId: string,
+    /**
+     * Veículos ATIVOS que o sync de pendências acabou de ler. Reaproveitar a
+     * lista evita varrer os 24 mil ativos duas vezes na mesma passada — a
+     * varredura é o gargalo (minutos), não a gravação.
+     */
+    ativosJaLidos?: HinovaRawVehicle[],
+  ): Promise<{
+    total: number;
+    porSituacao: Record<string, number>;
+  }> {
+    const inicio = new Date();
+    const porSituacao: Record<string, number> = {};
+    let total = 0;
+
+    if (ativosJaLidos?.length) {
+      let gravados = 0;
+      for (let i = 0; i < ativosJaLidos.length; i += SgaMirrorService.LOTE) {
+        gravados += await this.gravarPagina(
+          ativosJaLidos.slice(i, i + SgaMirrorService.LOTE),
+          tenantId,
+          1,
+        );
+      }
+      porSituacao.ATIVO = gravados;
+      total += gravados;
+      this.logger.log(
+        `Espelho cadastral: ${gravados} ativo(s) reaproveitados da varredura de pendências.`,
+      );
+    }
+
+    for (const situacao of SgaMirrorService.SITUACOES) {
+      if (situacao === 1 && ativosJaLidos?.length) continue;
+      let daSituacao = 0;
+      for (let pagina = 0; pagina < SgaMirrorService.MAX_PAGINAS; pagina++) {
+        const lote = await this.hinova.listRawVehiclesBySituation(
+          situacao,
+          pagina * SgaMirrorService.LOTE,
+          SgaMirrorService.LOTE,
+        );
+        if (lote.length > 0) {
+          daSituacao += await this.gravarPagina(lote, tenantId, situacao);
+        }
+        if (lote.length < SgaMirrorService.LOTE) break;
+        await new Promise((r) =>
+          setTimeout(r, SgaMirrorService.PAUSA_ENTRE_PAGINAS_MS),
+        );
+      }
+      porSituacao[SITUACOES_SGA[String(situacao)] ?? String(situacao)] =
+        daSituacao;
+      total += daSituacao;
+      this.logger.log(
+        `Espelho cadastral: ${daSituacao} veículo(s) na situação ${situacao}.`,
+      );
+    }
+
+    // Rede de segurança igual à do sync de pendências: SGA devolvendo quase nada
+    // por falha silenciosa não pode esvaziar o espelho que a operação usa.
+    const jaGravados = await this.prisma.sgaVehicle.count({ where: { tenantId } });
+    if (jaGravados > 0 && total < jaGravados * 0.3) {
+      this.logger.error(
+        `SGA devolveu ${total} veículo(s) contra ${jaGravados} já espelhados ` +
+          '(queda acima de 70%). Espelho preservado — verifique o SGA.',
+      );
+      return { total, porSituacao };
+    }
+
+    // Só aqui some quem saiu do SGA: as páginas já regravaram todo o resto com
+    // syncedAt novo.
+    const { count } = await this.prisma.sgaVehicle.deleteMany({
+      where: { tenantId, syncedAt: { lt: inicio } },
+    });
+    if (count > 0) {
+      this.logger.log(`Espelho cadastral: ${count} veículo(s) saíram do SGA.`);
+    }
+
+    this.logger.log(`Espelho cadastral sincronizado: ${total} veículo(s).`);
+    return { total, porSituacao };
+  }
+
+  /**
+   * Regrava uma página inteira. Apaga só os códigos da própria página e recria
+   * — dois comandos por página em vez de um upsert por veículo (36 mil queries),
+   * e a tela nunca vê o espelho vazio.
+   */
+  private async gravarPagina(
+    lote: HinovaRawVehicle[],
+    tenantId: string,
+    situacao: number,
+  ): Promise<number> {
+    const linhas = lote
+      .map((v) => SgaMirrorService.paraLinha(v, tenantId, situacao))
+      .filter((l): l is NonNullable<typeof l> => l !== null);
+    if (linhas.length === 0) return 0;
+
+    const codigos = linhas.map((l) => l.hinovaVehicleCode);
+    await this.prisma.$transaction([
+      this.prisma.sgaVehicle.deleteMany({
+        where: { tenantId, hinovaVehicleCode: { in: codigos } },
+      }),
+      this.prisma.sgaVehicle.createMany({ data: linhas }),
+    ]);
+    return linhas.length;
+  }
+
+  /** Veículo sem placa E sem chassi não serve pra nada aqui — não há como buscá-lo. */
+  private static paraLinha(
+    v: HinovaRawVehicle,
+    tenantId: string,
+    situacao: number,
+  ) {
+    const codigo = String(v.codigo_veiculo ?? '').trim();
+    const plate = String(v.placa ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    const chassi =
+      String(v.chassi ?? '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '') || null;
+    if (!codigo || (!plate && !chassi)) return null;
+
+    const codigoSituacao = String(v.codigo_situacao ?? situacao);
+    const telefone = SgaMirrorService.telefone(v);
+
+    return {
+      hinovaVehicleCode: codigo,
+      plate,
+      chassi,
+      associateName: String(v.nome_associado ?? '').trim(),
+      associateCode: String(v.codigo_associado ?? '').trim(),
+      cpf: String(v.cpf_associado ?? '').replace(/\D/g, '') || null,
+      phone: telefone,
+      email: String(v.email ?? '').trim() || null,
+      brandModel: `${v.marca ?? ''} ${v.modelo ?? ''}`.trim(),
+      situationCode: codigoSituacao,
+      situationLabel:
+        String(v.descricao_situacao ?? '').trim() ||
+        SITUACOES_SGA[codigoSituacao] ||
+        'DESCONHECIDA',
+      adhesionCode: v.codigo_tipo_adesao ? String(v.codigo_tipo_adesao) : null,
+      contractDate: SgaMirrorService.data(v.data_contrato),
+      tenantId,
+      syncedAt: new Date(),
+    };
+  }
+
+  /** Celular na frente do fixo: é o número que recebe o código do app por WhatsApp. */
+  private static telefone(v: HinovaRawVehicle): string | null {
+    const junta = (ddd: unknown, numero: unknown) => {
+      const d = String(ddd ?? '').replace(/\D/g, '');
+      const n = String(numero ?? '').replace(/\D/g, '');
+      return n ? `${d}${n}` : '';
+    };
+    return (
+      junta(v.ddd_celular, v.telefone_celular) ||
+      junta(v.ddd, v.telefone) ||
+      null
+    );
+  }
+
+  /** "2026-05-04T00:00:00-0300" → Date; qualquer coisa fora disso vira null. */
+  private static data(valor: unknown): Date | null {
+    if (typeof valor !== 'string' || valor.length < 10) return null;
+    const d = new Date(valor.slice(0, 10));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+}

@@ -224,3 +224,29 @@ describe('enfileirarFaltantes — freio da geocodificação em massa', () => {
     fetchSpy.mockRestore();
   });
 });
+
+describe('backoff ao levar 429', () => {
+  it('para de chamar o Nominatim depois da primeira recusa', async () => {
+    const prisma = {
+      geoAddress: { findMany: jest.fn().mockResolvedValue([]) },
+    } as never;
+    const servico = new ReverseGeocodeService(prisma);
+
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+    } as never);
+
+    // Primeira tentativa fala com o Nominatim e leva a recusa.
+    expect(await servico.lookupNow({ latitude: -22.9, longitude: -43.1 })).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // As seguintes nem saem: insistir só renovaria o bloqueio.
+    expect(await servico.lookupNow({ latitude: -22.8, longitude: -43.2 })).toBeNull();
+    expect(await servico.lookupNow({ latitude: -22.7, longitude: -43.3 })).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    fetchSpy.mockRestore();
+  });
+});

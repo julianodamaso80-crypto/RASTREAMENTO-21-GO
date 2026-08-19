@@ -9,6 +9,7 @@ import {
 } from '../hinova/hinova.interface';
 import { montarFila, diasPendente } from './installation-pendings.mapper';
 import { GeocodingService } from './geocoding.service';
+import { SgaMirrorService } from './sga-mirror.service';
 import type {
   InstallationPendingRow,
   PendingListQuery,
@@ -56,6 +57,7 @@ export class InstallationPendingsService implements OnModuleInit {
     private prisma: PrismaService,
     private config: ConfigService,
     private geocoding: GeocodingService,
+    private mirror: SgaMirrorService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -413,6 +415,18 @@ export class InstallationPendingsService implements OnModuleInit {
         this.prisma.installationPending.deleteMany({ where: { tenantId } }),
         this.prisma.installationPending.createMany({ data: linhas }),
       ]);
+
+      // Espelho cadastral: o vínculo do estoque consulta por placa, e o SGA não
+      // tem busca por placa que funcione sem boleto. Reaproveita os ativos já
+      // lidos acima e varre só as outras situações. Best-effort: falhar aqui não
+      // pode invalidar a fila de pendências, que já está gravada.
+      try {
+        await this.mirror.sincronizar(tenantId, veiculos);
+      } catch (erro) {
+        this.logger.error(
+          `Espelho cadastral do SGA falhou: ${erro instanceof Error ? erro.message : erro}`,
+        );
+      }
 
       const resultado: SyncOutcome = {
         started: false,

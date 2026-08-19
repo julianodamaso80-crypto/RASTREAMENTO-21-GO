@@ -289,6 +289,16 @@ export class HinovaMockService implements IHinovaClient {
    * ganha pendência (1 = rastreador, 10 = TAG) com contrato escalonado nos
    * últimos 90 dias, pra tela de pendências ter o que mostrar em dev.
    */
+  /** No mock toda situação devolve a mesma base fake — só os ativos existem. */
+  async listRawVehiclesBySituation(
+    situacao: number,
+    offset: number,
+    limit: number,
+  ): Promise<HinovaRawVehicle[]> {
+    if (situacao !== 1) return [];
+    return this.listRawActiveVehicles(offset, limit);
+  }
+
   async listRawActiveVehicles(
     offset: number,
     limit: number,

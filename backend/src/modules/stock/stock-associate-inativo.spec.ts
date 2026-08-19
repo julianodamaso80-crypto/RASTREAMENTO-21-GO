@@ -6,9 +6,11 @@ import { StockService } from './stock.service';
 import type { HinovaLookupResult } from '../hinova/hinova.interface';
 
 /**
- * Regra do vínculo com associado INATIVO no SGA: bloqueado por padrão, e só um
- * ADMIN pode liberar. Operador (que também chega neste endpoint) e o PWA do
- * técnico — que chama o service sem o argumento de liberação — nunca passam.
+ * Regra do vínculo: quem decide é a SITUAÇÃO do cliente no SGA, nunca a
+ * existência de boleto. Cliente fora de ATIVO — ou ativo com mensalidade
+ * vencida — é bloqueado por padrão, e só um ADMIN libera. Operador (que também
+ * chega neste endpoint) e o PWA do técnico — que chama o service sem o
+ * argumento de liberação — nunca passam.
  */
 
 const TENANT = '11111111-1111-1111-1111-111111111111';
@@ -40,7 +42,20 @@ const DTO_BASE = {
   installLocation: 'atrás do porta-luvas',
 };
 
-function servico() {
+/** Ativo no cadastro, mas com mensalidade vencida: mesmo tratamento do inativo. */
+const ATIVO_COM_BOLETO_VENCIDO: HinovaLookupResult = {
+  ...INATIVO,
+  ativo: true,
+  boletoVencido: true,
+  situacao: {
+    codigo: '1',
+    descricao: 'ATIVO',
+    financeira: 'INADIMPLENTE',
+    dataVencimento: '2026-07-10',
+  },
+};
+
+function servico(lookup: HinovaLookupResult = INATIVO) {
   const prisma = {
     stockItem: {
       findFirst: jest
@@ -53,7 +68,7 @@ function servico() {
     // Sentinela: se a execução chegou aqui, todas as validações passaram.
     $transaction: jest.fn().mockRejectedValue(new Error(CHEGOU_NA_GRAVACAO)),
   };
-  const hinova = { lookupByPlate: jest.fn().mockResolvedValue(INATIVO) };
+  const hinova = { lookupByPlate: jest.fn().mockResolvedValue(lookup) };
   const s = new StockService(
     prisma as never,
     hinova as never,
@@ -62,6 +77,10 @@ function servico() {
     {} as never,
     {} as never,
     { lookupNoEspelho: jest.fn().mockResolvedValue(null) } as never,
+    {
+      lookup: jest.fn().mockResolvedValue(null),
+      contato: jest.fn().mockResolvedValue(null),
+    } as never,
     {} as never,
     {} as never,
   );
@@ -97,6 +116,34 @@ describe('StockService.associate — associado inativo no SGA', () => {
     const { s } = servico();
     await expect(s.associate('item-1', TENANT, DTO_BASE, true)).rejects.toThrow(
       UnprocessableEntityException,
+    );
+  });
+});
+
+describe('StockService.associate — mensalidade vencida', () => {
+  it('ativo com boleto vencido: bloqueia e diz o motivo (não fala em "inativo")', async () => {
+    const { s } = servico(ATIVO_COM_BOLETO_VENCIDO);
+    await expect(s.associate('item-1', TENANT, DTO_BASE)).rejects.toThrow(
+      /mensalidade vencida/i,
+    );
+  });
+
+  it('admin libera a mensalidade vencida e o vínculo segue', async () => {
+    const { s } = servico(ATIVO_COM_BOLETO_VENCIDO);
+    await expect(
+      s.associate('item-1', TENANT, { ...DTO_BASE, allowInactive: true }, true),
+    ).rejects.toThrow(CHEGOU_NA_GRAVACAO);
+  });
+
+  it('ativo e em dia: nada bloqueia', async () => {
+    const emDia: HinovaLookupResult = {
+      ...ATIVO_COM_BOLETO_VENCIDO,
+      boletoVencido: false,
+      situacao: { ...ATIVO_COM_BOLETO_VENCIDO.situacao, financeira: 'ADIMPLENTE' },
+    };
+    const { s } = servico(emDia);
+    await expect(s.associate('item-1', TENANT, DTO_BASE)).rejects.toThrow(
+      CHEGOU_NA_GRAVACAO,
     );
   });
 });
