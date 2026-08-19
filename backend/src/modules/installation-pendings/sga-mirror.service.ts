@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   HINOVA_CLIENT,
@@ -26,8 +26,11 @@ import {
  * hoje tem 70% do resultado descartado.
  */
 @Injectable()
-export class SgaMirrorService {
+export class SgaMirrorService implements OnModuleInit {
   private readonly logger = new Logger(SgaMirrorService.name);
+
+  /** Trava contra varredura dupla: o sync de pendências também chama sincronizar(). */
+  private sincronizando = false;
 
   /** Mesmo lote e pausa do sync de pendências — o SGA responde 406 sob rajada. */
   private static readonly LOTE = 1000;
@@ -41,6 +44,39 @@ export class SgaMirrorService {
     @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
     private prisma: PrismaService,
   ) {}
+
+  /**
+   * Carga própria, sem depender do sync de pendências.
+   *
+   * O sync de pendências só chega no espelho depois de ~10 minutos de varredura,
+   * e é o espelho que sustenta a instalação em campo — ele não pode ficar refém
+   * do que vem antes. Roda uma vez, só com a tabela vazia.
+   */
+  onModuleInit(): void {
+    setTimeout(() => {
+      void this.cargaInicial();
+    }, 20_000).unref();
+  }
+
+  private async cargaInicial(): Promise<void> {
+    try {
+      const jaTem = await this.prisma.sgaVehicle.count();
+      if (jaTem > 0) return;
+
+      const tenant = await this.prisma.tenant.findFirst({
+        where: { active: true, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!tenant) return;
+
+      this.logger.warn('Espelho cadastral vazio — disparando carga inicial.');
+      await this.sincronizar(tenant.id);
+    } catch (erro) {
+      this.logger.error(
+        `Carga inicial do espelho cadastral falhou: ${erro instanceof Error ? erro.message : erro}`,
+      );
+    }
+  }
 
   /**
    * Consulta por placa OU chassi. É a fonte primária do vínculo do estoque:
@@ -116,73 +152,88 @@ export class SgaMirrorService {
     total: number;
     porSituacao: Record<string, number>;
   }> {
+    if (this.sincronizando) {
+      this.logger.warn(
+        'Espelho cadastral já está sincronizando — chamada ignorada.',
+      );
+      return { total: 0, porSituacao: {} };
+    }
+    this.sincronizando = true;
     const inicio = new Date();
     const porSituacao: Record<string, number> = {};
     let total = 0;
 
-    if (ativosJaLidos?.length) {
-      let gravados = 0;
-      for (let i = 0; i < ativosJaLidos.length; i += SgaMirrorService.LOTE) {
-        gravados += await this.gravarPagina(
-          ativosJaLidos.slice(i, i + SgaMirrorService.LOTE),
-          tenantId,
-          1,
-        );
-      }
-      porSituacao.ATIVO = gravados;
-      total += gravados;
-      this.logger.log(
-        `Espelho cadastral: ${gravados} ativo(s) reaproveitados da varredura de pendências.`,
-      );
-    }
-
-    for (const situacao of SgaMirrorService.SITUACOES) {
-      if (situacao === 1 && ativosJaLidos?.length) continue;
-      let daSituacao = 0;
-      for (let pagina = 0; pagina < SgaMirrorService.MAX_PAGINAS; pagina++) {
-        const lote = await this.hinova.listRawVehiclesBySituation(
-          situacao,
-          pagina * SgaMirrorService.LOTE,
-          SgaMirrorService.LOTE,
-        );
-        if (lote.length > 0) {
-          daSituacao += await this.gravarPagina(lote, tenantId, situacao);
+    try {
+      if (ativosJaLidos?.length) {
+        let gravados = 0;
+        for (let i = 0; i < ativosJaLidos.length; i += SgaMirrorService.LOTE) {
+          gravados += await this.gravarPagina(
+            ativosJaLidos.slice(i, i + SgaMirrorService.LOTE),
+            tenantId,
+            1,
+          );
         }
-        if (lote.length < SgaMirrorService.LOTE) break;
-        await new Promise((r) =>
-          setTimeout(r, SgaMirrorService.PAUSA_ENTRE_PAGINAS_MS),
+        porSituacao.ATIVO = gravados;
+        total += gravados;
+        this.logger.log(
+          `Espelho cadastral: ${gravados} ativo(s) reaproveitados da varredura de pendências.`,
         );
       }
-      porSituacao[SITUACOES_SGA[String(situacao)] ?? String(situacao)] =
-        daSituacao;
-      total += daSituacao;
-      this.logger.log(
-        `Espelho cadastral: ${daSituacao} veículo(s) na situação ${situacao}.`,
-      );
-    }
 
-    // Rede de segurança igual à do sync de pendências: SGA devolvendo quase nada
-    // por falha silenciosa não pode esvaziar o espelho que a operação usa.
-    const jaGravados = await this.prisma.sgaVehicle.count({ where: { tenantId } });
-    if (jaGravados > 0 && total < jaGravados * 0.3) {
-      this.logger.error(
-        `SGA devolveu ${total} veículo(s) contra ${jaGravados} já espelhados ` +
-          '(queda acima de 70%). Espelho preservado — verifique o SGA.',
-      );
+      for (const situacao of SgaMirrorService.SITUACOES) {
+        if (situacao === 1 && ativosJaLidos?.length) continue;
+        let daSituacao = 0;
+        for (let pagina = 0; pagina < SgaMirrorService.MAX_PAGINAS; pagina++) {
+          const lote = await this.hinova.listRawVehiclesBySituation(
+            situacao,
+            pagina * SgaMirrorService.LOTE,
+            SgaMirrorService.LOTE,
+          );
+          if (lote.length > 0) {
+            daSituacao += await this.gravarPagina(lote, tenantId, situacao);
+          }
+          if (lote.length < SgaMirrorService.LOTE) break;
+          await new Promise((r) =>
+            setTimeout(r, SgaMirrorService.PAUSA_ENTRE_PAGINAS_MS),
+          );
+        }
+        porSituacao[SITUACOES_SGA[String(situacao)] ?? String(situacao)] =
+          daSituacao;
+        total += daSituacao;
+        this.logger.log(
+          `Espelho cadastral: ${daSituacao} veículo(s) na situação ${situacao}.`,
+        );
+      }
+
+      // Rede de segurança igual à do sync de pendências: SGA devolvendo quase nada
+      // por falha silenciosa não pode esvaziar o espelho que a operação usa.
+      const jaGravados = await this.prisma.sgaVehicle.count({
+        where: { tenantId },
+      });
+      if (jaGravados > 0 && total < jaGravados * 0.3) {
+        this.logger.error(
+          `SGA devolveu ${total} veículo(s) contra ${jaGravados} já espelhados ` +
+            '(queda acima de 70%). Espelho preservado — verifique o SGA.',
+        );
+        return { total, porSituacao };
+      }
+
+      // Só aqui some quem saiu do SGA: as páginas já regravaram todo o resto com
+      // syncedAt novo.
+      const { count } = await this.prisma.sgaVehicle.deleteMany({
+        where: { tenantId, syncedAt: { lt: inicio } },
+      });
+      if (count > 0) {
+        this.logger.log(
+          `Espelho cadastral: ${count} veículo(s) saíram do SGA.`,
+        );
+      }
+
+      this.logger.warn(`Espelho cadastral sincronizado: ${total} veículo(s).`);
       return { total, porSituacao };
+    } finally {
+      this.sincronizando = false;
     }
-
-    // Só aqui some quem saiu do SGA: as páginas já regravaram todo o resto com
-    // syncedAt novo.
-    const { count } = await this.prisma.sgaVehicle.deleteMany({
-      where: { tenantId, syncedAt: { lt: inicio } },
-    });
-    if (count > 0) {
-      this.logger.log(`Espelho cadastral: ${count} veículo(s) saíram do SGA.`);
-    }
-
-    this.logger.log(`Espelho cadastral sincronizado: ${total} veículo(s).`);
-    return { total, porSituacao };
   }
 
   /**

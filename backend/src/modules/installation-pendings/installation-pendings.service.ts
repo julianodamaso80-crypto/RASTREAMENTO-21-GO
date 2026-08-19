@@ -277,13 +277,10 @@ export class InstallationPendingsService implements OnModuleInit {
 
   private async cargaInicial(): Promise<void> {
     try {
-      const [jaTem, jaTemCadastro] = await Promise.all([
-        this.prisma.installationPending.count(),
-        this.prisma.sgaVehicle.count(),
-      ]);
-      // O espelho cadastral estreia vazio: sem esta segunda condição, o vínculo
-      // ficaria dependendo do lookup ao vivo (e do boleto) até o cron das 9h.
-      if (jaTem > 0 && jaTemCadastro > 0) return;
+      const jaTem = await this.prisma.installationPending.count();
+      // Espelho cadastral tem carga própria (SgaMirrorService.cargaInicial) —
+      // aqui só a fila de pendências, senão são duas varreduras do SGA no boot.
+      if (jaTem > 0) return;
 
       const tenant = await this.prisma.tenant.findFirst({
         where: { active: true, deletedAt: null },
@@ -291,9 +288,7 @@ export class InstallationPendingsService implements OnModuleInit {
       });
       if (!tenant) return;
 
-      this.logger.log(
-        `Carga inicial disparada (pendências: ${jaTem}, espelho cadastral: ${jaTemCadastro}).`,
-      );
+      this.logger.log('Fila de pendências vazia — disparando carga inicial.');
       await this.sync(tenant.id);
     } catch (erro) {
       this.logger.error(
