@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useTracking } from '@/contexts/tracking-context';
 import { useAuth } from '@/contexts/auth-context';
-import { canBlockVehicle } from '@/lib/manageable-routes';
+import { canBlockVehicle, canSeeInstallLocation } from '@/lib/manageable-routes';
 import { cn, maskCPF, formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
 import { STATUS_COLORS, STATUS_HINTS } from '@/lib/constants';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
@@ -36,6 +36,8 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   const { vehicles, selectedVehicleId, selectVehicle } = useTracking();
   const { user } = useAuth();
   const canBlock = canBlockVehicle(user?.role);
+  // Cliente final não pode saber onde o rastreador está escondido.
+  const showInstallLocation = canSeeInstallLocation(user?.role);
   const [showBlockModal, setShowBlockModal] = useState(false);
 
   const vehicle = useMemo(
@@ -165,24 +167,27 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
           </div>
 
           {/* Onde o rastreador foi escondido no veículo — informado pelo
-              técnico na instalação. Vale ouro quando o carro é levado. */}
-          <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border/20">
-            <Wrench className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                Rastreador instalado em
-              </p>
-              {installLocation ? (
-                <p className="text-sm font-medium leading-tight mt-1">
-                  {installLocation}
+              técnico na instalação. Vale ouro quando o carro é levado, por
+              isso só o time interno vê: cliente final nunca. */}
+          {showInstallLocation && (
+            <div className="flex items-start gap-2 mt-3 pt-3 border-t border-border/20">
+              <Wrench className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Rastreador instalado em
                 </p>
-              ) : (
-                <p className="text-sm text-muted-foreground italic mt-1">
-                  Local não informado
-                </p>
-              )}
+                {installLocation ? (
+                  <p className="text-sm font-medium leading-tight mt-1">
+                    {installLocation}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic mt-1">
+                    Local não informado
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Veículo */}

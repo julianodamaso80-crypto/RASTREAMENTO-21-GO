@@ -70,6 +70,16 @@ export function canBlockVehicle(role: Role | undefined): boolean {
 }
 
 /**
+ * Onde o rastreador foi escondido no veículo só existe pro time interno —
+ * contar isso pro cliente final entrega o esconderijo em caso de roubo.
+ * Espelha o payload de `findOwnedByUser` em `vehicles.service.ts`, que nem
+ * manda o campo pra role CLIENT. Role desconhecida esconde por segurança.
+ */
+export function canSeeInstallLocation(role: Role | undefined): boolean {
+  return role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'OPERATOR';
+}
+
+/**
  * Decide se o usuário pode abrir uma tela.
  * `allowedRoutes` vazio mantém o comportamento antigo: vale só o perfil.
  */
