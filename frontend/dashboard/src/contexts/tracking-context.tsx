@@ -210,9 +210,6 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const handleAlert = useCallback((alert: Alert) => {
     setAlerts((prev) => [alert, ...prev].slice(0, 100));
     setUnreadCount((prev) => prev + 1);
-    toast.warning(`${alert.vehicle?.plate || 'Veículo'}: ${alert.message}`, {
-      duration: 5000,
-    });
   }, []);
 
   const handleBleSighting = useCallback((event: BleSightingEvent) => {
