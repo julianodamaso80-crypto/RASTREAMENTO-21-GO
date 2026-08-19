@@ -57,3 +57,6 @@ mobile/credentials.json
 
 # Scratch do subagent-driven-development
 .superpowers/
+
+# Artefatos de sessao do Playwright MCP (screenshots, logs de console, snapshots)
+.playwright-mcp/

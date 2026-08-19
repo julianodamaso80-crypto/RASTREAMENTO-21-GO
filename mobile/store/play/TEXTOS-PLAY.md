@@ -73,6 +73,5 @@ Faixa etária **18+** (o usuário precisa ter contrato de proteção veicular). 
 
 ## Acesso ao app (login exigido)
 Marcar "Todas ou algumas funcionalidades são restritas" e fornecer credenciais de teste:
-- CPF: `08577590780`
-- Senha: `160807`
+- CPF e senha: **1Password**, item "conta demo de revisao das lojas" (nao vao pro repositorio — regra 7 do CLAUDE.md)
 - Instrução: informar CPF e senha na tela de login; o veículo de demonstração TST1J16 aparece no mapa.

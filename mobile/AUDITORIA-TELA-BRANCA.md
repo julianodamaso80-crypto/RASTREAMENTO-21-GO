@@ -286,7 +286,7 @@ Se o dado mostrar "nenhum ping" → a aposta seguinte é **remover `@expo/ui` e
 ## 12. ACESSOS / FATOS ÚTEIS
 
 - Backend logs: `ssh root@167.71.31.77` → `docker service logs --tail 50 rastreamento-21-go_backend-rastreamento | grep APP_DIAG`
-- Conta de teste do app (backend prod): CPF `085.775.907-80` / senha `160807` (veículo `TST1J16`).
+- Conta de teste do app (backend prod): credenciais no **1Password**, item "conta demo de revisao das lojas" (veículo `TST1J16`).
 - Apple: Team `CCMH2N6PS4`, app id ASC `6785540839`, conta `marketing21goprotpatri@gmail.com`.
 - App **já foi rejeitado** pela App Review por: (2.1a) tela branca no iPad; (2.3.10) barra de
   status não-iOS nos screenshots [já corrigido nos screenshots]; (2.1) 7 perguntas de negócio
