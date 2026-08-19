@@ -2,6 +2,12 @@ name: Build Android (local no runner Ubuntu)
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: "production = .aab pra Play · preview = .apk pra instalar no aparelho"
+        type: choice
+        options: [production, preview]
+        default: production
 
 jobs:
   build:
@@ -52,14 +58,19 @@ jobs:
       - name: Instalar eas-cli
         run: npm install -g eas-cli
 
-      - name: Build AAB (local, sem cota EAS nuvem)
+      - name: Build (local, sem cota EAS nuvem)
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas build --local --platform android --profile production --non-interactive --output "$GITHUB_WORKSPACE/app.aab"
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          EXT=aab; [ "$PROFILE" = "preview" ] && EXT=apk
+          echo "ARTEFATO=app.$EXT" >> "$GITHUB_ENV"
+          eas build --local --platform android --profile "$PROFILE" --non-interactive \
+            --output "$GITHUB_WORKSPACE/app.$EXT"
 
-      - name: Upload do AAB como artefato
+      - name: Upload do binario como artefato
         uses: actions/upload-artifact@v4
         with:
-          name: app-aab
-          path: app.aab
+          name: app-android-${{ inputs.profile }}
+          path: ${{ env.ARTEFATO }}
