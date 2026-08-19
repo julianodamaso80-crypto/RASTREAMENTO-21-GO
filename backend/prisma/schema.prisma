@@ -217,6 +217,7 @@ model Tenant {
   settings     TenantSettings?
 
   installationPendings InstallationPending[]
+  sgaVehicles          SgaVehicle[]
   installationRoutes   InstallationRoute[]
 
   @@map("tenants")
@@ -932,4 +933,51 @@ model GeoAddress {
 
   @@unique([latKey, lngKey])
   @@map("geo_addresses")
+}
+
+/// Espelho cadastral do SGA: TODO veículo, em qualquer situação.
+///
+/// Existe porque o SGA não tem busca por placa: o único GET que aceita placa é
+/// o /buscar/situacao-financeira-veiculo, que é financeiro e responde 406
+/// enquanto o veículo não tem boleto emitido — exatamente o veículo recém-vendido
+/// que está indo receber rastreador. Sem este espelho, a instalação depende de
+/// ter boleto, o que não é regra de negócio nenhuma.
+///
+/// Alimentado pela mesma varredura do InstallationPending (POST /listar/veiculo),
+/// que já lê a base inteira e hoje descarta o que não é pendência.
+model SgaVehicle {
+  id                String @id @default(uuid()) @db.Uuid
+  hinovaVehicleCode String @map("hinova_vehicle_code")
+
+  /// Vazia em veículo aguardando emplacamento — nesses casos vale o chassi.
+  plate  String
+  chassi String?
+
+  associateName String  @map("associate_name")
+  associateCode String  @map("associate_code")
+  cpf           String?
+  phone         String?
+  email         String?
+  brandModel    String  @map("brand_model")
+
+  /// 1 ATIVO · 2 INATIVO · 3 PENDENTE · 4 INADIMPLENTE · 5 NEGADO
+  /// (verificado na API real em 2026-08-19).
+  situationCode  String  @map("situation_code")
+  situationLabel String  @map("situation_label")
+  /// codigo_tipo_adesao: 1 pendente rastreador · 2 instalado · 10 pendente TAG…
+  adhesionCode   String? @map("adhesion_code")
+
+  contractDate DateTime? @map("contract_date") @db.Date
+
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  syncedAt  DateTime @default(now()) @map("synced_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, hinovaVehicleCode])
+  @@index([tenantId, plate])
+  @@index([tenantId, chassi])
+  @@index([tenantId, situationCode])
+  @@map("sga_vehicles")
 }

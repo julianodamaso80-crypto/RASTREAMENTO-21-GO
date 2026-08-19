@@ -83,15 +83,20 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
       const res = await stockApi.sgaLookup(p);
       setLookup(res);
       if (!res.encontrado) {
-        toast.error(res.motivo || 'Placa não encontrada no SGA.');
+        toast.error(res.motivo || 'Não localizei este veículo no SGA.');
       } else if (!res.ativo) {
+        const situacao = res.situacao.descricao ?? 'INATIVA';
         toast.error(
           podeLiberarInativo
-            ? 'Placa INATIVA no SGA — só com liberação de administrador.'
-            : 'Placa INATIVA no SGA — vínculo bloqueado.',
+            ? `Placa ${situacao} no SGA — só com liberação de administrador.`
+            : `Placa ${situacao} no SGA — vínculo bloqueado.`,
         );
-      } else if (res.fonte === 'espelho') {
-        toast.info('Veículo novo, ainda sem boleto no SGA — dados vindos do espelho de pendências.');
+      } else if (res.boletoVencido) {
+        toast.error(
+          podeLiberarInativo
+            ? 'Cliente com mensalidade vencida no SGA — só com liberação de administrador.'
+            : 'Cliente com mensalidade vencida no SGA — vínculo bloqueado.',
+        );
       }
     } catch {
       toast.error('Erro ao consultar o SGA. Tente novamente.');
@@ -100,9 +105,20 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
     }
   };
 
-  const inativo = !!lookup?.encontrado && !lookup.ativo;
+  // Um só motivo de bloqueio, na língua da operação — o servidor aplica a mesma
+  // regra em StockService.motivoDeBloqueio.
+  const motivoBloqueio = !lookup?.encontrado
+    ? null
+    : !lookup.ativo
+      ? `Veículo ${lookup.situacao.descricao ?? 'INATIVO'} no SGA.`
+      : lookup.boletoVencido
+        ? `Cliente com mensalidade vencida no SGA${
+            lookup.situacao.dataVencimento ? ` (vencimento ${lookup.situacao.dataVencimento})` : ''
+          }.`
+        : null;
+  const inativo = !!motivoBloqueio;
   const inativoLiberado = inativo && podeLiberarInativo && liberarInativo;
-  const situacaoOk = !!lookup?.encontrado && (!!lookup.ativo || inativoLiberado);
+  const situacaoOk = !!lookup?.encontrado && (!inativo || inativoLiberado);
 
   const canActivate =
     situacaoOk &&
@@ -188,7 +204,9 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
                 {inativo ? (
                   <Badge className="bg-red-500/15 text-red-400 border border-red-500/30 text-xs">
                     <AlertTriangle className="h-3 w-3 mr-1" />
-                    {lookup.situacao.descricao ?? 'INATIVO'}
+                    {lookup.ativo && lookup.boletoVencido
+                      ? 'MENSALIDADE VENCIDA'
+                      : (lookup.situacao.descricao ?? 'INATIVO')}
                   </Badge>
                 ) : (
                   <Badge className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs">
@@ -210,7 +228,7 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
                 (podeLiberarInativo ? (
                   <div className="space-y-2">
                     <p className="text-xs text-red-400">
-                      Veículo INATIVO no SGA. Instalar assim mesmo é decisão do administrador e fica
+                      {motivoBloqueio} Instalar assim mesmo é decisão do administrador e fica
                       registrada.
                     </p>
                     <label className="flex items-start gap-2 text-xs font-medium cursor-pointer">
@@ -220,12 +238,12 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
                         checked={liberarInativo}
                         onChange={(e) => setLiberarInativo(e.target.checked)}
                       />
-                      <span>Liberar a instalação mesmo com o associado inativo</span>
+                      <span>Liberar a instalação assim mesmo</span>
                     </label>
                   </div>
                 ) : (
                   <p className="text-xs text-red-400">
-                    Veículo INATIVO no SGA. Só um administrador pode liberar esta instalação.
+                    {motivoBloqueio} Só um administrador pode liberar esta instalação.
                   </p>
                 ))}
             </div>

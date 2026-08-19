@@ -528,7 +528,10 @@ function InstallScreen({
   const [confirmandoSemGps, setConfirmandoSemGps] = useState(false);
 
   const localFinal = local === 'Outro' ? localOutro.trim() : local;
-  const podeFinalizar = !!lookup?.encontrado && !!lookup?.ativo && localFinal.length >= 3;
+  // Técnico nunca libera situação irregular — nem inativo, nem mensalidade
+  // vencida. Quem libera é o admin, pelo painel.
+  const podeFinalizar =
+    !!lookup?.encontrado && !!lookup?.ativo && !lookup?.boletoVencido && localFinal.length >= 3;
 
   const buscar = async () => {
     const p = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -541,9 +544,13 @@ function InstallScreen({
     try {
       const res = await techApi.lookup(p);
       setLookup(res);
-      if (!res.encontrado) toast.error(res.motivo || 'Placa não encontrada no SGA.');
-      else if (!res.ativo) toast.error('Placa inativa no SGA — vínculo bloqueado.');
-      else if (res.fonte === 'espelho') toast.info('Veículo novo, ainda sem boleto no SGA — dados do espelho de pendências.');
+      if (!res.encontrado) toast.error(res.motivo || 'Não localizei este veículo no SGA.');
+      else if (!res.ativo)
+        toast.error(
+          `Veículo ${res.situacao.descricao ?? 'INATIVO'} no SGA — só um administrador libera.`,
+        );
+      else if (res.boletoVencido)
+        toast.error('Cliente com mensalidade vencida no SGA — só um administrador libera.');
     } catch (err) {
       toast.error(apiMessage(err, 'Erro ao consultar o SGA'));
     } finally {

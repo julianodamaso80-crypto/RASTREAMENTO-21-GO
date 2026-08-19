@@ -149,8 +149,13 @@ export interface HinovaLookup {
   encontrado: boolean;
   ativo: boolean;
   motivo?: string;
-  /** sga = consulta ao vivo; espelho = veículo novo sem boleto, dados do espelho de pendências. */
-  fonte?: 'sga' | 'espelho';
+  /** Mensalidade vencida no SGA (só o lookup ao vivo enxerga). */
+  boletoVencido?: boolean;
+  /**
+   * sga = consulta ao vivo; cadastro = espelho cadastral do SGA (todo veículo,
+   * qualquer situação); espelho = espelho da fila de pendências.
+   */
+  fonte?: 'sga' | 'cadastro' | 'espelho';
   cliente: { nome: string | null; cpf: string | null };
   veiculo: {
     placa: string | null;
