@@ -111,11 +111,18 @@ export function AssetCard({
               {asset.associate?.name ?? 'Sem cliente vinculado'}
             </span>
           </span>
-          {/* CPF junto do nome: é o que confere com quem está no telefone.
-              Inteiro só pro time interno (mesma régua do esconderijo do
-              rastreador); VIEWER e qualquer outro perfil veem mascarado. */}
+          {/* Documento junto do nome: é o que confere com quem está no
+              telefone. O rótulo existe porque, solto, o número se perde entre
+              o IMEI e as datas do card. Inteiro só pro time interno (mesma
+              régua do esconderijo do rastreador); os demais perfis veem
+              mascarado. */}
           {asset.associate?.cpf && (
             <span className="font-mono text-xs">
+              <span className="font-sans">
+                {asset.associate.cpf.replace(/\D/g, '').length === 14
+                  ? 'CNPJ'
+                  : 'CPF'}
+              </span>{' '}
               {podeVerDocumento
                 ? formatCpfCnpj(asset.associate.cpf)
                 : maskCPF(asset.associate.cpf)}
