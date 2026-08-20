@@ -69,7 +69,10 @@ const COMMAND_TEMPLATES: Record<string, CommandTemplate[]> = {
     {
       type: 'SET_TIMER',
       label: 'Configurar Intervalo de Envio',
-      template: 'TIMER,30,3600#',
+      // 10s em movimento, e não os 30s de antes: a 60 km/h, 30s são ~490 m
+      // entre um ponto e o outro — o mapa ficava meio minuto parado e o ícone
+      // saltava meio quilômetro. Medido no parque em 20/08/2026.
+      template: 'TIMER,10,3600#',
       step: 5,
     },
     {
@@ -115,7 +118,7 @@ const COMMAND_TEMPLATES: Record<string, CommandTemplate[]> = {
     {
       type: 'SET_TIMER',
       label: 'Configurar Intervalo de Envio',
-      template: 'TIMER#30,3600',
+      template: 'TIMER#10,3600',
       step: 3,
     },
     {

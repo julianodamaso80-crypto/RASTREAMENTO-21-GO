@@ -44,6 +44,25 @@ interface MapContainerProps {
   basemapToggleClassName?: string;
 }
 
+/** Duração do deslize do marcador entre duas posições reportadas. */
+const ANIM_DURACAO_MS = 1000;
+/** Abaixo disso é oscilação de GPS parado — animar só faria o ícone tremer. */
+const ANIM_MIN_M = 3;
+/** Acima disso não é deslocamento contínuo (reconexão, carga inicial): vai direto. */
+const ANIM_MAX_M = 2000;
+
+/** Distância em metros entre duas coordenadas [lng, lat] (Haversine). */
+function distanciaMetros(a: [number, number], b: [number, number]): number {
+  const R = 6_371_000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b[1] - a[1]);
+  const dLng = rad(b[0] - a[0]);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a[1])) * Math.cos(rad(b[1])) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
 /**
  * Renderiza 1 marker DOM por veículo. Simples e direto.
  *
@@ -60,6 +79,9 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+    // Animação em curso por veículo: id -> handle do requestAnimationFrame.
+    // Ver `animarMarcador()`.
+    const animacoesRef = useRef<Map<string, number>>(new Map());
     const [basemap, setBasemap] = useState<BasemapId>('streets');
     // Só preenchido quando o satélite ativo é o do Google — dispara a
     // atribuição obrigatória (logo + copyright do viewport).
@@ -166,6 +188,11 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
 
       const applyStyle = (style: Parameters<typeof map.setStyle>[0]) => {
         if (cancelled) return;
+
+        // Os markers são recriados abaixo; um deslize em curso continuaria
+        // escrevendo no marker antigo, que já saiu do mapa.
+        animacoesRef.current.forEach((handle) => cancelAnimationFrame(handle));
+        animacoesRef.current.clear();
 
         const snapshot = Array.from(markersRef.current.entries()).map(
           ([id, marker]) => ({ id, lngLat: marker.getLngLat(), el: marker.getElement() }),
@@ -328,6 +355,73 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     );
 
     // ─────────────────────────────────────────────────────────────────
+    // Desliza o marcador do ponto onde ele está até o ponto novo.
+    //
+    // O rastreador só reporta de tempos em tempos — a 60 km/h com o TIMER
+    // em 10s são ~164 m entre um envio e o outro. Aplicar a coordenada de
+    // uma vez fazia o ícone teleportar esse trecho inteiro, e é isso que o
+    // operador lê como "o mapa está travado, o carro anda aos pulos".
+    //
+    // A animação NÃO inventa posição: os dois extremos são pontos que o GPS
+    // confirmou, e o percurso dura 1s — o marcador passa a esmagadora maioria
+    // do tempo parado sobre a última posição real, não sobre um palpite. Nada
+    // de projetar o carro pela rua durante o silêncio do rastreador; isso
+    // mandaria a equipe pro lugar errado num roubo.
+    // ─────────────────────────────────────────────────────────────────
+    const animarMarcador = useCallback(
+      (id: string, marker: maplibregl.Marker, destino: [number, number]) => {
+        const anterior = animacoesRef.current.get(id);
+        if (anterior !== undefined) cancelAnimationFrame(anterior);
+
+        const origem = marker.getLngLat();
+        const metros = distanciaMetros(
+          [origem.lng, origem.lat],
+          destino,
+        );
+
+        // Perto demais (oscilação de GPS parado) ou longe demais (primeira
+        // carga, reconexão do WebSocket, veículo que ficou horas sem reportar):
+        // vai direto. Animar um salto de quilômetros mostraria o carro
+        // atravessando a cidade em câmera lenta, longe dos dois pontos reais.
+        if (metros < ANIM_MIN_M || metros > ANIM_MAX_M) {
+          animacoesRef.current.delete(id);
+          marker.setLngLat(destino);
+          return;
+        }
+
+        const inicio = performance.now();
+        const passo = (agora: number) => {
+          const t = Math.min(1, (agora - inicio) / ANIM_DURACAO_MS);
+          marker.setLngLat([
+            origem.lng + (destino[0] - origem.lng) * t,
+            origem.lat + (destino[1] - origem.lat) * t,
+          ]);
+          if (t < 1) {
+            animacoesRef.current.set(id, requestAnimationFrame(passo));
+            return;
+          }
+          // Termina SEMPRE cravado na coordenada real, sem resto de float.
+          animacoesRef.current.delete(id);
+          marker.setLngLat(destino);
+        };
+
+        animacoesRef.current.set(id, requestAnimationFrame(passo));
+      },
+      [],
+    );
+
+    // Cancela toda animação pendente quando o mapa é desmontado ou o estilo
+    // troca — os markers são recriados nesses dois casos e um rAF órfão
+    // continuaria escrevendo em marker que já saiu do mapa.
+    useEffect(() => {
+      const animacoes = animacoesRef.current;
+      return () => {
+        animacoes.forEach((handle) => cancelAnimationFrame(handle));
+        animacoes.clear();
+      };
+    }, []);
+
+    // ─────────────────────────────────────────────────────────────────
     // Sincroniza markers com a lista de vehicles
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
@@ -348,12 +442,23 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         const vkey = `${vehicle.displayStatus}|${vehicle.vehicleType}|${isMoving}`;
 
         if (existing) {
-          existing.setLngLat(lngLat); // sempre move pro ponto atual
           const el = existing.getElement();
+          // A lista de veículos é recriada a cada atualização de QUALQUER um
+          // do parque, então este efeito roda ~1x/s por veículo com a mesma
+          // coordenada. Sem esta guarda, cada passagem reiniciaria o deslize
+          // do zero e o marcador nunca chegaria ao destino.
+          const destino = `${lngLat[0]},${lngLat[1]}`;
+          if (el.dataset.destino !== destino) {
+            el.dataset.destino = destino;
+            animarMarcador(vehicle.id, existing, lngLat);
+          }
           if (el.dataset.vkey !== vkey) {
             // status/tipo/movimento mudou → redesenha o marcador inteiro
             const newEl = createMarkerElement(vehicle);
             newEl.dataset.vkey = vkey;
+            // O destino acompanha o elemento novo, senão a guarda acima
+            // reabriria uma animação a cada redesenho de status.
+            newEl.dataset.destino = el.dataset.destino ?? '';
             el.replaceWith(newEl);
             (existing as unknown as { _element: HTMLElement })._element = newEl;
           } else {
@@ -367,6 +472,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         } else {
           const el = createMarkerElement(vehicle);
           el.dataset.vkey = vkey;
+          el.dataset.destino = `${lngLat[0]},${lngLat[1]}`;
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat(lngLat)
             .addTo(map);
@@ -377,11 +483,16 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       // Remove markers que sumiram da lista
       markersRef.current.forEach((marker, id) => {
         if (!currentIds.has(id)) {
+          const anim = animacoesRef.current.get(id);
+          if (anim !== undefined) {
+            cancelAnimationFrame(anim);
+            animacoesRef.current.delete(id);
+          }
           marker.remove();
           markersRef.current.delete(id);
         }
       });
-    }, [vehicles, createMarkerElement]);
+    }, [vehicles, createMarkerElement, animarMarcador]);
 
     return (
       <div className="relative w-full h-full">
