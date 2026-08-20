@@ -3,6 +3,7 @@ import {
   IsInt,
   IsOptional,
   IsNumber,
+  IsISO8601,
   Min,
   Max,
 } from 'class-validator';
@@ -23,14 +24,34 @@ export class CreateSightingDto {
   @IsString()
   macAddress: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: -55,
-    description: 'RSSI em dBm (mais negativo = mais distante)',
+    description:
+      'RSSI em dBm. Ausente em relatório da rede Apple, que não expõe potência de sinal.',
   })
+  @IsOptional()
   @IsInt()
   @Min(-127)
   @Max(20)
-  rssi: number;
+  rssi?: number;
+
+  @ApiPropertyOptional({
+    example: '2026-08-20T10:00:00.000Z',
+    description:
+      'Momento em que a TAG foi vista. Ausente no scanner local, que reporta na hora.',
+  })
+  @IsOptional()
+  @IsISO8601()
+  seenAt?: string;
+
+  @ApiPropertyOptional({
+    example: 40,
+    description: 'Raio de confiança em metros informado pela rede Find My.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  accuracy?: number;
 
   @ApiPropertyOptional({
     example: 'ub1FoLtdoAnRgH1/u9qjYETb5SNN1pJ/gXdWR1QNsUY=',

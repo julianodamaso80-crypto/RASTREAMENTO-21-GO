@@ -18,10 +18,12 @@ export type SightingEmittedPayload = {
   sighting: {
     id: string;
     macAddress: string;
-    rssi: number;
+    rssi: number | null;
     scannerLat: number | null;
     scannerLng: number | null;
     scannerSource: string | null;
+    seenAt: Date;
+    accuracy: number | null;
     createdAt: Date;
   };
 };
@@ -71,6 +73,8 @@ export class BleTagsService {
             scannerLat: true,
             scannerLng: true,
             scannerSource: true,
+            seenAt: true,
+            accuracy: true,
             createdAt: true,
           },
         },
@@ -141,11 +145,15 @@ export class BleTagsService {
       );
     }
 
+    const seenAt = dto.seenAt ? new Date(dto.seenAt) : new Date();
+
     const sighting = await this.sightingModel.create({
       data: {
         deviceId: device.id,
         macAddress: dto.macAddress,
-        rssi: dto.rssi,
+        rssi: dto.rssi ?? null,
+        accuracy: dto.accuracy ?? null,
+        seenAt,
         hashedAdvKey: dto.hashedAdvKey,
         counterByte: dto.counterByte,
         scannerLat: dto.scannerLat,
@@ -157,7 +165,7 @@ export class BleTagsService {
 
     await this.deviceModel.update({
       where: { id: device.id },
-      data: { lastConnection: sighting.createdAt },
+      data: { lastConnection: seenAt },
     });
 
     if (this.emitter) {
@@ -173,6 +181,8 @@ export class BleTagsService {
           scannerLat: sighting.scannerLat,
           scannerLng: sighting.scannerLng,
           scannerSource: sighting.scannerSource,
+          seenAt: sighting.seenAt,
+          accuracy: sighting.accuracy,
           createdAt: sighting.createdAt,
         },
       });
