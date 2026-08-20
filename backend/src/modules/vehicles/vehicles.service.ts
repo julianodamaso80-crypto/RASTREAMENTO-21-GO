@@ -45,10 +45,26 @@ export class VehiclesService {
     if (status) where.status = status;
     if (plate) where.plate = { contains: plate, mode: 'insensitive' };
     if (search) {
+      // Busca única, com tudo que o atendimento tem em mãos quando o telefone
+      // toca: placa, chassi, IMEI do rastreador, marca/modelo, nome e CPF do
+      // cliente. Procurar só por placa obrigava a saber a placa — e quem liga
+      // costuma dizer o nome.
+      const termo = search.trim();
+      const digitos = termo.replace(/\D/g, '');
       where.OR = [
-        { plate: { contains: search, mode: 'insensitive' } },
-        { model: { contains: search, mode: 'insensitive' } },
-        { brand: { contains: search, mode: 'insensitive' } },
+        { plate: { contains: termo, mode: 'insensitive' } },
+        { model: { contains: termo, mode: 'insensitive' } },
+        { brand: { contains: termo, mode: 'insensitive' } },
+        { color: { contains: termo, mode: 'insensitive' } },
+        { chassi: { contains: termo, mode: 'insensitive' } },
+        { associate: { name: { contains: termo, mode: 'insensitive' } } },
+        ...(digitos
+          ? [
+              { uniqueId: { contains: digitos } },
+              { device: { imei: { contains: digitos } } },
+              { associate: { cpf: { contains: digitos } } },
+            ]
+          : []),
       ];
     }
 
@@ -59,10 +75,18 @@ export class VehiclesService {
           associate: {
             select: { id: true, name: true, cpf: true, phone: true },
           },
-          // Onde o técnico informou ter escondido o rastreador — o painel do
-          // mapa mostra junto da localização.
+          // Rastreador instalado: o IMEI é a identidade do equipamento em
+          // campo (é por ele que se fala com o aparelho, se abre chamado e se
+          // acha o item no estoque), e `installLocation` é onde o técnico
+          // informou tê-lo escondido. Só o painel interno recebe os dois.
           device: {
-            select: { installLocation: true },
+            select: {
+              imei: true,
+              model: true,
+              status: true,
+              installedAt: true,
+              installLocation: true,
+            },
           },
         },
         skip: (page - 1) * perPage,

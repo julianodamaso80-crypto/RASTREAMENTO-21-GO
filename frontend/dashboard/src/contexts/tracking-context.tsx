@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import { useTraccarSocket } from '@/hooks/use-traccar-socket';
 import { getDisplayStatus } from '@/lib/utils';
+import { matchesVehicleSearch } from '@/lib/vehicle-search';
 
 interface StatusCounts {
   total: number;
@@ -283,13 +284,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     let list = vehicles;
 
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (v) =>
-          v.plate.toLowerCase().includes(q) ||
-          (v.model?.toLowerCase().includes(q)) ||
-          (v.brand?.toLowerCase().includes(q)),
-      );
+      list = list.filter((v) => matchesVehicleSearch(v, searchQuery));
     }
 
     if (statusFilter !== 'all') {

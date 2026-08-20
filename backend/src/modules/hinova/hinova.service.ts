@@ -190,6 +190,14 @@ export class HinovaService implements IHinovaClient {
     }
 
     const v = item as Record<string, string>;
+    if (!HinovaService.respostaConfere(p, v)) {
+      this.logger.warn(
+        `SGA respondeu a placa ${v.placa} (código ${v.codigo_veiculo}) para a ` +
+          `consulta ${p} — resposta descartada.`,
+      );
+      return HinovaService.emptyLookup('Placa não encontrada no SGA.');
+    }
+
     return {
       encontrado: true,
       ativo: String(v.codigo_situacao_veiculo) === '1',
@@ -208,6 +216,27 @@ export class HinovaService implements IHinovaClient {
         dataVencimento: v.data_vencimento ?? null,
       },
     };
+  }
+
+  /**
+   * A resposta tem que ser do veículo que foi pedido.
+   *
+   * O SGA compara o identificador da URL também com o `codigo_veiculo`, depois
+   * de um cast numérico implícito: "9C2KC2210TR110253" casa o veículo de
+   * código 9. Como todo chassi brasileiro começa por dígito (9BD, 9C2, 93Y...),
+   * consultar por chassi voltava com o cadastro de outro associado — e o
+   * vínculo do estoque instalava o rastreador no cliente errado (verificado em
+   * produção em 20/08/2026). Sem esta conferência, o dado alheio entra no
+   * banco antes que alguém desconfie.
+   */
+  private static respostaConfere(
+    pedido: string,
+    v: Record<string, string>,
+  ): boolean {
+    return (
+      HinovaService.normalizePlate(v.placa) === pedido ||
+      HinovaService.normalizePlate(v.chassi) === pedido
+    );
   }
 
   private static extractError(body: unknown): string | null {

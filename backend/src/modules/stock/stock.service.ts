@@ -549,6 +549,22 @@ export class StockService {
       // 3) Rastreador — um Device por IMEI e por veículo. O filtro por tenant
       // é redundante depois do assertImeiLivreNoTenant, mas mantém a garantia
       // local: nada aqui dentro toca registro de outra empresa.
+      //
+      // `devices.vehicle_id` é UNIQUE: se a placa já tem OUTRO rastreador, o
+      // create abaixo estoura a constraint e o técnico leva um 500 sem
+      // explicação. Aqui ele recebe o IMEI que está instalado e sabe o que
+      // fazer — retirar o atual antes de instalar o novo.
+      const jaInstalado = await tx.device.findFirst({
+        where: { vehicleId: vehicle.id },
+        select: { id: true, imei: true },
+      });
+      if (jaInstalado && jaInstalado.imei !== item.imei) {
+        throw new UnprocessableEntityException(
+          `A placa ${placa} já está com o rastreador IMEI ${jaInstalado.imei} ` +
+            'instalado. Retire o rastreador atual antes de instalar outro.',
+        );
+      }
+
       const existingDevice = await tx.device.findFirst({
         where: { imei: item.imei, tenantId },
       });

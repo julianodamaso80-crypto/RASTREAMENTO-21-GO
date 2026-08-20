@@ -25,7 +25,7 @@ export function VehicleSidebar() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por placa ou modelo..."
+            placeholder="Placa, nome, CPF, IMEI, chassi, modelo..."
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
             className="pl-9 bg-background/50 h-9 text-sm"

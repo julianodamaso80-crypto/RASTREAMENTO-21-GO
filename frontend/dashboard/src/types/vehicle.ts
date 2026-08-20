@@ -49,7 +49,14 @@ export interface Vehicle {
   updatedAt: string;
   associate: Associate | null;
   /** Rastreador vinculado. Só o que o painel precisa mostrar. */
-  device?: { installLocation: string | null } | null;
+  device?: {
+    /** Identidade do equipamento em campo. Ausente na rota do cliente final. */
+    imei?: string | null;
+    model?: string | null;
+    status?: string | null;
+    installedAt?: string | null;
+    installLocation: string | null;
+  } | null;
 }
 
 export interface VehicleWithTracking extends Vehicle {

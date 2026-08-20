@@ -13,7 +13,7 @@ import {
   Clock,
   HelpCircle,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatCpfCnpj } from '@/lib/utils';
 import type { ClientAsset, CommsState } from '@/types/assets';
 import { AssetActionsMenu } from './asset-actions-menu';
 
@@ -70,8 +70,16 @@ export function AssetCard({
                 {asset.plate}
               </span>
             </h3>
+            {/* O IMEI sem rótulo passava por número solto. É o que o
+                atendimento usa pra achar o equipamento e abrir chamado. */}
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-              {asset.device?.imei ?? 'sem rastreador'}
+              {asset.device?.imei ? (
+                <>
+                  <span className="font-sans">IMEI</span> {asset.device.imei}
+                </>
+              ) : (
+                'sem rastreador'
+              )}
             </p>
           </div>
         </div>
@@ -90,11 +98,19 @@ export function AssetCard({
 
       {/* Situação */}
       <div className="space-y-1.5 px-4 py-3 text-sm">
-        <p className="flex items-center gap-1.5 text-muted-foreground">
-          <User className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">
-            {asset.associate?.name ?? 'Sem cliente vinculado'}
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground">
+          <span className="flex items-center gap-1.5 min-w-0">
+            <User className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              {asset.associate?.name ?? 'Sem cliente vinculado'}
+            </span>
           </span>
+          {/* CPF junto do nome: é o que confere com quem está no telefone. */}
+          {asset.associate?.cpf && (
+            <span className="font-mono text-xs">
+              {formatCpfCnpj(asset.associate.cpf)}
+            </span>
+          )}
         </p>
 
         <Comunicacao asset={asset} />

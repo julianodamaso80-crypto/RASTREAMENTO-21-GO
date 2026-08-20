@@ -12,6 +12,24 @@ export function maskCPF(cpf: string): string {
   return `***.***.*${cpf.slice(-4, -2)}-${cpf.slice(-2)}`;
 }
 
+/**
+ * CPF/CNPJ com a pontuação de sempre, sem esconder dígito.
+ *
+ * Usado nas telas do time interno (Clientes Ativos), onde o documento serve
+ * para conferir com quem está no telefone — mascarado ele não confere nada.
+ * Para o que o cliente final enxerga existe `maskCPF`.
+ */
+export function formatCpfCnpj(doc: string | null | undefined): string {
+  const d = (doc ?? '').replace(/\D/g, '');
+  if (d.length === 11) {
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  if (d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  return doc ?? '';
+}
+
 export function formatSpeed(knots: number): string {
   const kmh = knots * 1.852;
   return `${Math.round(kmh)} km/h`;

@@ -71,6 +71,13 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   const displayAddress = reverseAddress || vehicle.address || null;
   // Local físico no veículo informado na instalação (ex.: "atrás do porta-luvas").
   const installLocation = vehicle.device?.installLocation?.trim() || null;
+  // IMEI do rastreador instalado. `uniqueId` guarda o mesmo número nos ativos
+  // vindos do estoque, e serve de rede quando o Device não veio no payload.
+  // Mesmo critério do esconderijo: número de equipamento é dado do time
+  // interno, cliente final não recebe.
+  const imei = showInstallLocation
+    ? vehicle.device?.imei?.trim() || vehicle.uniqueId?.trim() || null
+    : null;
 
   return (
     <>
@@ -208,6 +215,17 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
               <div className="col-span-2">
                 <span className="text-muted-foreground text-xs">Chassi</span>
                 <p className="font-medium font-mono text-xs">{vehicle.chassi}</p>
+              </div>
+            )}
+            {/* IMEI do rastreador vinculado: é por ele que se abre chamado,
+                se manda comando SMS e se acha o equipamento no estoque. A rota
+                do cliente final não recebe este campo. */}
+            {imei && (
+              <div className="col-span-2">
+                <span className="text-muted-foreground text-xs">
+                  IMEI do rastreador
+                </span>
+                <p className="font-medium font-mono text-xs">{imei}</p>
               </div>
             )}
           </div>
