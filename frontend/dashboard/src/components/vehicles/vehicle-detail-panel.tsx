@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { useTracking } from '@/contexts/tracking-context';
 import { useAuth } from '@/contexts/auth-context';
 import { canBlockVehicle, canSeeInstallLocation } from '@/lib/manageable-routes';
-import { cn, maskCPF, formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
+import { cn, maskCPF, formatCpfCnpj, formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
 import { STATUS_COLORS, STATUS_HINTS } from '@/lib/constants';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { BlockConfirmModal } from './block-confirm-modal';
@@ -247,7 +247,14 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
                 </div>
                 <div>
                   <span className="text-muted-foreground text-xs">CPF</span>
-                  <p className="font-medium">{maskCPF(vehicle.associate.cpf)}</p>
+                  {/* Time interno vê o documento inteiro — é com ele que se
+                      confere quem está no telefone. Cliente final continua
+                      vendo só os últimos dígitos. */}
+                  <p className="font-medium">
+                    {showInstallLocation
+                      ? formatCpfCnpj(vehicle.associate.cpf)
+                      : maskCPF(vehicle.associate.cpf)}
+                  </p>
                 </div>
                 {vehicle.associate.phone && (
                   <div>
