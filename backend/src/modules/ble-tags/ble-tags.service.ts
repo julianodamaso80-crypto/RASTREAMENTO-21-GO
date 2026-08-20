@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
+import { decidirModo, ModoPolling } from './polling-mode';
 
 const BLE_DEVICE_MODELS = ['BLE_KTAG', 'BLE_REDTAG', 'BLE_AIRTAG_GENERIC'];
 
@@ -44,6 +45,10 @@ export class BleTagsService {
 
   private get sightingModel() {
     return (this.prisma as any).bleSighting;
+  }
+
+  private get alertModel() {
+    return (this.prisma as any).alert;
   }
 
   constructor(private prisma: PrismaService) {}
@@ -193,5 +198,71 @@ export class BleTagsService {
     );
 
     return sighting;
+  }
+
+  /**
+   * O que o worker deve buscar e com que pressa. Toda a regra de ritmo mora
+   * aqui: o worker não conhece alerta nem veículo, só obedece o intervalo.
+   *
+   * `agora` é injetável para o teste não depender do relógio da máquina.
+   */
+  async getPollingPlan(tenantId: string, agora: Date = new Date()) {
+    const tags = await this.deviceModel.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        model: { in: BLE_DEVICE_MODELS },
+      },
+      select: {
+        imei: true,
+        vehicleId: true,
+        bleAdvKeyPrivate: true,
+        bleAdvKeyHashed: true,
+        bleTurboUntil: true,
+      },
+    });
+
+    const comChave = tags.filter(
+      (t: any) => t.bleAdvKeyPrivate && t.bleAdvKeyHashed,
+    );
+    if (comChave.length === 0) return { tags: [] };
+
+    const alertas = await this.alertModel.findMany({
+      where: {
+        tenantId,
+        status: { in: ['OPEN', 'IN_PROGRESS'] },
+        vehicleId: {
+          in: comChave.map((t: any) => t.vehicleId).filter(Boolean),
+        },
+      },
+      select: { vehicleId: true, type: true },
+    });
+
+    const porVeiculo = new Map<string, string[]>();
+    for (const a of alertas) {
+      const lista = porVeiculo.get(a.vehicleId) ?? [];
+      lista.push(a.type);
+      porVeiculo.set(a.vehicleId, lista);
+    }
+
+    return {
+      tags: comChave.map((t: any) => {
+        const decisao = decidirModo({
+          alertasAbertos: t.vehicleId
+            ? (porVeiculo.get(t.vehicleId) ?? [])
+            : [],
+          turboUntil: t.bleTurboUntil,
+          agora,
+        });
+        return {
+          deviceImei: t.imei,
+          privateKey: t.bleAdvKeyPrivate,
+          hashedAdvKey: t.bleAdvKeyHashed,
+          mode: decisao.modo as ModoPolling,
+          intervalSeconds: decisao.intervalSeconds,
+          backfillHours: decisao.backfillHours,
+        };
+      }),
+    };
   }
 }

@@ -140,3 +140,89 @@ describe('BleTagsService - ordenacao pelo momento em que a TAG foi vista', () =>
     expect(findManyArgs[0].orderBy).toEqual({ seenAt: 'desc' });
   });
 });
+
+describe('BleTagsService.getPollingPlan', () => {
+  const AGORA = new Date('2026-08-20T12:00:00.000Z');
+
+  function montarService(devices: any[], alertas: any[] = []) {
+    const chamadas: any = {};
+    const prisma: any = {
+      device: {
+        findMany: jest.fn((args) => {
+          chamadas.device = args;
+          return Promise.resolve(devices);
+        }),
+      },
+      alert: {
+        findMany: jest.fn((args) => {
+          chamadas.alert = args;
+          return Promise.resolve(alertas);
+        }),
+      },
+    };
+    return { service: new BleTagsService(prisma), chamadas };
+  }
+
+  const tagComChave = {
+    imei: '92603008494',
+    vehicleId: 'veh-1',
+    bleAdvKeyPrivate: 'priv',
+    bleAdvKeyHashed: 'hash',
+    bleTurboUntil: null,
+  };
+
+  it('devolve a TAG em IDLE quando o veiculo nao tem alerta de rastreador mudo', async () => {
+    const { service } = montarService([tagComChave]);
+    const plano = await service.getPollingPlan('tenant-1', AGORA);
+
+    expect(plano.tags).toHaveLength(1);
+    expect(plano.tags[0].mode).toBe('IDLE');
+    expect(plano.tags[0].privateKey).toBe('priv');
+  });
+
+  it('acelera a TAG do veiculo cujo rastreador esta sob jamming', async () => {
+    const { service } = montarService(
+      [tagComChave],
+      [{ vehicleId: 'veh-1', type: 'JAMMING' }],
+    );
+    const plano = await service.getPollingPlan('tenant-1', AGORA);
+
+    expect(plano.tags[0].mode).toBe('TURBO');
+    expect(plano.tags[0].backfillHours).toBe(168);
+  });
+
+  it('nao acelera uma TAG por causa de alerta de outro veiculo', async () => {
+    const { service } = montarService(
+      [tagComChave],
+      [{ vehicleId: 'veh-OUTRO', type: 'JAMMING' }],
+    );
+    const plano = await service.getPollingPlan('tenant-1', AGORA);
+
+    expect(plano.tags[0].mode).toBe('IDLE');
+  });
+
+  it('ignora TAG sem chave cadastrada, que o worker nao teria como consultar', async () => {
+    const { service } = montarService([
+      { ...tagComChave, bleAdvKeyPrivate: null },
+    ]);
+    const plano = await service.getPollingPlan('tenant-1', AGORA);
+
+    expect(plano.tags).toHaveLength(0);
+  });
+
+  it('filtra por tenant e por soft delete nas duas consultas', async () => {
+    const { service, chamadas } = montarService([tagComChave]);
+    await service.getPollingPlan('tenant-1', AGORA);
+
+    expect(chamadas.device.where.tenantId).toBe('tenant-1');
+    expect(chamadas.device.where.deletedAt).toBeNull();
+    expect(chamadas.alert.where.tenantId).toBe('tenant-1');
+  });
+
+  it('nao devolve tenantId no corpo, para nao existir caminho de escrita cruzada', async () => {
+    const { service } = montarService([tagComChave]);
+    const plano = await service.getPollingPlan('tenant-1', AGORA);
+
+    expect(plano.tags[0]).not.toHaveProperty('tenantId');
+  });
+});

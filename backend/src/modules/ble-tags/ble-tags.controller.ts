@@ -36,6 +36,17 @@ export class BleTagsController {
     return this.bleTagsService.findAll(req.tenantId);
   }
 
+  @Get('polling-plan')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary:
+      'Plano de consulta da rede Find My (uso exclusivo do worker; devolve chave privada)',
+  })
+  async pollingPlan(@Req() req: AuthenticatedRequest) {
+    return this.bleTagsService.getPollingPlan(req.tenantId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Detalhes de uma TAG BLE' })
   async findOne(
