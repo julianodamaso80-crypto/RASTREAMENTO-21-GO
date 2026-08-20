@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { AppApi } from '@/lib/api';
 import { maskCpf, onlyDigits } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
+import { PasswordInput } from '@/components/password-input';
 
 /**
  * Recuperação de senha em duas etapas: pede o código no WhatsApp cadastrado e,
@@ -152,25 +153,21 @@ export default function ForgotPasswordScreen() {
 
               <View style={styles.field}>
                 <Text style={styles.label}>Nova senha</Text>
-                <TextInput
+                <PasswordInput
                   value={nova}
                   onChangeText={setNova}
                   placeholder="Mínimo de 6 caracteres"
-                  placeholderTextColor={colors.textFaint}
-                  secureTextEntry
-                  style={styles.input}
+                  inputStyle={styles.input}
                 />
               </View>
 
               <View style={styles.field}>
                 <Text style={styles.label}>Repita a nova senha</Text>
-                <TextInput
+                <PasswordInput
                   value={confirma}
                   onChangeText={setConfirma}
                   placeholder="Digite de novo"
-                  placeholderTextColor={colors.textFaint}
-                  secureTextEntry
-                  style={styles.input}
+                  inputStyle={styles.input}
                 />
               </View>
 

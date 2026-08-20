@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { AppApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
 import { onlyDigits } from '@/lib/format';
+import { PasswordInput } from '@/components/password-input';
 import { colors, radii } from '@/lib/theme';
 
 /**
@@ -88,37 +89,31 @@ export default function ChangePasswordScreen() {
             <Text style={styles.label}>
               {obrigatoria ? 'Senha atual (o seu CPF)' : 'Senha atual'}
             </Text>
-            <TextInput
+            <PasswordInput
               value={atual}
               onChangeText={setAtual}
               placeholder={obrigatoria ? 'Digite o seu CPF' : 'Sua senha atual'}
-              placeholderTextColor={colors.textFaint}
-              secureTextEntry
-              style={styles.input}
+              inputStyle={styles.input}
             />
           </View>
 
           <View style={styles.field}>
             <Text style={styles.label}>Nova senha</Text>
-            <TextInput
+            <PasswordInput
               value={nova}
               onChangeText={setNova}
               placeholder="Mínimo de 6 caracteres"
-              placeholderTextColor={colors.textFaint}
-              secureTextEntry
-              style={styles.input}
+              inputStyle={styles.input}
             />
           </View>
 
           <View style={styles.field}>
             <Text style={styles.label}>Repita a nova senha</Text>
-            <TextInput
+            <PasswordInput
               value={confirma}
               onChangeText={setConfirma}
               placeholder="Digite de novo"
-              placeholderTextColor={colors.textFaint}
-              secureTextEntry
-              style={styles.input}
+              inputStyle={styles.input}
             />
           </View>
 
