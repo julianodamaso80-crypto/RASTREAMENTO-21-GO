@@ -67,25 +67,44 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   signIn: async (token, name, mustChangePassword) => {
-    await Promise.all([
-      SecureStore.setItemAsync(TOKEN_KEY, token),
-      SecureStore.setItemAsync(NAME_KEY, name),
-      SecureStore.setItemAsync(MUST_CHANGE_KEY, mustChangePassword ? '1' : '0'),
-    ]);
+    // Guardar a sessão é o desejável, NUNCA a condição pra entrar. Aparelho
+    // com o cofre quebrado (Keystore do Android) fazia o login inteiro ser
+    // jogado fora: a API autenticava e a tela dizia "não foi possível entrar".
+    // Falhando a gravação, a sessão vive só em memória — nada fica salvo, e
+    // ao fechar o app é preciso entrar de novo.
+    try {
+      await Promise.all([
+        SecureStore.setItemAsync(TOKEN_KEY, token),
+        SecureStore.setItemAsync(NAME_KEY, name),
+        SecureStore.setItemAsync(MUST_CHANGE_KEY, mustChangePassword ? '1' : '0'),
+      ]);
+    } catch {
+      diag('09-signin-sem-cofre');
+    }
     set({ token, name, mustChangePassword });
   },
 
   setMustChangePassword: async (value) => {
-    await SecureStore.setItemAsync(MUST_CHANGE_KEY, value ? '1' : '0');
+    try {
+      await SecureStore.setItemAsync(MUST_CHANGE_KEY, value ? '1' : '0');
+    } catch {
+      // Mesmo motivo do signIn: o cofre não manda no fluxo do usuário.
+    }
     set({ mustChangePassword: value });
   },
 
   logout: async () => {
-    await Promise.all([
-      SecureStore.deleteItemAsync(TOKEN_KEY),
-      SecureStore.deleteItemAsync(NAME_KEY),
-      SecureStore.deleteItemAsync(MUST_CHANGE_KEY),
-    ]);
+    // Sair sempre encerra a sessão em memória, mesmo que o cofre recuse
+    // apagar — senão o usuário fica preso dentro da conta.
+    try {
+      await Promise.all([
+        SecureStore.deleteItemAsync(TOKEN_KEY),
+        SecureStore.deleteItemAsync(NAME_KEY),
+        SecureStore.deleteItemAsync(MUST_CHANGE_KEY),
+      ]);
+    } catch {
+      diag('10-logout-sem-cofre');
+    }
     set({ token: null, name: null, mustChangePassword: false });
   },
 }));

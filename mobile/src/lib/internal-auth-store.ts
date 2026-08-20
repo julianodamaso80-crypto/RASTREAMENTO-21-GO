@@ -37,11 +37,15 @@ interface InternalAuthState {
 
 /** Apaga qualquer resquício do mundo do associado. Uma sessão viva por vez. */
 async function wipeAssociateSession() {
-  await Promise.all([
-    SecureStore.deleteItemAsync(ASSOCIATE_TOKEN_KEY),
-    SecureStore.deleteItemAsync(ASSOCIATE_NAME_KEY),
-    SecureStore.deleteItemAsync(ASSOCIATE_MUST_CHANGE_KEY),
-  ]);
+  try {
+    await Promise.all([
+      SecureStore.deleteItemAsync(ASSOCIATE_TOKEN_KEY),
+      SecureStore.deleteItemAsync(ASSOCIATE_NAME_KEY),
+      SecureStore.deleteItemAsync(ASSOCIATE_MUST_CHANGE_KEY),
+    ]);
+  } catch {
+    // Cofre do aparelho indisponível não pode travar a entrada.
+  }
 }
 
 export const useInternalAuth = create<InternalAuthState>((set) => ({
@@ -78,10 +82,15 @@ export const useInternalAuth = create<InternalAuthState>((set) => ({
   signIn: async (token, user) => {
     // Entrar num mundo apaga o outro — invariante de sessão única.
     await wipeAssociateSession();
-    await Promise.all([
-      SecureStore.setItemAsync(INTERNAL_TOKEN_KEY, token),
-      SecureStore.setItemAsync(INTERNAL_USER_KEY, JSON.stringify(user)),
-    ]);
+    // Gravar é melhor esforço — ver o mesmo motivo no store do associado.
+    try {
+      await Promise.all([
+        SecureStore.setItemAsync(INTERNAL_TOKEN_KEY, token),
+        SecureStore.setItemAsync(INTERNAL_USER_KEY, JSON.stringify(user)),
+      ]);
+    } catch {
+      // Sessão segue em memória.
+    }
     // Sessão nova começa sem biometria aprovada — o gate decide isso, nunca o login.
     set({ token, user, jaAutorizou: false });
   },
@@ -89,10 +98,14 @@ export const useInternalAuth = create<InternalAuthState>((set) => ({
   marcarAutorizado: () => set({ jaAutorizou: true }),
 
   logout: async () => {
-    await Promise.all([
-      SecureStore.deleteItemAsync(INTERNAL_TOKEN_KEY),
-      SecureStore.deleteItemAsync(INTERNAL_USER_KEY),
-    ]);
+    try {
+      await Promise.all([
+        SecureStore.deleteItemAsync(INTERNAL_TOKEN_KEY),
+        SecureStore.deleteItemAsync(INTERNAL_USER_KEY),
+      ]);
+    } catch {
+      // Sair sempre encerra a sessão em memória.
+    }
     // Qualquer encerramento de sessão (gate ou painel) passa por aqui — é o
     // único lugar que precisa zerar jaAutorizou pra próxima entrada exigir
     // biometria de novo.
