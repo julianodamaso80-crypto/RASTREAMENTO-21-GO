@@ -65,7 +65,7 @@ export class BleTagsService {
         },
         bleSightings: {
           take: 1,
-          orderBy: { createdAt: 'desc' },
+          orderBy: { seenAt: 'desc' },
           select: {
             id: true,
             macAddress: true,
@@ -114,7 +114,7 @@ export class BleTagsService {
     const [data, total] = await Promise.all([
       this.sightingModel.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { seenAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
       }),
