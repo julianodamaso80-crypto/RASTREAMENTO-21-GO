@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
-import { decidirModo, ModoPolling } from './polling-mode';
+import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
 
 const BLE_DEVICE_MODELS = ['BLE_KTAG', 'BLE_REDTAG', 'BLE_AIRTAG_GENERIC'];
 
@@ -264,5 +264,28 @@ export class BleTagsService {
         };
       }),
     };
+  }
+
+  /**
+   * Liga o ritmo acelerado por decisão do operador — para o caso em que a
+   * suspeita chega por telefone antes de qualquer alerta automático.
+   */
+  async acionarTurbo(id: string, tenantId: string, agora: Date = new Date()) {
+    await this.findOne(id, tenantId);
+
+    const bleTurboUntil = new Date(
+      agora.getTime() + TURBO_MANUAL_H * 60 * 60 * 1000,
+    );
+
+    await this.deviceModel.update({
+      where: { id },
+      data: { bleTurboUntil },
+    });
+
+    this.logger.log(
+      `Ritmo acelerado ligado na TAG ${id} até ${bleTurboUntil.toISOString()}`,
+    );
+
+    return { bleTurboUntil };
   }
 }

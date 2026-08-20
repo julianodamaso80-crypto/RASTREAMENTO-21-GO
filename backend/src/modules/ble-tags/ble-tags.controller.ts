@@ -79,4 +79,17 @@ export class BleTagsController {
   ) {
     return this.bleTagsService.createSighting(dto, req.tenantId);
   }
+
+  @Post(':id/turbo')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary: 'Liga o ritmo acelerado de consulta da TAG por 6 horas',
+  })
+  async acionarTurbo(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.bleTagsService.acionarTurbo(id, req.tenantId);
+  }
 }

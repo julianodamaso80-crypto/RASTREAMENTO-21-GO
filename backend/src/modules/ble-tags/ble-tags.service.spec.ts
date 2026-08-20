@@ -226,3 +226,41 @@ describe('BleTagsService.getPollingPlan', () => {
     expect(plano.tags[0]).not.toHaveProperty('tenantId');
   });
 });
+
+describe('BleTagsService.acionarTurbo', () => {
+  const AGORA = new Date('2026-08-20T12:00:00.000Z');
+
+  it('liga o ritmo acelerado por 6 horas a partir de agora', async () => {
+    const atualizacoes: any[] = [];
+    const prisma: any = {
+      device: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'dev-1', model: 'BLE_KTAG' }),
+        update: jest.fn((args) => {
+          atualizacoes.push(args);
+          return Promise.resolve({ ...args.data });
+        }),
+      },
+    };
+    const service = new BleTagsService(prisma);
+
+    const r = await service.acionarTurbo('dev-1', 'tenant-1', AGORA);
+
+    expect(r.bleTurboUntil).toEqual(new Date('2026-08-20T18:00:00.000Z'));
+    expect(atualizacoes[0].where.id).toBe('dev-1');
+  });
+
+  it('recusa TAG de outro tenant', async () => {
+    const prisma: any = {
+      device: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
+    };
+    const service = new BleTagsService(prisma);
+
+    await expect(
+      service.acionarTurbo('dev-1', 'tenant-INTRUSO', AGORA),
+    ).rejects.toThrow('TAG BLE não encontrada');
+    expect(prisma.device.update).not.toHaveBeenCalled();
+  });
+});
