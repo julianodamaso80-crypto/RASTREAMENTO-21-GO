@@ -24,6 +24,7 @@ import { maskCpf, onlyDigits } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 import { diag } from '@/lib/diag';
 import { LAST_IDENTIFIER_KEY } from '@/lib/session-keys';
+import { explicarFalhaDeLogin } from '@/lib/login-error';
 
 export default function LoginScreen() {
   diag('05-login-render');
@@ -65,12 +66,17 @@ export default function LoginScreen() {
   async function handleLogin() {
     if (!canSubmit || loading) return;
     setLoading(true);
+    // Marca até onde o login chegou. Sem isso, servidor fora do ar e sessão
+    // que não gravou no aparelho viram "senha inválida" na tela — e aí nem o
+    // cliente nem o suporte descobrem o que de fato aconteceu.
+    let autenticou = false;
     try {
       if (destino === 'associate') {
         const { accessToken, associate } = await AppApi.login(
           onlyDigits(identificador),
           password,
         );
+        autenticou = true;
         await signInAssociado(
           accessToken,
           associate.name,
@@ -81,6 +87,7 @@ export default function LoginScreen() {
           identificador.trim(),
           password,
         );
+        autenticou = true;
         await signInInterno(accessToken, user);
         router.replace('/interno/painel');
       }
@@ -88,14 +95,9 @@ export default function LoginScreen() {
       // vem mascarado do estado, e-mail vem do jeito que a pessoa escreveu) e
       // sem aguardar — não pode atrasar a navegação pós-login.
       SecureStore.setItemAsync(LAST_IDENTIFIER_KEY, identificador).catch(() => {});
-    } catch {
-      // Mensagem IDÊNTICA nos dois caminhos. Se variasse, o app viraria um
-      // verificador de quais e-mails pertencem ao time — e uma lista dessas é
-      // o primeiro passo de qualquer ataque dirigido.
-      RNAlert.alert(
-        'Não foi possível entrar',
-        'CPF/e-mail ou senha inválidos. Confira e tente de novo.',
-      );
+    } catch (e: any) {
+      const { titulo, texto } = explicarFalhaDeLogin(e, autenticou);
+      RNAlert.alert(titulo, texto);
     } finally {
       setLoading(false);
     }
