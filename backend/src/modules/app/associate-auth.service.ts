@@ -11,13 +11,14 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from '../notifications/whatsapp.service';
 import { AssociateLoginDto } from './dto/associate-login.dto';
+import {
+  docVariants,
+  normalizeDoc,
+  senhaEhODocumento,
+} from './documento';
 
 const BCRYPT_ROUNDS = 10;
 
-/** Remove máscara do CPF, deixando só dígitos. */
-function normalizeCpf(cpf: string): string {
-  return (cpf || '').replace(/\D/g, '');
-}
 
 /**
  * Senha temporária pra ser DITADA no telefone: blocos curtos, sem os caracteres
@@ -34,15 +35,6 @@ function gerarSenhaDitavel(): string {
   return `${bloco()}-${bloco()}`;
 }
 
-/** Formatos em que o CPF pode ter sido gravado: só dígitos ou com máscara. */
-function cpfVariants(digits: string): string[] {
-  if (digits.length !== 11) return [digits];
-  const masked = digits.replace(
-    /^(\d{3})(\d{3})(\d{3})(\d{2})$/,
-    '$1.$2.$3-$4',
-  );
-  return [digits, masked];
-}
 
 @Injectable()
 export class AssociateAuthService {
@@ -70,7 +62,7 @@ export class AssociateAuthService {
     const set = new Set(
       raw
         .split(',')
-        .map((c) => normalizeCpf(c))
+        .map((c) => normalizeDoc(c))
         .filter((c) => c.length > 0),
     );
     return set.size ? set : null;
@@ -118,13 +110,13 @@ export class AssociateAuthService {
    * perseguição e de roubo dirigido. Ver P1.8 do plano.
    */
   async login(dto: AssociateLoginDto) {
-    const cpf = normalizeCpf(dto.cpf);
+    const cpf = normalizeDoc(dto.cpf);
 
     // Mesmo CPF pode existir em mais de um tenant (multi-tenant). Buscamos todos
     // os candidatos e validamos 1-a-1 — o que bater vence. A busca tolera CPF
     // gravado com máscara (o SGA às vezes devolve "085.775.907-80").
     const candidates = await this.prisma.associate.findMany({
-      where: { cpf: { in: cpfVariants(cpf) }, deletedAt: null },
+      where: { cpf: { in: docVariants(cpf) }, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -194,8 +186,9 @@ export class AssociateAuthService {
     mustChangePassword: boolean,
   ): Promise<boolean> {
     if (mustChangePassword) {
-      // Primeiro acesso: CPF com ou sem máscara no campo senha dá no mesmo.
-      if (cpf.length === 11 && normalizeCpf(typed) === cpf) return true;
+      // Primeiro acesso: documento com ou sem máscara no campo senha dá no
+      // mesmo. Vale CPF (11) e CNPJ (14) — a base tem associado PJ.
+      if (senhaEhODocumento(cpf, typed)) return true;
     }
     return !!hash && (await bcrypt.compare(typed, hash));
   }
@@ -215,7 +208,7 @@ export class AssociateAuthService {
     });
     if (!associate) throw new UnauthorizedException('Associado não encontrado');
 
-    const cpf = normalizeCpf(associate.cpf);
+    const cpf = normalizeDoc(associate.cpf);
     const confere = await this.passwordMatches(
       associate.password,
       cpf,
@@ -227,7 +220,7 @@ export class AssociateAuthService {
     }
 
     // A senha nova não pode ser o próprio CPF — seria voltar ao problema.
-    if (normalizeCpf(newPassword) === cpf) {
+    if (normalizeDoc(newPassword) === cpf) {
       throw new BadRequestException(
         'A nova senha não pode ser o seu CPF. Escolha outra.',
       );
@@ -297,7 +290,7 @@ export class AssociateAuthService {
     sentTo: string | null;
     canUseWhatsapp: boolean;
   }> {
-    const cpf = normalizeCpf(rawCpf);
+    const cpf = normalizeDoc(rawCpf);
     const generico = {
       message:
         'Se esse CPF estiver cadastrado, enviamos um código no WhatsApp. ' +
@@ -306,10 +299,11 @@ export class AssociateAuthService {
       canUseWhatsapp: this.whatsapp.habilitado,
     };
 
-    if (cpf.length !== 11) return generico;
+    // CPF (11) ou CNPJ (14): a base tem associado pessoa jurídica.
+    if (cpf.length !== 11 && cpf.length !== 14) return generico;
 
     const associate = await this.prisma.associate.findFirst({
-      where: { cpf: { in: cpfVariants(cpf) }, deletedAt: null },
+      where: { cpf: { in: docVariants(cpf) }, deletedAt: null },
       select: {
         id: true,
         phone: true,
@@ -395,11 +389,11 @@ export class AssociateAuthService {
     codigo: string,
     novaSenha: string,
   ): Promise<{ ok: true }> {
-    const cpf = normalizeCpf(rawCpf);
+    const cpf = normalizeDoc(rawCpf);
     const digitos = (codigo || '').replace(/\D/g, '');
 
     const associate = await this.prisma.associate.findFirst({
-      where: { cpf: { in: cpfVariants(cpf) }, deletedAt: null },
+      where: { cpf: { in: docVariants(cpf) }, deletedAt: null },
       select: {
         id: true,
         resetCodeHash: true,
@@ -436,7 +430,7 @@ export class AssociateAuthService {
       throw invalido;
     }
 
-    if (normalizeCpf(novaSenha) === cpf) {
+    if (normalizeDoc(novaSenha) === cpf) {
       throw new BadRequestException(
         'A nova senha não pode ser o seu CPF. Escolha outra.',
       );
@@ -519,7 +513,7 @@ export class AssociateAuthService {
    * Normaliza o CPF e exige que o associado exista e não esteja deletado.
    */
   async setPasswordByCpf(rawCpf: string, plainPassword: string) {
-    const cpf = normalizeCpf(rawCpf);
+    const cpf = normalizeDoc(rawCpf);
     const associate = await this.prisma.associate.findFirst({
       where: { cpf, deletedAt: null },
       select: { id: true, name: true },

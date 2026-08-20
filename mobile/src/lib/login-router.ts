@@ -14,7 +14,9 @@ export function resolveLoginTarget(input: string): LoginTarget {
   // Arroba manda: e-mail é sempre mundo interno, mesmo que comece com números.
   if (valor.includes('@')) return 'internal';
   const digitos = valor.replace(/\D/g, '');
-  // Só aceita como CPF o que é de fato número e máscara — "joao123" não passa.
-  if (digitos.length === 11 && /^[\d.\-\s]+$/.test(valor)) return 'associate';
+  // Só aceita como documento o que é de fato número e máscara — "joao123" não
+  // passa. CPF tem 11 dígitos e CNPJ 14: a base tem associado pessoa jurídica.
+  const tamanhoDeDocumento = digitos.length === 11 || digitos.length === 14;
+  if (tamanhoDeDocumento && /^[\d.\-/\s]+$/.test(valor)) return 'associate';
   return 'invalid';
 }

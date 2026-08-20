@@ -5,7 +5,8 @@ import { IsString, Length, Matches, MaxLength, MinLength } from 'class-validator
 export class AssociateForgotPasswordDto {
   @ApiProperty({ example: '08577590780' })
   @IsString()
-  @Length(11, 14, { message: 'Informe um CPF válido.' })
+  // 11 (CPF cru) a 18 (CNPJ com máscara: 49.410.571/0001-93).
+  @Length(11, 18, { message: 'Informe um CPF ou CNPJ válido.' })
   cpf!: string;
 }
 
@@ -13,7 +14,8 @@ export class AssociateForgotPasswordDto {
 export class AssociateResetPasswordDto {
   @ApiProperty({ example: '08577590780' })
   @IsString()
-  @Length(11, 14, { message: 'Informe um CPF válido.' })
+  // 11 (CPF cru) a 18 (CNPJ com máscara: 49.410.571/0001-93).
+  @Length(11, 18, { message: 'Informe um CPF ou CNPJ válido.' })
   cpf!: string;
 
   @ApiProperty({ example: '482913', description: 'Código de 6 dígitos' })

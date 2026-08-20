@@ -32,4 +32,16 @@ describe('resolveLoginTarget', () => {
   it('e-mail ganha do formato numérico se tiver arroba', () => {
     expect(resolveLoginTarget('08577590780@trackgo.site')).toBe('internal');
   });
+
+  it('CNPJ com máscara vai pro mundo do associado (a base tem PJ)', () => {
+    expect(resolveLoginTarget('49.410.571/0001-93')).toBe('associate');
+  });
+
+  it('CNPJ só com dígitos vai pro mundo do associado', () => {
+    expect(resolveLoginTarget('49410571000193')).toBe('associate');
+  });
+
+  it('documento com 12 dígitos não é CPF nem CNPJ', () => {
+    expect(resolveLoginTarget('491234567890')).toBe('invalid');
+  });
 });

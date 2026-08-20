@@ -7,6 +7,26 @@ export function maskCpf(value: string): string {
     .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
 }
 
+/**
+ * Máscara do documento do associado: CPF até 11 dígitos, CNPJ de 12 a 14.
+ * A base tem pessoa jurídica — travar em 11 dígitos deixava o associado PJ
+ * sem conseguir nem habilitar o botão de entrar.
+ */
+export function maskDocumento(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 14);
+  if (d.length <= 11) return maskCpf(d);
+  const raiz = d.slice(0, 2);
+  const meio = d.slice(2, 5);
+  const fim = d.slice(5, 8);
+  const ordem = d.slice(8, 12);
+  const dv = d.slice(12, 14);
+  let out = `${raiz}.${meio}`;
+  if (fim) out += `.${fim}`;
+  if (ordem) out += `/${ordem}`;
+  if (dv) out += `-${dv}`;
+  return out;
+}
+
 export function onlyDigits(value: string): string {
   return value.replace(/\D/g, '');
 }

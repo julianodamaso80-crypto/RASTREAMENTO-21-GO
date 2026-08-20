@@ -20,7 +20,7 @@ import { InternalApi } from '@/lib/internal-api';
 import { useAuth } from '@/lib/auth-store';
 import { useInternalAuth } from '@/lib/internal-auth-store';
 import { resolveLoginTarget } from '@/lib/login-router';
-import { maskCpf, onlyDigits } from '@/lib/format';
+import { maskDocumento, onlyDigits } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 import { diag } from '@/lib/diag';
 import { LAST_IDENTIFIER_KEY } from '@/lib/session-keys';
@@ -59,8 +59,8 @@ export default function LoginScreen() {
    * usuário digita uma letra ou arroba, o campo vira e-mail e para de mascarar.
    */
   function handleChange(texto: string) {
-    const pareceCpf = /^[\d.\-\s]*$/.test(texto);
-    setIdentificador(pareceCpf ? maskCpf(texto) : texto);
+    const pareceDocumento = /^[\d.\-/\s]*$/.test(texto);
+    setIdentificador(pareceDocumento ? maskDocumento(texto) : texto);
   }
 
   async function handleLogin() {
