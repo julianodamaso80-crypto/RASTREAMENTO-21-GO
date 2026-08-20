@@ -13,7 +13,9 @@ import {
   Clock,
   HelpCircle,
 } from 'lucide-react';
-import { cn, formatCpfCnpj } from '@/lib/utils';
+import { cn, formatCpfCnpj, maskCPF } from '@/lib/utils';
+import { useAuth } from '@/contexts/auth-context';
+import { canSeeInstallLocation } from '@/lib/manageable-routes';
 import type { ClientAsset, CommsState } from '@/types/assets';
 import { AssetActionsMenu } from './asset-actions-menu';
 
@@ -43,6 +45,10 @@ export function AssetCard({
   onRetirar: () => void;
   redefinindoSenha: boolean;
 }) {
+  const { user } = useAuth();
+  // Mesma régua do esconderijo do rastreador: documento inteiro é dado de
+  // atendimento, não de vitrine.
+  const podeVerDocumento = canSeeInstallLocation(user?.role);
   const tecnico =
     asset.device?.technician?.name ?? asset.device?.installedByName ?? null;
   const modelo = [asset.brand, asset.model].filter(Boolean).join(' ');
@@ -105,10 +111,14 @@ export function AssetCard({
               {asset.associate?.name ?? 'Sem cliente vinculado'}
             </span>
           </span>
-          {/* CPF junto do nome: é o que confere com quem está no telefone. */}
+          {/* CPF junto do nome: é o que confere com quem está no telefone.
+              Inteiro só pro time interno (mesma régua do esconderijo do
+              rastreador); VIEWER e qualquer outro perfil veem mascarado. */}
           {asset.associate?.cpf && (
             <span className="font-mono text-xs">
-              {formatCpfCnpj(asset.associate.cpf)}
+              {podeVerDocumento
+                ? formatCpfCnpj(asset.associate.cpf)
+                : maskCPF(asset.associate.cpf)}
             </span>
           )}
         </p>
