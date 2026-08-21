@@ -61,9 +61,10 @@ def main() -> None:
                 datetime.now(timezone.utc),
             )
             log.info(
-                "ciclo: %s enviados, %s enfileirados",
+                "ciclo: %s enviados, %s enfileirados, %s pendentes na fila",
                 resultado["enviados"],
                 resultado["enfileirados"],
+                resultado["pendentes"],
             )
             if resultado["silencio_suspeito"]:
                 log.error(

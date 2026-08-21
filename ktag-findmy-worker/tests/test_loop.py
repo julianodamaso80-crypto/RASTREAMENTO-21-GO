@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from findmy_worker.backend_client import ErroPermanente, ErroTransitorio
 from findmy_worker.dedupe import Dedupe
 from findmy_worker.loop import executar_ciclo
 from findmy_worker.outbox import Outbox
@@ -32,16 +33,22 @@ def um_relatorio(minuto=0):
 
 
 class BackendFalso:
-    def __init__(self, falha_ao_enviar=False):
+    def __init__(self, falha_ao_enviar=False, rejeita=None):
+        """`rejeita` é um predicado opcional payload -> bool: quando dá True
+        para um payload, simula o backend recusando aquele conteúdo em
+        definitivo (ErroPermanente) em vez de estar fora do ar."""
         self.enviados = []
         self.falha_ao_enviar = falha_ao_enviar
+        self.rejeita = rejeita
 
     def plano(self):
         return PLANO
 
     def enviar(self, payload):
+        if self.rejeita is not None and self.rejeita(payload):
+            raise ErroPermanente("backend rejeitou o conteúdo do payload")
         if self.falha_ao_enviar:
-            raise ConnectionError("backend fora")
+            raise ErroTransitorio("backend fora")
         self.enviados.append(payload)
 
 
@@ -125,3 +132,49 @@ def test_ciclo_sem_relatorio_nenhum_avisa_o_detector(tmp_path):
     executar_ciclo(BackendFalso(), AppleFalsa([]), Dedupe(), Outbox(tmp_path), det, AGORA)
 
     assert det.chamadas == [False]
+
+
+def test_item_envenenado_na_fila_vai_para_quarentena_sem_travar_o_resto(tmp_path):
+    """Um payload que o backend rejeita em definitivo (ErroPermanente) não
+    pode bloquear os itens atrás dele na fila — a varredura precisa seguir
+    e entregar o resto."""
+    caixa = Outbox(tmp_path)
+    caixa.guardar({"deviceImei": "venenoso"})
+    caixa.guardar({"deviceImei": "bom"})
+
+    backend = BackendFalso(rejeita=lambda p: p.get("deviceImei") == "venenoso")
+
+    executar_ciclo(backend, AppleFalsa([]), Dedupe(), caixa, DetectorDeSilencio(), AGORA)
+
+    assert [p["deviceImei"] for p in backend.enviados] == ["bom"]
+    assert caixa.pendentes() == []
+    corrompidos = list((tmp_path / "corrompidos").glob("*.json"))
+    assert len(corrompidos) == 1
+
+
+def test_falha_transitoria_ao_drenar_mantem_a_fila_intacta(tmp_path):
+    """Backend fora do ar (ErroTransitorio) não é motivo pra perder nem
+    quarentenar nada — os itens continuam na fila pro próximo ciclo."""
+    caixa = Outbox(tmp_path)
+    caixa.guardar({"deviceImei": "1"})
+    caixa.guardar({"deviceImei": "2"})
+
+    backend = BackendFalso(falha_ao_enviar=True)
+
+    executar_ciclo(backend, AppleFalsa([]), Dedupe(), caixa, DetectorDeSilencio(), AGORA)
+
+    assert backend.enviados == []
+    assert len(caixa.pendentes()) == 2
+    pasta_corrompidos = tmp_path / "corrompidos"
+    assert not pasta_corrompidos.exists() or list(pasta_corrompidos.glob("*")) == []
+
+
+def test_resultado_do_ciclo_reporta_o_tamanho_do_backlog(tmp_path):
+    caixa = Outbox(tmp_path)
+    caixa.guardar({"deviceImei": "1"})
+
+    backend = BackendFalso(falha_ao_enviar=True)
+
+    r = executar_ciclo(backend, AppleFalsa([]), Dedupe(), caixa, DetectorDeSilencio(), AGORA)
+
+    assert r["pendentes"] == 1

@@ -46,6 +46,12 @@ class Outbox:
                 self._colocar_em_quarentena(caminho, str(erro))
         return itens
 
+    def quarentenar(self, caminho: Path, motivo: str) -> None:
+        """Move um payload da fila para corrompidos/ quando o backend rejeita
+        o conteúdo em definitivo (ErroPermanente) — sem isso o item ficaria
+        tentando de novo pra sempre e travando tudo atrás dele."""
+        self._colocar_em_quarentena(Path(caminho), motivo)
+
     def _colocar_em_quarentena(self, caminho: Path, motivo: str) -> None:
         logger.warning("relatório corrompido movido para quarentena (%s): %s", motivo, caminho)
         self._pasta_corrompidos.mkdir(parents=True, exist_ok=True)
