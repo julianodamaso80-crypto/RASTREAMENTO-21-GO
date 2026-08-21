@@ -77,8 +77,13 @@ export class ReverseGeocodeService {
   private processando = false;
   /** Instante em que o Nominatim pode ser chamado de novo. Ver `aguardarVez`. */
   private slotLivreEm = 0;
-  /** Enquanto este instante não passar, ninguém fala com o provedor ativo. Ver `resolver`. */
-  private bloqueadoAte = 0;
+  /**
+   * Um castigo por provedor, não um só. Um 429 do geocoder próprio não pode
+   * silenciar o Nominatim (nem vice-versa) — foi exatamente essa mistura que
+   * deixava o serviço inteiro parado 10 minutos por causa de UM provedor.
+   */
+  private bloqueadoAteProprio = 0;
+  private bloqueadoAteNominatim = 0;
   /** Quantos pedidos de tela estão esperando — a fila de fundo cede a vez. */
   private prioritarios = 0;
 
@@ -284,62 +289,99 @@ export class ReverseGeocodeService {
   }
 
   /**
-   * Uma chamada ao provedor de geocodificação, na coordenada EXATA. Falha
-   * aqui não estoura pra tela — fica sem endereço.
+   * Uma resolução da coordenada EXATA. Falha aqui não estoura pra tela — fica
+   * sem endereço.
+   *
+   * Quando o geocoder próprio está configurado, ele é tentado primeiro; se a
+   * chamada falhar (rede, status não-OK, corpo ilegível) ou ele estiver de
+   * castigo por um 429 anterior, o MESMO pedido cai pro Nominatim uma única
+   * vez — nunca em loop. Sem isso, o dia em que o geocoder próprio parar de
+   * responder apaga endereço de toda tela até alguém notar e redeployar (era
+   * exatamente essa a falha que existia antes: nenhum fallback em runtime).
    */
   private async resolver(coord: Coordenada): Promise<string | null> {
-    // De castigo: insistir só renova o bloqueio e não resolve endereço nenhum.
-    if (Date.now() < this.bloqueadoAte) return null;
+    if (this.usaGeocoderProprio) {
+      const { falhou, endereco } = await this.chamarGeocoderProprio(coord);
+      if (!falhou) return endereco;
+    }
+    return this.chamarNominatim(coord);
+  }
 
-    const proprio = this.usaGeocoderProprio;
-
-    // O portão de 1/s é a política do Nominatim PÚBLICO — o geocoder próprio
-    // roda na nossa rede interna, sem esse limite. Aplicar o portão aqui
-    // devolveria a fila como gargalo e anularia o motivo de ter servidor
-    // próprio (ver evidências da etapa 3).
-    if (!proprio) await this.aguardarVez();
+  /**
+   * O geocoder próprio roda na nossa rede interna — sem o limite de 1/s do
+   * Nominatim público, então nenhum portão é aplicado aqui (ver evidências da
+   * etapa 3). `falhou: true` é o sinal para `resolver` tentar o Nominatim.
+   */
+  private async chamarGeocoderProprio(
+    coord: Coordenada,
+  ): Promise<{ falhou: boolean; endereco: string | null }> {
+    // De castigo: nem tenta de novo (insistir só renovaria o bloqueio) — vai
+    // direto pro fallback, que tem seu próprio castigo independente.
+    if (Date.now() < this.bloqueadoAteProprio) return { falhou: true, endereco: null };
 
     // URLSearchParams codifica cada valor — a key é token opaco (hoje hex,
     // mas nada garante isso pra sempre) e não pode ir crua pra URL.
-    const url = proprio
-      ? `${this.geocoderBaseUrl}/reverse?${new URLSearchParams({
-          lat: String(coord.latitude),
-          lon: String(coord.longitude),
-          key: String(this.geocoderApiKey),
-        }).toString()}`
-      : `${ReverseGeocodeService.URL}?format=jsonv2&zoom=18&addressdetails=1` +
-        `&lat=${coord.latitude}&lon=${coord.longitude}`;
+    const url = `${this.geocoderBaseUrl}/reverse?${new URLSearchParams({
+      lat: String(coord.latitude),
+      lon: String(coord.longitude),
+      key: String(this.geocoderApiKey),
+    }).toString()}`;
 
     try {
       const resposta = await fetch(url, {
-        headers: proprio
-          ? {}
-          : {
-              'User-Agent': ReverseGeocodeService.USER_AGENT,
-              'Accept-Language': 'pt-BR',
-            },
+        headers: {},
         signal: AbortSignal.timeout(15_000),
       });
       if (resposta.status === 429) {
-        // O geocoder próprio também tem limite por usuário — vale o mesmo
-        // backoff, mesmo sem o portão de 1/s valer pra ele.
-        const pedido = Number(resposta.headers.get('retry-after')) * 1_000;
-        const espera = Number.isFinite(pedido) && pedido > 0
-          ? pedido
-          : ReverseGeocodeService.BACKOFF_429_MS;
-        this.bloqueadoAte = Date.now() + espera;
-        // A fila acumulada seria só uma sequência de tentativas negadas.
-        this.fila.clear();
+        this.bloquearPorExcesso('proprio', resposta);
+        return { falhou: true, endereco: null };
+      }
+      if (!resposta.ok) {
         this.logger.warn(
-          `${proprio ? 'Geocoder próprio' : 'Nominatim'} recusou por excesso de chamadas — pausando por ${Math.round(
-            espera / 1000,
-          )}s e limpando a fila`,
+          `Geocoder próprio respondeu ${resposta.status} para ${coord.latitude},${coord.longitude}`,
         );
+        return { falhou: true, endereco: null };
+      }
+
+      const corpo = (await resposta.json()) as NominatimResposta;
+      const endereco = formatarEndereco(corpo);
+      if (endereco) await this.salvarNoCache(coord, endereco);
+      return { falhou: false, endereco };
+    } catch (erro) {
+      this.logarFalha('Geocoder próprio', coord, erro);
+      return { falhou: true, endereco: null };
+    }
+  }
+
+  /**
+   * Nominatim público — sempre o último recurso. Chamado direto (sem
+   * geocoder próprio configurado) ou como fallback de uma falha do próprio;
+   * nos dois casos passa pelo portão de 1/s, porque a política do OSM não
+   * deixa de valer só porque chegamos aqui via fallback.
+   */
+  private async chamarNominatim(coord: Coordenada): Promise<string | null> {
+    if (Date.now() < this.bloqueadoAteNominatim) return null;
+    await this.aguardarVez();
+
+    const url =
+      `${ReverseGeocodeService.URL}?format=jsonv2&zoom=18&addressdetails=1` +
+      `&lat=${coord.latitude}&lon=${coord.longitude}`;
+
+    try {
+      const resposta = await fetch(url, {
+        headers: {
+          'User-Agent': ReverseGeocodeService.USER_AGENT,
+          'Accept-Language': 'pt-BR',
+        },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (resposta.status === 429) {
+        this.bloquearPorExcesso('nominatim', resposta);
         return null;
       }
       if (!resposta.ok) {
         this.logger.warn(
-          `${proprio ? 'Geocoder próprio' : 'Nominatim'} respondeu ${resposta.status} para ${coord.latitude},${coord.longitude}`,
+          `Nominatim respondeu ${resposta.status} para ${coord.latitude},${coord.longitude}`,
         );
         return null;
       }
@@ -347,34 +389,72 @@ export class ReverseGeocodeService {
       const corpo = (await resposta.json()) as NominatimResposta;
       const endereco = formatarEndereco(corpo);
       if (!endereco) return null;
-
-      const celula = this.arredondar(coord);
-      await this.prisma.geoAddress.upsert({
-        where: {
-          latKey_lngKey: { latKey: celula.latitude, lngKey: celula.longitude },
-        },
-        create: {
-          latKey: celula.latitude,
-          lngKey: celula.longitude,
-          lat: coord.latitude,
-          lng: coord.longitude,
-          address: endereco,
-        },
-        update: {
-          lat: coord.latitude,
-          lng: coord.longitude,
-          address: endereco,
-        },
-      });
+      await this.salvarNoCache(coord, endereco);
       return endereco;
     } catch (erro) {
-      this.logger.warn(
-        `Não consegui o endereço de ${coord.latitude},${coord.longitude}: ${
-          erro instanceof Error ? erro.message : erro
-        }`,
-      );
+      this.logarFalha('Nominatim', coord, erro);
       return null;
     }
+  }
+
+  private async salvarNoCache(coord: Coordenada, endereco: string): Promise<void> {
+    const celula = this.arredondar(coord);
+    await this.prisma.geoAddress.upsert({
+      where: {
+        latKey_lngKey: { latKey: celula.latitude, lngKey: celula.longitude },
+      },
+      create: {
+        latKey: celula.latitude,
+        lngKey: celula.longitude,
+        lat: coord.latitude,
+        lng: coord.longitude,
+        address: endereco,
+      },
+      update: {
+        lat: coord.latitude,
+        lng: coord.longitude,
+        address: endereco,
+      },
+    });
+  }
+
+  private bloquearPorExcesso(provedor: 'proprio' | 'nominatim', resposta: Response): void {
+    const pedido = Number(resposta.headers.get('retry-after')) * 1_000;
+    const espera = Number.isFinite(pedido) && pedido > 0
+      ? pedido
+      : ReverseGeocodeService.BACKOFF_429_MS;
+    const nome = provedor === 'proprio' ? 'Geocoder próprio' : 'Nominatim';
+
+    if (provedor === 'proprio') {
+      this.bloqueadoAteProprio = Date.now() + espera;
+      // Sem limpar a fila: o Nominatim é o fallback e continua processando
+      // os itens pendentes um a um, no ritmo dele.
+      this.logger.warn(
+        `${nome} recusou por excesso de chamadas — pausando por ${Math.round(espera / 1000)}s (Nominatim assume como fallback)`,
+      );
+    } else {
+      this.bloqueadoAteNominatim = Date.now() + espera;
+      // Nominatim é o último recurso — sem outro fallback depois dele, a
+      // fila acumulada seria só uma sequência de tentativas negadas.
+      this.fila.clear();
+      this.logger.warn(
+        `${nome} recusou por excesso de chamadas — pausando por ${Math.round(espera / 1000)}s e limpando a fila`,
+      );
+    }
+  }
+
+  /**
+   * Nunca deixa a key do geocoder próprio vazar pro log: ela viaja na query
+   * string, e uma URL base mal formada faz o próprio `fetch` reclamar citando
+   * a URL inteira na mensagem de erro. Loga provedor + coordenada; qualquer
+   * pedaço de mensagem de erro que sobrevive passa por este filtro antes.
+   */
+  private logarFalha(provedor: string, coord: Coordenada, erro: unknown): void {
+    const bruta = erro instanceof Error ? erro.message : String(erro);
+    const semChave = bruta.replace(/key=[^&\s'"]*/gi, 'key=***');
+    this.logger.warn(
+      `${provedor} falhou para ${coord.latitude},${coord.longitude}: ${semChave}`,
+    );
   }
 }
 
@@ -449,7 +529,11 @@ const SIGLA_POR_NOME_ESTADO: Record<string, string> = {
 
 /** Sem acento, sem caixa — a grafia do OSM varia ("Piauí" vs "Piaui"). */
 function normalizarNomeEstado(nome: string): string {
-  const SEM_DIACRITICOS = new RegExp('[̀-ͯ]', 'g');
+  // Escape \u0300-\u036f (faixa unicode), nunca os caracteres literais: um re-encoding do
+  // arquivo (UTF-8 -> outra coisa e volta) não mexe em escapes, mas apaga ou
+  // corrompe marcas combinantes literais sem quebrar a sintaxe do regex — o
+  // teste ficaria verde porque só alimenta 'piaui' já sem acento.
+  const SEM_DIACRITICOS = /[\u0300-\u036f]/g;
   return nome
     .normalize('NFD')
     .replace(SEM_DIACRITICOS, '')
