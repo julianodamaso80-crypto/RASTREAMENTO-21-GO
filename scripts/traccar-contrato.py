@@ -21,7 +21,13 @@ produção) responde do jeito que o backend precisa.
 
 Cada recurso criado pelo script (device, geofence, user, vínculo de
 permissão) é removido ao final, mesmo que algum passo no meio tenha
-falhado — o script não deixa lixo pra trás na instância testada.
+falhado, o operador dê Ctrl-C, ou a sessão SSH caia (o script trata
+SIGINT/SIGTERM/SIGHUP e roda a limpeza num finally). Exceção: um
+`kill -9` (SIGKILL) ou queda de energia não dão chance de rodar nada —
+aí o device/geofence/user ficam órfãos na instância testada.
+
+A senha do user de teste é gerada aleatoriamente a cada execução
+(módulo `secrets`), nunca fica hardcoded no arquivo.
 
 Como rodar contra um container descartável
 --------------------------------------------
@@ -40,21 +46,26 @@ Como rodar contra um container descartável
 
 Como rodar contra produção (depois do deploy, para conferir)
 ---------------------------------------------------------------
-    TRACCAR_BASE_URL=https://traccar.trackgo.site/api \\
-    TRACCAR_EMAIL=admin@rastreamento21go.com.br \\
-    TRACCAR_PASSWORD='<no 1Password>' \\
+    TRACCAR_API_URL=https://traccar.trackgo.site/api \\
+    TRACCAR_ADMIN_EMAIL=admin@rastreamento21go.com.br \\
+    TRACCAR_ADMIN_PASSWORD='<no 1Password>' \\
     python scripts/traccar-contrato.py
 
 Uso
 ----
     python scripts/traccar-contrato.py [--base-url URL] [--email EMAIL] [--password SENHA]
 
-    Prioridade de configuração: argumento de linha de comando > variável de
-    ambiente > default. Nenhuma credencial fica hardcoded no script.
+    Prioridade de configuração: argumento de linha de comando > variáveis de
+    ambiente do PROJETO (TRACCAR_API_URL/TRACCAR_ADMIN_EMAIL/
+    TRACCAR_ADMIN_PASSWORD, as mesmas de backend/src/config/configuration.ts)
+    > variáveis antigas do próprio script (TRACCAR_BASE_URL/TRACCAR_EMAIL/
+    TRACCAR_PASSWORD, aceitas por compatibilidade) > default. Nenhuma
+    credencial fica hardcoded no script. O alvo é sempre impresso antes de
+    rodar qualquer passo — confira a URL antes de confirmar que é a certa.
 
-    --base-url   ou TRACCAR_BASE_URL   (default: http://localhost:8082/api)
-    --email      ou TRACCAR_EMAIL      (obrigatório)
-    --password   ou TRACCAR_PASSWORD   (obrigatório)
+    --base-url   ou TRACCAR_API_URL / TRACCAR_BASE_URL   (default: http://localhost:8082/api)
+    --email      ou TRACCAR_ADMIN_EMAIL / TRACCAR_EMAIL      (obrigatório)
+    --password   ou TRACCAR_ADMIN_PASSWORD / TRACCAR_PASSWORD   (obrigatório)
 
 Saída
 ------
@@ -66,6 +77,8 @@ import argparse
 import json
 import os
 import re
+import secrets
+import signal
 import sys
 import time
 import urllib.error
@@ -398,12 +411,14 @@ class Contrato:
     def users_criar(self):
         def run():
             email = f"contrato-teste-{int(time.time())}@teste.local"
+            # Gerada a cada execução — nunca fica hardcoded no repositório.
+            senha = secrets.token_urlsafe(24)
             status, raw = self.client.post(
                 "/users",
                 data={
                     "name": "contrato-teste-user",
                     "email": email,
-                    "password": "ContratoTeste123",
+                    "password": senha,
                 },
             )
             self.esperar_status(status, {200}, "POST /users")
@@ -459,17 +474,51 @@ class Contrato:
 
 
 def resolver_config(args):
-    base_url = args.base_url or os.environ.get("TRACCAR_BASE_URL") or DEFAULT_BASE_URL
-    email = args.email or os.environ.get("TRACCAR_EMAIL")
-    password = args.password or os.environ.get("TRACCAR_PASSWORD")
+    # Nomes do projeto (backend/src/config/configuration.ts) têm prioridade
+    # sobre os nomes antigos do próprio script — um TRACCAR_API_URL de
+    # produção esquecido no ambiente não pode ser ofuscado por um
+    # TRACCAR_BASE_URL de teste local, ou o operador acha que testou
+    # produção e só testou o localhost.
+    base_url = (
+        args.base_url
+        or os.environ.get("TRACCAR_API_URL")
+        or os.environ.get("TRACCAR_BASE_URL")
+        or DEFAULT_BASE_URL
+    )
+    email = (
+        args.email
+        or os.environ.get("TRACCAR_ADMIN_EMAIL")
+        or os.environ.get("TRACCAR_EMAIL")
+    )
+    password = (
+        args.password
+        or os.environ.get("TRACCAR_ADMIN_PASSWORD")
+        or os.environ.get("TRACCAR_PASSWORD")
+    )
     if not email or not password:
         print(
             "Erro: informe email e senha via --email/--password ou "
-            "TRACCAR_EMAIL/TRACCAR_PASSWORD.",
+            "TRACCAR_ADMIN_EMAIL/TRACCAR_ADMIN_PASSWORD (ou os antigos "
+            "TRACCAR_EMAIL/TRACCAR_PASSWORD).",
             file=sys.stderr,
         )
         sys.exit(2)
     return base_url, email, password
+
+
+class InterrupcaoControlada(Exception):
+    """Ctrl-C local ou sinal recebido (SIGTERM/SIGHUP de uma sessão SSH que
+    caiu) — capturado só pra garantir que a limpeza no `finally` de `main()`
+    ainda roda antes do processo terminar."""
+
+
+def _instalar_handlers_de_interrupcao():
+    def _handler(signum, _frame):
+        raise InterrupcaoControlada(f"sinal {signal.Signals(signum).name} recebido")
+
+    signal.signal(signal.SIGTERM, _handler)
+    if hasattr(signal, "SIGHUP"):  # não existe no Windows
+        signal.signal(signal.SIGHUP, _handler)
 
 
 def main():
@@ -477,6 +526,8 @@ def main():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
+
+    _instalar_handlers_de_interrupcao()
 
     parser = argparse.ArgumentParser(
         description="Testa o contrato REST do Traccar usado pelo backend do 21 GO."
@@ -495,25 +546,37 @@ def main():
 
     print(f"Testando contrato Traccar em {base_url}\n")
 
-    # Login primeiro: se falhar, não adianta tentar o resto — mas ainda
-    # rodamos a limpeza (que não fará nada, pois nada foi criado).
-    if contrato.login():
-        contrato.server()
-        contrato.devices_listar()
-        contrato.devices_criar()
-        contrato.devices_buscar_por_id()
-        contrato.devices_buscar_por_unique_id()
-        contrato.devices_atualizar()
-        contrato.positions()
-        contrato.reports_summary()
-        contrato.commands_send()
-        contrato.geofences_criar()
-        contrato.geofences_atualizar()
-        contrato.permissions_vincular()
-        contrato.permissions_desvincular()
-        contrato.users_criar()
+    # try/finally garante que a limpeza roda mesmo se um Ctrl-C ou um
+    # SIGTERM/SIGHUP (sessão SSH caída) interromper um passo no meio — antes,
+    # só passos que levantavam Exception (não KeyboardInterrupt/sinal) eram
+    # cobertos, e um device/geofence/user de teste podia ficar pra trás com a
+    # senha do user publicada neste arquivo.
+    try:
+        # Login primeiro: se falhar, não adianta tentar o resto — mas ainda
+        # rodamos a limpeza (que não fará nada, pois nada foi criado).
+        if contrato.login():
+            contrato.server()
+            contrato.devices_listar()
+            contrato.devices_criar()
+            contrato.devices_buscar_por_id()
+            contrato.devices_buscar_por_unique_id()
+            contrato.devices_atualizar()
+            contrato.positions()
+            contrato.reports_summary()
+            contrato.commands_send()
+            contrato.geofences_criar()
+            contrato.geofences_atualizar()
+            contrato.permissions_vincular()
+            contrato.permissions_desvincular()
+            contrato.users_criar()
+    except (KeyboardInterrupt, InterrupcaoControlada) as exc:
+        print(f"\nInterrompido ({exc}) — limpando recursos criados antes de sair...", file=sys.stderr)
+    finally:
+        contrato.limpar()
 
-    contrato.limpar()
+    if not contrato.resultados:
+        print("Nenhum passo chegou a rodar.")
+        sys.exit(1)
 
     largura_nome = max(len(nome) for nome, _, _ in contrato.resultados) + 2
     print(f"{'ENDPOINT'.ljust(largura_nome)}RESULTADO")
