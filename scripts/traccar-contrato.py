@@ -22,9 +22,21 @@ produção) responde do jeito que o backend precisa.
 Cada recurso criado pelo script (device, geofence, user, vínculo de
 permissão) é removido ao final, mesmo que algum passo no meio tenha
 falhado, o operador dê Ctrl-C, ou a sessão SSH caia (o script trata
-SIGINT/SIGTERM/SIGHUP e roda a limpeza num finally). Exceção: um
-`kill -9` (SIGKILL) ou queda de energia não dão chance de rodar nada —
-aí o device/geofence/user ficam órfãos na instância testada.
+SIGINT/SIGTERM/SIGHUP e roda a limpeza num finally). A própria limpeza
+é melhor esforço: cada exclusão é tentada de forma independente, então
+um segundo Ctrl-C bem no meio da limpeza não impede as exclusões
+seguintes de rodar — só aquele item específico fica marcado como
+interrompido. Exceção: um `kill -9` (SIGKILL) ou queda de energia não
+dão chance de rodar nada — aí o device/geofence/user ficam órfãos na
+instância testada.
+
+Por segurança, se o alvo resolvido não for localhost, o script recusa
+rodar (antes de qualquer requisição) a menos que a flag
+`--sim-eu-sei-que-nao-e-local` seja passada. Isso existe porque
+`TRACCAR_API_URL` é o nome de variável que o próprio backend usa
+(`backend/src/config/configuration.ts`) — se já estiver exportada no
+shell do operador apontando pra produção, o script não pode simplesmente
+seguir em frente criando e apagando recursos reais.
 
 A senha do user de teste é gerada aleatoriamente a cada execução
 (módulo `secrets`), nunca fica hardcoded no arquivo.
@@ -49,11 +61,12 @@ Como rodar contra produção (depois do deploy, para conferir)
     TRACCAR_API_URL=https://traccar.trackgo.site/api \\
     TRACCAR_ADMIN_EMAIL=admin@rastreamento21go.com.br \\
     TRACCAR_ADMIN_PASSWORD='<no 1Password>' \\
-    python scripts/traccar-contrato.py
+    python scripts/traccar-contrato.py --sim-eu-sei-que-nao-e-local
 
 Uso
 ----
-    python scripts/traccar-contrato.py [--base-url URL] [--email EMAIL] [--password SENHA]
+    python scripts/traccar-contrato.py [--base-url URL] [--email EMAIL] \\
+      [--password SENHA] [--sim-eu-sei-que-nao-e-local]
 
     Prioridade de configuração: argumento de linha de comando > variáveis de
     ambiente do PROJETO (TRACCAR_API_URL/TRACCAR_ADMIN_EMAIL/
@@ -61,11 +74,20 @@ Uso
     > variáveis antigas do próprio script (TRACCAR_BASE_URL/TRACCAR_EMAIL/
     TRACCAR_PASSWORD, aceitas por compatibilidade) > default. Nenhuma
     credencial fica hardcoded no script. O alvo é sempre impresso antes de
-    rodar qualquer passo — confira a URL antes de confirmar que é a certa.
+    qualquer requisição.
+
+    Se o alvo resolvido não for localhost/127.0.0.1/::1, o script recusa
+    rodar — a menos que --sim-eu-sei-que-nao-e-local seja passada. Não há
+    prompt interativo: a recusa é imediata (antes de qualquer requisição),
+    pra funcionar igual em terminal interativo ou em comando disparado por
+    SSH sem tty.
 
     --base-url   ou TRACCAR_API_URL / TRACCAR_BASE_URL   (default: http://localhost:8082/api)
     --email      ou TRACCAR_ADMIN_EMAIL / TRACCAR_EMAIL      (obrigatório)
     --password   ou TRACCAR_ADMIN_PASSWORD / TRACCAR_PASSWORD   (obrigatório)
+    --sim-eu-sei-que-nao-e-local   confirma que rodar contra um alvo
+                                   remoto (produção, por exemplo) é
+                                   intencional
 
 Saída
 ------
@@ -432,17 +454,48 @@ class Contrato:
     # --- limpeza: roda sempre, mesmo se passos anteriores falharam ---
 
     def limpar(self):
+        """Melhor esforço: cada exclusão é tentada isoladamente, inclusive
+        contra um segundo Ctrl-C ou sinal bem no meio da limpeza — não usa
+        `passo()` porque `passo()` só absorve `Exception`, e um
+        KeyboardInterrupt/InterrupcaoControlada é `BaseException` e escaparia
+        pelo meio, abandonando as exclusões seguintes."""
         if self.permissao_vinculada:
-            self.passo("DELETE /permissions (limpeza)", self._fn_desvincular_limpeza)
+            self._passo_melhor_esforco(
+                "DELETE /permissions (limpeza)", self._fn_desvincular_limpeza
+            )
 
         if self.criados["geofence_id"] is not None:
-            self.passo("DELETE /geofences/{id} (limpeza)", self._fn_apagar_geofence)
+            self._passo_melhor_esforco(
+                "DELETE /geofences/{id} (limpeza)", self._fn_apagar_geofence
+            )
 
         if self.criados["device_id"] is not None:
-            self.passo("DELETE /devices/{id} (apagar)", self._fn_apagar_device)
+            self._passo_melhor_esforco(
+                "DELETE /devices/{id} (apagar)", self._fn_apagar_device
+            )
 
         if self.criados["user_id"] is not None:
-            self.passo("DELETE /users/{id} (apagar)", self._fn_apagar_user)
+            self._passo_melhor_esforco(
+                "DELETE /users/{id} (apagar)", self._fn_apagar_user
+            )
+
+    def _passo_melhor_esforco(self, nome, fn):
+        """Como `passo()`, mas também absorve KeyboardInterrupt/sinal — usado
+        só durante a limpeza, onde um segundo Ctrl-C não pode deixar as
+        exclusões seguintes órfãs no servidor."""
+        try:
+            detalhe = fn()
+            self.resultados.append((nome, True, detalhe or "OK"))
+            return True
+        except ContratoError as exc:
+            self.resultados.append((nome, False, str(exc)))
+            return False
+        except (KeyboardInterrupt, InterrupcaoControlada) as exc:
+            self.resultados.append((nome, False, f"interrompido de novo: {exc}"))
+            return False
+        except Exception as exc:  # segurança: qualquer exceção não prevista também conta como falha
+            self.resultados.append((nome, False, f"erro inesperado: {exc}"))
+            return False
 
     def _fn_desvincular_limpeza(self):
         device_id = self.criados["device_id"]
@@ -471,6 +524,16 @@ class Contrato:
         status, _ = self.client.delete(f"/users/{user_id}")
         self.esperar_status(status, {204}, "DELETE /users/{id}")
         return f"{status}"
+
+
+_HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
+
+
+def _alvo_e_local(base_url):
+    """True só para localhost/127.0.0.1/::1 — qualquer outro host (IP do
+    droplet, domínio de produção, etc.) é tratado como remoto pra fins do
+    guard de confirmação, mesmo que na prática seja outro ambiente de teste."""
+    return urllib.parse.urlparse(base_url).hostname in _HOSTS_LOCAIS
 
 
 def resolver_config(args):
@@ -535,9 +598,30 @@ def main():
     parser.add_argument("--base-url", help="Base da API do Traccar (ex.: http://localhost:8082/api)")
     parser.add_argument("--email", help="E-mail de administrador do Traccar")
     parser.add_argument("--password", help="Senha do administrador do Traccar")
+    parser.add_argument(
+        "--sim-eu-sei-que-nao-e-local",
+        action="store_true",
+        help=(
+            "Confirma que rodar contra um alvo que não é localhost "
+            "(produção, por exemplo) é intencional. Sem isso, o script "
+            "recusa rodar contra qualquer alvo remoto."
+        ),
+    )
     args = parser.parse_args()
 
     base_url, email, password = resolver_config(args)
+
+    print(f"Alvo: {base_url}")
+    if not _alvo_e_local(base_url) and not args.sim_eu_sei_que_nao_e_local:
+        print(
+            "Erro: o alvo acima não é localhost — recusando rodar sem "
+            "confirmação explícita. Um TRACCAR_API_URL de produção esquecido "
+            "no ambiente não pode fazer este script criar e apagar recursos "
+            "reais sem querer. Se é isso mesmo que você quer, rode de novo "
+            "com --sim-eu-sei-que-nao-e-local.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     client = TraccarClient(base_url)
     contrato = Contrato(client)
