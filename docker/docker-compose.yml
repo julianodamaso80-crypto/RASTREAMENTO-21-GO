@@ -36,7 +36,7 @@ services:
       retries: 5
 
   traccar:
-    image: traccar/traccar:6.5
+    image: traccar/traccar:6.14.5
     container_name: r21go-traccar
     environment:
       # Heap default ~256m derruba com >100 devices.

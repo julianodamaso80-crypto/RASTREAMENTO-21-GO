@@ -14,13 +14,27 @@
     <entry key='database.user'>postgres</entry>
     <entry key='database.password'>postgres</entry>
 
-    <!-- API REST -->
+    <!--
+      Chave inerte na 6.14.5 (não existe em Keys.java, o Traccar ignora
+      chave desconhecida em silêncio). Mantida sem efeito nenhum — não
+      remover achando que quebra algo. Ver .superpowers/sdd/etapa2-traccar-evidencias.md.
+    -->
     <entry key='api.enable'>true</entry>
 
-    <!-- WebSocket -->
+    <!--
+      Chave inerte na 6.14.5. NÃO é isso que liga o WebSocket — o WebSocket
+      funciona por conta própria (medido), independente desta entrada.
+      Ver .superpowers/sdd/etapa2-traccar-evidencias.md.
+    -->
     <entry key='web.socket'>true</entry>
 
-    <!-- Registração aberta (desenvolvimento) -->
+    <!--
+      Chave inerte na 6.14.5 (registração desenvolvimento). Registro público
+      não é config de XML, é flag no registro do servidor no banco —
+      GET /api/server já devolve registration: false hoje em produção,
+      então não há brecha aberta apesar desta entrada dizer 'true'.
+      Ver .superpowers/sdd/etapa2-traccar-evidencias.md.
+    -->
     <entry key='registration.enable'>true</entry>
 
     <!-- Protocolo OsmAnd (para testes com app) -->
@@ -32,6 +46,11 @@
     <entry key='geocoder.url'>https://nominatim.openstreetmap.org/reverse</entry>
 
     <!-- Logs -->
+    <!--
+      Chave inerte na 6.14.5 (não existe em Keys.java, ignorada em silêncio).
+      Quem controla se há log é a presença de logger.level/logger.file, não
+      esta entrada. Ver .superpowers/sdd/etapa2-traccar-evidencias.md.
+    -->
     <entry key='logger.enable'>true</entry>
     <entry key='logger.level'>info</entry>
     <entry key='logger.file'>/opt/traccar/data/tracker-server.log</entry>
