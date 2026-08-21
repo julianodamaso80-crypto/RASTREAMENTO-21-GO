@@ -29,7 +29,7 @@ Este documento é a fonte única de referência **técnica de desenvolvimento**.
                                               │        │
                                               ▼        ▼
                                      ┌────────────┐  ┌─────────────┐
-                                     │ PostgreSQL │  │ Traccar 6.5 │
+                                     │ PostgreSQL │  │  Traccar    │
                                      │    :5432   │  │   :8082     │
                                      └────────────┘  └──────┬──────┘
                                      ┌────────────┐         │
@@ -45,7 +45,7 @@ Este documento é a fonte única de referência **técnica de desenvolvimento**.
 |---|---|---|
 | Frontend | Next.js (App Router), React, Tailwind, shadcn/ui, MapLibre GL JS, Socket.io-client | 16.2 / 19 / 4 |
 | Backend | NestJS, Prisma, Passport JWT, Socket.io, Pino, Swagger, class-validator | 11 / 7.6 |
-| Motor GPS | Traccar (REST + WebSocket) | 6.5 |
+| Motor GPS | Traccar (REST + WebSocket) | 6.14.5 |
 | Banco | PostgreSQL | 17 |
 | Cache | Redis | 7 |
 | Integração | Hinova SGA (mock em dev) | v2 |

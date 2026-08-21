@@ -28,9 +28,11 @@ Projeto EasyPanel: **`rastreamento-21-go`**.
 |---|---|---|---|---|
 | `frontend-rastreamento` | `r21go-frontend:latest` | 3000 | `trackgo.site`, `www.trackgo.site` | Next.js dashboard |
 | `backend-rastreamento` | `r21go-backend:latest` | 3001 | `api.trackgo.site` | NestJS API + WebSocket |
-| `traccar-rastreamento` | `traccar/traccar:6.5` | 8082 | `traccar.trackgo.site` | Motor GPS |
+| `traccar-rastreamento` | `traccar/traccar:6.14.5`¹ | 8082 | `traccar.trackgo.site` | Motor GPS |
 | `postgres-rastreamento` | `postgres:17` | 5432 | — (interno) | Banco principal |
 | `redis-rastreamento` | `redis:7` | 6379 | — (interno) | Cache/fila |
+
+¹ Alvo do upgrade documentado em [RUNBOOK-UPGRADE-TRACCAR.md](RUNBOOK-UPGRADE-TRACCAR.md). Produção continua em `6.5` até alguém com acesso SSH executar o runbook — confira `GET /api/server` antes de presumir que já rodou.
 
 **Portas TCP publicadas pelo Traccar (host mode) para rastreadores:**
 `5001` (GPS103/TK103), `5011` (Suntech), `5013` (H02/Sinotrack), `5023` (GT06/J16/Concox), `5027` (Teltonika), `5055` (OsmAnd), `8082` (HTTP/API).

@@ -32,7 +32,7 @@ Credenciais dev (seed): `admin@rastreamento21go.com.br` / `admin123`.
 
 - **Frontend:** Next.js 16 (App Router), React 19, TailwindCSS, shadcn/ui, MapLibre GL JS, Socket.io-client
 - **Backend:** NestJS 11, Prisma, Passport JWT, Socket.io, Pino, class-validator
-- **Motor GPS:** Traccar 6.5 (REST + WebSocket)
+- **Motor GPS:** Traccar 6.14.5 (REST + WebSocket)
 - **Banco:** PostgreSQL 17
 - **Cache:** Redis 7
 - **Integração:** Hinova SGA (mock em dev)
