@@ -225,8 +225,11 @@ def test_segundo_ciclo_acelerado_usa_janela_curta_em_vez_de_sete_dias(tmp_path):
     """O plano manda 168h (7 dias, o limite de retenção da Apple) pra
     justificar o primeiro ciclo depois que a TAG acelera. Repetir isso a
     cada minuto enquanto ela seguir acelerada é o jeito mais rápido de
-    estourar o proxy residencial pago."""
-    apple = AppleFalsa([])
+    estourar o proxy residencial pago — mas só quando o primeiro ciclo
+    realmente trouxe relatório de volta (ver
+    test_bloqueio_de_ip_com_lista_vazia_nao_esvazia_o_backfill logo abaixo
+    para o caso em que não trouxe)."""
+    apple = AppleFalsa([um_relatorio()])
     rastreador = RastreadorDeBackfill(janela_curta_horas=1)
     backend = BackendFalso()
     dedupe, caixa, det = Dedupe(), Outbox(tmp_path), DetectorDeSilencio()
@@ -236,6 +239,26 @@ def test_segundo_ciclo_acelerado_usa_janela_curta_em_vez_de_sete_dias(tmp_path):
 
     assert apple.pedidos[0][1] == 168
     assert apple.pedidos[1][1] == 1
+
+
+def test_bloqueio_de_ip_com_lista_vazia_nao_esvazia_o_backfill(tmp_path):
+    """Cenário do veículo roubado: TAG entra em modo acelerado (168h) no
+    mesmo ciclo em que o proxy residencial está bloqueado pela Apple —
+    bloqueio de IP responde 200 OK com lista vazia, indistinguível de
+    "nenhuma TAG foi vista" (apple.buscar não lança nada). Se isso marcasse
+    a TAG como já backfilled, o bloqueio passar 20 minutos depois faria
+    todo ciclo seguinte pedir só 1h, e o rastro de 7 dias que a Apple ainda
+    guarda da semana do roubo nunca mais seria pedido de novo."""
+    apple = AppleFalsa([])  # bloqueio de IP: sem exceção, sem relatório
+    rastreador = RastreadorDeBackfill(janela_curta_horas=1)
+    backend = BackendFalso()
+    dedupe, caixa, det = Dedupe(), Outbox(tmp_path), DetectorDeSilencio()
+
+    executar_ciclo(backend, apple, dedupe, caixa, det, AGORA, rastreador)
+    executar_ciclo(backend, apple, dedupe, caixa, det, AGORA, rastreador)
+
+    assert apple.pedidos[0][1] == 168
+    assert apple.pedidos[1][1] == 168
 
 
 def test_tag_que_sai_do_modo_acelerado_e_reentra_ganha_backfill_novo(tmp_path):

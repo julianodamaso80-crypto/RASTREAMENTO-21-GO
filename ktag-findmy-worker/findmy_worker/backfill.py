@@ -31,14 +31,24 @@ class RastreadorDeBackfill:
                 horas.append(pedido)
         return max(horas) if horas else 0
 
-    def atualizar(self, tags: list) -> None:
-        """Chamar só depois de uma busca bem-sucedida na Apple. TAG que
-        pediu backfill (>0h) entra para o controle — o próximo ciclo já usa
-        janela curta. TAG que parou de pedir (saiu do modo acelerado) sai do
-        controle, para reentrar elegível a um backfill completo de novo."""
+    def atualizar(self, tags: list, chaves_com_relatorio: set) -> None:
+        """Chamar só depois de uma busca bem-sucedida (sem exceção) na Apple.
+
+        `chaves_com_relatorio` são os `hashedAdvKey` que realmente vieram
+        com relatório nesta resposta. Um bloqueio de IP do proxy responde
+        200 OK com lista vazia — exatamente como "nenhuma TAG foi vista" —
+        e se isso marcasse a TAG como já backfilled, o rastro dos 7 dias que
+        a Apple ainda guarda (ex.: a semana de um roubo) nunca mais seria
+        pedido de novo depois que o bloqueio passasse. Por isso só marca
+        quem teve chave presente na resposta, tag por tag.
+
+        TAG que parou de pedir (saiu do modo acelerado) sai do controle
+        incondicionalmente, para reentrar elegível a um backfill completo de
+        novo."""
         for tag in tags:
             chave = tag.get("hashedAdvKey")
             if tag.get("backfillHours", 0) > 0:
-                self._ja_baixados.add(chave)
+                if chave in chaves_com_relatorio:
+                    self._ja_baixados.add(chave)
             else:
                 self._ja_baixados.discard(chave)

@@ -27,12 +27,15 @@ def relatorio_para_payload(relatorio: dict, device_imei: str) -> dict:
     if precisao is not None:
         try:
             precisao_int = int(precisao)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
+            # OverflowError: int(float('inf')) não é TypeError nem
+            # ValueError, e sem capturar aqui ela escapava e derrubava o
+            # ciclo inteiro em vez de só omitir a precisão.
             precisao_int = None
-        # backend valida accuracy com @Min(0); um valor negativo ou
-        # sentinela vindo da Apple rejeitaria o payload inteiro (posição e
-        # tudo) em vez de só perder a precisão — melhor omitir o campo.
-        if precisao_int is not None and precisao_int >= 0:
+        # backend valida accuracy com @Min(0) e @Max(50000); um valor fora
+        # dessa faixa rejeitaria o payload inteiro (posição e tudo) em vez
+        # de só perder a precisão — melhor omitir o campo.
+        if precisao_int is not None and 0 <= precisao_int <= 50000:
             payload["accuracy"] = precisao_int
 
     return payload

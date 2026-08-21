@@ -59,7 +59,11 @@ def executar_ciclo(backend, apple, dedupe, outbox, detector, agora, rastreador_b
             "apple_autenticado": False,
         }
 
-    rastreador_backfill.atualizar(tags)
+    # Só marca como backfilled a TAG cuja chave realmente apareceu na
+    # resposta — uma resposta vazia (ex.: bloqueio de IP do proxy) não pode
+    # ser confundida com "já baixei a semana inteira" (ver backfill.py).
+    chaves_com_relatorio = {r["hashed_adv_key"] for r in relatorios}
+    rastreador_backfill.atualizar(tags, chaves_com_relatorio)
 
     por_chave = {t["hashedAdvKey"]: t["deviceImei"] for t in tags}
 
