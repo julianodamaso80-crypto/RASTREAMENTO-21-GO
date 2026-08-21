@@ -42,11 +42,16 @@ curl -s -o /dev/null -w "traccar: %{http_code}\n" https://traccar.trackgo.site/a
 curl -s https://traccar.trackgo.site/api/server | grep -o '"version":"[^"]*"'
 ```
 
-Esperado hoje: os três primeiros `200`, e `"version":"6.5"` (ou o que estiver
-efetivamente publicado — não presumir, ler o retorno).
+Esperado hoje: `dashboard` e `traccar` em `200`; `api` em `405` — GET não é
+permitido em `/auth/login` (é rota de POST), e o 405 é o sinal saudável: prova
+que o handler existe. Mesmo critério do checklist de saúde do projeto (ver
+[DEPLOY.md §8](DEPLOY.md#8-checklist-de-saúde-rodar-periodicamente)). E
+`"version":"6.5"` (ou o que estiver efetivamente publicado — não presumir,
+ler o retorno).
 
-Se qualquer um dos três não for 200, **pare aqui**. Resolver o que já está
-quebrado é prioridade sobre o upgrade (ver Regra 0 do projeto).
+Se `dashboard` ou `traccar` não forem 200, ou se `api` não for 405, **pare
+aqui**. Resolver o que já está quebrado é prioridade sobre o upgrade (ver
+Regra 0 do projeto).
 
 ---
 
@@ -117,13 +122,13 @@ docker run -d --name traccar-upgrade-teste -p 8092:8082 traccar/traccar:6.14.5
 curl -X POST http://localhost:8092/api/users -H 'Content-Type: application/json' \
   -d '{"name":"admin","email":"admin@teste.local","password":"<escolha uma senha>"}'
 
-python scripts/traccar-contrato.py \
-  --base-url http://localhost:8092/api \
-  --email admin@teste.local \
-  --password '<a senha escolhida acima>'
+TRACCAR_BASE_URL=http://localhost:8092/api \
+TRACCAR_EMAIL=admin@teste.local \
+TRACCAR_PASSWORD='<a senha escolhida acima>' \
+python scripts/traccar-contrato.py
 ```
 
-Esperado: `17/17 OK`, saída `0`. Se alguma linha falhar, **não prosseguir** —
+Esperado: `18/18 OK`, saída `0`. Se alguma linha falhar, **não prosseguir** —
 investigar antes de tocar em produção. Ao terminar:
 
 ```bash
@@ -171,7 +176,8 @@ Container de pé **não** é sucesso. O que importa é rastreador real mandando
 posição de novo. Verificar, nesta ordem:
 
 ```bash
-# 1. Os três domínios continuam 200
+# 1. Os três domínios continuam saudáveis — dashboard e traccar em 200,
+#    api em 405 (GET não permitido em /auth/login, prova que o handler existe)
 curl -s -o /dev/null -w "dashboard: %{http_code}\n" https://trackgo.site
 curl -s -o /dev/null -w "api: %{http_code}\n" https://api.trackgo.site/api/v1/auth/login
 curl -s -o /dev/null -w "traccar: %{http_code}\n" https://traccar.trackgo.site/api/server

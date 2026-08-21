@@ -8,10 +8,12 @@ Plataforma multi-tenant de rastreamento veicular em tempo real com gestão de fr
 |---|---|
 | Frontend | Next.js 16 (App Router), React 19, TailwindCSS, shadcn/ui, MapLibre GL JS, Socket.io-client |
 | Backend | NestJS 11, Prisma, Passport JWT, Socket.io, Pino, class-validator |
-| Motor GPS | Traccar 6.14.5 (REST + WebSocket) |
+| Motor GPS | Traccar 6.14.5¹ (REST + WebSocket) |
 | Banco | PostgreSQL 17 |
 | Cache | Redis 7 |
 | Infra | Docker Swarm + Traefik via EasyPanel (prod) / Docker Compose (dev) |
+
+¹ Alvo do upgrade documentado em [docs/RUNBOOK-UPGRADE-TRACCAR.md](docs/RUNBOOK-UPGRADE-TRACCAR.md). Produção continua em `6.5` até alguém com acesso SSH executar o runbook — confira `GET /api/server` antes de presumir que já rodou.
 
 ## Como rodar (local)
 
