@@ -78,4 +78,12 @@ export default () => ({
     // folga. `0` desliga a limpeza (usar só se migrar pra particionamento).
     retentionDays: parseInt(process.env.POSITION_RETENTION_DAYS || '90', 10),
   },
+  geocoder: {
+    // traccar-geocoder self-hosted (ver docs/RUNBOOK-GEOCODER.md). Com as duas
+    // vazias, o serviço de geocodificação cai no Nominatim público de sempre —
+    // é o que mantém o endereço funcionando se o geocoder cair ou nunca tiver
+    // sido implantado.
+    baseUrl: process.env.GEOCODER_URL,
+    apiKey: process.env.GEOCODER_API_KEY,
+  },
 });

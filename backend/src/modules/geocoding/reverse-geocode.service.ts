@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -76,12 +77,34 @@ export class ReverseGeocodeService {
   private processando = false;
   /** Instante em que o Nominatim pode ser chamado de novo. Ver `aguardarVez`. */
   private slotLivreEm = 0;
-  /** Enquanto este instante não passar, ninguém fala com o Nominatim. Ver `resolver`. */
+  /** Enquanto este instante não passar, ninguém fala com o provedor ativo. Ver `resolver`. */
   private bloqueadoAte = 0;
   /** Quantos pedidos de tela estão esperando — a fila de fundo cede a vez. */
   private prioritarios = 0;
 
-  constructor(private readonly prisma: PrismaService) {}
+  /**
+   * geocoder self-hosted (traccar-geocoder). Só usado quando as DUAS estão
+   * setadas — faltando uma, cai no Nominatim de sempre (ver `usaGeocoderProprio`).
+   */
+  private readonly geocoderBaseUrl?: string;
+  private readonly geocoderApiKey?: string;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    // Opcional só para não quebrar os testes que instanciam o serviço direto
+    // com `new ReverseGeocodeService(prisma)`. Em produção o Nest sempre injeta.
+    private readonly configService?: ConfigService,
+  ) {
+    this.geocoderBaseUrl = this.configService
+      ?.get<string>('geocoder.baseUrl')
+      ?.replace(/\/+$/, '') || undefined;
+    this.geocoderApiKey = this.configService?.get<string>('geocoder.apiKey') || undefined;
+  }
+
+  /** As duas precisam estar setadas — só a URL ou só a chave não bastam. */
+  private get usaGeocoderProprio(): boolean {
+    return !!(this.geocoderBaseUrl && this.geocoderApiKey);
+  }
 
   /**
    * Endereços já conhecidos das coordenadas pedidas. O que não estiver aqui
@@ -261,29 +284,39 @@ export class ReverseGeocodeService {
   }
 
   /**
-   * Uma chamada ao Nominatim, na coordenada EXATA. Falha aqui não estoura pra
-   * tela — fica sem endereço.
+   * Uma chamada ao provedor de geocodificação, na coordenada EXATA. Falha
+   * aqui não estoura pra tela — fica sem endereço.
    */
   private async resolver(coord: Coordenada): Promise<string | null> {
     // De castigo: insistir só renova o bloqueio e não resolve endereço nenhum.
     if (Date.now() < this.bloqueadoAte) return null;
 
-    await this.aguardarVez();
+    const proprio = this.usaGeocoderProprio;
 
-    const url =
-      `${ReverseGeocodeService.URL}?format=jsonv2&zoom=18&addressdetails=1` +
-      `&lat=${coord.latitude}&lon=${coord.longitude}`;
+    // O portão de 1/s é a política do Nominatim PÚBLICO — o geocoder próprio
+    // roda na nossa rede interna, sem esse limite. Aplicar o portão aqui
+    // devolveria a fila como gargalo e anularia o motivo de ter servidor
+    // próprio (ver evidências da etapa 3).
+    if (!proprio) await this.aguardarVez();
+
+    const url = proprio
+      ? `${this.geocoderBaseUrl}/reverse?lat=${coord.latitude}&lon=${coord.longitude}&key=${this.geocoderApiKey}`
+      : `${ReverseGeocodeService.URL}?format=jsonv2&zoom=18&addressdetails=1` +
+        `&lat=${coord.latitude}&lon=${coord.longitude}`;
 
     try {
       const resposta = await fetch(url, {
-        headers: {
-          'User-Agent': ReverseGeocodeService.USER_AGENT,
-          'Accept-Language': 'pt-BR',
-        },
+        headers: proprio
+          ? {}
+          : {
+              'User-Agent': ReverseGeocodeService.USER_AGENT,
+              'Accept-Language': 'pt-BR',
+            },
         signal: AbortSignal.timeout(15_000),
       });
       if (resposta.status === 429) {
-        // O serviço pede para esperar; `Retry-After` vem em segundos quando vem.
+        // O geocoder próprio também tem limite por usuário — vale o mesmo
+        // backoff, mesmo sem o portão de 1/s valer pra ele.
         const pedido = Number(resposta.headers.get('retry-after')) * 1_000;
         const espera = Number.isFinite(pedido) && pedido > 0
           ? pedido
@@ -292,7 +325,7 @@ export class ReverseGeocodeService {
         // A fila acumulada seria só uma sequência de tentativas negadas.
         this.fila.clear();
         this.logger.warn(
-          `Nominatim recusou por excesso de chamadas — pausando o geocoder por ${Math.round(
+          `${proprio ? 'Geocoder próprio' : 'Nominatim'} recusou por excesso de chamadas — pausando por ${Math.round(
             espera / 1000,
           )}s e limpando a fila`,
         );
@@ -300,7 +333,7 @@ export class ReverseGeocodeService {
       }
       if (!resposta.ok) {
         this.logger.warn(
-          `Nominatim respondeu ${resposta.status} para ${coord.latitude},${coord.longitude}`,
+          `${proprio ? 'Geocoder próprio' : 'Nominatim'} respondeu ${resposta.status} para ${coord.latitude},${coord.longitude}`,
         );
         return null;
       }
@@ -370,13 +403,66 @@ export function formatarEndereco(corpo: NominatimResposta): string | null {
   return corpo.display_name ?? null;
 }
 
-/** "BR-RJ" (padrão ISO do Nominatim) vira "RJ". */
+/**
+ * Nome por extenso (normalizado, sem acento) -> sigla. As 26 UFs + DF.
+ *
+ * Existe porque o geocoder próprio (traccar-geocoder) não emite
+ * `ISO3166-2-lvl4` — só `address.state` por extenso. Sem este mapa, um
+ * endereço no Rio passaria de "... - RJ" para "... - Rio de Janeiro", uma
+ * regressão visível em toda tela que hoje mostra a sigla.
+ */
+const SIGLA_POR_NOME_ESTADO: Record<string, string> = {
+  acre: 'AC',
+  alagoas: 'AL',
+  amapa: 'AP',
+  amazonas: 'AM',
+  bahia: 'BA',
+  ceara: 'CE',
+  'distrito federal': 'DF',
+  'espirito santo': 'ES',
+  goias: 'GO',
+  maranhao: 'MA',
+  'mato grosso': 'MT',
+  'mato grosso do sul': 'MS',
+  'minas gerais': 'MG',
+  para: 'PA',
+  paraiba: 'PB',
+  parana: 'PR',
+  pernambuco: 'PE',
+  piaui: 'PI',
+  'rio de janeiro': 'RJ',
+  'rio grande do norte': 'RN',
+  'rio grande do sul': 'RS',
+  rondonia: 'RO',
+  roraima: 'RR',
+  'santa catarina': 'SC',
+  'sao paulo': 'SP',
+  sergipe: 'SE',
+  tocantins: 'TO',
+};
+
+/** Sem acento, sem caixa — a grafia do OSM varia ("Piauí" vs "Piaui"). */
+function normalizarNomeEstado(nome: string): string {
+  const SEM_DIACRITICOS = new RegExp('[̀-ͯ]', 'g');
+  return nome
+    .normalize('NFD')
+    .replace(SEM_DIACRITICOS, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * "BR-RJ" (padrão ISO do Nominatim) vira "RJ". Sem o ISO — caso do geocoder
+ * próprio — cai no mapa nome -> sigla; se nem isso bater, devolve o nome como
+ * veio (melhor mostrar por extenso do que sumir com a UF).
+ */
 function siglaEstado(
   estado: string | undefined,
   iso: string | undefined,
 ): string | null {
   if (iso && iso.includes('-')) return iso.split('-').pop() ?? null;
-  return estado ?? null;
+  if (!estado) return null;
+  return SIGLA_POR_NOME_ESTADO[normalizarNomeEstado(estado)] ?? estado;
 }
 
 /**

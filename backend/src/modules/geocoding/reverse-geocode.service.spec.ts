@@ -1,9 +1,34 @@
+import type { ConfigService } from '@nestjs/config';
 import {
   ReverseGeocodeService,
   distanciaMetros,
   formatarEndereco,
   proximoSlot,
 } from './reverse-geocode.service';
+
+/** Prisma de mentira mínimo — sem linha nenhuma de cache, upsert vira no-op. */
+function prismaFakeVazio() {
+  return {
+    geoAddress: {
+      findMany: jest.fn().mockResolvedValue([]),
+      upsert: jest.fn().mockResolvedValue(undefined),
+    },
+  } as never;
+}
+
+/** ConfigService de mentira — só o `.get(chave)` que o serviço usa. */
+function configFake(valores: Record<string, string | undefined>): ConfigService {
+  return { get: (chave: string) => valores[chave] } as unknown as ConfigService;
+}
+
+function respostaOk(address: Record<string, string>) {
+  return {
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: async () => ({ address }),
+  } as never;
+}
 
 describe('formatarEndereco', () => {
   it('monta rua - bairro, cidade - UF (mesmo formato da referência)', () => {
@@ -32,7 +57,7 @@ describe('formatarEndereco', () => {
     ).toBe('Estrada do Magarça, Rio de Janeiro - RJ');
   });
 
-  it('usa o estado por extenso quando o ISO não vem', () => {
+  it('acha a sigla pelo nome do estado quando o ISO não vem (geocoder próprio não emite ISO3166-2-lvl4)', () => {
     expect(
       formatarEndereco({
         address: {
@@ -42,7 +67,23 @@ describe('formatarEndereco', () => {
           state: 'Rio Grande do Norte',
         },
       }),
-    ).toBe('Rua Almir Freire - Bom Jesus, Bom Jesus - Rio Grande do Norte');
+    ).toBe('Rua Almir Freire - Bom Jesus, Bom Jesus - RN');
+  });
+
+  it('acha a sigla ignorando acento e caixa (grafia do OSM varia)', () => {
+    expect(
+      formatarEndereco({
+        address: { city: 'Teresina', state: 'piaui' },
+      }),
+    ).toBe('Teresina - PI');
+  });
+
+  it('devolve o nome por extenso quando não acha o estado no mapa nem no ISO', () => {
+    expect(
+      formatarEndereco({
+        address: { city: 'Cidade Fantasia', state: 'Estado Inexistente' },
+      }),
+    ).toBe('Cidade Fantasia - Estado Inexistente');
   });
 
   it('cai pro display_name quando não dá pra montar nada', () => {
@@ -248,5 +289,136 @@ describe('backoff ao levar 429', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
     fetchSpy.mockRestore();
+  });
+});
+
+describe('provedor configurável — geocoder próprio vs Nominatim', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('com GEOCODER_URL e GEOCODER_API_KEY setados, consulta o geocoder próprio levando a key', async () => {
+    const config = configFake({
+      'geocoder.baseUrl': 'http://localhost:3010',
+      'geocoder.apiKey': 'minha-chave',
+    });
+    const servico = new ReverseGeocodeService(prismaFakeVazio(), config);
+
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        respostaOk({ road: 'Gallerie Charles Despeaux', city: 'Monaco', state: 'Monaco' }),
+      );
+
+    await servico.lookupNow({ latitude: 43.7384, longitude: 7.4246 });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [urlChamada] = fetchSpy.mock.calls[0];
+    expect(String(urlChamada)).toBe(
+      'http://localhost:3010/reverse?lat=43.7384&lon=7.4246&key=minha-chave',
+    );
+  });
+
+  it('faltando a URL ou a chave, continua indo pro Nominatim exatamente como hoje', async () => {
+    // Só a chave, sem a URL — não basta metade da configuração.
+    const config = configFake({ 'geocoder.apiKey': 'minha-chave' });
+    const servico = new ReverseGeocodeService(prismaFakeVazio(), config);
+
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(respostaOk({ road: 'Rua X', city: 'Salvador', state: 'Bahia' }));
+
+    await servico.lookupNow({ latitude: -12.9, longitude: -38.5 });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [urlChamada] = fetchSpy.mock.calls[0];
+    expect(String(urlChamada)).toContain('https://nominatim.openstreetmap.org/reverse');
+  });
+
+  it('sem ConfigService nenhum (como os testes antigos instanciam), continua indo pro Nominatim', async () => {
+    const servico = new ReverseGeocodeService(prismaFakeVazio());
+
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(respostaOk({ road: 'Rua Y', city: 'Recife', state: 'Pernambuco' }));
+
+    await servico.lookupNow({ latitude: -8.05, longitude: -34.9 });
+
+    const [urlChamada] = fetchSpy.mock.calls[0];
+    expect(String(urlChamada)).toContain('https://nominatim.openstreetmap.org/reverse');
+  });
+});
+
+describe('portão de 1/s — só vale para o Nominatim público', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('não serializa chamadas consecutivas ao geocoder próprio', async () => {
+    const config = configFake({
+      'geocoder.baseUrl': 'http://localhost:3010',
+      'geocoder.apiKey': 'minha-chave',
+    });
+    const servico = new ReverseGeocodeService(prismaFakeVazio(), config);
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(respostaOk({ road: 'Rua A', city: 'B', state: 'Bahia' }));
+
+    // Se o portão valesse aqui, a segunda chamada agendaria uma espera via
+    // setTimeout (ver `aguardarVez`/`proximoSlot`). Sem o portão, nenhuma.
+    const setTimeoutSpy = jest
+      .spyOn(global, 'setTimeout')
+      .mockImplementation(((fn: () => void) => {
+        fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }) as never);
+
+    await servico.lookupNow({ latitude: 1, longitude: 1 });
+    await servico.lookupNow({ latitude: 2, longitude: 2 });
+
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+  });
+
+  it('continua serializando chamadas consecutivas ao Nominatim', async () => {
+    const servico = new ReverseGeocodeService(prismaFakeVazio());
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(respostaOk({ road: 'Rua A', city: 'B', state: 'Bahia' }));
+
+    const setTimeoutSpy = jest
+      .spyOn(global, 'setTimeout')
+      .mockImplementation(((fn: () => void) => {
+        fn();
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }) as never);
+
+    await servico.lookupNow({ latitude: 1, longitude: 1 });
+    // A segunda chamada cai dentro do intervalo de 1,1s reservado pela
+    // primeira — o portão agenda espera via setTimeout.
+    await servico.lookupNow({ latitude: 2, longitude: 2 });
+
+    expect(setTimeoutSpy).toHaveBeenCalled();
+  });
+});
+
+describe('backoff ao levar 429 — vale também para o geocoder próprio', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('para de chamar o geocoder próprio depois da primeira recusa', async () => {
+    const config = configFake({
+      'geocoder.baseUrl': 'http://localhost:3010',
+      'geocoder.apiKey': 'minha-chave',
+    });
+    const servico = new ReverseGeocodeService(prismaFakeVazio(), config);
+
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+    } as never);
+
+    expect(await servico.lookupNow({ latitude: 1, longitude: 1 })).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Sem o portão de 1/s para segurar, insistir chamaria de novo na hora —
+    // é o backoff que precisa impedir, exatamente como já impede pro Nominatim.
+    expect(await servico.lookupNow({ latitude: 2, longitude: 2 })).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
