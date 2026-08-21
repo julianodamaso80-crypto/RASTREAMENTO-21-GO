@@ -32,6 +32,14 @@ export function explicarFalhaDeLogin(
 
   const status = erro?.response?.status;
   if (status === 401) {
+    // Caso único em que o servidor diz mais: a senha JÁ bateu, mas o cadastro
+    // não tem rastreador instalado. Repassar isso não revela nada a quem não
+    // tem a senha, e sem isso o cliente acha que errou a senha e tenta de novo
+    // pra sempre.
+    const mensagem = mensagemDoServidor(erro);
+    if (mensagem.includes('Nenhum rastreador instalado')) {
+      return { titulo: 'Sem rastreador vinculado', texto: mensagem };
+    }
     return {
       titulo: 'Não foi possível entrar',
       texto: 'CPF/e-mail ou senha inválidos. Confira e tente de novo.',
@@ -51,4 +59,11 @@ export function explicarFalhaDeLogin(
     titulo: 'O servidor não respondeu direito',
     texto: `Deu um problema do nosso lado (erro ${status}). Tente de novo em instantes.`,
   };
+}
+
+/** NestJS manda `message` como string ou array de strings (class-validator). */
+function mensagemDoServidor(erro: any): string {
+  const m = erro?.response?.data?.message;
+  if (Array.isArray(m)) return m.join(' ');
+  return typeof m === 'string' ? m : '';
 }

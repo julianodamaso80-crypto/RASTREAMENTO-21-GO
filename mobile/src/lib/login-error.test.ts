@@ -26,4 +26,30 @@ describe('explicarFalhaDeLogin', () => {
     const r = explicarFalhaDeLogin(new Error('SecureStore falhou'), true);
     expect(r.texto).toContain('estão certos');
   });
+
+  it('401 por falta de rastreador instalado mostra a orientação do servidor, não "senha inválida"', () => {
+    const r = explicarFalhaDeLogin(
+      {
+        response: {
+          status: 401,
+          data: {
+            message:
+              'Nenhum rastreador instalado vinculado ao seu cadastro. Fale com a sua associação.',
+          },
+        },
+      },
+      false,
+    );
+    expect(r.titulo).toBe('Sem rastreador vinculado');
+    expect(r.texto).toContain('Fale com a sua associação');
+    expect(r.texto).not.toContain('senha');
+  });
+
+  it('401 com qualquer outra mensagem continua genérico (não vira verificador de CPF)', () => {
+    const r = explicarFalhaDeLogin(
+      { response: { status: 401, data: { message: 'Associado não encontrado' } } },
+      false,
+    );
+    expect(r.texto).toContain('CPF/e-mail ou senha inválidos');
+  });
 });

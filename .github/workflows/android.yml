@@ -62,8 +62,10 @@ jobs:
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
           PROFILE: ${{ inputs.profile }}
         run: |
+          [ -n "$GOOGLE_MAPS_ANDROID_KEY" ] || { echo "GOOGLE_MAPS_ANDROID_KEY ausente: build Android geraria app que cai ao abrir o mapa"; exit 1; }
           EXT=aab; [ "$PROFILE" = "preview" ] && EXT=apk
           echo "ARTEFATO=app.$EXT" >> "$GITHUB_ENV"
           eas build --local --platform android --profile "$PROFILE" --non-interactive \

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Linking, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { BackHandler, Linking, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,21 @@ export default function PainelInterno() {
   const router = useRouter();
   const { token, user, logout } = useInternalAuth();
   const [tentativaChave, setTentativaChave] = useState(0);
+  const webRef = useRef<WebView>(null);
+  const podeVoltar = useRef(false);
+
+  // Voltar físico do Android: volta uma página do painel, não fecha o app.
+  // Só quando o histórico acaba é que o sistema assume (e aí sair é o certo).
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (podeVoltar.current) {
+        webRef.current?.goBack();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, []);
 
   /**
    * O painel lê a sessão de `localStorage.token` (frontend/dashboard/src/lib/api.ts).
@@ -46,6 +61,7 @@ export default function PainelInterno() {
 
       <WebView
         key={tentativaChave}
+        ref={webRef}
         source={{ uri: PAINEL_ORIGIN }}
         injectedJavaScriptBeforeContentLoaded={injecao}
         // Nada sobrevive ao fim da sessão: celular emprestado não reabre o
@@ -65,6 +81,7 @@ export default function PainelInterno() {
         // painel chama router.push('/login')) não passa por
         // onShouldStartLoadWithRequest no iOS — só por aqui.
         onNavigationStateChange={(nav) => {
+          podeVoltar.current = nav.canGoBack;
           if (ehLoginDoPainel(nav.url)) sair();
         }}
         onShouldStartLoadWithRequest={(req) => {
@@ -90,7 +107,7 @@ export default function PainelInterno() {
             <Text style={styles.erroTitulo}>Não foi possível abrir o painel</Text>
             <Text style={styles.erroTexto}>Verifique sua conexão e tente de novo.</Text>
             <TouchableOpacity
-              onPress={() => setTentativaChave((c) => c + 1)}
+              onPress={() => { podeVoltar.current = false; setTentativaChave((c) => c + 1); }}
               style={styles.erroBotao}
             >
               <Text style={styles.erroBotaoTexto}>Tentar de novo</Text>

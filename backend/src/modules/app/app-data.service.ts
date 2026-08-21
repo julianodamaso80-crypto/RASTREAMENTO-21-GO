@@ -29,6 +29,61 @@ function toPositionDto(p: TraccarPosition) {
   };
 }
 
+/**
+ * Allowlist do que o associado pode ver do próprio veículo. Nunca espalhar o
+ * registro do Prisma aqui: IMEI, local de instalação, técnico e estoque são
+ * função de time interno e não saem por /app/* em hipótese nenhuma.
+ */
+function toVehicleDto(v: {
+  id: string;
+  plate: string;
+  vehicleType: unknown;
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+  year: number | null;
+  status: unknown;
+  traccarDeviceId: number | null;
+}) {
+  return {
+    id: v.id,
+    plate: v.plate,
+    vehicleType: v.vehicleType,
+    brand: v.brand,
+    model: v.model,
+    color: v.color,
+    year: v.year,
+    status: v.status,
+    traccarDeviceId: v.traccarDeviceId,
+  };
+}
+
+/**
+ * Allowlist do que o associado pode ver de um alerta. Mesma regra do
+ * toVehicleDto: dado de operação interna nunca sai por /app/*.
+ */
+function toAlertDto(a: {
+  id: string;
+  type: unknown;
+  severity: unknown;
+  message: string;
+  status: unknown;
+  read: boolean;
+  createdAt: Date;
+  vehicle: { id: string; plate: string };
+}) {
+  return {
+    id: a.id,
+    type: a.type,
+    severity: a.severity,
+    message: a.message,
+    status: a.status,
+    read: a.read,
+    createdAt: a.createdAt,
+    vehicle: { id: a.vehicle.id, plate: a.vehicle.plate },
+  };
+}
+
 @Injectable()
 export class AppDataService {
   constructor(
@@ -59,7 +114,7 @@ export class AppDataService {
       .filter((id): id is number => id !== null);
 
     if (deviceIds.length === 0) {
-      return vehicles.map((v) => ({ ...v, position: null, connection: null }));
+      return vehicles.map((v) => ({ ...toVehicleDto(v), position: null, connection: null }));
     }
 
     // Posição (GPS real) e device (status de conexão = heartbeat) são fontes
@@ -80,7 +135,7 @@ export class AppDataService {
         ? devByDevice.get(v.traccarDeviceId)
         : undefined;
       return {
-        ...v,
+        ...toVehicleDto(v),
         position: pos ? toPositionDto(pos) : null,
         connection: dev
           ? { status: dev.status, lastUpdate: dev.lastUpdate }
@@ -126,7 +181,7 @@ export class AppDataService {
     const vehicleIds = vehicles.map((v) => v.id);
     if (vehicleIds.length === 0) return [];
 
-    return this.prisma.alert.findMany({
+    const alerts = await this.prisma.alert.findMany({
       where: { vehicleId: { in: vehicleIds }, tenantId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       take: Math.min(limit, 100),
@@ -141,5 +196,6 @@ export class AppDataService {
         vehicle: { select: { id: true, plate: true } },
       },
     });
+    return alerts.map(toAlertDto);
   }
 }

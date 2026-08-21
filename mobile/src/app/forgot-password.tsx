@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { AppApi } from '@/lib/api';
-import { maskCpf, onlyDigits } from '@/lib/format';
+import { maskDocumento, onlyDigits } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 import { PasswordInput } from '@/components/password-input';
 
@@ -34,7 +34,7 @@ export default function ForgotPasswordScreen() {
   const [confirma, setConfirma] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const cpfValido = onlyDigits(cpf).length === 11;
+  const cpfValido = [11, 14].includes(onlyDigits(cpf).length);
   const novaValida = nova.trim().length >= 6;
   const conferem = nova === confirma;
   const naoEhCpf = onlyDigits(nova) !== onlyDigits(cpf) || !onlyDigits(nova);
@@ -106,12 +106,12 @@ export default function ForgotPasswordScreen() {
                 <Text style={styles.label}>CPF</Text>
                 <TextInput
                   value={cpf}
-                  onChangeText={(t) => setCpf(maskCpf(t))}
+                  onChangeText={(t) => setCpf(maskDocumento(t))}
                   placeholder="000.000.000-00"
                   placeholderTextColor={colors.textFaint}
                   keyboardType="number-pad"
                   style={styles.input}
-                  maxLength={14}
+                  maxLength={18}
                 />
               </View>
 
