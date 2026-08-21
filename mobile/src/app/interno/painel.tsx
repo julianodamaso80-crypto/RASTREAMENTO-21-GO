@@ -107,7 +107,7 @@ export default function PainelInterno() {
             <Text style={styles.erroTitulo}>Não foi possível abrir o painel</Text>
             <Text style={styles.erroTexto}>Verifique sua conexão e tente de novo.</Text>
             <TouchableOpacity
-              onPress={() => setTentativaChave((c) => c + 1)}
+              onPress={() => { podeVoltar.current = false; setTentativaChave((c) => c + 1); }}
               style={styles.erroBotao}
             >
               <Text style={styles.erroBotaoTexto}>Tentar de novo</Text>
