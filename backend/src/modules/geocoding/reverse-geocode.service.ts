@@ -299,8 +299,14 @@ export class ReverseGeocodeService {
     // próprio (ver evidências da etapa 3).
     if (!proprio) await this.aguardarVez();
 
+    // URLSearchParams codifica cada valor — a key é token opaco (hoje hex,
+    // mas nada garante isso pra sempre) e não pode ir crua pra URL.
     const url = proprio
-      ? `${this.geocoderBaseUrl}/reverse?lat=${coord.latitude}&lon=${coord.longitude}&key=${this.geocoderApiKey}`
+      ? `${this.geocoderBaseUrl}/reverse?${new URLSearchParams({
+          lat: String(coord.latitude),
+          lon: String(coord.longitude),
+          key: String(this.geocoderApiKey),
+        }).toString()}`
       : `${ReverseGeocodeService.URL}?format=jsonv2&zoom=18&addressdetails=1` +
         `&lat=${coord.latitude}&lon=${coord.longitude}`;
 
