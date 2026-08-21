@@ -25,6 +25,14 @@ def relatorio_para_payload(relatorio: dict, device_imei: str) -> dict:
 
     precisao = relatorio.get("horizontal_accuracy")
     if precisao is not None:
-        payload["accuracy"] = int(precisao)
+        try:
+            precisao_int = int(precisao)
+        except (TypeError, ValueError):
+            precisao_int = None
+        # backend valida accuracy com @Min(0); um valor negativo ou
+        # sentinela vindo da Apple rejeitaria o payload inteiro (posição e
+        # tudo) em vez de só perder a precisão — melhor omitir o campo.
+        if precisao_int is not None and precisao_int >= 0:
+            payload["accuracy"] = precisao_int
 
     return payload

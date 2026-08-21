@@ -46,6 +46,14 @@ class Outbox:
                 self._colocar_em_quarentena(caminho, str(erro))
         return itens
 
+    def quarentenados(self) -> list:
+        """Quantos payloads estão em quarentena agora. Diferente de
+        `pendentes()`, não filtra por sufixo: um .tmp órfão também vai para
+        cá (ver `_varrer_tmp_orfaos`), e contar só *.json subestimaria o
+        tamanho real da quarentena."""
+        self._pasta_corrompidos.mkdir(parents=True, exist_ok=True)
+        return sorted(p for p in self._pasta_corrompidos.iterdir() if p.is_file())
+
     def quarentenar(self, caminho: Path, motivo: str) -> None:
         """Move um payload da fila para corrompidos/ quando o backend rejeita
         o conteúdo em definitivo (ErroPermanente) — sem isso o item ficaria

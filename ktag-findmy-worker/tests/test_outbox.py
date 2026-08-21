@@ -103,6 +103,19 @@ def test_varredura_do_construtor_nao_mexe_em_json_valido_ao_lado(tmp_path):
     assert len(caixa.pendentes()) == 1
 
 
+def test_quarentenados_conta_arquivos_json_e_tmp_orfaos(tmp_path):
+    caixa = Outbox(tmp_path)
+    caixa.guardar({"deviceImei": "venenoso"})
+    caminho, _ = caixa.pendentes()[0]
+    caixa.quarentenar(caminho, "rejeitado pelo backend")
+
+    orfao = tmp_path / f"{uuid.uuid4().hex}.tmp"
+    orfao.write_text('{"deviceImei": "2"}', encoding="utf-8")
+    Outbox(tmp_path)  # varre o .tmp orfao no boot e joga pra quarentena tambem
+
+    assert len(Outbox(tmp_path).quarentenados()) == 2
+
+
 def test_arquivo_com_utf8_invalido_e_colocado_em_quarentena_por_pendentes(tmp_path):
     caixa = Outbox(tmp_path)
     caixa.guardar({"deviceImei": "1"})

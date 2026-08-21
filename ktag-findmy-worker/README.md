@@ -19,6 +19,25 @@ incluída, que é onde este worker roda. Sem proxy residencial, o login retorna
 foi vista". Por isso `AppleClient` se recusa a ser instanciado sem
 `APPLE_PROXY` configurado.
 
+## BACKEND_TOKEN expira em 12 horas — limitação operacional
+
+`BACKEND_TOKEN` é um JWT de staff comum, emitido pelo login do backend com
+`internalExpiration: '12h'` (`backend/src/config/configuration.ts`). O
+backend não tem API key nem service account para processos automatizados —
+o worker usa o mesmo token que uma pessoa usaria.
+
+**Consequência:** passadas 12h da emissão, todo ciclo falha com HTTP 401/403
+até alguém trocar o token. O worker detecta isso (`ErroDeCredencial`) e loga
+um `SESSAO`/`TOKEN` de erro bem visível a cada ciclo — mas ele **fica cego**
+enquanto isso: nenhuma posição nova chega ao backend, e é justamente nesse
+tipo de silêncio que a TAG deveria estar cobrindo (jammer de GPS/GSM não
+desliga o Bluetooth, mas um token vencido desliga o worker inteiro).
+
+Enquanto não existir um mecanismo de credencial de longa duração no backend,
+alguém precisa gerar um `BACKEND_TOKEN` novo e reimplantar o worker com ele
+antes de cada expiração — ou monitorar o log de `TOKEN DO BACKEND EXPIROU`
+e agir quando ele aparecer.
+
 ## Login é manual, uma vez
 
 O 2FA por SMS da Apple está quebrado no momento. O login é feito à mão, uma

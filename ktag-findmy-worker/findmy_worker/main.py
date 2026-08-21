@@ -13,7 +13,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .apple_client import AppleClient
-from .backend_client import BackendClient
+from .backend_client import BackendClient, ErroDeCredencial
+from .backfill import RastreadorDeBackfill
 from .dedupe import Dedupe
 from .loop import executar_ciclo
 from .outbox import Outbox
@@ -51,6 +52,7 @@ def main() -> None:
     outbox = Outbox(Path(os.environ["OUTBOX_DIR"]))
     dedupe = Dedupe()
     detector = DetectorDeSilencio()
+    rastreador_backfill = RastreadorDeBackfill()
 
     log.info("worker da K-Tag iniciado")
 
@@ -58,13 +60,16 @@ def main() -> None:
         try:
             resultado = executar_ciclo(
                 backend, apple, dedupe, outbox, detector,
-                datetime.now(timezone.utc),
+                datetime.now(timezone.utc), rastreador_backfill,
             )
             log.info(
-                "ciclo: %s enviados, %s enfileirados, %s pendentes na fila",
+                "ciclo: %s enviados, %s enfileirados, %s pendentes na fila, "
+                "%s em quarentena, %s sem TAG correspondente",
                 resultado["enviados"],
                 resultado["enfileirados"],
                 resultado["pendentes"],
+                resultado["quarentena"],
+                resultado["nao_correspondidos"],
             )
             if resultado["silencio_suspeito"]:
                 log.error(
@@ -72,7 +77,26 @@ def main() -> None:
                     "Provavel bloqueio do IP do proxy pela Apple — conferir antes "
                     "de assumir que as TAGs estao fora de area."
                 )
+            if not resultado["apple_autenticado"]:
+                log.error(
+                    "SESSAO DA APPLE INVALIDA: a Apple recusou a autenticacao "
+                    "(sessao expirada ou revogada). O worker PAROU de consultar "
+                    "a Apple e vai continuar parado ate o processo ser reiniciado "
+                    "com uma sessao nova — login manual com --trusteddevice (o "
+                    "2FA por SMS esta quebrado, nao existe reautenticacao "
+                    "automatica). Nenhuma TAG tera posicao nova ate isso ser feito."
+                )
             espera = _intervalo_do_plano(backend)
+        except ErroDeCredencial:
+            log.error(
+                "TOKEN DO BACKEND EXPIROU OU FOI REVOGADO: o worker esta CEGO "
+                "agora, sem conseguir ler o plano nem entregar posicao nenhuma. "
+                "BACKEND_TOKEN e um JWT de staff com validade de 12h — gere um "
+                "token novo e atualize a variavel de ambiente do worker. Vou "
+                "continuar tentando a cada %s s ate isso acontecer.",
+                INTERVALO_APOS_ERRO_S,
+            )
+            espera = INTERVALO_APOS_ERRO_S
         except Exception:
             log.exception("ciclo falhou")
             espera = INTERVALO_APOS_ERRO_S

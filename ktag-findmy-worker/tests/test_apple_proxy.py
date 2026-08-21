@@ -8,6 +8,8 @@ forma (findmy.KeyPair, findmy.reports.RemoteAnisetteProvider/AppleAccount,
 findmy.util.http.HttpSession._get_session) só o suficiente pra importar
 apple_client.py e exercitar o instalador do proxy.
 """
+import asyncio
+import inspect
 import os
 import sys
 import types
@@ -18,17 +20,25 @@ PROXY = "http://usuario:senha@proxy-residencial:8080"
 
 
 def _stub_findmy_base():
-    """Stub mínimo pro `from findmy import KeyPair` / `from findmy.reports
-    import ...` que apple_client.py faz no topo do arquivo. Não é o alvo do
-    teste — só existe pra permitir importar o módulo sem a lib real."""
+    """Stub mínimo pro `from findmy import KeyPair` / `from findmy.errors
+    import ...` / `from findmy.reports import ...` que apple_client.py faz no
+    topo do arquivo. Não é o alvo do teste — só existe pra permitir importar
+    o módulo sem a lib real."""
     findmy = types.ModuleType("findmy")
     findmy.KeyPair = object
+    findmy_errors = types.ModuleType("findmy.errors")
+
+    class UnauthorizedErrorStub(Exception):
+        pass
+
+    findmy_errors.UnauthorizedError = UnauthorizedErrorStub
     findmy_reports = types.ModuleType("findmy.reports")
     findmy_reports.RemoteAnisetteProvider = object
     findmy_reports.AppleAccount = object
     findmy_util = types.ModuleType("findmy.util")
 
     sys.modules["findmy"] = findmy
+    sys.modules["findmy.errors"] = findmy_errors
     sys.modules["findmy.reports"] = findmy_reports
     sys.modules["findmy.util"] = findmy_util
 
@@ -49,6 +59,23 @@ def _stub_http_session(com_get_session=True, com_http_session=True):
 
         modulo.HttpSession = HttpSessionStub
 
+    sys.modules["findmy.util.http"] = modulo
+    return modulo
+
+
+def _stub_http_session_async():
+    """Variante em que _get_session é uma coroutine — o caminho plausível de
+    verdade da lib real (aiohttp cria sessão dentro de um loop). O teste
+    original só cobria a versão síncrona do stub; se a lib real usa
+    `async def _get_session`, o ramo `inspect.iscoroutinefunction` do
+    monkeypatch nunca era exercitado."""
+    modulo = types.ModuleType("findmy.util.http")
+
+    class HttpSessionStub:
+        async def _get_session(self):
+            return types.SimpleNamespace(_trust_env=False)
+
+    modulo.HttpSession = HttpSessionStub
     sys.modules["findmy.util.http"] = modulo
     return modulo
 
@@ -149,3 +176,40 @@ def test_sem_get_session_recusa_e_nao_deixa_env_pela_metade():
 
     assert "HTTPS_PROXY" not in os.environ
     assert "HTTP_PROXY" not in os.environ
+
+
+def test_instala_proxy_substitui_get_session_assincrono():
+    _stub_findmy_base()
+    modulo_http = _stub_http_session_async()
+    metodo_original = modulo_http.HttpSession._get_session
+    instalar = _importar_instalador()
+
+    instalar(PROXY)
+
+    assert modulo_http.HttpSession._get_session is not metodo_original
+    assert inspect.iscoroutinefunction(modulo_http.HttpSession._get_session)
+
+
+def test_sessao_construida_pelo_metodo_patcheado_assincrono_fica_com_trust_env():
+    _stub_findmy_base()
+    modulo_http = _stub_http_session_async()
+    instalar = _importar_instalador()
+
+    instalar(PROXY)
+
+    sessao = asyncio.run(modulo_http.HttpSession()._get_session())
+    assert sessao._trust_env is True
+
+
+def test_instalar_duas_vezes_assincrono_nao_empilha_wrapper():
+    _stub_findmy_base()
+    modulo_http = _stub_http_session_async()
+    instalar = _importar_instalador()
+
+    instalar(PROXY)
+    metodo_depois_da_primeira = modulo_http.HttpSession._get_session
+
+    instalar(PROXY)
+    metodo_depois_da_segunda = modulo_http.HttpSession._get_session
+
+    assert metodo_depois_da_primeira is metodo_depois_da_segunda

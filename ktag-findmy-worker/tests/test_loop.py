@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 
-from findmy_worker.backend_client import ErroPermanente, ErroTransitorio
+import pytest
+
+from findmy_worker.apple_errors import ErroDeAutenticacaoApple
+from findmy_worker.backend_client import ErroDeCredencial, ErroPermanente, ErroTransitorio
+from findmy_worker.backfill import RastreadorDeBackfill
 from findmy_worker.dedupe import Dedupe
 from findmy_worker.loop import executar_ciclo
 from findmy_worker.outbox import Outbox
@@ -178,3 +182,166 @@ def test_resultado_do_ciclo_reporta_o_tamanho_do_backlog(tmp_path):
     r = executar_ciclo(backend, AppleFalsa([]), Dedupe(), caixa, DetectorDeSilencio(), AGORA)
 
     assert r["pendentes"] == 1
+
+
+def test_credencial_expirada_ao_enviar_propaga_em_vez_de_virar_fila(tmp_path):
+    """Token JWT de staff expira em 12h (ver README) — precisa ser
+    distinguível de falha comum de rede/conteúdo, senão o item vira só mais
+    um "enfileirado" e o ciclo seguinte cai no genérico e ninguém percebe
+    que o worker está cego."""
+    class BackendCredencialMorta:
+        def plano(self):
+            return PLANO
+
+        def enviar(self, payload):
+            raise ErroDeCredencial("token expirado")
+
+    with pytest.raises(ErroDeCredencial):
+        executar_ciclo(
+            BackendCredencialMorta(), AppleFalsa([um_relatorio()]), Dedupe(),
+            Outbox(tmp_path), DetectorDeSilencio(), AGORA,
+        )
+
+
+def test_credencial_expirada_ao_drenar_a_fila_tambem_propaga(tmp_path):
+    caixa = Outbox(tmp_path)
+    caixa.guardar({"deviceImei": "1"})
+
+    class BackendCredencialMorta:
+        def plano(self):
+            return PLANO
+
+        def enviar(self, payload):
+            raise ErroDeCredencial("token expirado")
+
+    with pytest.raises(ErroDeCredencial):
+        executar_ciclo(
+            BackendCredencialMorta(), AppleFalsa([]), Dedupe(), caixa,
+            DetectorDeSilencio(), AGORA,
+        )
+
+
+def test_segundo_ciclo_acelerado_usa_janela_curta_em_vez_de_sete_dias(tmp_path):
+    """O plano manda 168h (7 dias, o limite de retenção da Apple) pra
+    justificar o primeiro ciclo depois que a TAG acelera. Repetir isso a
+    cada minuto enquanto ela seguir acelerada é o jeito mais rápido de
+    estourar o proxy residencial pago."""
+    apple = AppleFalsa([])
+    rastreador = RastreadorDeBackfill(janela_curta_horas=1)
+    backend = BackendFalso()
+    dedupe, caixa, det = Dedupe(), Outbox(tmp_path), DetectorDeSilencio()
+
+    executar_ciclo(backend, apple, dedupe, caixa, det, AGORA, rastreador)
+    executar_ciclo(backend, apple, dedupe, caixa, det, AGORA, rastreador)
+
+    assert apple.pedidos[0][1] == 168
+    assert apple.pedidos[1][1] == 1
+
+
+def test_tag_que_sai_do_modo_acelerado_e_reentra_ganha_backfill_novo(tmp_path):
+    apple = AppleFalsa([])
+    rastreador = RastreadorDeBackfill(janela_curta_horas=1)
+    dedupe, caixa, det = Dedupe(), Outbox(tmp_path), DetectorDeSilencio()
+
+    executar_ciclo(BackendFalso(), apple, dedupe, caixa, det, AGORA, rastreador)
+
+    plano_normal = {
+        "tags": [{**PLANO["tags"][0], "backfillHours": 0, "intervalSeconds": 3600}]
+    }
+
+    class BackendNormal:
+        def plano(self):
+            return plano_normal
+
+        def enviar(self, payload):
+            pass
+
+    executar_ciclo(BackendNormal(), apple, dedupe, caixa, det, AGORA, rastreador)
+    executar_ciclo(BackendFalso(), apple, dedupe, caixa, det, AGORA, rastreador)
+
+    assert [pedido[1] for pedido in apple.pedidos] == [168, 0, 168]
+
+
+def test_relatorio_sem_tag_correspondente_e_contado_em_vez_de_sumir(tmp_path, caplog):
+    """As chaves são cadastradas à mão (Device.bleAdvKeyHashed) — uma
+    divergência de encoding derruba 100% dos relatórios e o ciclo reporta
+    "enviados: 0", indistinguível de "nenhuma TAG foi vista"."""
+    relatorio_orfao = um_relatorio()
+    relatorio_orfao["hashed_adv_key"] = "chave-sem-tag-no-plano"
+
+    with caplog.at_level("WARNING"):
+        r = executar_ciclo(
+            BackendFalso(), AppleFalsa([relatorio_orfao]), Dedupe(),
+            Outbox(tmp_path), DetectorDeSilencio(), AGORA,
+        )
+
+    assert r["nao_correspondidos"] == 1
+    assert r["enviados"] == 0
+    aviso = next(rec for rec in caplog.records if "sem TAG correspondente" in rec.message)
+    assert "chave-sem-tag-no-plano" in aviso.message
+
+
+def test_plano_vazio_nao_alimenta_o_detector_de_silencio(tmp_path):
+    """Plano vazio é "ninguém cadastrou chave ainda", não silêncio nem
+    avistamento — alimentar o detector aqui faria ele alarmar bloqueio de
+    IP num ambiente que nunca teve nada pra achar."""
+    class DetectorEspiao(DetectorDeSilencio):
+        def __init__(self):
+            super().__init__()
+            self.chamadas = []
+
+        def registrar_ciclo(self, houve, agora):
+            self.chamadas.append(houve)
+            return super().registrar_ciclo(houve, agora)
+
+    class BackendSemTags:
+        def plano(self):
+            return {"tags": []}
+
+        def enviar(self, payload):
+            pass
+
+    det = DetectorEspiao()
+    r = executar_ciclo(BackendSemTags(), AppleFalsa([]), Dedupe(), Outbox(tmp_path), det, AGORA)
+
+    assert det.chamadas == []
+    assert r["silencio_suspeito"] is False
+
+
+def test_falha_de_autenticacao_na_apple_para_de_consultar_e_nao_alarma_silencio(tmp_path):
+    class AppleComSessaoMorta:
+        def __init__(self):
+            self.pedidos = 0
+
+        def buscar(self, tags, backfill_horas):
+            self.pedidos += 1
+            raise ErroDeAutenticacaoApple("sessao expirada")
+
+    apple = AppleComSessaoMorta()
+
+    class DetectorEspiao(DetectorDeSilencio):
+        def __init__(self):
+            super().__init__()
+            self.chamadas = []
+
+        def registrar_ciclo(self, houve, agora):
+            self.chamadas.append(houve)
+            return super().registrar_ciclo(houve, agora)
+
+    det = DetectorEspiao()
+    r = executar_ciclo(BackendFalso(), apple, Dedupe(), Outbox(tmp_path), det, AGORA)
+
+    assert r["apple_autenticado"] is False
+    assert det.chamadas == []
+    assert apple.pedidos == 1
+
+
+def test_resultado_do_ciclo_reporta_o_tamanho_da_quarentena(tmp_path):
+    caixa = Outbox(tmp_path)
+    caixa.guardar({"deviceImei": "venenoso"})
+
+    backend = BackendFalso(rejeita=lambda p: p.get("deviceImei") == "venenoso")
+
+    r = executar_ciclo(backend, AppleFalsa([]), Dedupe(), caixa, DetectorDeSilencio(), AGORA)
+
+    assert r["quarentena"] == 1

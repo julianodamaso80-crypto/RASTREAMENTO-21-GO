@@ -20,6 +20,17 @@ class ErroTransitorio(Exception):
     O item continua na fila e é reenviado no próximo ciclo."""
 
 
+class ErroDeCredencial(Exception):
+    """O backend recusou o token (401/403).
+
+    O BACKEND_TOKEN é um JWT de staff com validade de 12h
+    (`internalExpiration` em backend/src/config/configuration.ts) — não
+    existe API key nem service account no backend para o worker usar. Isso é
+    diferente de ErroTransitorio: tentar de novo em 5 minutos não resolve
+    nada até alguém trocar o token. Precisa de tratamento à parte para não
+    virar só mais um "ciclo falhou" indistinguível no log."""
+
+
 class BackendClient:
     def __init__(self, base_url: str, token: str, timeout: float = 30.0):
         self._http = httpx.Client(
@@ -30,8 +41,15 @@ class BackendClient:
         )
 
     def plano(self) -> dict:
-        resposta = self._http.get("/ble-tags/polling-plan")
-        resposta.raise_for_status()
+        try:
+            resposta = self._http.get("/ble-tags/polling-plan")
+            resposta.raise_for_status()
+        except httpx.HTTPStatusError as erro:
+            if erro.response.status_code in (401, 403):
+                raise ErroDeCredencial(
+                    f"backend recusou o token ao buscar o plano (HTTP {erro.response.status_code})"
+                ) from erro
+            raise
         return resposta.json()
 
     def enviar(self, payload: dict) -> None:
@@ -40,6 +58,10 @@ class BackendClient:
             resposta.raise_for_status()
         except httpx.HTTPStatusError as erro:
             status = erro.response.status_code
+            if status in (401, 403):
+                raise ErroDeCredencial(
+                    f"backend recusou o token ao enviar (HTTP {status})"
+                ) from erro
             if 400 <= status < 500 and status not in (408, 429):
                 raise ErroPermanente(
                     f"backend rejeitou o payload (HTTP {status}): {erro}"

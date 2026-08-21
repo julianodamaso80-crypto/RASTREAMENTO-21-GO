@@ -13,7 +13,10 @@ from datetime import timedelta
 from pathlib import Path
 
 from findmy import KeyPair
+from findmy.errors import UnauthorizedError
 from findmy.reports import RemoteAnisetteProvider, AppleAccount
+
+from .apple_errors import ErroDeAutenticacaoApple
 
 
 def _instalar_proxy_no_findmy(proxy: str) -> None:
@@ -81,6 +84,11 @@ class AppleClient:
         self._anisette = RemoteAnisetteProvider(anisette_url)
         self._proxy = proxy
         self._conta = None
+        # Uma vez que a Apple recusa a sessão, não adianta tentar de novo no
+        # próximo ciclo: reautenticação automática está desligada de
+        # propósito (2FA por SMS quebrado). Fica marcado até o processo ser
+        # reiniciado com uma sessão nova via login manual.
+        self._sessao_morta = False
 
     def _sessao(self) -> AppleAccount:
         if self._conta is None:
@@ -96,11 +104,25 @@ class AppleClient:
         return self._conta
 
     def buscar(self, tags: list, backfill_horas: int) -> list:
+        if self._sessao_morta:
+            raise ErroDeAutenticacaoApple(
+                "sessão da Apple já foi marcada como inválida nesta execução — "
+                "não consulto de novo até o processo ser reiniciado com sessão nova"
+            )
+
         conta = self._sessao()
         chaves = [KeyPair.from_b64(t["privateKey"]) for t in tags]
         janela = timedelta(hours=backfill_horas or 1)
 
-        relatorios = conta.fetch_last_reports(chaves, hours=int(janela.total_seconds() // 3600))
+        try:
+            relatorios = conta.fetch_last_reports(chaves, hours=int(janela.total_seconds() // 3600))
+        except UnauthorizedError as erro:
+            self._sessao_morta = True
+            raise ErroDeAutenticacaoApple(
+                "Apple recusou a sessão (expirada ou revogada). É preciso login "
+                "manual novo com --trusteddevice — o worker não reautentica "
+                "sozinho porque o 2FA por SMS da Apple está quebrado."
+            ) from erro
 
         return [
             {

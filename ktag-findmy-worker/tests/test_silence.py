@@ -32,3 +32,23 @@ def test_nao_alarma_repetido_sem_novo_periodo_de_silencio():
     d.registrar_ciclo(False, INICIO)
     assert d.registrar_ciclo(False, INICIO + timedelta(hours=7)) is True
     assert d.registrar_ciclo(False, INICIO + timedelta(hours=8)) is False
+
+
+def test_alarme_rearma_depois_de_mais_uma_janela_inteira_de_silencio():
+    """Bloqueio de IP permanente não pode virar um único log.error perdido
+    na hora seis — o alarme precisa repetir enquanto o silêncio continuar."""
+    d = DetectorDeSilencio(janela_horas=6)
+    d.registrar_ciclo(False, INICIO)
+    assert d.registrar_ciclo(False, INICIO + timedelta(hours=7)) is True
+
+    assert d.registrar_ciclo(False, INICIO + timedelta(hours=12)) is False
+    assert d.registrar_ciclo(False, INICIO + timedelta(hours=13, minutes=1)) is True
+
+
+def test_relatorio_apos_rearme_zera_tudo_de_novo():
+    d = DetectorDeSilencio(janela_horas=6)
+    d.registrar_ciclo(False, INICIO)
+    d.registrar_ciclo(False, INICIO + timedelta(hours=7))
+    d.registrar_ciclo(True, INICIO + timedelta(hours=13, minutes=1))
+
+    assert d.registrar_ciclo(False, INICIO + timedelta(hours=14)) is False
