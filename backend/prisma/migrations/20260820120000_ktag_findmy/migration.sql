@@ -6,5 +6,11 @@ ALTER TABLE "ble_sightings" ALTER COLUMN "rssi" DROP NOT NULL;
 ALTER TABLE "ble_sightings" ADD COLUMN IF NOT EXISTS "accuracy" INTEGER;
 ALTER TABLE "ble_sightings" ADD COLUMN IF NOT EXISTS "seen_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
+-- O DEFAULT acima só vale pra INSERT novo; Postgres avalia CURRENT_TIMESTAMP
+-- uma vez e estampa em toda linha pré-existente. Sem isso, todo sighting
+-- antigo nasceria ordenado como "visto agora". A verdade sobrevive em
+-- created_at, então recuperamos ela aqui.
+UPDATE "ble_sightings" SET "seen_at" = "created_at";
+
 CREATE INDEX IF NOT EXISTS "ble_sightings_device_id_seen_at_idx"
   ON "ble_sightings"("device_id", "seen_at" DESC);

@@ -161,6 +161,21 @@ export class BleTagsService {
 
     const seenAt = dto.seenAt ? new Date(dto.seenAt) : new Date();
 
+    // Restart do worker no meio de um backfill reenvia a mesma janela de até
+    // 7 dias; sem índice único (um P2002 apareceria pro worker como 500, que
+    // ele trata como falha transiente e reenvia pra sempre), o dedupe é feito
+    // aqui, por aplicação (ver I3).
+    if (dto.hashedAdvKey) {
+      const existente = await this.sightingModel.findFirst({
+        where: {
+          deviceId: device.id,
+          hashedAdvKey: dto.hashedAdvKey,
+          seenAt,
+        },
+      });
+      if (existente) return existente;
+    }
+
     const sighting = await this.sightingModel.create({
       data: {
         deviceId: device.id,
@@ -177,10 +192,15 @@ export class BleTagsService {
       },
     });
 
-    await this.deviceModel.update({
-      where: { id: device.id },
-      data: { lastConnection: seenAt },
-    });
+    // Backfill entrega relatos fora de ordem (até 7 dias de história); só
+    // avança lastConnection, nunca retrocede pra um seenAt mais antigo que o
+    // já registrado (ver I2).
+    if (!device.lastConnection || seenAt > device.lastConnection) {
+      await this.deviceModel.update({
+        where: { id: device.id },
+        data: { lastConnection: seenAt },
+      });
+    }
 
     if (this.emitter) {
       this.emitter(tenantId, {
