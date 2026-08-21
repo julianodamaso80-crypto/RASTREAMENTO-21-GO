@@ -709,6 +709,13 @@ model Device {
   uninstalledBy   String?      @map("uninstalled_by")
   uninstallReason String?      @map("uninstall_reason")
   lastConnection  DateTime?    @map("last_connection")
+  /// Chave privada da etiqueta BLE (base64). Segredo operacional: permite
+  /// decifrar a posição da TAG na rede Find My. Nunca sai em listagem.
+  bleAdvKeyPrivate String?   @map("ble_adv_key_private")
+  /// SHA-256 da advertisement key (base64), usado para casar o relatório.
+  bleAdvKeyHashed  String?   @map("ble_adv_key_hashed")
+  /// Enquanto estiver no futuro, a TAG é consultada em ritmo acelerado.
+  bleTurboUntil    DateTime? @map("ble_turbo_until")
   notes           String?
   deletedAt       DateTime?    @map("deleted_at")
   createdAt       DateTime     @default(now()) @map("created_at")
@@ -782,7 +789,11 @@ model BleSighting {
   deviceId      String   @map("device_id") @db.Uuid
   device        Device   @relation(fields: [deviceId], references: [id])
   macAddress    String   @map("mac_address")
-  rssi          Int
+  /// Nulo em relatório da rede Apple: a posição vem do iPhone que ouviu, não
+  /// da potência do sinal.
+  rssi          Int?
+  /// Raio de confiança em metros informado pela rede Find My.
+  accuracy      Int?
   hashedAdvKey  String?  @map("hashed_adv_key")
   counterByte   Int?     @map("counter_byte")
   scannerLat    Float?   @map("scanner_lat")
@@ -790,10 +801,14 @@ model BleSighting {
   scannerSource String?  @map("scanner_source")
   tenantId      String   @map("tenant_id") @db.Uuid
   tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  /// Momento em que a TAG foi vista. É o carimbo que vale para decidir onde o
+  /// veículo está — `createdAt` é apenas quando gravamos.
+  seenAt        DateTime @default(now()) @map("seen_at")
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([deviceId, createdAt(sort: Desc)])
+  @@index([deviceId, seenAt(sort: Desc)])
   @@map("ble_sightings")
 }
 

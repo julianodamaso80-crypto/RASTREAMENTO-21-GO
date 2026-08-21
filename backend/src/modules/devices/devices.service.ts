@@ -13,6 +13,13 @@ import { FilterDevicesDto } from './dto/filter-devices.dto';
 
 const BLE_MODELS = ['BLE_KTAG', 'BLE_REDTAG', 'BLE_AIRTAG_GENERIC'];
 
+// Chave privada da TAG BLE: nunca pode voltar em listagem/detalhe/exclusão de
+// dispositivo. Só sai do banco pela rota de plano de polling (ble-tags).
+const OMIT_BLE_KEY = {
+  bleAdvKeyPrivate: true,
+  bleAdvKeyHashed: true,
+} as const;
+
 @Injectable()
 export class DevicesService {
   private readonly logger = new Logger(DevicesService.name);
@@ -43,6 +50,7 @@ export class DevicesService {
     const [data, total] = await Promise.all([
       this.deviceModel.findMany({
         where,
+        omit: OMIT_BLE_KEY,
         include: {
           chip: {
             select: {
@@ -71,6 +79,7 @@ export class DevicesService {
   async findOne(id: string, tenantId: string) {
     const device = await this.deviceModel.findFirst({
       where: { id, tenantId, deletedAt: null },
+      omit: OMIT_BLE_KEY,
       include: {
         chip: true,
         vehicle: {
@@ -218,6 +227,7 @@ export class DevicesService {
     return this.deviceModel.update({
       where: { id },
       data: { deletedAt: new Date() },
+      omit: OMIT_BLE_KEY,
     });
   }
 

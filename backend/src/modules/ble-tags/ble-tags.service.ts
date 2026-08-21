@@ -7,8 +7,16 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
+import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
 
 const BLE_DEVICE_MODELS = ['BLE_KTAG', 'BLE_REDTAG', 'BLE_AIRTAG_GENERIC'];
+
+// Chave privada da TAG: nunca pode voltar em listagem. Só sai do banco pela
+// rota de plano de polling (getPollingPlan), que escolhe os campos a dedo.
+const OMIT_BLE_KEY = {
+  bleAdvKeyPrivate: true,
+  bleAdvKeyHashed: true,
+} as const;
 
 export type SightingEmittedPayload = {
   deviceId: string;
@@ -18,10 +26,12 @@ export type SightingEmittedPayload = {
   sighting: {
     id: string;
     macAddress: string;
-    rssi: number;
+    rssi: number | null;
     scannerLat: number | null;
     scannerLng: number | null;
     scannerSource: string | null;
+    seenAt: Date;
+    accuracy: number | null;
     createdAt: Date;
   };
 };
@@ -44,6 +54,10 @@ export class BleTagsService {
     return (this.prisma as any).bleSighting;
   }
 
+  private get alertModel() {
+    return (this.prisma as any).alert;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   setEmitter(emitter: SightingEmitter) {
@@ -57,13 +71,14 @@ export class BleTagsService {
         deletedAt: null,
         model: { in: BLE_DEVICE_MODELS },
       },
+      omit: OMIT_BLE_KEY,
       include: {
         vehicle: {
           select: { id: true, plate: true, brand: true, model: true },
         },
         bleSightings: {
           take: 1,
-          orderBy: { createdAt: 'desc' },
+          orderBy: { seenAt: 'desc' },
           select: {
             id: true,
             macAddress: true,
@@ -71,6 +86,8 @@ export class BleTagsService {
             scannerLat: true,
             scannerLng: true,
             scannerSource: true,
+            seenAt: true,
+            accuracy: true,
             createdAt: true,
           },
         },
@@ -87,6 +104,7 @@ export class BleTagsService {
         deletedAt: null,
         model: { in: BLE_DEVICE_MODELS },
       },
+      omit: OMIT_BLE_KEY,
       include: {
         vehicle: {
           select: { id: true, plate: true, brand: true, model: true },
@@ -110,7 +128,7 @@ export class BleTagsService {
     const [data, total] = await Promise.all([
       this.sightingModel.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { seenAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
       }),
@@ -141,11 +159,30 @@ export class BleTagsService {
       );
     }
 
+    const seenAt = dto.seenAt ? new Date(dto.seenAt) : new Date();
+
+    // Restart do worker no meio de um backfill reenvia a mesma janela de até
+    // 7 dias; sem índice único (um P2002 apareceria pro worker como 500, que
+    // ele trata como falha transiente e reenvia pra sempre), o dedupe é feito
+    // aqui, por aplicação (ver I3).
+    if (dto.hashedAdvKey) {
+      const existente = await this.sightingModel.findFirst({
+        where: {
+          deviceId: device.id,
+          hashedAdvKey: dto.hashedAdvKey,
+          seenAt,
+        },
+      });
+      if (existente) return existente;
+    }
+
     const sighting = await this.sightingModel.create({
       data: {
         deviceId: device.id,
         macAddress: dto.macAddress,
-        rssi: dto.rssi,
+        rssi: dto.rssi ?? null,
+        accuracy: dto.accuracy ?? null,
+        seenAt,
         hashedAdvKey: dto.hashedAdvKey,
         counterByte: dto.counterByte,
         scannerLat: dto.scannerLat,
@@ -155,10 +192,15 @@ export class BleTagsService {
       },
     });
 
-    await this.deviceModel.update({
-      where: { id: device.id },
-      data: { lastConnection: sighting.createdAt },
-    });
+    // Backfill entrega relatos fora de ordem (até 7 dias de história); só
+    // avança lastConnection, nunca retrocede pra um seenAt mais antigo que o
+    // já registrado (ver I2).
+    if (!device.lastConnection || seenAt > device.lastConnection) {
+      await this.deviceModel.update({
+        where: { id: device.id },
+        data: { lastConnection: seenAt },
+      });
+    }
 
     if (this.emitter) {
       this.emitter(tenantId, {
@@ -173,6 +215,8 @@ export class BleTagsService {
           scannerLat: sighting.scannerLat,
           scannerLng: sighting.scannerLng,
           scannerSource: sighting.scannerSource,
+          seenAt: sighting.seenAt,
+          accuracy: sighting.accuracy,
           createdAt: sighting.createdAt,
         },
       });
@@ -183,5 +227,94 @@ export class BleTagsService {
     );
 
     return sighting;
+  }
+
+  /**
+   * O que o worker deve buscar e com que pressa. Toda a regra de ritmo mora
+   * aqui: o worker não conhece alerta nem veículo, só obedece o intervalo.
+   *
+   * `agora` é injetável para o teste não depender do relógio da máquina.
+   */
+  async getPollingPlan(tenantId: string, agora: Date = new Date()) {
+    const tags = await this.deviceModel.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        model: { in: BLE_DEVICE_MODELS },
+      },
+      select: {
+        imei: true,
+        vehicleId: true,
+        bleAdvKeyPrivate: true,
+        bleAdvKeyHashed: true,
+        bleTurboUntil: true,
+      },
+    });
+
+    const comChave = tags.filter(
+      (t: any) => t.bleAdvKeyPrivate && t.bleAdvKeyHashed,
+    );
+    if (comChave.length === 0) return { tags: [] };
+
+    const alertas = await this.alertModel.findMany({
+      where: {
+        tenantId,
+        status: { in: ['OPEN', 'IN_PROGRESS'] },
+        vehicleId: {
+          in: comChave.map((t: any) => t.vehicleId).filter(Boolean),
+        },
+      },
+      select: { vehicleId: true, type: true },
+    });
+
+    const porVeiculo = new Map<string, string[]>();
+    for (const a of alertas) {
+      const lista = porVeiculo.get(a.vehicleId) ?? [];
+      lista.push(a.type);
+      porVeiculo.set(a.vehicleId, lista);
+    }
+
+    return {
+      tags: comChave.map((t: any) => {
+        const decisao = decidirModo({
+          alertasAbertos: t.vehicleId
+            ? (porVeiculo.get(t.vehicleId) ?? [])
+            : [],
+          turboUntil: t.bleTurboUntil,
+          agora,
+        });
+        return {
+          deviceImei: t.imei,
+          privateKey: t.bleAdvKeyPrivate,
+          hashedAdvKey: t.bleAdvKeyHashed,
+          mode: decisao.modo as ModoPolling,
+          intervalSeconds: decisao.intervalSeconds,
+          backfillHours: decisao.backfillHours,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Liga o ritmo acelerado por decisão do operador — para o caso em que a
+   * suspeita chega por telefone antes de qualquer alerta automático.
+   */
+  async acionarTurbo(id: string, tenantId: string, agora: Date = new Date()) {
+    await this.findOne(id, tenantId);
+
+    const bleTurboUntil = new Date(
+      agora.getTime() + TURBO_MANUAL_H * 60 * 60 * 1000,
+    );
+
+    await this.deviceModel.update({
+      where: { id },
+      data: { bleTurboUntil },
+    });
+
+    this.logger.log(
+      `Ritmo acelerado ligado na TAG ${id} até ${bleTurboUntil.toISOString()}`,
+    );
+
+    return { bleTurboUntil };
   }
 }

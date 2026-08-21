@@ -217,9 +217,18 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     setBleTags((prev) =>
       prev.map((tag) => {
         if (tag.id !== event.deviceId) return tag;
+
+        // Backfill entrega até 7 dias de histórico fora de ordem: só troca o
+        // sighting exibido e o lastConnection quando o novo seenAt é mais
+        // recente que o que já está na tela — senão a posição "pula" pro
+        // passado (ver C2/I2).
+        const seenAtAtual = tag.bleSightings[0]?.seenAt;
+        const maisRecente = !seenAtAtual || event.sighting.seenAt > seenAtAtual;
+        if (!maisRecente) return tag;
+
         return {
           ...tag,
-          lastConnection: event.sighting.createdAt,
+          lastConnection: event.sighting.seenAt,
           bleSightings: [event.sighting, ...tag.bleSightings].slice(0, 1),
         };
       }),
