@@ -63,6 +63,33 @@ services:
       retries: 5
       start_period: 60s
 
+  geocoder:
+    image: traccar/traccar-geocoder:latest
+    container_name: r21go-geocoder
+    environment:
+      # Extrato do Brasil por padrão (Geofabrik). Pra teste local rápido, use
+      # um extrato pequeno, ex.: GEOCODER_PBF_URLS=https://download.geofabrik.de/europe/monaco-latest.osm.pbf
+      # (build em ~90s, contra horas pro Brasil inteiro — ver docs/RUNBOOK-GEOCODER.md).
+      PBF_URLS: ${GEOCODER_PBF_URLS:-https://download.geofabrik.de/south-america/brazil-latest.osm.pbf}
+    ports:
+      # Publicado só pro dev abrir o navegador e criar a conta admin +
+      # gerar o token (POST /login, POST /tokens) — sem porta aberta isso só
+      # dá pra fazer via `docker exec` + curl. Em produção o backend fala com
+      # o geocoder pela rede interna do Docker Swarm, sem publicar porta
+      # nenhuma (ver docs/RUNBOOK-GEOCODER.md, seção "Criar o admin antes de
+      # a porta ficar acessível" — o primeiro /login que chegar vira dono).
+      - "3011:3000"
+    volumes:
+      - geocoder_data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/login > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
   nginx:
     image: nginx:alpine
     container_name: r21go-nginx
@@ -84,6 +111,7 @@ volumes:
   postgres_data:
   redis_data:
   traccar_data:
+  geocoder_data:
 
 networks:
   app-network:
