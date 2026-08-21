@@ -64,7 +64,11 @@ services:
       start_period: 60s
 
   geocoder:
-    image: traccar/traccar-geocoder:latest
+    # Pinado em 1.0.8 (mesmo digest de :latest em 21/08/2026, conferido em
+    # hub.docker.com) — o backend depende do formato de resposta desta
+    # versão (sem ISO3166-2-lvl4, key como query param); :latest podia trocar
+    # isso silenciosamente num redeploy.
+    image: traccar/traccar-geocoder:1.0.8
     container_name: r21go-geocoder
     environment:
       # Extrato do Brasil por padrão (Geofabrik). Pra teste local rápido, use
@@ -89,7 +93,10 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/login > /dev/null 2>&1 || exit 1"]
+      # Esta imagem (Debian bookworm) não tem wget — só curl. wget aqui
+      # deixaria o container permanentemente "unhealthy" (confirmado rodando
+      # a imagem: `which wget` falha, `which curl` acha /usr/bin/curl).
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/login > /dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
