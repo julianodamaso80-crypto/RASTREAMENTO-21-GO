@@ -11,6 +11,13 @@ import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
 
 const BLE_DEVICE_MODELS = ['BLE_KTAG', 'BLE_REDTAG', 'BLE_AIRTAG_GENERIC'];
 
+// Chave privada da TAG: nunca pode voltar em listagem. Só sai do banco pela
+// rota de plano de polling (getPollingPlan), que escolhe os campos a dedo.
+const OMIT_BLE_KEY = {
+  bleAdvKeyPrivate: true,
+  bleAdvKeyHashed: true,
+} as const;
+
 export type SightingEmittedPayload = {
   deviceId: string;
   deviceImei: string;
@@ -64,6 +71,7 @@ export class BleTagsService {
         deletedAt: null,
         model: { in: BLE_DEVICE_MODELS },
       },
+      omit: OMIT_BLE_KEY,
       include: {
         vehicle: {
           select: { id: true, plate: true, brand: true, model: true },
@@ -96,6 +104,7 @@ export class BleTagsService {
         deletedAt: null,
         model: { in: BLE_DEVICE_MODELS },
       },
+      omit: OMIT_BLE_KEY,
       include: {
         vehicle: {
           select: { id: true, plate: true, brand: true, model: true },
