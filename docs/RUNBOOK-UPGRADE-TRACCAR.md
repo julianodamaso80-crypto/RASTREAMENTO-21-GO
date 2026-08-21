@@ -136,17 +136,25 @@ Numa máquina qualquer com Docker (o próprio droplet ou sua máquina — só n�
 o Postgres de produção):
 
 ```bash
+# Extrair usuário e senha REAIS do traccar.xml de produção — se o Postgres
+# de ensaio não aceitar as mesmas credenciais que o traccar.xml carrega
+# (seção 3.3 só troca o host), o Traccar de teste nunca conecta e a
+# migração Liquibase, que é o motivo de existir esta seção, nunca roda.
+DB_USER=$(grep -oP "(?<=<entry key='database.user'>).*(?=</entry>)" traccar-producao.xml)
+DB_PASSWORD=$(grep -oP "(?<=<entry key='database.password'>).*(?=</entry>)" traccar-producao.xml)
+
 docker network create traccar-ensaio-net 2>/dev/null || true
 
 docker run -d --name pg-ensaio --network traccar-ensaio-net \
-  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=<nome-do-banco> \
+  -e POSTGRES_USER="$DB_USER" -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+  -e POSTGRES_DB=<nome-do-banco> \
   postgres:17
 
 # esperar aceitar conexão antes do restore
-until docker exec pg-ensaio pg_isready -U postgres; do sleep 2; done
+until docker exec pg-ensaio pg_isready -U "$DB_USER"; do sleep 2; done
 
 docker cp traccar-ensaio.dump pg-ensaio:/tmp/
-docker exec pg-ensaio pg_restore -U postgres -d <nome-do-banco> \
+docker exec pg-ensaio pg_restore -U "$DB_USER" -d <nome-do-banco> \
   --clean --if-exists /tmp/traccar-ensaio.dump
 ```
 
@@ -181,13 +189,19 @@ no banco real.
 ### 3.4 Contrato REST contra a cópia restaurada
 
 A cópia já tem os usuários reais de produção — não criar usuário novo, usar
-as credenciais reais (mesmas do 1Password usadas na seção 6):
+as credenciais reais (mesmas do 1Password usadas na seção 6). Usar
+`--base-url`, não `TRACCAR_BASE_URL`: se `TRACCAR_API_URL` já estiver
+exportada no shell apontando pra produção (é o nome de variável que o
+próprio backend usa), ela tem prioridade sobre `TRACCAR_BASE_URL` e o
+ensaio local rodaria contra produção sem avisar. `--base-url` sempre
+vence, então é a única forma segura de garantir que este comando roda
+contra `localhost:18092`:
 
 ```bash
-TRACCAR_BASE_URL=http://localhost:18092/api \
-TRACCAR_EMAIL=admin@rastreamento21go.com.br \
-TRACCAR_PASSWORD='<no 1Password>' \
-python scripts/traccar-contrato.py
+python scripts/traccar-contrato.py \
+  --base-url http://localhost:18092/api \
+  --email admin@rastreamento21go.com.br \
+  --password '<no 1Password>'
 ```
 
 Esperado: `18/18 OK`, saída `0` — agora contra dados reais, não um banco
@@ -196,12 +210,23 @@ tocar em produção.
 
 ### 3.5 Descartar o ambiente de ensaio
 
-Nada aqui tocou produção — é só derrubar:
+Nada aqui tocou produção — é só derrubar. Isto inclui apagar TODA cópia do
+dump e do `traccar.xml`, local e no droplet: o dump é uma cópia integral
+dos dados de clientes, e `traccar-producao.xml`/`traccar-ensaio.xml`
+carregam `database.user`/`database.password` reais de produção — nenhum
+dos dois pode ficar pra trás em disco depois que o ensaio termina.
 
 ```bash
 docker rm -f traccar-upgrade-teste pg-ensaio
 docker network rm traccar-ensaio-net
-rm traccar-ensaio.dump traccar-ensaio.xml
+
+# apagar as cópias que ficaram no droplet (seção 3.1, passos 3 e 4)
+ssh -i ~/.ssh/claude_21go root@167.71.31.77 \
+  'rm -f /root/traccar-ensaio.dump /root/traccar-producao.xml'
+
+# apagar as cópias locais — inclui traccar-producao.xml, que a seção 3.1
+# trouxe por scp e a limpeza anterior deste runbook esquecia
+rm -f traccar-ensaio.dump traccar-ensaio.xml traccar-producao.xml
 ```
 
 ---
@@ -293,11 +318,16 @@ docker exec $(docker ps -q -f name=traccar-rastreamento) \
 ```
 
 ```bash
-# 4. Contrato REST contra a produção real (mesmo script, mesma checagem)
-TRACCAR_BASE_URL=https://traccar.trackgo.site/api \
-TRACCAR_EMAIL=admin@rastreamento21go.com.br \
-TRACCAR_PASSWORD='<no 1Password>' \
-python scripts/traccar-contrato.py
+# 4. Contrato REST contra a produção real (mesmo script, mesma checagem).
+#    --base-url (não TRACCAR_BASE_URL) garante que o alvo é este e não um
+#    TRACCAR_API_URL esquecido no ambiente; --sim-eu-sei-que-nao-e-local
+#    confirma que rodar contra produção de verdade é intencional — o
+#    script recusa por padrão contra qualquer alvo que não seja localhost.
+python scripts/traccar-contrato.py \
+  --base-url https://traccar.trackgo.site/api \
+  --email admin@rastreamento21go.com.br \
+  --password '<no 1Password>' \
+  --sim-eu-sei-que-nao-e-local
 ```
 
 ```bash
