@@ -29,6 +29,35 @@ function toPositionDto(p: TraccarPosition) {
   };
 }
 
+/**
+ * Allowlist do que o associado pode ver do próprio veículo. Nunca espalhar o
+ * registro do Prisma aqui: IMEI, local de instalação, técnico e estoque são
+ * função de time interno e não saem por /app/* em hipótese nenhuma.
+ */
+function toVehicleDto(v: {
+  id: string;
+  plate: string;
+  vehicleType: unknown;
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+  year: number | null;
+  status: unknown;
+  traccarDeviceId: number | null;
+}) {
+  return {
+    id: v.id,
+    plate: v.plate,
+    vehicleType: v.vehicleType,
+    brand: v.brand,
+    model: v.model,
+    color: v.color,
+    year: v.year,
+    status: v.status,
+    traccarDeviceId: v.traccarDeviceId,
+  };
+}
+
 @Injectable()
 export class AppDataService {
   constructor(
@@ -59,7 +88,7 @@ export class AppDataService {
       .filter((id): id is number => id !== null);
 
     if (deviceIds.length === 0) {
-      return vehicles.map((v) => ({ ...v, position: null, connection: null }));
+      return vehicles.map((v) => ({ ...toVehicleDto(v), position: null, connection: null }));
     }
 
     // Posição (GPS real) e device (status de conexão = heartbeat) são fontes
@@ -80,7 +109,7 @@ export class AppDataService {
         ? devByDevice.get(v.traccarDeviceId)
         : undefined;
       return {
-        ...v,
+        ...toVehicleDto(v),
         position: pos ? toPositionDto(pos) : null,
         connection: dev
           ? { status: dev.status, lastUpdate: dev.lastUpdate }
