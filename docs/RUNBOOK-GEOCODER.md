@@ -33,10 +33,22 @@ resposta **compatível com o formato do Nominatim** (`display_name` e
 backend é uma troca de provedor, não uma reescrita — ver `GEOCODER_URL` e
 `GEOCODER_API_KEY` abaixo.
 
-**A troca é opt-in e reversível a qualquer momento**: com as duas variáveis
-vazias, o backend continua batendo no Nominatim exatamente como hoje. Isso não
-é um detalhe — é o que garante que o endereço não para de funcionar se o
-geocoder cair ou nunca tiver sido implantado.
+**A troca é opt-in a qualquer momento**: com as duas variáveis vazias, o
+backend continua batendo no Nominatim exatamente como hoje.
+
+**E também é resiliente em runtime.** Com o geocoder próprio configurado, se
+uma consulta falhar (erro de rede, status não-OK, corpo que não parseia) ou o
+provedor estiver de castigo por um `429` anterior, `ReverseGeocodeService`
+cai pro Nominatim nessa MESMA consulta — uma tentativa, nunca em loop (ver
+`resolver()` em [reverse-geocode.service.ts](../backend/src/modules/geocoding/reverse-geocode.service.ts)).
+Cada provedor tem seu próprio castigo (`bloqueadoAteProprio` /
+`bloqueadoAteNominatim`) — um `429` de um nunca silencia o outro.
+
+**Limite disso:** a chamada de fallback ainda respeita o portão de 1 req/s do
+Nominatim (a política do OSM não deixa de valer só porque chegamos até ele via
+fallback). Numa indisponibilidade total do geocoder próprio, o endereço volta
+a resolver — mas no ritmo lento de sempre, não instantaneamente. Ver seção 7.4
+para o que observar quando isso está acontecendo.
 
 ---
 
@@ -185,13 +197,16 @@ endereço válido pro mesmo ponto. Formas de confirmar qual provedor respondeu:
   próprio está ativo.
 - **Desligar o geocoder de propósito** (`docker service scale
   ..._geocoder-rastreamento=0`) num ambiente de teste e confirmar que o
-  endereço para de resolver — se continuasse resolvendo com o geocoder fora
-  do ar, a variável não estava realmente sendo lida.
+  **fallback entra em ação** — o endereço continua resolvendo, só que no
+  ritmo do Nominatim (1 por segundo) em vez de instantâneo. Se o endereço
+  **parar** de resolver com o geocoder próprio fora do ar, é o fallback que
+  quebrou — o comportamento esperado é degradar, nunca parar.
 - **Log de erro do provedor, se algo falhar.** As mensagens de warning que o
   serviço emite em caso de `429` ou resposta não-OK citam o provedor pelo nome
-  (`"Geocoder próprio recusou..."` vs. `"Nominatim recusou..."`) — não aparece
-  nada em requisição que deu certo, mas se o backend estiver caindo em algum
-  provedor errado, é aqui que aparece:
+  (`"Geocoder próprio respondeu..."`, `"Geocoder próprio falhou..."` vs.
+  `"Nominatim respondeu..."`, `"Nominatim falhou..."`) — não aparece nada em
+  requisição que deu certo, mas se o backend estiver caindo no fallback com
+  frequência, é aqui que aparece:
 
 ```bash
 docker service logs --tail 200 rastreamento-21-go_backend-rastreamento | grep -i "geocoder próprio\|nominatim"
@@ -211,6 +226,34 @@ esse mesmo container: `"Gallerie Charles Despeaux - Monte-Carlo, Monaco"` —
 confirma que o parsing, a montagem do endereço e a chamada HTTP real fecham
 ponta a ponta.
 
+### 7.4 Enquanto estiver em produção — o que observar quando o geocoder cair
+
+O fallback é silencioso por desenho: quando o geocoder próprio falha, o
+operador que só olha a tela **não percebe nada** — o endereço continua
+aparecendo. É exatamente por isso que "degradado, mas funcionando" é fácil de
+passar batido. Sinais de que o fallback está ativo (não de que algo parou):
+
+- **Log de warning repetido** com `"Geocoder próprio respondeu..."` ou
+  `"Geocoder próprio falhou..."` seguido, logo depois, de uma chamada ao
+  Nominatim para a mesma coordenada — é o padrão esperado de uma consulta que
+  caiu no fallback.
+- **Lentidão perceptível na primeira resolução de cada endereço novo.** Com o
+  geocoder próprio no ar, a resolução é em milissegundos, na rede interna. Em
+  fallback, cada endereço novo (o cache por proximidade continua valendo para
+  os já resolvidos) passa a esperar o portão de 1 req/s do Nominatim — em um
+  parque com muitos veículos se movendo ao mesmo tempo, isso é visível como
+  atraso pra aparecer o endereço de ativos recém-instalados ou fora da área já
+  cacheada.
+- **`bloqueadoAteProprio` sistematicamente no futuro** (não observável direto,
+  mas o sintoma é: toda consulta do período cai em fallback, não só uma
+  isolada) indica que o geocoder próprio está recusando por excesso de
+  chamadas (`429`) ou fora do ar — vale checar `docker service ps
+  ..._geocoder-rastreamento` nesse caso.
+
+Nenhum alerta automático dispara nesse cenário — hoje a única forma de saber
+que o geocoder próprio está indisponível é olhar os logs acima ou notar a
+lentidão.
+
 ---
 
 ## 8. Rollback
@@ -229,6 +272,39 @@ endereço, o backend volta a bater no Nominatim público — nenhum dado é
 perdido: o cache de endereços já resolvidos (`geo_addresses`) continua válido
 independente de qual provedor o gerou, porque o formato salvo é o mesmo texto
 formatado (`rua - bairro, cidade - UF`) nos dois casos.
+
+---
+
+## 9. Limitação conhecida — o Nominatim público não fica vago
+
+Este runbook tira a maior parte do tráfego de geocodificação reversa (mapa,
+listas de veículos) do Nominatim público. Mas **dois outros consumidores no
+mesmo egress IP continuam batendo lá**, e nenhum dos dois pode migrar para o
+geocoder próprio hoje:
+
+- [backend/src/modules/installation-pendings/geocoding.service.ts](../backend/src/modules/installation-pendings/geocoding.service.ts)
+  (`viaNominatim`, ~linha 113-140) faz **geocodificação direta** (endereço →
+  coordenada, `/search`) para resolver CEP em coordenada quando a AwesomeAPI
+  não cobre. O `traccar-geocoder` self-hosted **não tem endpoint `/search`** —
+  só `/reverse` e `/snap` (ver
+  [etapa3-geocoder-evidencias.md](../.superpowers/sdd/etapa3-geocoder-evidencias.md)).
+  Não há para onde migrar esse consumidor sem trocar de motor.
+- [docker/traccar/traccar.xml](../docker/traccar/traccar.xml) (~linha 44-46)
+  configura o **próprio Traccar** para geocodificar contra
+  `nominatim.openstreetmap.org` — independente do backend, com sua própria
+  política de uso.
+
+**Consequência.** Se o OpenStreetMap resolver bloquear ou throttlar o IP do
+droplet por causa de qualquer um desses dois caminhos, o fallback deste
+runbook (seção 1 e 7.4) degrada exatamente no momento em que mais precisa
+funcionar — porque o Nominatim, que é o destino do fallback, é o mesmo que
+está sendo throttled pelos outros dois consumidores.
+
+**Antes de considerar isso resolvido em produção**, checar se o
+`traccar.xml` **publicado no droplet** (bind mount, não commitado neste repo)
+tem a mesma configuração `geocoder.type=nominatim` do arquivo de dev — só a
+cópia de dev está visível aqui, e a de produção pode já ter sido alterada ou
+não.
 
 ---
 
