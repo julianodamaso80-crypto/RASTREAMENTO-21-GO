@@ -45,12 +45,14 @@ Este documento é a fonte única de referência **técnica de desenvolvimento**.
 |---|---|---|
 | Frontend | Next.js (App Router), React, Tailwind, shadcn/ui, MapLibre GL JS, Socket.io-client | 16.2 / 19 / 4 |
 | Backend | NestJS, Prisma, Passport JWT, Socket.io, Pino, Swagger, class-validator | 11 / 7.6 |
-| Motor GPS | Traccar (REST + WebSocket) | 6.14.5 |
+| Motor GPS | Traccar (REST + WebSocket) | 6.14.5¹ |
 | Banco | PostgreSQL | 17 |
 | Cache | Redis | 7 |
 | Integração | Hinova SGA (mock em dev) | v2 |
 | Infra dev | Docker Compose local | — |
 | Infra prod | Docker Swarm + Traefik via EasyPanel | — |
+
+¹ Versão do [docker/docker-compose.yml](../../docker/docker-compose.yml), usada em dev. Alvo do upgrade documentado em [docs/RUNBOOK-UPGRADE-TRACCAR.md](../../docs/RUNBOOK-UPGRADE-TRACCAR.md) — **produção continua em `6.5`** até alguém com acesso SSH executar o runbook. Comportamento exclusivo da 6.14 (filtro por device/grupo, `tc_actions`, write batching) não está disponível em produção; confira `GET /api/server` antes de presumir que já rodou.
 
 ### Conceitos-chave
 
