@@ -216,7 +216,7 @@ export class AssociateAuthService {
           `Login bloqueado (sem rastreador instalado): CPF ...${cpf.slice(-4)}`,
         );
         throw new UnauthorizedException(
-          'Nenhum rastreador instalado vinculado ao seu CPF. Fale com a sua associação.',
+          'Nenhum rastreador instalado vinculado ao seu cadastro. Fale com a sua associação.',
         );
       }
 

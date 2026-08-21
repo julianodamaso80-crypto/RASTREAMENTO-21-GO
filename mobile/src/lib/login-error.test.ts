@@ -34,7 +34,7 @@ describe('explicarFalhaDeLogin', () => {
           status: 401,
           data: {
             message:
-              'Nenhum rastreador instalado vinculado ao seu CPF. Fale com a sua associação.',
+              'Nenhum rastreador instalado vinculado ao seu cadastro. Fale com a sua associação.',
           },
         },
       },
