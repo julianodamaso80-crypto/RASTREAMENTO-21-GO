@@ -173,8 +173,8 @@ export default function EtiquetasBlePage() {
                     <th className="px-4 py-3 font-medium">TAG</th>
                     <th className="px-4 py-3 font-medium">Modelo</th>
                     <th className="px-4 py-3 font-medium">Veículo</th>
-                    <th className="px-4 py-3 font-medium">RSSI</th>
-                    <th className="px-4 py-3 font-medium">Scanner</th>
+                    <th className="px-4 py-3 font-medium">Sinal</th>
+                    <th className="px-4 py-3 font-medium">Origem</th>
                     <th className="px-4 py-3 font-medium">Última detecção</th>
                   </tr>
                 </thead>

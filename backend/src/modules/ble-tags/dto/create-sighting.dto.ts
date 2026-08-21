@@ -51,6 +51,7 @@ export class CreateSightingDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(50000)
   accuracy?: number;
 
   @ApiPropertyOptional({
