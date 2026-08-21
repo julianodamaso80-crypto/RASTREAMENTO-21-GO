@@ -20,6 +20,15 @@ class Outbox:
         self._pasta = Path(pasta)
         self._pasta.mkdir(parents=True, exist_ok=True)
         self._pasta_corrompidos = self._pasta / "corrompidos"
+        self._varrer_tmp_orfaos()
+
+    def _varrer_tmp_orfaos(self) -> None:
+        """O worker cria seu Outbox no boot. Qualquer .tmp presente nesse
+        momento só pode ser resto de um write_text/os.replace interrompido
+        por um processo que já morreu (ex.: OOM kill) — não há relógio nem
+        TTL envolvido, a própria existência do arquivo já prova isso."""
+        for tmp in self._pasta.glob("*.tmp"):
+            self._colocar_em_quarentena(tmp, "escrita interrompida por queda do processo")
 
     def guardar(self, payload: dict) -> Path:
         caminho = self._pasta / f"{uuid.uuid4().hex}.json"
@@ -33,12 +42,12 @@ class Outbox:
         for caminho in sorted(self._pasta.glob("*.json")):
             try:
                 itens.append((caminho, json.loads(caminho.read_text(encoding="utf-8"))))
-            except json.JSONDecodeError:
-                self._colocar_em_quarentena(caminho)
+            except (json.JSONDecodeError, UnicodeDecodeError) as erro:
+                self._colocar_em_quarentena(caminho, str(erro))
         return itens
 
-    def _colocar_em_quarentena(self, caminho: Path) -> None:
-        logger.warning("relatório corrompido movido para quarentena: %s", caminho)
+    def _colocar_em_quarentena(self, caminho: Path, motivo: str) -> None:
+        logger.warning("relatório corrompido movido para quarentena (%s): %s", motivo, caminho)
         self._pasta_corrompidos.mkdir(parents=True, exist_ok=True)
         os.replace(caminho, self._pasta_corrompidos / caminho.name)
 

@@ -1,3 +1,5 @@
+import uuid
+
 from findmy_worker.outbox import Outbox
 
 
@@ -76,3 +78,40 @@ def test_guardar_nao_deixa_tmp_solto_em_pendentes(tmp_path):
 
     assert list(tmp_path.glob("*.tmp")) == []
     assert len(caixa.pendentes()) == 1
+
+
+def test_tmp_orfao_e_colocado_em_quarentena_ao_construir_outbox(tmp_path):
+    """Processo morto entre write_text e os.replace deixa um .tmp solto.
+    O construtor varre a pasta no boot e coloca isso em quarentena, porque
+    nesse momento o .tmp só pode pertencer a um processo que já morreu."""
+    orfao = tmp_path / f"{uuid.uuid4().hex}.tmp"
+    orfao.write_text('{"deviceImei": "1"}', encoding="utf-8")
+
+    Outbox(tmp_path)
+
+    assert not orfao.exists()
+    assert (tmp_path / "corrompidos" / orfao.name).exists()
+
+
+def test_varredura_do_construtor_nao_mexe_em_json_valido_ao_lado(tmp_path):
+    Outbox(tmp_path).guardar({"deviceImei": "1"})
+    orfao = tmp_path / f"{uuid.uuid4().hex}.tmp"
+    orfao.write_text('{"deviceImei": "2"}', encoding="utf-8")
+
+    caixa = Outbox(tmp_path)
+
+    assert len(caixa.pendentes()) == 1
+
+
+def test_arquivo_com_utf8_invalido_e_colocado_em_quarentena_por_pendentes(tmp_path):
+    caixa = Outbox(tmp_path)
+    caixa.guardar({"deviceImei": "1"})
+    invalido = tmp_path / "invalido.json"
+    invalido.write_bytes(b"\xff\xfe\x00nao-e-utf8")
+
+    pendentes = caixa.pendentes()
+
+    assert len(pendentes) == 1
+    assert pendentes[0][1]["deviceImei"] == "1"
+    assert not invalido.exists()
+    assert (tmp_path / "corrompidos" / "invalido.json").exists()
