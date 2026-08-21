@@ -60,3 +60,6 @@ mobile/credentials.json
 
 # Artefatos de sessao do Playwright MCP (screenshots, logs de console, snapshots)
 .playwright-mcp/
+
+# binarios das lojas (entregues fora do git)
+mobile/store/play/builds/
