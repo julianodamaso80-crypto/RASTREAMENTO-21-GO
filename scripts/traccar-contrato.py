@@ -65,6 +65,7 @@ código de saída não-zero se qualquer passo falhar.
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -134,7 +135,12 @@ class Contrato:
     def __init__(self, client: TraccarClient):
         self.client = client
         self.resultados = []  # (nome, ok, detalhe)
-        self.criados = {"device_id": None, "geofence_id": None, "user_id": None}
+        self.criados = {
+            "device_id": None,
+            "device_unique_id": None,
+            "geofence_id": None,
+            "user_id": None,
+        }
         self.permissao_vinculada = False
 
     def passo(self, nome, fn):
@@ -152,6 +158,15 @@ class Contrato:
     def esperar_status(self, status, esperados, contexto):
         if status not in esperados:
             raise ContratoError(f"esperava {esperados}, veio {status} ({contexto})")
+
+    def _capturar_id_defensivo(self, chave, raw):
+        """Guarda o id do recurso assim que possível — o POST já criou o
+        recurso no servidor (status conferido antes de chamar isto). Se o
+        parse completo do JSON falhar logo em seguida, limpar() ainda precisa
+        do id pra não deixar um `contrato-teste-*` esquecido em produção."""
+        match = re.search(rb'"id"\s*:\s*(\d+)', raw)
+        if match:
+            self.criados[chave] = int(match.group(1))
 
     # --- passos individuais ---
 
@@ -201,8 +216,10 @@ class Contrato:
                 data={"name": "contrato-teste-device", "uniqueId": unique_id},
             )
             self.esperar_status(status, {200}, "POST /devices")
+            self._capturar_id_defensivo("device_id", raw)
             body = json.loads(raw)
             self.criados["device_id"] = body["id"]
+            self.criados["device_unique_id"] = unique_id
             return f"{status} (id={body['id']})"
 
         return self.passo("POST /devices (criar)", run)
@@ -220,6 +237,29 @@ class Contrato:
             return f"{status}"
 
         return self.passo("GET /devices?id={id}", run)
+
+    def devices_buscar_por_unique_id(self):
+        def run():
+            unique_id = self.criados["device_unique_id"]
+            if unique_id is None:
+                raise ContratoError("pulado: device não foi criado no passo anterior")
+            # mesmo filtro que backend/src/modules/traccar/traccar.service.ts
+            # (getDeviceByUniqueId) usa no fluxo de instalação — versão-dependente,
+            # cai num 400 se a API não suportar mais o filtro server-side.
+            status, raw = self.client.get("/devices", params={"uniqueId": unique_id})
+            self.esperar_status(status, {200}, "GET /devices?uniqueId=")
+            body = json.loads(raw)
+            if not body or not any(d.get("uniqueId") == unique_id for d in body):
+                raise ContratoError(
+                    "200 mas a resposta não contém o device pedido — regressão "
+                    "silenciosa: getDeviceByUniqueId cairia no fallback de escanear "
+                    "a frota inteira a cada 'conferir GPS' do técnico"
+                )
+            return f"{status}"
+
+        return self.passo(
+            "GET /devices?uniqueId={imei} (getDeviceByUniqueId)", run
+        )
 
     def devices_atualizar(self):
         def run():
@@ -298,6 +338,7 @@ class Contrato:
                 },
             )
             self.esperar_status(status, {200}, "POST /geofences")
+            self._capturar_id_defensivo("geofence_id", raw)
             body = json.loads(raw)
             self.criados["geofence_id"] = body["id"]
             return f"{status} (id={body['id']})"
@@ -366,6 +407,7 @@ class Contrato:
                 },
             )
             self.esperar_status(status, {200}, "POST /users")
+            self._capturar_id_defensivo("user_id", raw)
             body = json.loads(raw)
             self.criados["user_id"] = body["id"]
             return f"{status} (id={body['id']})"
@@ -460,6 +502,7 @@ def main():
         contrato.devices_listar()
         contrato.devices_criar()
         contrato.devices_buscar_por_id()
+        contrato.devices_buscar_por_unique_id()
         contrato.devices_atualizar()
         contrato.positions()
         contrato.reports_summary()
