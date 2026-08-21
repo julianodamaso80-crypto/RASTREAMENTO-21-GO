@@ -133,3 +133,30 @@ Qualquer acesso de "manutenção" reusa `gps2`.
 - Tokens emitidos antes de 2026-04-13 13:12 UTC estão inválidos — usuários ativos precisam fazer login novamente.
 - Atualização feita via `docker service update --env-add` (não via UI do EasyPanel) por causa da incompatibilidade `MDB_VERSION_MISMATCH` (ver ADR-006). **Followup manual:** replicar o valor na UI do EasyPanel antes do próximo deploy via painel, senão o valor antigo reverte.
 - Todo doc/checklist que mencionava "trocar JWT_SECRET em produção" como TODO pode ser removido (já feito).
+
+---
+
+## ADR-009: Manter a integração própria do Google Maps Tiles — não adotar o plugin `traccar/maplibre-google-maps`
+
+**Data:** 2026-08-21
+**Status:** Ativa
+
+**Contexto.** A fila de melhorias trazia o item "trocar o hack de tiles do Google pelo plugin oficial `traccar/maplibre-google-maps`", partindo da suposição de que um plugin mantido pela comunidade Traccar bateria a integração própria. A investigação leu os dois lados: nosso código em [backend/src/modules/map/map.service.ts](../backend/src/modules/map/map.service.ts), [frontend/dashboard/src/lib/basemap.ts](../frontend/dashboard/src/lib/basemap.ts) e [frontend/dashboard/src/components/map/google-attribution.tsx](../frontend/dashboard/src/components/map/google-attribution.tsx), e o source do plugin (`index.js`, 1946 bytes).
+
+**Decisão.** Manter a integração própria. Não adotar o plugin.
+
+**Razão**, em ordem de peso:
+
+1. **Exposição da chave.** O plugin monta a URL do tile como `google://{mapType}/{z}/{x}/{y}?key=${key}` — a API key viaja pro browser. Na nossa implementação a sessão é criada no backend (`MapService.createSession` em `map.service.ts`) e só o token de sessão chega ao front; a chave nunca sai do servidor.
+2. **`maxzoom: 19` hardcoded anula o motivo de pagar pelo Google.** O Esri (grátis) já cobre o Brasil até z19 — é exatamente por isso que contratamos o Google, para a faixa acima disso (nossa source declara `maxzoom: 22`, ver `map.service.ts`). Um plugin que trava em z19 não serve nenhum pixel do que hoje pagamos ao Google.
+3. **Sem `minzoom` multiplica o custo.** Nosso estilo em duas camadas só ativa a source do Google a partir de um piso de zoom configurável (`GOOGLE_MAPS_MIN_ZOOM`, mecanismo usado em `basemap.ts`/`resolveSatelliteStyle`); o comentário no próprio `map.service.ts` registra a medição de uma sessão real de operador — 31% dos tiles ficam em z≥20, e cobrar só ali corta ~2/3 da conta. O plugin não tem `minzoom`: busca tiles do Google em todo nível de zoom, sempre, sem opção de restringir à faixa cara.
+4. **Sem fallback — risco de tela em branco (Regra 0).** O plugin é uma única raster layer; tile do Google falhou, buraco preto. Nossa `resolveSatelliteStyle` (`basemap.ts`) desenha o Esri por baixo de propósito — se um tile do Google falhar, aparece a imagem do Esri em vez de nada — e cai pro Esri inteiro quando a sessão não existe ou a API do Google falha. O mapa nunca pode ficar em branco durante um rastreamento ao vivo.
+5. **Atribuição fixa, política pede atribuição dinâmica.** O plugin fixa a string `© Google Maps`. A política da Map Tiles API exige a atribuição do viewport atual, buscada por chamada própria — é o que `MapService.getViewportAttribution` faz, renderizado pelo componente `GoogleMapsAttribution` com o logo oficial.
+
+Diferenças menores na mesma direção: o plugin fixa `language: "en-US"` / `region: "US"` na sessão (a nossa manda `pt-BR`/`BR`); e cacheia a sessão num objeto de módulo sem tratar expiração, enquanto `MapService` renova 24h antes do vencimento (`RENEW_MARGIN_MS`).
+
+**Quando revisitar.** Se o plugin ganhar um `maxzoom` configurável e algum jeito de manter a chave fora do browser (sessão criada por trás de um backend), vale reavaliar. Isso não é um veredito de qualidade do plugin — pra um mapa simples que só quer a imagem do Google, sem apuro de custo por zoom e sem backend próprio pra sessão, ele resolve bem. Só não serve o requisito que nos fez pagar pelo Google Tiles em primeiro lugar: cobrar só onde o Esri não alcança.
+
+**Consequências.**
+- Continuamos mantendo a integração própria (`map.service.ts` + `basemap.ts` + `google-attribution.tsx`) em vez de trocar por uma dependência de terceiro.
+- O item "plugin `maplibre-google-maps`" da fila de melhorias de 2026-08-20 fica marcado como decidido (não adotar), registrado aqui pra não ser reaberto sem essa análise.
