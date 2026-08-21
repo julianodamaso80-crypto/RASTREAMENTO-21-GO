@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppApi, AssociateProfile } from '@/lib/api';
 import { useAuth } from '@/lib/auth-store';
-import { maskCpf } from '@/lib/format';
+import { maskDocumento } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 
 export default function ProfileScreen() {
@@ -54,7 +54,7 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.rows}>
-            <Row icon="card-outline" label="CPF" value={maskCpf(profile.cpf)} />
+            <Row icon="card-outline" label={profile.cpf.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'} value={maskDocumento(profile.cpf)} />
             {profile.email ? (
               <Row icon="mail-outline" label="E-mail" value={profile.email} />
             ) : null}
