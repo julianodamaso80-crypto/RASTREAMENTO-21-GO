@@ -45,6 +45,46 @@ function toAssociateDto(a: {
   };
 }
 
+/**
+ * Contrato de `/app/me` — allowlist explícita, mesma regra do
+ * `toAssociateDto`: um campo novo no `select` (senha, nota interna, IP
+ * liberado, segredo do tenant) precisa ser adicionado aqui de propósito pra
+ * sair; por omissão, fica de fora.
+ */
+function toMeDto(a: {
+  id: string;
+  name: string;
+  cpf: string;
+  email: string | null;
+  phone: string | null;
+  tenantId: string;
+  mustChangePassword: boolean;
+  tenant: {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+    primaryColor: string | null;
+  };
+  _count: { vehicles: number };
+}) {
+  return {
+    id: a.id,
+    name: a.name,
+    cpf: a.cpf,
+    email: a.email,
+    phone: a.phone,
+    tenantId: a.tenantId,
+    mustChangePassword: a.mustChangePassword,
+    tenant: {
+      id: a.tenant.id,
+      name: a.tenant.name,
+      logoUrl: a.tenant.logoUrl,
+      primaryColor: a.tenant.primaryColor,
+    },
+    _count: { vehicles: a._count.vehicles },
+  };
+}
+
 
 /**
  * Senha temporária pra ser DITADA no telefone: blocos curtos, sem os caracteres
@@ -289,7 +329,7 @@ export class AssociateAuthService {
     if (!associate) {
       throw new UnauthorizedException('Associado não encontrado');
     }
-    return associate;
+    return toMeDto(associate);
   }
 
   // ---------------------------------------------------------------------------

@@ -71,6 +71,56 @@ describe('contrato do associado — /app/vehicles', () => {
   it('sem rastreador vinculado (traccarDeviceId null), idem', async () => {
     const r = await servico([{ ...veiculoGordo, traccarDeviceId: null }]).getVehicles('a1', 'tn1');
     for (const k of PROIBIDOS) expect(chaves(r[0])).not.toContain(k);
+    expect(chaves(r[0]).sort()).toEqual(
+      ['brand', 'color', 'connection', 'id', 'model', 'plate', 'position', 'status', 'traccarDeviceId', 'vehicleType', 'year'].sort(),
+    );
+  });
+});
+
+describe('contrato do associado — /app/alerts', () => {
+  const alertaGordo = {
+    id: 'al1',
+    type: 'SOS',
+    severity: 'HIGH',
+    message: 'Botão de pânico acionado',
+    status: 'OPEN',
+    read: false,
+    createdAt: new Date(),
+    // tudo abaixo é interno e não pode sair
+    imei: '860000000000001',
+    technicianId: 't1',
+    internalNotes: 'cliente já foi avisado por telefone',
+    vehicle: {
+      id: 'v1',
+      plate: 'ABC1D23',
+      // tudo abaixo é interno e não pode sair
+      imei: '860000000000001',
+      installLocation: 'Atrás do painel, lado esquerdo',
+    },
+  };
+
+  function servicoComAlerta(alerta: any) {
+    const prisma: any = {
+      vehicle: { findMany: jest.fn().mockResolvedValue([{ id: 'v1' }]) },
+      alert: { findMany: jest.fn().mockResolvedValue([alerta]) },
+    };
+    const traccar: any = {
+      getPositions: jest.fn().mockResolvedValue([]),
+      getDevices: jest.fn().mockResolvedValue([]),
+    };
+    return new AppDataService(prisma, traccar);
+  }
+
+  it('nenhum campo interno sai na resposta, nem no alerta nem no veículo aninhado', async () => {
+    const r = await servicoComAlerta(alertaGordo).getAlerts('a1', 'tn1');
+    for (const k of ['imei', 'technicianId', 'internalNotes', 'installLocation']) {
+      expect(chaves(r[0])).not.toContain(k);
+      expect(chaves(r[0].vehicle)).not.toContain(k);
+    }
+    expect(chaves(r[0]).sort()).toEqual(
+      ['id', 'type', 'severity', 'message', 'status', 'read', 'createdAt', 'vehicle'].sort(),
+    );
+    expect(chaves(r[0].vehicle).sort()).toEqual(['id', 'plate'].sort());
   });
 });
 
@@ -122,5 +172,53 @@ describe('contrato do associado — /app/auth/login', () => {
     for (const k of ['password', 'internalNotes', 'allowedIps', 'role', 'technicianId']) {
       expect(chaves(r.associate)).not.toContain(k);
     }
+  });
+});
+
+describe('contrato do associado — /app/me', () => {
+  const meGordo = {
+    id: 'a1',
+    name: 'Fulano',
+    cpf: '08577590780',
+    email: 'fulano@example.com',
+    phone: '5511999998888',
+    tenantId: 'tn1',
+    mustChangePassword: false,
+    // tudo abaixo é interno e não pode sair
+    password: 'hash-secreto',
+    internalNotes: 'cliente difícil, cobrar com cuidado',
+    allowedIps: ['1.2.3.4'],
+    tenant: {
+      id: 'tn1',
+      name: '21 GO',
+      logoUrl: null,
+      primaryColor: '#123456',
+      // tudo abaixo é interno e não pode sair
+      apiSecret: 'segredo-do-tenant',
+    },
+    _count: { vehicles: 2 },
+  };
+
+  function servicoMe(associado: any) {
+    const prisma: any = {
+      associate: { findFirst: jest.fn().mockResolvedValue(associado) },
+    };
+    const jwt: any = { sign: jest.fn().mockReturnValue('tok') };
+    const whatsapp: any = {};
+    return new AssociateAuthService(prisma, jwt, whatsapp);
+  }
+
+  it('nenhum campo interno sai na resposta, nem no topo nem no tenant aninhado', async () => {
+    const r = await servicoMe(meGordo).me('a1');
+    for (const k of ['password', 'internalNotes', 'allowedIps']) {
+      expect(chaves(r)).not.toContain(k);
+    }
+    expect(chaves((r as any).tenant)).not.toContain('apiSecret');
+    expect(chaves(r).sort()).toEqual(
+      ['id', 'name', 'cpf', 'email', 'phone', 'tenantId', 'mustChangePassword', 'tenant', '_count'].sort(),
+    );
+    expect(chaves((r as any).tenant).sort()).toEqual(
+      ['id', 'name', 'logoUrl', 'primaryColor'].sort(),
+    );
   });
 });

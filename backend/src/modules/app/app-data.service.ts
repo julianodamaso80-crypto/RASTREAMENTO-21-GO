@@ -58,6 +58,32 @@ function toVehicleDto(v: {
   };
 }
 
+/**
+ * Allowlist do que o associado pode ver de um alerta. Mesma regra do
+ * toVehicleDto: dado de operação interna nunca sai por /app/*.
+ */
+function toAlertDto(a: {
+  id: string;
+  type: unknown;
+  severity: unknown;
+  message: string;
+  status: unknown;
+  read: boolean;
+  createdAt: Date;
+  vehicle: { id: string; plate: string };
+}) {
+  return {
+    id: a.id,
+    type: a.type,
+    severity: a.severity,
+    message: a.message,
+    status: a.status,
+    read: a.read,
+    createdAt: a.createdAt,
+    vehicle: { id: a.vehicle.id, plate: a.vehicle.plate },
+  };
+}
+
 @Injectable()
 export class AppDataService {
   constructor(
@@ -155,7 +181,7 @@ export class AppDataService {
     const vehicleIds = vehicles.map((v) => v.id);
     if (vehicleIds.length === 0) return [];
 
-    return this.prisma.alert.findMany({
+    const alerts = await this.prisma.alert.findMany({
       where: { vehicleId: { in: vehicleIds }, tenantId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       take: Math.min(limit, 100),
@@ -170,5 +196,6 @@ export class AppDataService {
         vehicle: { select: { id: true, plate: true } },
       },
     });
+    return alerts.map(toAlertDto);
   }
 }
