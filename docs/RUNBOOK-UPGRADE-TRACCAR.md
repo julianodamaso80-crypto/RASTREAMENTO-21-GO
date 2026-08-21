@@ -28,7 +28,7 @@ quem primeiro executa os passos abaixo de verdade.
 
 ---
 
-## 1. Baseline — confirmar que está tudo 200 ANTES de mexer
+## 1. Baseline — confirmar que está tudo saudável ANTES de mexer
 
 Regra do projeto: nunca mexer em produção sem saber o estado de antes. Rodar
 e **anotar** o resultado de cada comando:
