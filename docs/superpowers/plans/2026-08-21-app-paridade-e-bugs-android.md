@@ -31,25 +31,25 @@
 **Interfaces:**
 - Produces: `versionCode` servido pela Play, contagem de logins bloqueados por "sem rastreador instalado", SHA-1 do certificado de upload (usado na Task 2).
 
-- [ ] **Step 1: Pedir ao dono o print da Play com a versão ao vivo**
+- [x] **Step 1: Pedir ao dono o print da Play com a versão ao vivo**
 
 Mensagem exata pro dono: "Abra a página do 21 Tracker na Play Store no celular → 'Sobre este app' → role até 'Versão'. Me manda o print ou o texto." Registrar no rascunho: `Play: versão X.Y.Z`. Se o dono tiver acesso ao Play Console: print de *Versões → Produção → versionCode*.
 
-- [ ] **Step 2: Contar logins bloqueados no backend (últimos 7 dias)**
+- [x] **Step 2: Contar logins bloqueados no backend (últimos 7 dias)**
 
 ```bash
 ssh root@167.71.31.77 'CID=$(docker ps -q -f name=backend-rastreamento | head -1); docker logs --since 168h "$CID" 2>&1 | grep -c "Login bloqueado (sem rastreador instalado)"'
 ```
 Esperado: um inteiro. Anotar. Se > 0, o sintoma "CPF + senha=CPF não entra" tem pelo menos essa causa parcial (mensagem engolida pelo app — Task 3).
 
-- [ ] **Step 3: Contar quem conseguiu logar nos últimos 7 dias**
+- [x] **Step 3: Contar quem conseguiu logar nos últimos 7 dias**
 
 ```bash
 ssh root@167.71.31.77 'PG=$(docker ps -q -f name=postgres-rastreamento | head -1); docker exec "$PG" psql -U postgres -d rastreamento -tAc "select count(*) from associates where last_login_at > now() - interval '"'"'7 days'"'"'"'
 ```
 Esperado: um inteiro. Anotar. (Se o nome do banco/usuário divergir, conferir com `docker exec "$PG" psql -U postgres -lqt`.)
 
-- [ ] **Step 4: SHA-1 do keystore de upload (pra restringir a chave do Google)**
+- [x] **Step 4: SHA-1 do keystore de upload (pra restringir a chave do Google)**
 
 Local, com o keystore que está no secret `ANDROID_KEYSTORE_BASE64` (pedir ao dono o `.jks` ou decodificar o secret num runner). Se tiver o arquivo em mãos:
 ```bash
@@ -57,7 +57,7 @@ keytool -list -v -keystore upload-keystore.jks -alias "$ALIAS" | grep -E "SHA1|S
 ```
 Esperado: `SHA1: AA:BB:...`. **Também** pedir ao dono o print de *Play Console → Configuração → Integridade do app → Chave de assinatura do app → SHA-1* — a Play reassina o binário, e é esse certificado que vale em produção. Anotar os dois.
 
-- [ ] **Step 5: Registrar o rascunho**
+- [x] **Step 5: Registrar o rascunho**
 
 Escrever em `docs/superpowers/plans/evidencia-2026-08-21.md` as quatro respostas, com data e comando usado. Não commitar (adicionar ao `.git/info/exclude` se precisar: `echo docs/superpowers/plans/evidencia-2026-08-21.md >> .git/info/exclude`).
 
@@ -75,7 +75,7 @@ Escrever em `docs/superpowers/plans/evidencia-2026-08-21.md` as quatro respostas
 - Consumes: SHA-1 da Task 1 (restrição da chave no GCP).
 - Produces: `android.config.googleMaps.apiKey` preenchido no manifesto do build Android; build Android **falha** se a chave faltar (em vez de gerar binário que cai).
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 `mobile/app.config.test.js`:
 ```js
@@ -118,12 +118,12 @@ describe('app.config.js', () => {
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd mobile && npx jest app.config.test.js`
 Expected: FAIL — `Cannot find module './app.config.js'`.
 
-- [ ] **Step 3: Implementar `mobile/app.config.js`**
+- [x] **Step 3: Implementar `mobile/app.config.js`**
 
 ```js
 /**
@@ -160,21 +160,21 @@ module.exports = ({ config }) => {
 };
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+- [x] **Step 4: Rodar e ver passar**
 
 Run: `cd mobile && npx jest app.config.test.js`
 Expected: PASS (3 testes).
 
-- [ ] **Step 5: Conferir que o Expo lê o `app.config.js` junto do `app.json`**
+- [x] **Step 5: Conferir que o Expo lê o `app.config.js` junto do `app.json`**
 
-Run: `cd mobile && GOOGLE_MAPS_ANDROID_KEY=teste npx expo config --type public --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);console.log(c.android.config.googleMaps.apiKey, c.android.package, c.newArchEnabled)})"`
+Run: `cd mobile && GOOGLE_MAPS_ANDROID_KEY=teste npx expo config --type prebuild --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);console.log(c.android.config.googleMaps.apiKey, c.android.package, c.newArchEnabled)})"`
 Expected: `teste com.r21go.client false`.
 
-- [ ] **Step 6: Criar a chave no GCP (ação do dono, com doc oficial lida antes)**
+- [x] **Step 6: Criar a chave no GCP (ação do dono, com doc oficial lida antes)**
 
 Antes de instruir, **WebFetch** de `https://developers.google.com/maps/documentation/android-sdk/get-api-key` e `https://cloud.google.com/docs/authentication/api-keys#adding-application-restrictions` — não chutar fluxo de UI. Resumo do que a doc pede (confirmar na leitura): projeto GCP `21go-maps` (já existe, ver `docs/DEPLOY.md`) → ativar **Maps SDK for Android** → criar chave → restrição de aplicativo **Apps Android** com pacote `com.r21go.client` + os **dois** SHA-1 da Task 1 (upload e app signing da Play) → restrição de API **só Maps SDK for Android**. Dono cola a chave no 1Password e no GitHub: *Settings → Secrets and variables → Actions → New repository secret* `GOOGLE_MAPS_ANDROID_KEY`.
 
-- [ ] **Step 7: Passar o secret pro build no workflow**
+- [x] **Step 7: Passar o secret pro build no workflow**
 
 Em `.github/workflows/android.yml`, no step `Build (local, sem cota EAS nuvem)`, o bloco `env:` vira:
 ```yaml
@@ -184,14 +184,14 @@ Em `.github/workflows/android.yml`, no step `Build (local, sem cota EAS nuvem)`,
           PROFILE: ${{ inputs.profile }}
 ```
 
-- [ ] **Step 8: Documentar o nome da credencial**
+- [x] **Step 8: Documentar o nome da credencial**
 
 Em `docs/DEPLOY.md`, na tabela da seção "Satélite do Google (Map Tiles API)" (linha ~119), adicionar a linha:
 ```
 | `GOOGLE_MAPS_ANDROID_KEY` | GitHub Actions (secret) | sim, pro build Android | Chave do GCP `21go-maps` com **Maps SDK for Android**, restrita ao pacote `com.r21go.client` + SHA-1 de upload e de assinatura da Play. Sem ela o `app.config.js` derruba o build. |
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add mobile/app.config.js mobile/app.config.test.js .github/workflows/android.yml docs/DEPLOY.md
@@ -218,7 +218,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: backend já responde `401` com `message: 'Nenhum rastreador instalado vinculado ao seu CPF. Fale com a sua associação.'` (`backend/src/modules/app/associate-auth.service.ts:152`). Esse 401 só acontece **depois** de a senha bater — não é vetor de enumeração.
 - Produces: `explicarFalhaDeLogin(erro, autenticou)` devolve `{titulo:'Sem rastreador vinculado', texto:<mensagem do servidor>}` para esse caso; todo outro 401 segue genérico.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Adicionar em `mobile/src/lib/login-error.test.ts`, dentro do `describe`:
 ```ts
@@ -249,12 +249,12 @@ Adicionar em `mobile/src/lib/login-error.test.ts`, dentro do `describe`:
   });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd mobile && npx jest src/lib/login-error.test.ts`
 Expected: FAIL no primeiro teste novo (`titulo` é "Não foi possível entrar").
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Em `mobile/src/lib/login-error.ts`, substituir o bloco `if (status === 401) {...}` por:
 ```ts
@@ -284,12 +284,12 @@ function mensagemDoServidor(erro: any): string {
 }
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+- [x] **Step 4: Rodar e ver passar**
 
 Run: `cd mobile && npx jest src/lib/login-error.test.ts`
 Expected: PASS (7 testes).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/src/lib/login-error.ts mobile/src/lib/login-error.test.ts
@@ -309,7 +309,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Modify: `mobile/src/app/(tabs)/profile.tsx:15,57`
 - Test: `mobile/src/lib/documento.test.ts` (já cobre `maskDocumento`; conferir)
 
-- [ ] **Step 1: Confirmar que `maskDocumento` já tem teste de CNPJ**
+- [x] **Step 1: Confirmar que `maskDocumento` já tem teste de CNPJ**
 
 Run: `cd mobile && grep -n "14\|CNPJ\|/0001-" src/lib/documento.test.ts`
 Expected: ao menos uma linha. Se não houver, adicionar ao `describe` existente:
@@ -320,18 +320,18 @@ Expected: ao menos uma linha. Se não houver, adicionar ao `describe` existente:
 ```
 e rodar `npx jest src/lib/documento.test.ts` → PASS.
 
-- [ ] **Step 2: Trocar o import e o uso**
+- [x] **Step 2: Trocar o import e o uso**
 
 Em `mobile/src/app/(tabs)/profile.tsx`:
 - linha 15: `import { maskCpf } from '@/lib/format';` → `import { maskDocumento } from '@/lib/format';`
 - linha 57: `<Row icon="card-outline" label="CPF" value={maskCpf(profile.cpf)} />` → `<Row icon="card-outline" label={profile.cpf.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'} value={maskDocumento(profile.cpf)} />`
 
-- [ ] **Step 3: Tipos e testes**
+- [x] **Step 3: Tipos e testes**
 
 Run: `cd mobile && npx tsc --noEmit && npx jest`
 Expected: sem erro de tipo; todos os testes PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add "mobile/src/app/(tabs)/profile.tsx" mobile/src/lib/documento.test.ts
@@ -351,7 +351,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: Tasks 2–4 commitadas; secret `GOOGLE_MAPS_ANDROID_KEY` criado.
 - Produces: App Store e Play servindo **1.3.1**.
 
-- [ ] **Step 1: Subir versão**
+- [x] **Step 1: Subir versão**
 
 Em `mobile/app.json`: `"version": "1.3.1"`, `"buildNumber": "32"`, `"versionCode": 4`.
 ```bash
@@ -362,11 +362,11 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push
 ```
 
-- [ ] **Step 2: Build `preview` (.apk) pra testar no aparelho antes da Play**
+- [x] **Step 2: Build `preview` (.apk) pra testar no aparelho antes da Play**
 
 Sem `gh` local: dono dispara em *GitHub → Actions → Build Android → Run workflow → profile = preview*. Baixar artefato `app-android-preview`, instalar num Android (`adb install app.apk` ou transferir e abrir).
 
-- [ ] **Step 3: Reproduzir os dois sintomas no aparelho**
+- [x] **Step 3: Reproduzir os dois sintomas no aparelho**
 
 1. Login com CPF + senha=CPF de um associado **com rastreador instalado** → deve entrar e abrir o mapa.
 2. Fechar o app pelo gesto e reabrir 3 vezes → deve abrir no mapa e **ficar aberto**.
@@ -377,16 +377,16 @@ adb logcat -b crash -d > crash.txt; adb logcat -d | grep -E "AndroidRuntime|FATA
 ```
 e voltar pra Task 2 (se a mensagem tiver `API key not found` / `Google Maps Android API`, a chave não entrou no manifesto: conferir `unzip -p app.apk AndroidManifest.xml | strings | grep -i geo.API_KEY`).
 
-- [ ] **Step 4: Build `production` Android e iOS**
+- [x] **Step 4: Build `production` Android e iOS**
 
 Actions → *Build Android* → `production` (gera `.aab`); Actions → *Build iOS* (gera `.ipa`). Aguardar os dois (≤ 90 min cada).
 
-- [ ] **Step 5: Publicar**
+- [x] **Step 5: Publicar**
 
 - Play: dono envia o `.aab` em *Produção → Criar nova versão*, notas: "Correção do fechamento inesperado no Android ao abrir o mapa; mensagem de acesso mais clara; dados de empresa no perfil." Seguir `mobile/store/play/PUBLICACAO-PASSO-A-PASSO.md`.
 - iOS: `cd mobile && eas submit --platform ios --profile production --path <caminho do .ipa>` (credenciais em `eas.json`/`secrets/`), depois *App Store Connect → enviar pra revisão*.
 
-- [ ] **Step 6: Verificar com evidência (não presumir)**
+- [x] **Step 6: Verificar com evidência (não presumir)**
 
 ```bash
 curl -s "https://itunes.apple.com/lookup?bundleId=com.r21go.client&country=br" | grep -o '"version":"[^"]*"'
@@ -398,6 +398,8 @@ Expected (após propagação, Apple pode levar 24h+ de revisão): `"version":"1.
 
 ## Fase 2 — WebView interna acabada + associado blindado
 
+> Execução 21/08: Task 8 auditou as 19 rotas em produção e todas já passavam a 390px — nenhum commit de frontend. Revisão final acrescentou allowlist em `/app/alerts` e `/app/me`, assert do secret no workflow, reset do `podeVoltar` no "Tentar de novo", texto sem "CPF" pra associado PJ e recuperação de senha aceitando CNPJ.
+
 ### Task 6: Botão Voltar físico do Android navega dentro do painel
 
 **Files:**
@@ -406,7 +408,7 @@ Expected (após propagação, Apple pode levar 24h+ de revisão): `"version":"1.
 **Interfaces:**
 - Produces: Voltar → `webView.goBack()` enquanto houver histórico; sem histórico, comportamento padrão do sistema (sai do app).
 
-- [ ] **Step 1: Implementar**
+- [x] **Step 1: Implementar**
 
 Em `mobile/src/app/interno/painel.tsx`:
 - imports: `import { useEffect, useRef, useState } from 'react';` e adicionar `BackHandler` ao import de `react-native`.
@@ -430,16 +432,16 @@ Em `mobile/src/app/interno/painel.tsx`:
 ```
 - no `<WebView`: adicionar `ref={webRef}` e, dentro do `onNavigationStateChange` existente, a primeira linha `podeVoltar.current = nav.canGoBack;` (antes do `if (ehLoginDoPainel(nav.url)) sair();`).
 
-- [ ] **Step 2: Tipos**
+- [x] **Step 2: Tipos**
 
 Run: `cd mobile && npx tsc --noEmit`
 Expected: sem erro.
 
-- [ ] **Step 3: Verificação manual (Android, `expo start --android` ou o .apk preview)**
+- [x] **Step 3: Verificação manual (Android, `expo start --android` ou o .apk preview)**
 
 Login interno por e-mail → Estoque → abrir um item → Voltar físico → volta pro Estoque (app continua aberto) → Voltar até o início → Voltar de novo → app vai pro fundo. Registrar no SessionLog "verificado em <aparelho>".
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add mobile/src/app/interno/painel.tsx
@@ -459,7 +461,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `toVehicleDto(v)` — allowlist explícita `{id, plate, vehicleType, brand, model, color, year, status, traccarDeviceId}`; `getVehicles` nunca espalha o registro do Prisma. Campos proibidos na resposta do associado: `imei`, `installLocation`, `installedAt`, `technicianId`, `technician`, `serialNumber`, `stockItem*`, `device`, `deviceId`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 `backend/src/modules/app/app-data.contrato.spec.ts`:
 ```ts
@@ -539,12 +541,12 @@ describe('contrato do associado — /app/vehicles', () => {
 });
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `cd backend && npx jest src/modules/app/app-data.contrato.spec.ts`
 Expected: FAIL — `imei` presente (o serviço usa `...v`).
 
-- [ ] **Step 3: Implementar a allowlist**
+- [x] **Step 3: Implementar a allowlist**
 
 Em `backend/src/modules/app/app-data.service.ts`, logo após `toPositionDto`, adicionar:
 ```ts
@@ -581,12 +583,12 @@ E em `getVehicles` trocar os dois `...v`:
 - `return vehicles.map((v) => ({ ...v, position: null, connection: null }));` → `return vehicles.map((v) => ({ ...toVehicleDto(v), position: null, connection: null }));`
 - no `return vehicles.map((v) => { ... return { ...v, position: ..., connection: ... } })` → `return { ...toVehicleDto(v), position: ..., connection: ... }`.
 
-- [ ] **Step 4: Rodar e ver passar (e o resto do módulo)**
+- [x] **Step 4: Rodar e ver passar (e o resto do módulo)**
 
 Run: `cd backend && npx jest src/modules/app`
 Expected: PASS em todos.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/modules/app/app-data.service.ts backend/src/modules/app/app-data.contrato.spec.ts
@@ -599,7 +601,7 @@ teste simula o Prisma devolvendo o registro inteiro.
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Deploy do backend (fluxo real do projeto) e verificação**
+- [x] **Step 6: Deploy do backend (fluxo real do projeto) e verificação**
 
 Baseline: `curl -s -o /dev/null -w "%{http_code}\n" https://api.trackgo.site/api/v1/health` → 200. Depois, via SSH no droplet, build + tag + push pro registry `localhost:5000` + `docker service update` conforme `docs/DEPLOY.md` (ver memória `feedback_deploy_via_registry`; **nunca** build de backend e frontend em paralelo). Conferir `curl -s https://api.trackgo.site/api/v1/health | grep -o '"gitSha":"[^"]*"'` = SHA do commit.
 
@@ -615,7 +617,7 @@ Baseline: `curl -s -o /dev/null -w "%{http_code}\n" https://api.trackgo.site/api
 - Consumes: credencial de um usuário interno de teste (env `AUD_EMAIL`/`AUD_SENHA`, nunca no script).
 - Produces: lista `rota → scrollWidth/clientWidth` e correções.
 
-- [ ] **Step 1: Script de auditoria (puppeteer-core com Chrome local — ver memória `reference_puppeteer_test`)**
+- [x] **Step 1: Script de auditoria (puppeteer-core com Chrome local — ver memória `reference_puppeteer_test`)**
 
 ```js
 const puppeteer = require('puppeteer-core');
@@ -641,16 +643,16 @@ const ROTAS = ['/dashboard','/mapa','/dispositivos','/veiculos','/alertas','/geo
 Run: `cd <scratchpad> && npm i puppeteer-core@latest >/dev/null && AUD_EMAIL=... AUD_SENHA=... node auditoria-390.js`
 Expected: uma linha por rota. Anotar as `OVERFLOW`.
 
-- [ ] **Step 2: Corrigir cada rota com OVERFLOW**
+- [x] **Step 2: Corrigir cada rota com OVERFLOW**
 
 Regra mecânica, uma rota por vez, olhando o PNG: (a) toda `<Table>`/`<table>` fica dentro de `<div className="overflow-x-auto">` (padrão já usado nas 7 páginas que passam — ex.: `grep -rn overflow-x-auto "frontend/dashboard/src/app/(dashboard)"`); (b) grids fixas `grid-cols-N` ganham `grid-cols-1 md:grid-cols-N`; (c) larguras fixas `w-[NNNpx]` em contêiner de página viram `w-full max-w-[NNNpx]`. Não tocar em rota que passou.
 
-- [ ] **Step 3: Rodar a auditoria de novo até zerar**
+- [x] **Step 3: Rodar a auditoria de novo até zerar**
 
 Run: mesmo comando do Step 1.
 Expected: todas `ok`.
 
-- [ ] **Step 4: Commit + deploy do frontend**
+- [x] **Step 4: Commit + deploy do frontend**
 
 ```bash
 git add "frontend/dashboard/src"
@@ -670,10 +672,10 @@ Deploy do frontend conforme `docs/DEPLOY.md` (build args `NEXT_PUBLIC_API_URL`/`
 - Modify: `<vault>/ClaudeCode/Index.md` (Sessões recentes)
 - Create: `<vault>/ClaudeCode/Aprendizados/Android-MapView-sem-chave-Google-derruba-o-app.md`
 
-- [ ] **Step 1: SessionLog com frontmatter (`data`, `projeto`, `tags`, `tipo: sessao`)** contendo: contexto, o que foi feito (Tasks 1–8), arquivos, decisões (chave via `app.config.js`; allowlist no `/app/vehicles`), evidências da Task 1 e da Task 5 (versões por `curl`), pendências, próximos passos, wikilinks.
-- [ ] **Step 2: Aprendizado** com problema / causa-raiz / solução / como evitar (o crash loop Android por MapView sem chave; iOS imune por Apple Maps).
-- [ ] **Step 3: Atualizar MEMORIA e Index.**
-- [ ] **Step 4: Commit da spec e do plano**
+- [x] **Step 1: SessionLog com frontmatter (`data`, `projeto`, `tags`, `tipo: sessao`)** contendo: contexto, o que foi feito (Tasks 1–8), arquivos, decisões (chave via `app.config.js`; allowlist no `/app/vehicles`), evidências da Task 1 e da Task 5 (versões por `curl`), pendências, próximos passos, wikilinks.
+- [x] **Step 2: Aprendizado** com problema / causa-raiz / solução / como evitar (o crash loop Android por MapView sem chave; iOS imune por Apple Maps).
+- [x] **Step 3: Atualizar MEMORIA e Index.**
+- [x] **Step 4: Commit da spec e do plano**
 
 ```bash
 git add docs/superpowers/specs/2026-08-21-app-paridade-e-bugs-android-design.md docs/superpowers/plans/2026-08-21-app-paridade-e-bugs-android.md

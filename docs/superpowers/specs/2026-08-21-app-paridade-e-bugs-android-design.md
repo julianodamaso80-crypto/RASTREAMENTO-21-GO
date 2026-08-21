@@ -20,7 +20,7 @@ interno (`/auth/login` + painel `trackgo.site` embarcado).
 
 ## Estado encontrado (evidência)
 
-- App Store serve **1.2.0** (16/07/2026); Play serve **1.3.0** (não sei se `versionCode` 2 ou 3; o 3 tem o conserto do cofre do aparelho que derrubava o login inteiro).
+- App Store serve **1.2.0** (16/07/2026); Play serve **1.3.0** (conta demo das lojas estava sem rastreador vinculado desde 13/08 — robô da Play bloqueado em 20/08; religado em 21/08) (não sei se `versionCode` 2 ou 3; o 3 tem o conserto do cofre do aparelho que derrubava o login inteiro).
 - `mobile/app.json` **não tem `android.config.googleMaps.apiKey`**. `react-native-maps` no Android usa o Google Maps SDK e, sem chave, o processo cai ao montar `MapView`. Sessão salva + boot direto no mapa = "abre e fecha sozinho". iOS usa Apple Maps (sem chave) e por isso não sofre.
 - Backend recusa login do associado com **duas** mensagens 401 distintas ("CPF ou senha inválidos" e "Nenhum rastreador instalado vinculado ao seu CPF…"); o app colapsa ambas em "CPF/e-mail ou senha inválidos". Quem tem CPF certo e senha certa mas está sem rastreador vinculado acha que errou a senha.
 - `profile.tsx` formata o documento com `maskCpf`, que corta em 11 dígitos: associado PJ vê CNPJ errado.
@@ -40,8 +40,9 @@ Critério de aceite: associado com CPF + senha=CPF e rastreador instalado entra 
 ## Fase 2 — WebView interna acabada + associado
 
 1. Voltar físico do Android navega na WebView (`canGoBack`) e só sai do app quando não há histórico.
-2. Auditoria das 22 rotas do painel a 390px (puppeteer-core) — nenhuma página com rolagem horizontal; tabelas em `overflow-x-auto`.
-3. Teste de contrato no backend que garante que `/app/vehicles`, `/app/vehicles/:id/history`, `/app/alerts` e `/app/me` **nunca** devolvem `imei`, `installLocation`, `technician*`, `serial*`, `stock*` — a regra absoluta vira teste que falha.
+2. Auditoria das rotas do painel a 390px (puppeteer-core) — nenhuma página com rolagem horizontal; tabelas em `overflow-x-auto`.
+   **Resultado (21/08):** as 19 rotas públicas do menu já passam (`390/390`), medição validada injetando um div de 1200px; nenhuma alteração de frontend foi necessária.
+3. Teste de contrato no backend que garante que `/app/vehicles`, `/app/alerts`, `/app/auth/login` e `/app/me` **nunca** devolvem `imei`, `installLocation`, `technician*`, `serial*`, `stock*` — a regra absoluta vira teste que falha. `/app/vehicles/:id/history` devolve só `toPositionDto` (posição do Traccar), sem registro do Prisma. Todas as respostas são allowlists explícitas (`toVehicleDto`, `toAlertDto`, `toAssociateDto`, `toMeDto`), nunca `...spread`.
 
 Critério de aceite: funcionário navega por estoque → pendências → rota → Waze e volta com o botão físico sem sair do app; teste de contrato verde.
 
