@@ -6,6 +6,7 @@
  * a resposta continue enxuta.
  */
 import { AppDataService } from './app-data.service';
+import { AssociateAuthService } from './associate-auth.service';
 
 const PROIBIDOS = [
   'imei',
@@ -70,5 +71,56 @@ describe('contrato do associado — /app/vehicles', () => {
   it('sem rastreador vinculado (traccarDeviceId null), idem', async () => {
     const r = await servico([{ ...veiculoGordo, traccarDeviceId: null }]).getVehicles('a1', 'tn1');
     for (const k of PROIBIDOS) expect(chaves(r[0])).not.toContain(k);
+  });
+});
+
+describe('contrato do associado — /app/auth/login', () => {
+  const CPF = '08577590780';
+
+  const associadoGordo = {
+    id: 'a1',
+    name: 'Fulano',
+    cpf: CPF,
+    email: 'fulano@example.com',
+    phone: '5511999998888',
+    tenantId: 'tn1',
+    password: null,
+    mustChangePassword: true,
+    // tudo abaixo é interno e não pode sair
+    internalNotes: 'cliente difícil, cobrar com cuidado',
+    allowedIps: ['1.2.3.4'],
+    role: 'ADMIN',
+    technicianId: 't1',
+  };
+
+  function servicoLogin(associado: any) {
+    const prisma: any = {
+      associate: {
+        findMany: jest.fn().mockResolvedValue([associado]),
+        update: jest.fn().mockResolvedValue(undefined),
+      },
+      device: { count: jest.fn().mockResolvedValue(1) },
+    };
+    const jwt: any = { sign: jest.fn().mockReturnValue('tok') };
+    const whatsapp: any = {};
+    return new AssociateAuthService(prisma, jwt, whatsapp);
+  }
+
+  beforeEach(() => {
+    delete process.env.APP_ASSOCIATE_ALLOWLIST;
+  });
+
+  it('a resposta do login traz só os campos do contrato do associado, nada de interno', async () => {
+    const r = await servicoLogin(associadoGordo).login({
+      cpf: CPF,
+      password: CPF,
+    });
+
+    expect(chaves(r.associate).sort()).toEqual(
+      ['id', 'name', 'cpf', 'email', 'phone', 'tenantId', 'mustChangePassword'].sort(),
+    );
+    for (const k of ['password', 'internalNotes', 'allowedIps', 'role', 'technicianId']) {
+      expect(chaves(r.associate)).not.toContain(k);
+    }
   });
 });

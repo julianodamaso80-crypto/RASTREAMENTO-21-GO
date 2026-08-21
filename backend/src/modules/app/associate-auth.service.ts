@@ -19,6 +19,32 @@ import {
 
 const BCRYPT_ROUNDS = 10;
 
+/**
+ * Contrato do associado devolvido pro app — allowlist explícita, não spread.
+ * Mesma regra de `toVehicleDto` em `AppDataService`: um campo novo no `select`
+ * (nota interna, IP liberado, papel, técnico) precisa ser adicionado aqui de
+ * propósito pra sair; por omissão, fica de fora.
+ */
+function toAssociateDto(a: {
+  id: string;
+  name: string;
+  cpf: string;
+  email: string | null;
+  phone: string | null;
+  tenantId: string;
+  mustChangePassword: boolean;
+}) {
+  return {
+    id: a.id,
+    name: a.name,
+    cpf: a.cpf,
+    email: a.email,
+    phone: a.phone,
+    tenantId: a.tenantId,
+    mustChangePassword: a.mustChangePassword,
+  };
+}
+
 
 /**
  * Senha temporária pra ser DITADA no telefone: blocos curtos, sem os caracteres
@@ -166,8 +192,7 @@ export class AssociateAuthService {
         name: a.name,
       };
 
-      const { password: _omit, ...associate } = a;
-      return { accessToken: this.jwt.sign(payload), associate };
+      return { accessToken: this.jwt.sign(payload), associate: toAssociateDto(a) };
     }
 
     // Mensagem genérica — não revela se o CPF existe.
