@@ -9,6 +9,13 @@ As evidências que embasam este runbook estão medidas, não presumidas, em
 [.superpowers/sdd/etapa2-traccar-evidencias.md](../.superpowers/sdd/etapa2-traccar-evidencias.md):
 16/16 endpoints REST usados pelo backend compatíveis, WebSocket compatível, 25
 chaves de config conferidas uma a uma contra `Keys.java` da tag `v6.14.5`.
+Esse `16/16` é a contagem da fase de evidência (endpoints comparados um a um
+contra o código-fonte). É um número diferente do `18/18 OK` que aparece nas
+seções 3 e 6 — aquele é a saída do script `scripts/traccar-contrato.py`, que
+soma passos de teste (inclui `GET /devices?uniqueId=` e `/reports/summary`,
+que não entravam na contagem de endpoints, mais as operações de limpeza dos
+recursos que o próprio script cria). Os dois números estão certos; contam
+coisas diferentes.
 
 **Este runbook não foi executado.** Ninguém com acesso a este repositório tinha
 SSH pra produção no momento em que foi escrito — só o preparo (compose de dev,
@@ -55,44 +62,7 @@ Regra 0 do projeto).
 
 ---
 
-## 2. Backup do banco — não é opcional
-
-As migrações do Traccar (Liquibase) **não são reversíveis**. Não existe
-`liquibase rollback` de fábrica configurado neste projeto. O backup de antes
-do upgrade é a **única** forma de voltar atrás se algo der errado — sem ele,
-"reverter a imagem" não desfaz o schema.
-
-```bash
-ssh -i ~/.ssh/claude_21go root@167.71.31.77
-
-# 1. Descobrir o banco exato que o Traccar de produção usa —
-#    não presumir o nome, ler do próprio traccar.xml publicado:
-cat /etc/easypanel/projects/rastreamento-21-go/traccar-rastreamento/traccar.xml \
-  | grep 'database.url'
-# ex.: jdbc:postgresql://postgres-rastreamento:5432/<nome-do-banco>
-
-# 2. Dump desse banco específico, de dentro do container do Postgres:
-PGCID=$(docker ps -q -f name=postgres-rastreamento)
-STAMP=$(date +%Y%m%d-%H%M)
-docker exec "$PGCID" pg_dump -U postgres -d <nome-do-banco> -F c \
-  -f "/tmp/traccar-pre-upgrade-$STAMP.dump"
-
-# 3. Copiar o dump para fora do container e do droplet (não deixar só em /tmp) —
-#    tirar do container:
-docker cp "$PGCID:/tmp/traccar-pre-upgrade-$STAMP.dump" \
-  "/root/traccar-pre-upgrade-$STAMP.dump"
-# e da VPS pra sua máquina:
-exit  # sai do SSH
-scp -i ~/.ssh/claude_21go \
-  root@167.71.31.77:/root/traccar-pre-upgrade-$STAMP.dump .
-```
-
-Confirmar que o arquivo chegou e não está vazio (`ls -lh`) antes de prosseguir.
-Guardar o `$STAMP` usado — é o nome do arquivo que a seção 6 (rollback) pede de volta.
-
----
-
-## 3. Fatos da migração (o que muda no schema)
+## 2. Fatos da migração (o que muda no schema)
 
 - Todos os changesets de schema entre 6.5 e 6.14 são **aditivos** — colunas e
   tabelas novas, lidos um a um a partir do código-fonte da tag `v6.14.5`. Nada
@@ -107,40 +77,170 @@ Guardar o `$STAMP` usado — é o nome do arquivo que a seção 6 (rollback) ped
   do Traccar.** Se um dia quiser adicionar TimescaleDB, faça isso *depois*,
   isolado, com o Traccar já estável na 6.14.5 — nunca as duas mudanças juntas,
   senão não dá pra saber qual delas causou um problema.
+- Estes fatos vêm de ler o código-fonte da tag `v6.14.5`, não de já ter
+  rodado a migração contra o nosso banco real — é exatamente essa lacuna que
+  a seção 3 fecha.
 
 ---
 
-## 4. Validar em ambiente descartável ANTES de tocar em produção
+## 3. Ensaio — rodar a migração real contra uma cópia de produção
 
-Nunca testar upgrade de motor de GPS direto em produção. Suba um container
-solto, sem tocar no Swarm:
+**Este é o único passo irreversível de todo o procedimento**: depois que o
+Liquibase aplica os changesets 6.5→6.14.5 no banco de produção, não existe
+`liquibase rollback` de fábrica configurado neste projeto — só um restore de
+backup desfaz. Testar isso primeiro contra um banco **vazio** (como uma
+versão anterior deste runbook fazia) só prova que a 6.14.5 nova sobe e
+responde à API REST — não prova que o Liquibase aplica os changesets **nos
+nossos dados reais**, com o volume e as inconsistências que só existem depois
+de meses em produção. Um teste todo verde contra banco vazio prova bem menos
+do que parece.
+
+O ensaio abaixo usa um dump real de produção, restaurado num Postgres
+descartável, e observa o Liquibase migrar de verdade — sem tocar em produção.
+
+### 3.1 Tirar o dump de ensaio
 
 ```bash
-docker run -d --name traccar-upgrade-teste -p 8092:8082 traccar/traccar:6.14.5
+ssh -i ~/.ssh/claude_21go root@167.71.31.77
 
-# primeiro usuário criado sem sessão vira administrador (bootstrap do Traccar)
-curl -X POST http://localhost:8092/api/users -H 'Content-Type: application/json' \
-  -d '{"name":"admin","email":"admin@teste.local","password":"<escolha uma senha>"}'
+# 1. Descobrir o banco exato que o Traccar de produção usa —
+#    não presumir o nome, ler do próprio traccar.xml publicado:
+cat /etc/easypanel/projects/rastreamento-21-go/traccar-rastreamento/traccar.xml \
+  | grep 'database.url'
+# ex.: jdbc:postgresql://postgres-rastreamento:5432/<nome-do-banco>
 
-TRACCAR_BASE_URL=http://localhost:8092/api \
-TRACCAR_EMAIL=admin@teste.local \
-TRACCAR_PASSWORD='<a senha escolhida acima>' \
+# 2. Dump desse banco específico, de dentro do container do Postgres:
+PGCID=$(docker ps -q -f name=postgres-rastreamento)
+docker exec "$PGCID" pg_dump -U postgres -d <nome-do-banco> -F c \
+  -f "/tmp/traccar-ensaio.dump"
+
+# 3. Copiar o dump para fora do container e do droplet:
+docker cp "$PGCID:/tmp/traccar-ensaio.dump" "/root/traccar-ensaio.dump"
+# 4. Copiar também o traccar.xml de produção — a seção 3.3 usa ele como base,
+#    só trocando o host do banco:
+cp /etc/easypanel/projects/rastreamento-21-go/traccar-rastreamento/traccar.xml \
+  /root/traccar-producao.xml
+exit  # sai do SSH
+scp -i ~/.ssh/claude_21go root@167.71.31.77:/root/traccar-ensaio.dump .
+scp -i ~/.ssh/claude_21go root@167.71.31.77:/root/traccar-producao.xml .
+```
+
+**Este dump é só para o ensaio — não serve pra rollback.** Ele pode ficar
+velho enquanto o ensaio roda (seção 3.2 a 3.4 pode levar um tempo). O dump
+que protege o rollback de verdade é tirado de novo, com timestamp fresco,
+na seção 4 — imediatamente antes do upgrade real.
+
+### 3.2 Restaurar num Postgres descartável
+
+Numa máquina qualquer com Docker (o próprio droplet ou sua máquina — só não
+o Postgres de produção):
+
+```bash
+docker network create traccar-ensaio-net 2>/dev/null || true
+
+docker run -d --name pg-ensaio --network traccar-ensaio-net \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=<nome-do-banco> \
+  postgres:17
+
+# esperar aceitar conexão antes do restore
+until docker exec pg-ensaio pg_isready -U postgres; do sleep 2; done
+
+docker cp traccar-ensaio.dump pg-ensaio:/tmp/
+docker exec pg-ensaio pg_restore -U postgres -d <nome-do-banco> \
+  --clean --if-exists /tmp/traccar-ensaio.dump
+```
+
+### 3.3 Apontar um Traccar 6.14.5 pra essa cópia e assistir a migração
+
+```bash
+# copiar o traccar.xml de produção e trocar só o host do banco pro Postgres
+# de ensaio — tudo o mais (usuário, senha, demais chaves) fica igual ao real
+sed 's#jdbc:postgresql://[^/]*/#jdbc:postgresql://pg-ensaio:5432/#' \
+  traccar-producao.xml > traccar-ensaio.xml
+
+docker run -d --name traccar-upgrade-teste --network traccar-ensaio-net \
+  -p 18092:8082 \
+  -v "$(pwd)/traccar-ensaio.xml:/opt/traccar/conf/traccar.xml:ro" \
+  traccar/traccar:6.14.5
+
+# É AQUI que a migração 6.5→6.14.5 acontece de verdade — acompanhar até o fim
+docker logs -f traccar-upgrade-teste
+```
+
+O que esperar no log, em ordem: uma sequência de linhas `Running Changeset:
+changelog-X.Y::...::author` (um por changeset, incluindo `6.8.0-timescale` e
+`6.11.0-timescale` — ver seção 2, são os que o precondition pula em silêncio
+sem a extensão) terminando em `Liquibase: Update has been successful. Rows
+affected: N`, seguido do servidor web subindo normalmente. **O que uma falha
+parece:** uma stack trace do Liquibase (`liquibase.exception.*Exception`) no
+meio da sequência de changesets, o container saindo (`docker ps` não mostra
+`Up`) ou nunca respondendo em `:18092`. Se isso acontecer, **não prosseguir
+para produção** — investigar a causa contra este mesmo dump antes de tocar
+no banco real.
+
+### 3.4 Contrato REST contra a cópia restaurada
+
+A cópia já tem os usuários reais de produção — não criar usuário novo, usar
+as credenciais reais (mesmas do 1Password usadas na seção 6):
+
+```bash
+TRACCAR_BASE_URL=http://localhost:18092/api \
+TRACCAR_EMAIL=admin@rastreamento21go.com.br \
+TRACCAR_PASSWORD='<no 1Password>' \
 python scripts/traccar-contrato.py
 ```
 
-Esperado: `18/18 OK`, saída `0`. Se alguma linha falhar, **não prosseguir** —
-investigar antes de tocar em produção. Ao terminar:
+Esperado: `18/18 OK`, saída `0` — agora contra dados reais, não um banco
+vazio. Se alguma linha falhar, **não prosseguir** — investigar antes de
+tocar em produção.
+
+### 3.5 Descartar o ambiente de ensaio
+
+Nada aqui tocou produção — é só derrubar:
 
 ```bash
-docker rm -f traccar-upgrade-teste
+docker rm -f traccar-upgrade-teste pg-ensaio
+docker network rm traccar-ensaio-net
+rm traccar-ensaio.dump traccar-ensaio.xml
 ```
+
+---
+
+## 4. Backup real — dump imediatamente antes do upgrade
+
+Este é o dump que protege o rollback (seção 7). Repetir exatamente os mesmos
+passos da seção 3.1, com timestamp novo — **rodar agora, o mais perto
+possível da seção 5**, não antes: qualquer posição ou evento gravado entre
+este dump e o corte de produção fica protegido; qualquer coisa gravada
+*durante* o ensaio da seção 3 (que pode ter levado minutos ou horas) **não
+está** neste dump se ele for tirado antes do ensaio — por isso a ordem
+importa.
+
+```bash
+ssh -i ~/.ssh/claude_21go root@167.71.31.77
+
+PGCID=$(docker ps -q -f name=postgres-rastreamento)
+STAMP=$(date +%Y%m%d-%H%M)
+docker exec "$PGCID" pg_dump -U postgres -d <nome-do-banco> -F c \
+  -f "/tmp/traccar-pre-upgrade-$STAMP.dump"
+
+docker cp "$PGCID:/tmp/traccar-pre-upgrade-$STAMP.dump" \
+  "/root/traccar-pre-upgrade-$STAMP.dump"
+exit  # sai do SSH
+scp -i ~/.ssh/claude_21go \
+  root@167.71.31.77:/root/traccar-pre-upgrade-$STAMP.dump .
+```
+
+Confirmar que o arquivo chegou e não está vazio (`ls -lh`) antes de
+prosseguir. Guardar o `$STAMP` usado — é o nome do arquivo que a seção 7
+(rollback) pede de volta.
 
 ---
 
 ## 5. Upgrade em produção
 
-Com o baseline (seção 1) e o backup (seção 2) feitos, e o teste descartável
-(seção 4) todo verde:
+Com o baseline (seção 1), o ensaio da migração real (seção 3) todo verde e o
+backup fresco (seção 4) feito:
 
 ```bash
 ssh -i ~/.ssh/claude_21go root@167.71.31.77
@@ -224,10 +324,41 @@ em reinícios anteriores do service).
 
 ## 7. Rollback
 
-Só é seguro **com** o dump da seção 2. Voltar só a imagem, sem restaurar o
+Só é seguro **com** o dump da seção 4. Voltar só a imagem, sem restaurar o
 banco, **não funciona** — o Traccar 6.5 não conhece as colunas/tabelas que a
 6.14.5 pode ter criado durante o boot, e o serviço sobe quebrado ou
 inconsistente.
+
+**Custo deste rollback — dizer com todas as letras, não deixar implícito:**
+`pg_restore --clean` apaga o schema inteiro antes de recriar a partir do
+dump. Isso **descarta permanentemente toda posição e todo evento gravados
+entre o dump da seção 4 e o momento do rollback** — para um produto cujo
+pior cenário é justamente "faltou uma posição durante um roubo", esse
+período sem histórico é o preço real de reverter, não um detalhe técnico.
+Quanto mais rápido se decidir por rollback depois do upgrade, menor essa
+janela.
+
+**Confirmar ANTES de rodar `--clean --if-exists`:** este comando presume que
+`<nome-do-banco>` contém **só** o schema do Traccar. Em dev, Traccar e o
+backend do 21 GO usam bancos separados (`traccar` vs. `rastreamento21go`) —
+mas **o layout de produção não está documentado em lugar nenhum deste
+repositório**. Se em produção os dois compartilharem o mesmo banco, este
+`--clean` apaga dados do backend (veículos, alertas, tenants) junto com o
+schema do Traccar. Confirmar o layout real antes de rodar:
+
+```bash
+PGCID=$(docker ps -q -f name=postgres-rastreamento)
+
+# ver se existe mais de um banco de aplicação no mesmo Postgres
+docker exec "$PGCID" psql -U postgres -c '\l'
+# e, no banco alvo do restore, se as tabelas são só as do Traccar
+# (tc_*, prefixo do schema do Traccar) e nada de outro schema (ex. tabelas
+# do Prisma do backend, sem prefixo tc_)
+docker exec "$PGCID" psql -U postgres -d <nome-do-banco> -c '\dt'
+```
+
+Se aparecer tabela que não é `tc_*` no mesmo banco do Traccar, **parar e
+isolar antes de restaurar** — `--clean` ali destruiria dado do backend.
 
 ```bash
 ssh -i ~/.ssh/claude_21go root@167.71.31.77
@@ -236,7 +367,7 @@ ssh -i ~/.ssh/claude_21go root@167.71.31.77
 docker service scale rastreamento-21-go_traccar-rastreamento=0
 
 # 2. Restaurar o dump de antes do upgrade (usar o mesmo <nome-do-banco> e
-#    $STAMP anotados na seção 2)
+#    $STAMP anotados na seção 4)
 PGCID=$(docker ps -q -f name=postgres-rastreamento)
 docker cp "/root/traccar-pre-upgrade-$STAMP.dump" "$PGCID:/tmp/"
 docker exec "$PGCID" pg_restore -U postgres -d <nome-do-banco> --clean --if-exists \
@@ -277,6 +408,6 @@ seção 5.
 ## Referências
 
 - [.superpowers/sdd/etapa2-traccar-evidencias.md](../.superpowers/sdd/etapa2-traccar-evidencias.md) — evidências medidas que embasam este runbook.
-- [scripts/traccar-contrato.py](../scripts/traccar-contrato.py) — script de contrato REST usado nas seções 4 e 6.
+- [scripts/traccar-contrato.py](../scripts/traccar-contrato.py) — script de contrato REST usado nas seções 3 e 6.
 - [DEPLOY.md](DEPLOY.md) — infraestrutura, credenciais e runbook geral de incidentes.
 - [DECISIONS.md](DECISIONS.md) — ADRs do projeto (nomenclatura de serviços, DNS, templates SMS).
