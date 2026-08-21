@@ -17,7 +17,27 @@ const MODEL_LABELS: Record<BleTag['model'], string> = {
   BLE_AIRTAG_GENERIC: 'AirTag (genérica)',
 };
 
-function rssiQuality(rssi: number): { label: string; color: string } {
+/**
+ * Posição de TAG nunca é tempo real: ela depende de alguém passar perto. A
+ * idade vai sempre na cara do operador para que ninguém trate uma posição de
+ * meia hora atrás como a posição atual do veículo.
+ */
+function idadeLegivel(seenAt: string): string {
+  const minutos = Math.floor((Date.now() - new Date(seenAt).getTime()) / 60000);
+  if (minutos < 1) return 'visto agora';
+  if (minutos < 60) return `visto há ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `visto há ${horas}h`;
+  return `visto há ${Math.floor(horas / 24)}d`;
+}
+
+const ORIGEM_LEGIVEL: Record<string, string> = {
+  'apple-findmy': 'rede Apple',
+  'ble-local': 'Bluetooth próprio',
+};
+
+function rssiQuality(rssi: number | null): { label: string; color: string } | null {
+  if (rssi === null) return null;
   if (rssi >= -55) return { label: 'Excelente', color: 'text-emerald-400' };
   if (rssi >= -70) return { label: 'Bom', color: 'text-emerald-300' };
   if (rssi >= -85) return { label: 'Médio', color: 'text-amber-400' };
@@ -163,6 +183,7 @@ export default function EtiquetasBlePage() {
                     const lastSighting = tag.bleSightings?.[0];
                     const online = isOnline(tag.lastConnection);
                     const quality = lastSighting ? rssiQuality(lastSighting.rssi) : null;
+                    const idade = lastSighting ? idadeLegivel(lastSighting.seenAt) : null;
 
                     return (
                       <tr key={tag.id} className="border-b border-border/30 hover:bg-muted/20">
@@ -208,12 +229,31 @@ export default function EtiquetasBlePage() {
                                 {quality.label}
                               </div>
                             </div>
+                          ) : lastSighting && lastSighting.accuracy !== null ? (
+                            <div>
+                              <div className="font-mono text-xs text-muted-foreground">
+                                ±{lastSighting.accuracy} m
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                precisão estimada
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {lastSighting?.scannerSource || '—'}
+                          {lastSighting ? (
+                            <div>
+                              <div>
+                                {ORIGEM_LEGIVEL[lastSighting.scannerSource ?? ''] ??
+                                  'origem desconhecida'}
+                              </div>
+                              <div className="text-[10px]">{idade}</div>
+                            </div>
+                          ) : (
+                            '—'
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs">
                           {tag.lastConnection ? (

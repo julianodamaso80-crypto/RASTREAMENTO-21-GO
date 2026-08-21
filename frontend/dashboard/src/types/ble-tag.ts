@@ -2,7 +2,9 @@ export interface BleSighting {
   id: string;
   deviceId: string;
   macAddress: string;
-  rssi: number;
+  rssi: number | null;
+  accuracy: number | null;
+  seenAt: string;
   hashedAdvKey: string | null;
   counterByte: number | null;
   scannerLat: number | null;
@@ -32,7 +34,7 @@ export interface BleTag {
     brand: string | null;
     model: string | null;
   } | null;
-  bleSightings: Array<Pick<BleSighting, 'id' | 'macAddress' | 'rssi' | 'scannerLat' | 'scannerLng' | 'scannerSource' | 'createdAt'>>;
+  bleSightings: Array<Pick<BleSighting, 'id' | 'macAddress' | 'rssi' | 'accuracy' | 'seenAt' | 'scannerLat' | 'scannerLng' | 'scannerSource' | 'createdAt'>>;
 }
 
 export interface BleSightingEvent {
@@ -43,7 +45,9 @@ export interface BleSightingEvent {
   sighting: {
     id: string;
     macAddress: string;
-    rssi: number;
+    rssi: number | null;
+    accuracy: number | null;
+    seenAt: string;
     scannerLat: number | null;
     scannerLng: number | null;
     scannerSource: string | null;
