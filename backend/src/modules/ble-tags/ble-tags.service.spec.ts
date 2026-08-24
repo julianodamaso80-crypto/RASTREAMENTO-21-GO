@@ -277,34 +277,58 @@ describe('BleTagsService.getPollingPlan', () => {
     bleTurboUntil: null,
   };
 
-  it('devolve a TAG em IDLE quando o veiculo nao tem alerta de rastreador mudo', async () => {
+  it('nao devolve a TAG em repouso: sem ocorrencia aberta, o worker nao a consulta', async () => {
     const { service } = montarService([tagComChave]);
     const plano = await service.getPollingPlan('tenant-1', AGORA);
 
-    expect(plano.tags).toHaveLength(1);
-    expect(plano.tags[0].mode).toBe('IDLE');
-    expect(plano.tags[0].privateKey).toBe('priv');
+    expect(plano.tags).toHaveLength(0);
   });
 
-  it('acelera a TAG do veiculo cujo rastreador esta sob jamming', async () => {
-    const { service } = montarService(
-      [tagComChave],
-      [{ vehicleId: 'veh-1', type: 'JAMMING' }],
-    );
-    const plano = await service.getPollingPlan('tenant-1', AGORA);
+  it.each(['OFFLINE', 'GPS_SILENT', 'JAMMING', 'POWER_CUT'])(
+    'acelera a TAG do veiculo cujo rastreador esta com alerta %s: entra no plano em TURBO, 30min, backfill de 7 dias',
+    async (alerta) => {
+      const { service } = montarService(
+        [tagComChave],
+        [{ vehicleId: 'veh-1', type: alerta }],
+      );
+      const plano = await service.getPollingPlan('tenant-1', AGORA);
 
-    expect(plano.tags[0].mode).toBe('TURBO');
-    expect(plano.tags[0].backfillHours).toBe(168);
-  });
+      expect(plano.tags).toHaveLength(1);
+      expect(plano.tags[0].mode).toBe('TURBO');
+      expect(plano.tags[0].intervalSeconds).toBe(1800);
+      expect(plano.tags[0].backfillHours).toBe(168);
+      expect(plano.tags[0].privateKey).toBe('priv');
+    },
+  );
 
-  it('nao acelera uma TAG por causa de alerta de outro veiculo', async () => {
+  it('nao acelera uma TAG por causa de alerta de outro veiculo, e como fica IDLE nem entra no plano', async () => {
     const { service } = montarService(
       [tagComChave],
       [{ vehicleId: 'veh-OUTRO', type: 'JAMMING' }],
     );
     const plano = await service.getPollingPlan('tenant-1', AGORA);
 
-    expect(plano.tags[0].mode).toBe('IDLE');
+    expect(plano.tags).toHaveLength(0);
+  });
+
+  it('entra no plano com uma TAG do acionamento manual ainda valido', async () => {
+    const { service } = montarService([
+      { ...tagComChave, bleTurboUntil: new Date('2026-08-20T12:00:01.000Z') },
+    ]);
+    const plano = await service.getPollingPlan('tenant-1', AGORA);
+
+    expect(plano.tags).toHaveLength(1);
+    expect(plano.tags[0].mode).toBe('TURBO');
+    expect(plano.tags[0].intervalSeconds).toBe(1800);
+  });
+
+  it('nao entra no plano quando o acionamento manual ja expirou', async () => {
+    const { service } = montarService([
+      { ...tagComChave, bleTurboUntil: new Date('2026-08-20T11:59:59.000Z') },
+    ]);
+    const plano = await service.getPollingPlan('tenant-1', AGORA);
+
+    expect(plano.tags).toHaveLength(0);
   });
 
   it('ignora TAG sem chave cadastrada, que o worker nao teria como consultar', async () => {
@@ -326,7 +350,10 @@ describe('BleTagsService.getPollingPlan', () => {
   });
 
   it('nao devolve tenantId no corpo, para nao existir caminho de escrita cruzada', async () => {
-    const { service } = montarService([tagComChave]);
+    const { service } = montarService(
+      [tagComChave],
+      [{ vehicleId: 'veh-1', type: 'JAMMING' }],
+    );
     const plano = await service.getPollingPlan('tenant-1', AGORA);
 
     expect(plano.tags[0]).not.toHaveProperty('tenantId');

@@ -8,10 +8,11 @@ import {
 const AGORA = new Date('2026-08-20T12:00:00.000Z');
 
 describe('decidirModo', () => {
-  it('fica em IDLE quando nada aconteceu', () => {
+  it('fica em IDLE quando nada aconteceu, com intervalSeconds 0 (nao consultar)', () => {
     const r = decidirModo({ alertasAbertos: [], turboUntil: null, agora: AGORA });
     expect(r.modo).toBe('IDLE');
     expect(r.intervalSeconds).toBe(INTERVALO_IDLE_S);
+    expect(r.intervalSeconds).toBe(0);
     expect(r.backfillHours).toBe(0);
   });
 
@@ -25,6 +26,7 @@ describe('decidirModo', () => {
       });
       expect(r.modo).toBe('TURBO');
       expect(r.intervalSeconds).toBe(INTERVALO_TURBO_S);
+      expect(r.intervalSeconds).toBe(1800); // piso seguro medido no issue #99
       expect(r.backfillHours).toBe(BACKFILL_TURBO_H);
     },
   );

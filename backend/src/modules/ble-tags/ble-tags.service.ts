@@ -274,8 +274,11 @@ export class BleTagsService {
       porVeiculo.set(a.vehicleId, lista);
     }
 
-    return {
-      tags: comChave.map((t: any) => {
+    // TAG em repouso (IDLE) não entra no plano: com 52 mil TAGs, mandar o
+    // worker consultar a frota inteira em ritmo lento ainda é o padrão que
+    // bane a conta na Apple. Só quem tem ocorrência aberta custa requisição.
+    const tagsParaConsultar = comChave
+      .map((t: any) => {
         const decisao = decidirModo({
           alertasAbertos: t.vehicleId
             ? (porVeiculo.get(t.vehicleId) ?? [])
@@ -291,8 +294,10 @@ export class BleTagsService {
           intervalSeconds: decisao.intervalSeconds,
           backfillHours: decisao.backfillHours,
         };
-      }),
-    };
+      })
+      .filter((t: any) => t.mode === 'TURBO');
+
+    return { tags: tagsParaConsultar };
   }
 
   /**
