@@ -86,7 +86,7 @@ O sync do SGA cria veículo com `uniqueId = "HINOVA-" + codigoVeiculo` ([hinova-
 | Tornar `unique_id` nullable — **descartado** | Exigiria migration, mudança de tipo no Prisma (`String` → `String?`) e ajuste em todo consumidor (F7). Não é o mínimo que resolve. |
 | Na retirada, **religar** o device no Traccar em vez de desabilitar | O estoque inteiro vive cadastrado e comunicando (F4); desabilitar deixa o aparelho cego (F3) e quebra a conferência antes da próxima instalação. |
 | Renomear o device do Traccar de volta para o IMEI | Caminho inverso do que o `associate` faz (F4) e pedido explícito do dono. |
-| Manter o veículo desvinculado na lista de Clientes Ativos | `findAssets` filtra por `associateId != null`, não por device ([clients.service.ts:41-45](../../../backend/src/modules/clients/clients.service.ts#L41-L45)). O card já sabe dizer "sem rastreador" ([asset-card.tsx:86](../../../frontend/dashboard/src/components/clientes/asset-card.tsx#L86)). Esconder o veículo é mudança de regra de negócio que ninguém pediu — se incomodar na prática, vira filtro em outro plano. |
+| **Veículo desvinculado sai de Clientes Ativos** (decisão do dono, 24/08/2026) | A tela filtrava só por `associateId != null`, então o carro continuava listado como ativo "sem rastreador". Ativo é veículo COM rastreador: desvinculou, o aparelho volta pro estoque e o veículo sai da lista. Listagem, contagem e resumo passam a usar `device: { is: { deletedAt: null } }` — a mesma régua, senão o cabeçalho conta o que a lista não mostra. O veículo continua existindo em `/veiculos` e volta pra cá sozinho quando receber outro rastreador. |
 | Não mexer em `Vehicle.status`, `appAccessBlocked` nem no chip | Cancelamento comercial ≠ retirada física de equipamento. Misturar os dois aqui é escopo especulativo (Regra 8). O plano entrega exatamente o ciclo aparelho↔estoque. |
 | Sem model de histórico de instalações | O `Device` guarda o último ciclo e o `AuditLog` guarda a ação (F9). Histórico ciclo-a-ciclo é outro plano. |
 
@@ -1149,6 +1149,18 @@ TRACCAR: [{'id': 2, 'name': 'ADW0Z41', 'disabled': False}]
 ```
 
 Os dois cadastros coexistem: o cliente antigo continua no lugar dele, sem rastreador; o novo ficou com o aparelho.
+
+**Clientes Ativos só mostra quem tem rastreador** (52 veículos com cliente no banco, 1 com aparelho instalado):
+
+```
+CLIENTES ATIVOS -> total: 1
+   ADX6H87 | Maria Santos | IMEI 869999000000001
+cabecalho (summary): 1
+
+# depois de desvincular:
+CLIENTES ATIVOS -> total: 0
+ESTOQUE -> total: 1 [('869999000000001', 'disponivel')]
+```
 
 **Segundo desvínculo** — device no Traccar de volta ao estado de estoque:
 
