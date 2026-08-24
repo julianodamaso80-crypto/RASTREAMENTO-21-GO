@@ -117,7 +117,7 @@ O braço do `uniqueId` **não filtra tenant**. Se o IMEI existir num veículo de
 
 **Como corrigir:** embrulhar a chamada em try/catch com log (mesmo padrão do `removeByPlate`).
 
-### P1.7 Retirada/desinstalação não devolve o rastreador ao estoque
+### P1.7 Retirada/desinstalação não devolve o rastreador ao estoque — CONCLUIDO em 24/08/2026
 
 **Problema.** [devices.service.ts:158-164](../backend/src/modules/devices/devices.service.ts) — `remove()` só seta `deletedAt` no Device. Não limpa `vehicle.traccarDeviceId` (veículo segue no mapa com device "excluído"), não reabre o `StockItem` (`associatedAt` fica preenchido — o aparelho some do estoque pra sempre), não remove do Traccar. O ciclo "retirar rastreador e reaproveitar" (tipo_adesao 3/4 do SGA) não existe.
 
@@ -128,6 +128,17 @@ O braço do `uniqueId` **não filtra tenant**. Se o IMEI existir num veículo de
 4. UI: botão "Retirar rastreador" na ficha do device/cliente.
 
 **Aceite:** retirar → aparelho volta em `/estoque`, veículo sai do mapa, histórico preservado.
+
+**Entregue (24/08/2026, commit `da833aa`).** Além do fluxo `uninstall` descrito acima, o ciclo só fechou com quatro correções que o plano original não previa — todas com teste e provadas em ensaio local:
+
+1. **`Vehicle.unique_id` liberado na retirada** (`RETIRADO-<vehicleId>`). É UNIQUE global e guardava o IMEI: enquanto o veículo antigo o segurasse, reinstalar o mesmo aparelho noutra placa **sobrescrevia o cadastro do cliente anterior** (ou estourava a constraint).
+2. **Device volta ao Traccar HABILITADO e com o IMEI como nome.** `disabled: true` faz o Traccar recusar a sessão do rastreador (`ConnectionManager` chama `Device.checkDisabled()`, idêntico em 6.5 e 6.14.5) — o aparelho voltaria pro estoque cego.
+3. **O PUT do Traccar exige o device inteiro.** Mandar só `{name, disabled}` devolve 400 — `uniqueId` é obrigatório. Agora relemos o device antes (mesmo padrão do `StockService.associate`). Foi por causa desse 400 que o `disabled: true` nunca chegou a valer em producao.
+4. **`StockItem` volta sem o selo de conferência** do ciclo anterior, e o device reinstalado perde os carimbos `uninstalled*`.
+
+E a régua de **Clientes Ativos** mudou: ativo é veículo **com** rastreador. Desvinculou, sai da lista e o aparelho aparece em `/estoque`.
+
+**Passivo de produção corrigido no mesmo dia:** 1 veículo com `unique_id` de aparelho já retirado (`RJQ1B12`), 2 devices no Traccar com nome de placa antiga (719, 920) e 1 device instalado com carimbo de retirada. Diagnóstico e queries em [docs/superpowers/plans/2026-08-24-desvinculo-rastreador-estoque.md](superpowers/plans/2026-08-24-desvinculo-rastreador-estoque.md).
 
 ---
 
