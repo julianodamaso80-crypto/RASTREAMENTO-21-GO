@@ -12,7 +12,9 @@ import {
   Unlock,
   Clock,
   HelpCircle,
+  PackageOpen,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn, formatCpfCnpj, maskCPF } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
 import { canSeeInstallLocation } from '@/lib/manageable-routes';
@@ -97,7 +99,6 @@ export function AssetCard({
           onAlterarFinanceiro={onAlterarFinanceiro}
           onAlterarAcesso={onAlterarAcesso}
           onRedefinirSenha={onRedefinirSenha}
-          onRetirar={onRetirar}
           redefinindoSenha={redefinindoSenha}
         />
       </div>
@@ -145,18 +146,34 @@ export function AssetCard({
         </div>
       </div>
 
-      {/* Rodapé: frescor do dado + situação no SGA */}
+      {/* Rodapé: frescor do dado, situação no SGA e a ação que o atendimento
+          mais usa quando o cliente cancela. Ela fica à vista porque estava
+          escondida atrás do menu de três pontinhos — dois cliques pra uma
+          operação de rotina. */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2">
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
           {textoUltimaAtualizacao(asset)}
         </span>
-        {asset.sga.code && (
-          <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 text-[11px] font-medium text-sky-300">
-            SGA: {asset.sga.code}
-            {asset.sga.statusLabel ? ` · ${asset.sga.statusLabel}` : ''}
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {asset.sga.code && (
+            <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 text-[11px] font-medium text-sky-300">
+              SGA: {asset.sga.code}
+              {asset.sga.statusLabel ? ` · ${asset.sga.statusLabel}` : ''}
+            </span>
+          )}
+          {asset.device && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetirar}
+              className="h-7 gap-1.5 border-red-500/30 px-2.5 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+            >
+              <PackageOpen className="h-3.5 w-3.5" />
+              Desvincular rastreador
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
