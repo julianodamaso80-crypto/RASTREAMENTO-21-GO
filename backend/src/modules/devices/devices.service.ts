@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
@@ -294,7 +295,10 @@ export class DevicesService {
           validatedByName: null,
           validationOk: null,
           validationNotes: null,
-          validationSnapshot: null,
+          // Coluna Json: `DbNull` zera a coluna de verdade (igual a item nunca
+          // validado). `null` puro não compila e `JsonNull` gravaria o literal
+          // JSON `null`, que a tela leria como snapshot existente e vazio.
+          validationSnapshot: Prisma.DbNull,
           ...(device.traccarDeviceId
             ? { traccarDeviceId: device.traccarDeviceId }
             : {}),

@@ -1,3 +1,4 @@
+import { Prisma } from '.prisma/client';
 import { DevicesService } from './devices.service';
 
 /**
@@ -111,7 +112,8 @@ describe('DevicesService.uninstall — o que o desvínculo precisa soltar', () =
       validatedByName: null,
       validationOk: null,
       validationNotes: null,
-      validationSnapshot: null,
+      // Coluna Json: zerar de verdade é `DbNull`, não o literal JSON `null`.
+      validationSnapshot: Prisma.DbNull,
     });
   });
 });
