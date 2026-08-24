@@ -10,7 +10,6 @@ import {
   Lock,
   Unlock,
   KeyRound,
-  PackageOpen,
   Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,7 +30,6 @@ export function AssetActionsMenu({
   onAlterarFinanceiro,
   onAlterarAcesso,
   onRedefinirSenha,
-  onRetirar,
   redefinindoSenha,
 }: {
   asset: ClientAsset;
@@ -41,7 +39,6 @@ export function AssetActionsMenu({
   onAlterarFinanceiro: () => void;
   onAlterarAcesso: () => void;
   onRedefinirSenha: () => void;
-  onRetirar: () => void;
   redefinindoSenha: boolean;
 }) {
   const inadimplente = asset.financialStatus === 'INADIMPLENTE';
@@ -110,15 +107,6 @@ export function AssetActionsMenu({
           Redefinir senha do app
         </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={onRetirar}
-          disabled={!asset.device}
-        >
-          <PackageOpen className="h-4 w-4" /> Retirar rastreador
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

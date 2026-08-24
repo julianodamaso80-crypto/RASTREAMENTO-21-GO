@@ -126,7 +126,7 @@ export function RetirarRastreadorDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Retirar rastreador</DialogTitle>
+          <DialogTitle>Desvincular rastreador</DialogTitle>
           <DialogDescription>
             O rastreador{' '}
             <span className="font-mono font-semibold">{alvo?.imei}</span> vai
@@ -138,7 +138,8 @@ export function RetirarRastreadorDialog({
 
         <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-200">
           O veículo deixa de ser rastreado imediatamente e o aparelho volta pro
-          estoque disponível. O histórico de posições é preservado.
+          estoque disponível, com o mesmo IMEI e continuando a comunicar — nada
+          é enviado ao rastreador. O histórico de posições é preservado.
         </p>
 
         <div className="space-y-1.5">
@@ -162,7 +163,7 @@ export function RetirarRastreadorDialog({
             disabled={salvando}
           >
             {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Confirmar retirada
+            Confirmar desvínculo
           </Button>
         </DialogFooter>
       </DialogContent>

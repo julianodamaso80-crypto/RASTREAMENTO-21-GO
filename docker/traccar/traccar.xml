@@ -6,7 +6,10 @@
 
     <!-- Servidor Web -->
     <entry key='web.port'>8082</entry>
-    <entry key='web.path'>./modern</entry>
+    <!-- A pasta da interface é `web`. `./modern` não existe em nenhuma das
+         imagens que usamos (conferido em traccar/traccar:6.5 e :6.14.5) e o
+         container morre no boot com NoSuchFileException. -->
+    <entry key='web.path'>./web</entry>
 
     <!-- Banco de Dados PostgreSQL -->
     <entry key='database.driver'>org.postgresql.Driver</entry>

@@ -75,8 +75,14 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   // vindos do estoque, e serve de rede quando o Device não veio no payload.
   // Mesmo critério do esconderijo: número de equipamento é dado do time
   // interno, cliente final não recebe.
+  // `uniqueId` também guarda valores sintéticos pra veículo sem rastreador
+  // (`RETIRADO-<id>` depois do desvínculo, `HINOVA-<codigo>` no sync do SGA).
+  // Só serve como IMEI quando é o número mesmo.
+  const uniqueIdComoImei = /^\d{6,}$/.test(vehicle.uniqueId?.trim() ?? '')
+    ? vehicle.uniqueId.trim()
+    : null;
   const imei = showInstallLocation
-    ? vehicle.device?.imei?.trim() || vehicle.uniqueId?.trim() || null
+    ? vehicle.device?.imei?.trim() || uniqueIdComoImei
     : null;
 
   return (

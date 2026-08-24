@@ -42,6 +42,11 @@ export class ClientsService {
       tenantId,
       deletedAt: null,
       associateId: { not: null },
+      // Ativo é veículo COM rastreador instalado. Desvinculou, o aparelho volta
+      // pro estoque e o carro sai desta tela — senão a lista vira depósito de
+      // veículo que ninguém rastreia e o total deixa de significar frota
+      // monitorada. O veículo continua existindo em /veiculos.
+      device: { is: { deletedAt: null } },
     };
 
     const search = params.search?.trim();
@@ -188,6 +193,9 @@ export class ClientsService {
       tenantId,
       deletedAt: null,
       associateId: { not: null },
+      // Mesma régua da listagem: sem rastreador não é ativo. Contar diferente
+      // aqui faria o cabeçalho dizer um número e a lista mostrar outro.
+      device: { is: { deletedAt: null } },
     };
 
     const byTypeRows = await this.prisma.vehicle.groupBy({
