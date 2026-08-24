@@ -28,7 +28,17 @@ function montar() {
     device: { findFirst: jest.fn().mockResolvedValue(DEVICE) },
     $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
   };
-  const traccar: any = { updateDevice: jest.fn().mockResolvedValue({}) };
+  // O Traccar devolve o device inteiro no GET e exige o objeto inteiro no PUT.
+  const traccar: any = {
+    getDevice: jest.fn().mockResolvedValue({
+      id: TRACCAR_ID,
+      name: 'ADW0Z41',
+      uniqueId: IMEI,
+      disabled: false,
+      category: 'car',
+    }),
+    updateDevice: jest.fn().mockResolvedValue({}),
+  };
   const registry: any = { notifyDeviceChanged: jest.fn() };
   const service = new DevicesService(prisma, traccar, registry);
   return { service, tx, traccar, registry };
@@ -70,9 +80,16 @@ describe('DevicesService.uninstall — o que o desvínculo precisa soltar', () =
     // (ConnectionManager.getDeviceSession → Device.checkDisabled), ou seja: o
     // aparelho voltava pro estoque cego. E o nome tem que voltar a ser o IMEI,
     // que é como o estoque cadastra e reconhece o equipamento.
+    //
+    // O payload leva o device inteiro de propósito: o PUT do Traccar troca o
+    // registro todo e recusa (400) um corpo sem `uniqueId`. Foi assim que a
+    // primeira versão desta correção falhou no ensaio local.
     expect(traccar.updateDevice).toHaveBeenCalledWith(TRACCAR_ID, {
+      id: TRACCAR_ID,
       name: IMEI,
+      uniqueId: IMEI,
       disabled: false,
+      category: 'car',
     });
   });
 
@@ -92,7 +109,7 @@ describe('DevicesService.uninstall — o que o desvínculo precisa soltar', () =
 
   it('não quebra o desvínculo quando o servidor GPS está fora', async () => {
     const { service, tx, traccar } = montar();
-    traccar.updateDevice.mockRejectedValue(new Error('ECONNREFUSED'));
+    traccar.getDevice.mockRejectedValue(new Error('ECONNREFUSED'));
 
     await expect(service.uninstall('dev-1', TENANT)).resolves.toBeDefined();
     expect(tx.stockItem.updateMany).toHaveBeenCalled();

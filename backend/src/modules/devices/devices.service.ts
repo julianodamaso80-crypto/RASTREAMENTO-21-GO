@@ -317,7 +317,15 @@ export class DevicesService {
     // comunicando no Traccar — ver StockTraccarService.
     if (device.traccarDeviceId) {
       try {
+        // O PUT do Traccar substitui o registro inteiro: mandar só os campos
+        // que mudam devolve 400 (`uniqueId` é obrigatório). Por isso relemos o
+        // device e sobrescrevemos só o que interessa — mesmo padrão do
+        // `StockService.associate` quando renomeia pra placa.
+        const atual = await this.traccarService.getDevice(
+          device.traccarDeviceId,
+        );
         await this.traccarService.updateDevice(device.traccarDeviceId, {
+          ...atual,
           name: device.imei,
           disabled: false,
         });
