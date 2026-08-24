@@ -1118,6 +1118,51 @@ Anotar no PR (ou no SessionLog do dia) as saídas dos Steps 5, 6 e 8. Sem essas 
 
 ---
 
+## Evidências do ensaio (executado em 24/08/2026, ambiente local)
+
+Ciclo completo rodado contra Postgres 16 e Traccar 6.14.5 em container, pelo caminho real da API.
+
+**Instalação no cliente A** — `POST /stock/<item>/associate` com a placa `ADW0Z41`:
+
+```
+ plate   | unique_id       | traccar_device_id | dono       | imei            | status
+ ADW0Z41 | 869999000000001 | 2                 | João Silva | 869999000000001 | INSTALLED
+TRACCAR: [{'id': 2, 'name': 'ADW0Z41', 'disabled': False}]
+```
+
+**Depois do desvínculo** — `POST /devices/<id>/uninstall`:
+
+```
+ plate   | unique_id                                     | traccar_device_id | dono
+ ADW0Z41 | RETIRADO-4d5d14ed-8449-4fcc-a500-5ecb45b83331 |                   | João Silva
+
+ imei            | no_estoque | sem_device | selo_limpo | snapshot_limpo | traccar_device_id
+ 869999000000001 | t          | t          | t          | t              | 2
+```
+
+**Reinstalação no cliente B** — mesmo item, placa `ADX6H87`, sem erro e com veículo novo:
+
+```
+ plate   | unique_id                | dono         | imei            | status    | sem_carimbo_retirada
+ ADW0Z41 | RETIRADO-4d5d14ed-...    | João Silva   |                 |           | t
+ ADX6H87 | 869999000000001          | Maria Santos | 869999000000001 | INSTALLED | t
+```
+
+Os dois cadastros coexistem: o cliente antigo continua no lugar dele, sem rastreador; o novo ficou com o aparelho.
+
+**Segundo desvínculo** — device no Traccar de volta ao estado de estoque:
+
+```
+TRACCAR: [{'id': 2, 'name': '869999000000001', 'uniqueId': '869999000000001', 'disabled': False}]
+```
+
+### Dois defeitos que só o ensaio pegou
+
+1. **`PUT /devices/{id}` do Traccar recusa payload parcial (HTTP 400).** A primeira versão mandava só `{ name, disabled }` e o Traccar respondia 400 porque `uniqueId` é obrigatório — o desvínculo terminava com um `WARN` no log e o device continuava com o nome da placa. Corrigido lendo o device (`getDevice`) e sobrescrevendo só o que muda, mesmo padrão do `StockService.associate`.
+2. **`docker/traccar/traccar.xml` tinha `web.path = ./modern`**, pasta que não existe nem na 6.5 nem na 6.14.5 — o container morre no boot com `NoSuchFileException` e nunca chega a responder. Corrigido para `./web`. Vale conferir a mesma linha no `traccar.xml` de produção antes do upgrade 6.5 → 6.14.5.
+
+---
+
 ## Task 8: Deploy em produção
 
 Ler antes de começar: `docs/DEPLOY.md` seção 5 e a memória `feedback_deploy_via_registry` (o `git push` **não** dispara build; `docker build` + `service update` sem `push` pro registry **não** atualiza o container).
