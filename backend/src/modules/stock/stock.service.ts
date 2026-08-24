@@ -520,6 +520,12 @@ export class StockService {
           where: { id: vehicle.id },
           data: {
             plate: placa,
+            // `unique_id` acompanha o rastreador que está no carro agora. Sem
+            // isto, um veículo que já existia (criado pelo sync do SGA com
+            // `HINOVA-<codigo>`, ou que teve o aparelho trocado) ficaria pra
+            // sempre com o número de outro equipamento — e a busca por IMEI
+            // na tela de veículos não acharia o carro.
+            uniqueId: item.imei,
             chassi: lookup.veiculo.chassi ?? vehicle.chassi,
             model: lookup.veiculo.modelo ?? vehicle.model,
             status: 'ACTIVE',
@@ -568,6 +574,23 @@ export class StockService {
       const existingDevice = await tx.device.findFirst({
         where: { imei: item.imei, tenantId },
       });
+
+      // Espelho da checagem de placa ocupada: o aparelho só pode entrar num
+      // veículo novo se não estiver preso a outro. Sem isto, o `update` abaixo
+      // arrancaria o rastreador do carro alheio em silêncio — o dono antigo
+      // sumiria do mapa sem ninguém saber por quê.
+      if (existingDevice?.vehicleId && existingDevice.vehicleId !== vehicle.id) {
+        const ocupado = await tx.vehicle.findFirst({
+          where: { id: existingDevice.vehicleId },
+          select: { plate: true },
+        });
+        throw new UnprocessableEntityException(
+          `O rastreador IMEI ${item.imei} ainda está instalado ` +
+            `${ocupado?.plate ? `na placa ${ocupado.plate}` : 'em outro veículo'}. ` +
+            'Desvincule o rastreador antes de instalar em outro veículo.',
+        );
+      }
+
       const device = existingDevice
         ? await tx.device.update({
             where: { id: existingDevice.id },
@@ -578,6 +601,12 @@ export class StockService {
               installedBy: technicianName,
               installedByTechnicianId: dto.technicianId ?? null,
               installLocation,
+              // Aparelho reinstalado não pode carregar a data e o motivo da
+              // retirada anterior — o cadastro diria "retirado" com o
+              // equipamento em campo.
+              uninstalledAt: null,
+              uninstalledBy: null,
+              uninstallReason: null,
             },
           })
         : await tx.device.create({
