@@ -264,30 +264,62 @@ export class DevicesService {
 
       // Veículo sai do rastreamento — sem isso continuaria plotado no mapa com
       // a última posição congelada, o que é pior que não aparecer.
+      //
+      // `unique_id` é UNIQUE global e guarda o IMEI do rastreador que estava
+      // instalado. Enquanto o veículo antigo segurar esse número, instalar o
+      // mesmo aparelho em outra placa encontra ESTE registro pelo IMEI e o
+      // sobrescreve com a placa e o cliente novos (ou estoura a constraint no
+      // create). O valor sintético segue o padrão que o sync do SGA já usa pra
+      // veículo sem rastreador (`HINOVA-<codigo>`).
       if (vehicleId) {
         await tx.vehicle.update({
           where: { id: vehicleId },
-          data: { traccarDeviceId: null },
+          data: { traccarDeviceId: null, uniqueId: `RETIRADO-${vehicleId}` },
         });
       }
 
       // Aparelho volta pro estoque disponível (a listagem filtra associatedAt).
+      // O `traccarDeviceId` volta junto pra tela de estoque conseguir mostrar
+      // sinal e posição na hora, sem esperar o cron do StockTraccarService.
       await tx.stockItem.updateMany({
         where: { tenantId, imei: device.imei },
-        data: { associatedAt: null, deviceId: null },
+        data: {
+          associatedAt: null,
+          deviceId: null,
+          // O selo de conferência vale para UMA instalação. Voltando ao
+          // estoque com o selo antigo, o operador leria "já conferido" num
+          // aparelho que passou meses em campo e ninguém testou na volta.
+          validatedAt: null,
+          validatedById: null,
+          validatedByName: null,
+          validationOk: null,
+          validationNotes: null,
+          validationSnapshot: null,
+          ...(device.traccarDeviceId
+            ? { traccarDeviceId: device.traccarDeviceId }
+            : {}),
+        },
       });
     });
 
-    // Traccar: mantém o device (histórico de posições) mas desabilitado, pra
-    // não contar como ativo nem gerar alerta de offline eterno.
+    // Traccar: o device continua existindo (preserva o histórico de posições) e
+    // volta ao estado de estoque — nome de novo igual ao IMEI e HABILITADO.
+    //
+    // Habilitado é obrigatório: `disabled: true` faz o Traccar recusar a sessão
+    // do rastreador (`ConnectionManager.getDeviceSession` chama
+    // `Device.checkDisabled()`, que lança SecurityException), então o aparelho
+    // voltaria pro estoque sem comunicar e a conferência antes da próxima
+    // instalação ficaria impossível. O estoque inteiro vive cadastrado e
+    // comunicando no Traccar — ver StockTraccarService.
     if (device.traccarDeviceId) {
       try {
         await this.traccarService.updateDevice(device.traccarDeviceId, {
-          disabled: true,
+          name: device.imei,
+          disabled: false,
         });
       } catch (error) {
         this.logger.warn(
-          `Retirada ${device.imei}: não consegui desabilitar no Traccar (${
+          `Retirada ${device.imei}: não consegui devolver o device ao estado de estoque no Traccar (${
             error instanceof Error ? error.message : error
           }).`,
         );
