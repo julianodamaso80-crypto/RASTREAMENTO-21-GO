@@ -29,13 +29,6 @@ export default function MapaPage() {
   // Painel nasce RECOLHIDO: a prioridade é ver o máximo do mapa. Quem quiser
   // informação extra abre pela aba lateral.
   const [panelOpen, setPanelOpen] = useState(false);
-  // Placa vinda de "Abrir no mapa" em outra tela. Lida do location em vez de
-  // useSearchParams pra não exigir Suspense na rota.
-  const [placaInicial] = useState(() =>
-    typeof window === 'undefined'
-      ? ''
-      : (new URLSearchParams(window.location.search).get('placa') ?? ''),
-  );
   const focouInicial = useRef(false);
   // Abaixo de lg a VehicleSidebar (lista pra selecionar veículo) some da
   // tela — sem esta gaveta, no celular só sobra tocar em pins minúsculos no
@@ -66,18 +59,25 @@ export default function MapaPage() {
     [selectVehicle, vehicles, panelOpen],
   );
 
-  // A lista de veículos chega assíncrona, então a seleção inicial só pode
-  // acontecer depois dela. `focouInicial` garante que isso rode uma vez só —
-  // senão o mapa voltaria pro veículo da URL a cada atualização do WebSocket.
+  // Placa vinda de "Abrir no mapa" em outra tela. Lida do location (e não com
+  // useSearchParams, que exigiria Suspense na rota) DENTRO do efeito: numa
+  // navegação client-side o Next troca a URL depois da primeira renderização,
+  // então ler no render pegava a rota anterior e o veículo nunca era aberto.
+  //
+  // A lista de veículos chega assíncrona, então a seleção só pode acontecer
+  // depois dela. `focouInicial` garante que isso rode uma vez só — senão o
+  // mapa voltaria pro veículo da URL a cada atualização do WebSocket.
   useEffect(() => {
-    if (focouInicial.current || !placaInicial || vehicles.length === 0) return;
+    if (focouInicial.current || vehicles.length === 0) return;
+    const placa = new URLSearchParams(window.location.search).get('placa');
+    if (!placa) return;
     const alvo = vehicles.find(
-      (v) => v.plate?.toUpperCase() === placaInicial.toUpperCase(),
+      (v) => v.plate?.toUpperCase() === placa.toUpperCase(),
     );
     if (!alvo) return;
     focouInicial.current = true;
     selectVehicle(alvo.id);
-  }, [placaInicial, vehicles, selectVehicle]);
+  }, [vehicles, selectVehicle]);
 
   // Coordenada do veículo selecionado, como número solto.
   //
