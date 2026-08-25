@@ -307,18 +307,19 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     }, [googleVisible]);
 
     // ─────────────────────────────────────────────────────────────────
-    // Cria o elemento DOM do marker (seta direcional com cor por status)
+    // Desenha o conteúdo do marker DENTRO do nó que o MapLibre controla.
+    //
+    // Sempre repintar, nunca trocar o nó: quem é dono da posição na tela é o
+    // MapLibre, que escreve `transform` no elemento que recebeu no construtor
+    // e marca ele com a classe `maplibregl-marker`. Substituir esse nó por
+    // outro (o antigo `el.replaceWith(novo)` + `marker._element = novo`)
+    // entregava ao MapLibre um elemento sem a classe e sem transform: o
+    // marcador ia pro canto superior esquerdo do mapa — 718 px medidos, ~3 km —
+    // e ficava lá PERMANENTEMENTE, porque sem a classe nenhum reposicionamento
+    // posterior o traz de volta. Ver scripts/diagnostics/marcador-no-lugar.js.
     // ─────────────────────────────────────────────────────────────────
-    const createMarkerElement = useCallback(
-      (vehicle: VehicleWithTracking) => {
-        const el = document.createElement('div');
-        el.className = 'vehicle-marker-container';
-        // width/height FIXOS são essenciais: sem isso o div vira block e estica
-        // pra largura inteira do mapa, jogando o ícone ~350px pra esquerda do
-        // ponto real (o veículo "some" do lugar certo). Comprovado via teste.
-        el.style.cssText =
-          'cursor:pointer;position:relative;width:54px;height:54px;display:flex;align-items:center;justify-content:center;';
-
+    const pintarMarcador = useCallback(
+      (el: HTMLElement, vehicle: VehicleWithTracking) => {
         const color = STATUS_COLORS[vehicle.displayStatus];
         // Pulse só quando carro REALMENTE está se movendo (motor ligado +
         // velocidade > 0). Não pulsa só por ignição ligada parado.
@@ -338,7 +339,9 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           </div>
         `;
 
-        // Tooltip ao passar o mouse
+        // Tooltip ao passar o mouse. É filho do nó (o `innerHTML` acima já
+        // limpou o tooltip da pintura anterior), então acompanha o marcador
+        // sem participar do posicionamento dele.
         const tooltip = document.createElement('div');
         tooltip.style.cssText =
           'display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding:6px 10px;background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.15);border-radius:6px;white-space:nowrap;font-size:12px;color:#e2e8f0;z-index:10;pointer-events:none;margin-bottom:6px;backdrop-filter:blur(8px);';
@@ -363,10 +366,36 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           e.stopPropagation();
           onVehicleClick?.(vehicle.id);
         };
-
-        return el;
       },
       [onVehicleClick],
+    );
+
+    /**
+     * Cria o nó que será entregue ao MapLibre.
+     *
+     * NÃO declarar `position` aqui. A classe `.maplibregl-marker` que o
+     * MapLibre adiciona traz `position:absolute; top:0; left:0`, e é a partir
+     * desse canto que ele desloca o marcador com `transform`. Um
+     * `position:relative` inline vence essa classe (estilo inline > regra de
+     * classe), o marcador cai no FLUXO do canvas-container e cada um passa a
+     * empilhar 54 px — a altura do ícone — abaixo do anterior: medido em
+     * 25/08/2026, o 1º ficava certo, o 2º errava 239 m, o 8º errava 1 665 m, e
+     * com o parque inteiro o erro passava de 18 000 px, ou seja, o veículo
+     * simplesmente não aparecia no mapa.
+     *
+     * width/height fixos continuam necessários: sem eles o div vira block e
+     * estica pra largura inteira do mapa.
+     */
+    const createMarkerElement = useCallback(
+      (vehicle: VehicleWithTracking) => {
+        const el = document.createElement('div');
+        el.className = 'vehicle-marker-container';
+        el.style.cssText =
+          'cursor:pointer;width:54px;height:54px;display:flex;align-items:center;justify-content:center;';
+        pintarMarcador(el, vehicle);
+        return el;
+      },
+      [pintarMarcador],
     );
 
     // ─────────────────────────────────────────────────────────────────

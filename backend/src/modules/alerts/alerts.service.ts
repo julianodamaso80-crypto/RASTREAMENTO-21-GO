@@ -458,7 +458,7 @@ export class AlertsService {
       AlertType.GPS_SILENT,
       vehicleId,
       tenantId,
-      `GPS silenciado há ${minutesGpsSilent} min (heartbeat continua chegando — possível sabotagem da antena)`,
+      `Rastreador online, mas sem nova posição GPS há ${minutesGpsSilent} min — verificar`,
       {
         lastPositionAt: lastPositionAt.toISOString(),
         lastHeartbeatAt: lastHeartbeatAt.toISOString(),

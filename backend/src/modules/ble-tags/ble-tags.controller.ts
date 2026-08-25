@@ -36,6 +36,14 @@ export class BleTagsController {
     return this.bleTagsService.findAll(req.tenantId);
   }
 
+  @Get('active')
+  @ApiOperation({
+    summary: 'TAGs em uso — vinculadas a um veículo e ainda instaladas',
+  })
+  async findActive(@Req() req: AuthenticatedRequest) {
+    return this.bleTagsService.findActive(req.tenantId);
+  }
+
   @Get('polling-plan')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN)

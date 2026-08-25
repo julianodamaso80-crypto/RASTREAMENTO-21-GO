@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assessComms } from './asset-comms';
+import { BLE_DEVICE_MODELS } from '../../common/constants/ble-models';
 
 /** Situação financeira do ativo no SGA. */
 export type FinancialStatus = 'ADIMPLENTE' | 'INADIMPLENTE';
@@ -46,7 +47,11 @@ export class ClientsService {
       // pro estoque e o carro sai desta tela — senão a lista vira depósito de
       // veículo que ninguém rastreia e o total deixa de significar frota
       // monitorada. O veículo continua existindo em /veiculos.
-      device: { is: { deletedAt: null } },
+      //
+      // TAG Bluetooth não é rastreador: quem está com TAG aparece na tela de
+      // TAGs ativas, senão o total desta lista deixaria de significar frota
+      // com GPS.
+      device: { is: { deletedAt: null, model: { notIn: [...BLE_DEVICE_MODELS] } } },
     };
 
     const search = params.search?.trim();
@@ -193,9 +198,10 @@ export class ClientsService {
       tenantId,
       deletedAt: null,
       associateId: { not: null },
-      // Mesma régua da listagem: sem rastreador não é ativo. Contar diferente
-      // aqui faria o cabeçalho dizer um número e a lista mostrar outro.
-      device: { is: { deletedAt: null } },
+      // Mesma régua da listagem: sem rastreador não é ativo (e TAG não é
+      // rastreador). Contar diferente aqui faria o cabeçalho dizer um número e
+      // a lista mostrar outro.
+      device: { is: { deletedAt: null, model: { notIn: [...BLE_DEVICE_MODELS] } } },
     };
 
     const byTypeRows = await this.prisma.vehicle.groupBy({

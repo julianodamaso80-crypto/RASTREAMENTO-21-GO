@@ -96,6 +96,56 @@ export class BleTagsService {
     });
   }
 
+  /**
+   * TAGs em uso: vinculadas a um veículo e ainda instaladas.
+   *
+   * É a régua de "Clientes Ativos" aplicada à TAG — quem foi retirado
+   * (`uninstalledAt`) ou nunca foi instalado não conta como ativo. Traz o
+   * cliente junto porque a tela existe pro atendimento, que precisa saber de
+   * quem é a TAG antes de qualquer outra coisa.
+   */
+  async findActive(tenantId: string) {
+    return this.deviceModel.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        model: { in: BLE_DEVICE_MODELS },
+        vehicleId: { not: null },
+        uninstalledAt: null,
+      },
+      omit: OMIT_BLE_KEY,
+      include: {
+        vehicle: {
+          select: {
+            id: true,
+            plate: true,
+            brand: true,
+            model: true,
+            vehicleType: true,
+            associate: { select: { id: true, name: true, cpf: true } },
+          },
+        },
+        installedByTechnician: { select: { id: true, name: true } },
+        bleSightings: {
+          take: 1,
+          orderBy: { seenAt: 'desc' },
+          select: {
+            id: true,
+            macAddress: true,
+            rssi: true,
+            scannerLat: true,
+            scannerLng: true,
+            scannerSource: true,
+            seenAt: true,
+            accuracy: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: [{ installedAt: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
   async findOne(id: string, tenantId: string) {
     const tag = await this.deviceModel.findFirst({
       where: {

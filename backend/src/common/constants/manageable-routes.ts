@@ -15,6 +15,7 @@ export const MANAGEABLE_ROUTES = [
   { key: 'chips', label: 'Chips', path: '/chips' },
   { key: 'estoque', label: 'Estoque', path: '/estoque' },
   { key: 'clientes', label: 'Clientes ativos', path: '/clientes' },
+  { key: 'tags-ativas', label: 'TAGs ativas', path: '/tags-ativas' },
   { key: 'pendencias', label: 'Pendentes de instalação', path: '/pendencias' },
   { key: 'rotas', label: 'Rota inteligente', path: '/rotas' },
   { key: 'tecnicos', label: 'Técnicos', path: '/tecnicos' },

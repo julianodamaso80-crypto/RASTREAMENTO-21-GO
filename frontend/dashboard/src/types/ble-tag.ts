@@ -54,3 +54,22 @@ export interface BleSightingEvent {
     createdAt: string;
   };
 }
+
+/**
+ * TAG em uso: vinculada a um veículo e ainda instalada. Traz o cliente junto
+ * porque a tela existe pro atendimento, que precisa saber de quem é a TAG.
+ */
+export interface ActiveBleTag extends Omit<BleTag, 'vehicle'> {
+  installLocation: string | null;
+  installedBy: string | null;
+  uninstalledAt: string | null;
+  installedByTechnician: { id: string; name: string } | null;
+  vehicle: {
+    id: string;
+    plate: string;
+    brand: string | null;
+    model: string | null;
+    vehicleType: 'CAR' | 'MOTORCYCLE';
+    associate: { id: string; name: string; cpf: string | null } | null;
+  } | null;
+}

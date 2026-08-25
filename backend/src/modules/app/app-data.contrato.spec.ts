@@ -122,6 +122,20 @@ describe('contrato do associado — /app/alerts', () => {
     );
     expect(chaves(r[0].vehicle).sort()).toEqual(['id', 'plate'].sort());
   });
+
+  it('não expõe alertas técnicos internos (GPS_SILENT) ao associado', async () => {
+    const prisma: any = {
+      vehicle: { findMany: jest.fn().mockResolvedValue([{ id: 'v1' }]) },
+      alert: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const traccar: any = {
+      getPositions: jest.fn().mockResolvedValue([]),
+      getDevices: jest.fn().mockResolvedValue([]),
+    };
+    await new AppDataService(prisma, traccar).getAlerts('a1', 'tn1');
+    const where = prisma.alert.findMany.mock.calls[0][0].where;
+    expect(where.type).toEqual({ notIn: ['GPS_SILENT'] });
+  });
 });
 
 describe('contrato do associado — /app/auth/login', () => {

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { AlertType } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   TraccarService,
@@ -6,6 +7,12 @@ import {
 } from '../traccar/traccar.service';
 
 const KNOTS_TO_KMH = 1.852;
+
+// Alertas técnicos internos (antifurto encoberto) que NUNCA vão pro app do
+// associado — só confundem e alarmam o cliente. Mesma regra da TAG: o que é
+// interno fica interno. GPS_SILENT segue disparando pro time interno; aqui ele
+// só é omitido da visão do associado.
+const ALERTAS_OCULTOS_DO_ASSOCIADO: AlertType[] = [AlertType.GPS_SILENT];
 
 /** Posição "limpa" pro app — só o que a UI do associado precisa. */
 function toPositionDto(p: TraccarPosition) {
@@ -182,7 +189,12 @@ export class AppDataService {
     if (vehicleIds.length === 0) return [];
 
     const alerts = await this.prisma.alert.findMany({
-      where: { vehicleId: { in: vehicleIds }, tenantId, deletedAt: null },
+      where: {
+        vehicleId: { in: vehicleIds },
+        tenantId,
+        deletedAt: null,
+        type: { notIn: ALERTAS_OCULTOS_DO_ASSOCIADO },
+      },
       orderBy: { createdAt: 'desc' },
       take: Math.min(limit, 100),
       select: {
