@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, Search, User as UserIcon } from 'lucide-react';
 import { AlertsDropdown } from '@/components/alerts/alerts-dropdown';
 import { AssistantDrawer } from '@/components/assistant/assistant-drawer';
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/auth-context';
 import { useTracking } from '@/contexts/tracking-context';
+import { matchesVehicleSearch } from '@/lib/vehicle-search';
 import { cn } from '@/lib/utils';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -26,8 +27,9 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function Header() {
   const { user, logout } = useAuth();
-  const { setSearchQuery, filteredVehicles } = useTracking();
+  const { setSearchQuery, filteredVehicles, vehicles, selectVehicle } = useTracking();
   const router = useRouter();
+  const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState('');
   const [isMac, setIsMac] = useState(false);
@@ -46,9 +48,27 @@ export function Header() {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!value.trim()) return;
-    setSearchQuery(value.trim());
-    router.push('/mapa');
+    const termo = value.trim();
+    if (!termo) return;
+    setSearchQuery(termo);
+
+    // Quem digita um IMEI (ou placa) quer ver AQUELE rastreador aberto no
+    // mapa. Só filtrar a lista deixava o mapa no enquadramento padrão, com o
+    // veículo procurado fora da tela: o operador digitava o IMEI e não via
+    // nada. Quando a busca resolve num único veículo, ele já entra aberto.
+    const achados = vehicles.filter((v) => matchesVehicleSearch(v, termo));
+    const alvo = achados.length === 1 ? achados[0] : null;
+
+    if (!alvo) {
+      router.push('/mapa');
+      return;
+    }
+
+    // Já dentro do mapa a URL não é reprocessada (o parâmetro só é lido na
+    // montagem), então a seleção tem que ser direta pra segunda busca também
+    // funcionar.
+    if (pathname === '/mapa') selectVehicle(alvo.id);
+    else router.push(`/mapa?placa=${encodeURIComponent(alvo.plate)}`);
   };
 
   // Tenta achar uma placa exata pra dar feedback rápido (não obrigatório)

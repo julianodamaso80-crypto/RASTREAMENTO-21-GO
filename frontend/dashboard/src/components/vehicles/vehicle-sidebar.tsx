@@ -10,8 +10,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useState, useEffect } from 'react';
 
 export function VehicleSidebar() {
-  const { filteredVehicles, setSearchQuery, isLoading } = useTracking();
-  const [localSearch, setLocalSearch] = useState('');
+  const { filteredVehicles, searchQuery, setSearchQuery, isLoading } = useTracking();
+  // Nasce com a busca que já está valendo (ex.: o IMEI digitado na barra do
+  // topo). Começar vazio zerava o filtro assim que o mapa montava, e o
+  // operador via a lista inteira de volta com o termo ainda escrito em cima.
+  const [localSearch, setLocalSearch] = useState(searchQuery);
   const debouncedSearch = useDebounce(localSearch, 300);
 
   useEffect(() => {
