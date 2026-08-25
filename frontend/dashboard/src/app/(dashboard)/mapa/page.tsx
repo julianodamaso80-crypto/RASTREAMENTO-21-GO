@@ -32,6 +32,10 @@ export default function MapaPage() {
   const focouInicial = useRef(false);
   /** Último veículo que a câmera já enquadrou — evita reimpor o zoom. */
   const focadoId = useRef<string | null>(null);
+  // O mapa é carregado sob demanda: comandar a câmera antes dele existir era
+  // comando perdido, e o veículo aberto por "Abrir no mapa" ficava fora da
+  // tela justamente na navegação por dentro do painel.
+  const [mapaPronto, setMapaPronto] = useState(false);
   // Abaixo de lg a VehicleSidebar (lista pra selecionar veículo) some da
   // tela — sem esta gaveta, no celular só sobra tocar em pins minúsculos no
   // mapa, e foi exatamente isso que ficou impossível de usar.
@@ -44,6 +48,8 @@ export default function MapaPage() {
   useEffect(() => {
     if (selectedVehicleId) setVehicleListOpen(false);
   }, [selectedVehicleId]);
+
+  const onMapaPronto = useCallback(() => setMapaPronto(true), []);
 
   const handleVehicleClick = useCallback(
     (vehicleId: string) => {
@@ -105,7 +111,8 @@ export default function MapaPage() {
       focadoId.current = null;
       return;
     }
-    if (!alvoLat || !alvoLng || focadoId.current === selectedVehicleId) return;
+    if (!mapaPronto || !alvoLat || !alvoLng) return;
+    if (focadoId.current === selectedVehicleId) return;
     focadoId.current = selectedVehicleId;
     mapRef.current?.flyTo(
       alvoLng,
@@ -113,7 +120,7 @@ export default function MapaPage() {
       FOCUS_ZOOM,
       panelOpen ? PANEL_WIDTH : 0,
     );
-  }, [selectedVehicleId, alvoLat, alvoLng, panelOpen]);
+  }, [selectedVehicleId, alvoLat, alvoLng, panelOpen, mapaPronto]);
 
   // Seguimento: mantém o veículo à vista enquanto ele anda, sem tocar no zoom
   // e sem brigar com quem arrastou o mapa — a câmera só reage quando o veículo
@@ -136,6 +143,7 @@ export default function MapaPage() {
           ref={mapRef}
           vehicles={filteredVehicles}
           onVehicleClick={handleVehicleClick}
+          onReady={onMapaPronto}
           // O painel de detalhe cobre os 380px da direita e engolia o seletor
           // de mapa (incluindo o Satélite Google). Com o painel aberto ele sai
           // de baixo: à esquerda do painel no desktop, no canto esquerdo no

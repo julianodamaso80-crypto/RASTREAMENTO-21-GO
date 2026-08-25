@@ -42,6 +42,10 @@ interface MapContainerProps {
   /** Reposiciona o seletor de mapa quando algo cobre o canto superior direito
    *  — no /mapa é o painel de detalhe do veículo. */
   basemapToggleClassName?: string;
+  /** Avisa que o mapa já existe e aceita comandos de câmera. Quem chega com um
+   *  veículo pra abrir (ex.: "Abrir no mapa") precisa disso: o componente é
+   *  carregado sob demanda e o `flyTo` disparado antes disso ia pro vazio. */
+  onReady?: () => void;
 }
 
 /** Duração do deslize do marcador entre duas posições reportadas. */
@@ -75,9 +79,15 @@ function distanciaMetros(a: [number, number], b: [number, number]): number {
  * componente como fallback pra clientes individuais (visão CLIENT).
  */
 const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
-  function MapContainer({ vehicles, onVehicleClick, basemapToggleClassName }, ref) {
+  function MapContainer(
+    { vehicles, onVehicleClick, basemapToggleClassName, onReady },
+    ref,
+  ) {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
+    // Guardado em ref pra não entrar nas dependências do efeito que cria o
+    // mapa: um callback inline recriaria o mapa inteiro a cada renderização.
+    const onReadyRef = useRef(onReady);
     const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
     // Animação em curso por veículo: id -> handle do requestAnimationFrame.
     // Ver `animarMarcador()`.
@@ -145,6 +155,10 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     // Inicializa mapa (uma vez só — não depende de `basemap`)
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
+      onReadyRef.current = onReady;
+    }, [onReady]);
+
+    useEffect(() => {
       if (!mapContainerRef.current || mapRef.current) return;
 
       const map = new maplibregl.Map({
@@ -162,6 +176,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       );
 
       mapRef.current = map;
+      map.once('load', () => onReadyRef.current?.());
 
       return () => {
         markersRef.current.forEach((m) => m.remove());
