@@ -30,6 +30,8 @@ export default function MapaPage() {
   // informação extra abre pela aba lateral.
   const [panelOpen, setPanelOpen] = useState(false);
   const focouInicial = useRef(false);
+  /** Último veículo que a câmera já enquadrou — evita reimpor o zoom. */
+  const focadoId = useRef<string | null>(null);
   // Abaixo de lg a VehicleSidebar (lista pra selecionar veículo) some da
   // tela — sem esta gaveta, no celular só sobra tocar em pins minúsculos no
   // mapa, e foi exatamente isso que ficou impossível de usar.
@@ -89,20 +91,29 @@ export default function MapaPage() {
   const alvoLat = selectedVehicle?.latitude ?? null;
   const alvoLng = selectedVehicle?.longitude ?? null;
 
-  // Foco inicial: acontece ao SELECIONAR o veículo e só aí. É o único momento
+  // Foco inicial: acontece uma vez por veículo selecionado. É o único momento
   // em que o zoom é imposto — a partir daqui o zoom é de quem está olhando.
+  //
+  // O `focadoId` existe porque a coordenada costuma chegar DEPOIS da seleção
+  // (as posições vêm do Traccar numa chamada separada da lista de veículos):
+  // quem só olhava `selectedVehicleId` desistia com a coordenada ainda nula e
+  // o veículo aberto por "Abrir no mapa" ficava fora da tela. Com o ref dá pra
+  // esperar a coordenada sem reimpor o zoom a cada metro andado — que era o
+  // bug antigo de a câmera brigar com quem estava olhando.
   useEffect(() => {
-    if (!selectedVehicleId || !alvoLat || !alvoLng) return;
+    if (!selectedVehicleId) {
+      focadoId.current = null;
+      return;
+    }
+    if (!alvoLat || !alvoLng || focadoId.current === selectedVehicleId) return;
+    focadoId.current = selectedVehicleId;
     mapRef.current?.flyTo(
       alvoLng,
       alvoLat,
       FOCUS_ZOOM,
       panelOpen ? PANEL_WIDTH : 0,
     );
-    // Dependências de propósito só na seleção: incluir a coordenada aqui faria
-    // o zoom voltar pro FOCUS_ZOOM a cada metro andado, que é o bug antigo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedVehicleId]);
+  }, [selectedVehicleId, alvoLat, alvoLng, panelOpen]);
 
   // Seguimento: mantém o veículo à vista enquanto ele anda, sem tocar no zoom
   // e sem brigar com quem arrastou o mapa — a câmera só reage quando o veículo
