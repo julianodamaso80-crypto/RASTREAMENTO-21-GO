@@ -66,8 +66,12 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   // displayStatus sozinho não diz isso porque ele é sobre IGNIÇÃO agora.
   const isActuallyMoving =
     vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0;
-  // Prioriza endereço do Nominatim; se falhou, usa o do Traccar (que pode
-  // vir vazio se geocoder do servidor estiver lento/rate-limited).
+  // Os dois endereços aqui são da MESMA coordenada que aparece logo abaixo
+  // deles na tela, e é isso que os torna intercambiáveis: `reverseAddress` só
+  // sai do hook carimbado com a coordenada pedida, e `vehicle.address` vem do
+  // mesmo objeto `position` do Traccar que forneceu latitude e longitude.
+  // Nenhum dos dois pode ser de um ponto anterior — se algum dia um fallback
+  // sem esse vínculo entrar aqui, o texto volta a divergir do mapa.
   const displayAddress = reverseAddress || vehicle.address || null;
   // Local físico no veículo informado na instalação (ex.: "atrás do porta-luvas").
   const installLocation = vehicle.device?.installLocation?.trim() || null;

@@ -92,6 +92,12 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     // Animação em curso por veículo: id -> handle do requestAnimationFrame.
     // Ver `animarMarcador()`.
     const animacoesRef = useRef<Map<string, number>>(new Map());
+    // Última coordenada que o rastreador reportou por veículo — o ponto onde o
+    // marcador tem que estar. Fica em ref, e não num `data-` do elemento, para
+    // que ele descreva SEMPRE a coordenada real: um atributo no DOM podia
+    // continuar afirmando um destino que o marcador já não ocupava, e a guarda
+    // de "coordenada repetida" então travava o marcador no lugar errado.
+    const destinosRef = useRef<Map<string, [number, number]>>(new Map());
     const [basemap, setBasemap] = useState<BasemapId>('streets');
     // Só preenchido quando o satélite ativo é o do Google — dispara a
     // atribuição obrigatória (logo + copyright do viewport).
@@ -187,11 +193,17 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     }, []);
 
     // ─────────────────────────────────────────────────────────────────
-    // Troca de basemap (Padrão ↔ Satélite). MapLibre limpa os markers
-    // DOM ao chamar setStyle em algumas versões — re-attach manual após
-    // o `styledata` garantindo que o pin do veículo continua visível.
-    // CRÍTICO em rastreamento: se o usuário troca pra satélite e o pin
-    // some, ele perde o veículo de vista.
+    // Troca de basemap (Padrão ↔ Satélite).
+    //
+    // `setStyle` NÃO mexe nos markers: eles são nós DOM do canvas-container,
+    // não fazem parte do style. Medido no MapLibre 5.21.1 em 25/08/2026 — o
+    // marcador continua no pixel exato depois da troca.
+    //
+    // Existia aqui um re-attach manual no `styledata` que tirava e recriava
+    // cada marker na coordenada capturada num snapshot. Além de desnecessário,
+    // ele congelava o marcador: o snapshot era tirado no meio de um deslize, e
+    // como a coordenada reportada não tinha mudado, nada o trazia de volta pro
+    // ponto real. Trocar de mapa deslocava o veículo — foi removido.
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
       const map = mapRef.current;
@@ -203,28 +215,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
 
       const applyStyle = (style: Parameters<typeof map.setStyle>[0]) => {
         if (cancelled) return;
-
-        // Os markers são recriados abaixo; um deslize em curso continuaria
-        // escrevendo no marker antigo, que já saiu do mapa.
-        animacoesRef.current.forEach((handle) => cancelAnimationFrame(handle));
-        animacoesRef.current.clear();
-
-        const snapshot = Array.from(markersRef.current.entries()).map(
-          ([id, marker]) => ({ id, lngLat: marker.getLngLat(), el: marker.getElement() }),
-        );
-
         map.setStyle(style);
-
-        map.once('styledata', () => {
-          snapshot.forEach(({ id, lngLat, el }) => {
-            const existing = markersRef.current.get(id);
-            existing?.remove();
-            const newMarker = new maplibregl.Marker({ element: el })
-              .setLngLat(lngLat)
-              .addTo(map);
-            markersRef.current.set(id, newMarker);
-          });
-        });
       };
 
       if (basemap === 'satellite-google') {
@@ -491,23 +482,36 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           // do parque, então este efeito roda ~1x/s por veículo com a mesma
           // coordenada. Sem esta guarda, cada passagem reiniciaria o deslize
           // do zero e o marcador nunca chegaria ao destino.
-          const destino = `${lngLat[0]},${lngLat[1]}`;
-          if (el.dataset.destino !== destino) {
-            el.dataset.destino = destino;
+          const destinoAtual = destinosRef.current.get(vehicle.id);
+          const coordenadaNova =
+            !destinoAtual ||
+            destinoAtual[0] !== lngLat[0] ||
+            destinoAtual[1] !== lngLat[1];
+
+          if (coordenadaNova) {
+            destinosRef.current.set(vehicle.id, lngLat);
             animarMarcador(vehicle.id, existing, lngLat);
+          } else if (!animacoesRef.current.has(vehicle.id)) {
+            // Rede de segurança: coordenada é a mesma e não há deslize em
+            // curso, então o marcador TEM que estar exatamente sobre ela. Se
+            // não estiver, alguma coisa o desposicionou — crava de volta agora,
+            // no máximo um segundo depois. Um marcador fora do lugar é o mapa
+            // mentindo onde o veículo está; não pode sobreviver a um tick.
+            const onde = existing.getLngLat();
+            if (onde.lng !== lngLat[0] || onde.lat !== lngLat[1]) {
+              existing.setLngLat(lngLat);
+            }
           }
+
           if (el.dataset.vkey !== vkey) {
-            // status/tipo/movimento mudou → redesenha o marcador inteiro
-            const newEl = createMarkerElement(vehicle);
-            newEl.dataset.vkey = vkey;
-            // O destino acompanha o elemento novo, senão a guarda acima
-            // reabriria uma animação a cada redesenho de status.
-            newEl.dataset.destino = el.dataset.destino ?? '';
-            el.replaceWith(newEl);
-            (existing as unknown as { _element: HTMLElement })._element = newEl;
+            // status/tipo/movimento mudou → repinta o conteúdo DENTRO do mesmo
+            // nó. Trocar o nó por outro tirava dele a classe que o MapLibre usa
+            // pra posicionar e mandava o marcador pro canto do mapa de vez.
+            pintarMarcador(el, vehicle);
+            el.dataset.vkey = vkey;
           } else {
             // só posição/direção mudou (carro andando) → gira a img no lugar,
-            // sem recriar (evita o "pisca" do desenho a cada atualização)
+            // sem repintar (evita o "pisca" do desenho a cada atualização)
             const img = el.querySelector('img');
             if (img) {
               (img as HTMLElement).style.transform = `rotate(${vehicle.course}deg)`;
@@ -516,7 +520,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         } else {
           const el = createMarkerElement(vehicle);
           el.dataset.vkey = vkey;
-          el.dataset.destino = `${lngLat[0]},${lngLat[1]}`;
+          destinosRef.current.set(vehicle.id, lngLat);
           const marker = new maplibregl.Marker({ element: el })
             .setLngLat(lngLat)
             .addTo(map);
@@ -534,9 +538,10 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           }
           marker.remove();
           markersRef.current.delete(id);
+          destinosRef.current.delete(id);
         }
       });
-    }, [vehicles, createMarkerElement, animarMarcador]);
+    }, [vehicles, createMarkerElement, pintarMarcador, animarMarcador]);
 
     return (
       <div className="relative w-full h-full">

@@ -209,8 +209,16 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
         const el = document.createElement('div');
         // width/height fixos: sem isso o div vira block, estica pela largura do
         // mapa e o ícone aparece deslocado do ponto real.
+        //
+        // E NUNCA declarar `position` aqui: a classe `.maplibregl-marker` traz
+        // `position:absolute; top:0; left:0`, e é desse canto que o MapLibre
+        // desloca o pino com `transform`. Um `position:relative` inline vence a
+        // classe, o pino cai no fluxo do canvas-container e cada um empilha a
+        // própria altura abaixo do anterior — o 1º certo, o 2º a centenas de
+        // metros, o 8º a mais de 1,6 km. Medido em 25/08/2026; ver
+        // scripts/diagnostics/marcador-no-lugar.js.
         el.style.cssText =
-          'cursor:pointer;position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;';
+          'cursor:pointer;width:44px;height:44px;display:flex;align-items:center;justify-content:center;';
 
         const cor = corDaConexao(ponto);
         const giro = ponto.direcao ?? 0;

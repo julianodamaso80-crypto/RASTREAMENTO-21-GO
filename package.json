@@ -13,9 +13,11 @@
     "docker:logs": "docker compose -f docker/docker-compose.yml logs -f",
     "dev:backend": "cd backend && npm run start:dev",
     "dev:frontend": "cd frontend/dashboard && npm run dev",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "test:mapa": "node scripts/diagnostics/marcador-no-lugar.js"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "puppeteer-core": "^25.9.0"
   }
 }
