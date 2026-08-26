@@ -576,11 +576,12 @@ export const bleTagsApi = {
     search?: string;
     tipo?: 'RASTREADOR_E_TAG' | 'SO_TAG';
   }): Promise<ActiveTagsResponse> => {
-    const res = await api.get<ApiResponse<ActiveTagsResponse>>(
-      '/ble-tags/active',
-      { params },
-    );
-    return res.data.data;
+    // O backend responde no formato paginado ({ data, meta }) — pegar só o
+    // `data` deixaria a tela sem total, sem páginas e sem os contadores.
+    const res = await api.get<ActiveTagsResponse>('/ble-tags/active', {
+      params,
+    });
+    return res.data;
   },
   getById: async (id: string): Promise<BleTag> => {
     const res = await api.get<ApiResponse<BleTag>>(`/ble-tags/${id}`);
