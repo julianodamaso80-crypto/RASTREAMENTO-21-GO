@@ -159,6 +159,37 @@ describe('BleTagsService.findActive', () => {
     expect(r.data[0].tag).toBeNull();
   });
 
+  it('buscar por nome não pode trazer a base inteira de volta', async () => {
+    const { service, findManyArgs } = montar();
+
+    await service.findActive(TENANT, { search: 'AURELIO' });
+
+    const or = findManyArgs[0].where.OR;
+    // `contains: ''` casa com tudo — o CPF só entra quando o termo tem
+    // dígitos suficientes pra ser documento.
+    expect(or.some((c: any) => c.cpf)).toBe(false);
+    expect(or.some((c: any) => c.associateName?.contains === 'AURELIO')).toBe(true);
+  });
+
+  it('pedaço numérico de placa não vira busca por CPF', async () => {
+    const { service, findManyArgs } = montar();
+
+    await service.findActive(TENANT, { search: 'LTG2D32' });
+
+    const or = findManyArgs[0].where.OR;
+    expect(or.some((c: any) => c.cpf)).toBe(false);
+    expect(or.some((c: any) => c.plate?.contains === 'LTG2D32')).toBe(true);
+  });
+
+  it('CPF inteiro continua buscando por documento', async () => {
+    const { service, findManyArgs } = montar();
+
+    await service.findActive(TENANT, { search: '047.724.477-76' });
+
+    const or = findManyArgs[0].where.OR;
+    expect(or.some((c: any) => c.cpf?.contains === '04772447776')).toBe(true);
+  });
+
   it('traduz o código do SGA pro que a tela mostra', async () => {
     const { service } = montar([
       linhaSga(),

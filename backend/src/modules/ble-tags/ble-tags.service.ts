@@ -30,18 +30,30 @@ export type ActiveTagsQuery = {
   tipo?: 'RASTREADOR_E_TAG' | 'SO_TAG';
 };
 
-/** Mesma busca da fila de pendências: placa, chassi, nome ou CPF. */
+/**
+ * Busca por placa, chassi, nome ou CPF.
+ *
+ * Cada pedaço só entra quando tem o que casar: `contains: ''` casa com TODAS as
+ * linhas, então buscar um nome (que não tem dígito) trazia a base inteira de
+ * volta como se nada tivesse sido filtrado.
+ */
 function filtroBuscaSga(termo: string) {
   const t = termo.trim();
   const alfanumerico = t.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return {
-    OR: [
-      { plate: { contains: alfanumerico } },
-      { chassi: { contains: alfanumerico } },
-      { associateName: { contains: t, mode: 'insensitive' as const } },
-      { cpf: { contains: t.replace(/\D/g, '') } },
-    ],
-  };
+  const digitos = t.replace(/\D/g, '');
+
+  const OR: Record<string, unknown>[] = [
+    { associateName: { contains: t, mode: 'insensitive' as const } },
+  ];
+  if (alfanumerico) {
+    OR.push({ plate: { contains: alfanumerico } });
+    OR.push({ chassi: { contains: alfanumerico } });
+  }
+  // CPF tem 11 dígitos: pedaço curto (o "232" de uma placa) casaria com meio
+  // mundo. Só busca por documento quando o termo é mesmo um documento.
+  if (digitos.length >= 6) OR.push({ cpf: { contains: digitos } });
+
+  return { OR };
 }
 
 // Chave privada da TAG: nunca pode voltar em listagem. Só sai do banco pela
