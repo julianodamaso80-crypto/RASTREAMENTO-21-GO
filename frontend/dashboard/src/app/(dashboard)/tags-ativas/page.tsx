@@ -88,6 +88,26 @@ export default function TagsAtivasPage() {
     setPage(1);
   };
 
+  /**
+   * O botão fica em todos os cards, mas só navega quando existe posição pra
+   * mostrar. Abrir um mapa vazio seria pior do que dizer o motivo: o operador
+   * ficaria procurando um pino que não existe.
+   */
+  const abrirNoMapa = (linha: ActiveTagRow) => {
+    if (linha.ultimaPosicao) {
+      router.push(
+        `/mapa?placa=${encodeURIComponent(linha.plate || linha.chassi || '')}`,
+      );
+      return;
+    }
+    toast.info(
+      linha.tipo === 'SO_TAG'
+        ? 'Esse veículo só tem TAG. A TAG não reporta posição sozinha — precisa de um scanner por perto.'
+        : 'Sem posição aqui: o rastreador desse veículo ainda não está no 21 GO.',
+      { description: `${linha.plate || linha.chassi} · ${linha.associateName}` },
+    );
+  };
+
   return (
     <div className="space-y-5 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -195,11 +215,7 @@ export default function TagsAtivasPage() {
                 key={linha.id}
                 linha={linha}
                 podeVerDocumento={podeVerDocumento}
-                onMapa={() =>
-                  router.push(
-                    `/mapa?placa=${encodeURIComponent(linha.plate || linha.chassi || '')}`,
-                  )
-                }
+                onMapa={() => abrirNoMapa(linha)}
               />
             ))}
           </div>
@@ -315,16 +331,32 @@ function CardTag({
           </p>
         </div>
 
-        <span
-          className={cn(
-            'shrink-0 rounded px-2 py-0.5 text-[11px] font-bold',
-            soTag
-              ? 'bg-brand-orange-500/15 text-brand-orange-500'
-              : 'bg-muted text-muted-foreground',
-          )}
-        >
-          {soTag ? 'SÓ TAG' : 'RASTREADOR + TAG'}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span
+            className={cn(
+              'rounded px-2 py-0.5 text-[11px] font-bold',
+              soTag
+                ? 'bg-brand-orange-500/15 text-brand-orange-500'
+                : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {soTag ? 'SÓ TAG' : 'RASTREADOR + TAG'}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className={cn('h-8', !pos && 'text-muted-foreground')}
+            onClick={onMapa}
+            title={
+              pos
+                ? 'Ver no mapa a última posição'
+                : 'Sem posição no 21 GO — clique para saber por quê'
+            }
+          >
+            <MapPin className="mr-1 h-3.5 w-3.5" />
+            Abrir no mapa
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-1.5 px-4 py-3 text-sm">
@@ -359,10 +391,6 @@ function CardTag({
                 </span>
               </span>
             </p>
-            <Button size="sm" variant="outline" className="h-8" onClick={onMapa}>
-              <MapPin className="mr-1 h-3.5 w-3.5" />
-              Abrir no mapa
-            </Button>
           </div>
         ) : (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
