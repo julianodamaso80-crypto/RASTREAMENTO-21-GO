@@ -16,6 +16,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { BleTagsService } from './ble-tags.service';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
+import { FilterActiveTagsDto } from './dto/filter-active-tags.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -38,10 +39,19 @@ export class BleTagsController {
 
   @Get('active')
   @ApiOperation({
-    summary: 'TAGs em uso — vinculadas a um veículo e ainda instaladas',
+    summary:
+      'TAGs em uso — veículos com TAG no SGA (rastreador+TAG ou só TAG), paginado',
   })
-  async findActive(@Req() req: AuthenticatedRequest) {
-    return this.bleTagsService.findActive(req.tenantId);
+  async findActive(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: FilterActiveTagsDto,
+  ) {
+    return this.bleTagsService.findActive(req.tenantId, {
+      page: query.page,
+      perPage: query.perPage,
+      search: query.search,
+      tipo: query.tipo,
+    });
   }
 
   @Get('polling-plan')

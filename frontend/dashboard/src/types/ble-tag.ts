@@ -56,20 +56,41 @@ export interface BleSightingEvent {
 }
 
 /**
- * TAG em uso: vinculada a um veículo e ainda instalada. Traz o cliente junto
- * porque a tela existe pro atendimento, que precisa saber de quem é a TAG.
+ * TAG em uso, como o SGA enxerga: o cliente contratou TAG (com rastreador ou
+ * sozinha) e está ativo. `tag` só vem preenchida quando a TAG também está
+ * cadastrada aqui, com número e MAC — o que é raro.
  */
-export interface ActiveBleTag extends Omit<BleTag, 'vehicle'> {
-  installLocation: string | null;
-  installedBy: string | null;
-  uninstalledAt: string | null;
-  installedByTechnician: { id: string; name: string } | null;
-  vehicle: {
+export interface ActiveTagRow {
+  id: string;
+  plate: string;
+  chassi: string | null;
+  brandModel: string;
+  associateName: string;
+  cpf: string | null;
+  phone: string | null;
+  tipo: 'RASTREADOR_E_TAG' | 'SO_TAG';
+  contractDate: string | null;
+  hinovaVehicleCode: string;
+  /** Id do veículo no 21 GO, quando ele existe aqui. */
+  vehicleId: string | null;
+  tag: {
     id: string;
-    plate: string;
+    imei: string;
+    model: string;
     brand: string | null;
-    model: string | null;
-    vehicleType: 'CAR' | 'MOTORCYCLE';
-    associate: { id: string; name: string; cpf: string | null } | null;
+    macAddress: string | null;
+    lastSeenAt: string | null;
   } | null;
+}
+
+export interface ActiveTagsResponse {
+  data: ActiveTagRow[];
+  meta: {
+    page: number;
+    perPage: number;
+    total: number;
+    totalPages: number;
+    comRastreador: number;
+    soTag: number;
+  };
 }

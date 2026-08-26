@@ -11,6 +11,39 @@ import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
 
 const BLE_DEVICE_MODELS = ['BLE_KTAG', 'BLE_REDTAG', 'BLE_AIRTAG_GENERIC'];
 
+/**
+ * `codigo_tipo_adesao` do SGA — a lista completa vive no mapper das pendências.
+ * Aqui interessam os dois que significam TAG já em uso.
+ */
+const ADHESION_RASTREADOR_E_TAG = '8';
+const ADHESION_SO_TAG = '9';
+
+const ADHESION_POR_TIPO: Record<string, string> = {
+  RASTREADOR_E_TAG: ADHESION_RASTREADOR_E_TAG,
+  SO_TAG: ADHESION_SO_TAG,
+};
+
+export type ActiveTagsQuery = {
+  page?: number;
+  perPage?: number;
+  search?: string;
+  tipo?: 'RASTREADOR_E_TAG' | 'SO_TAG';
+};
+
+/** Mesma busca da fila de pendências: placa, chassi, nome ou CPF. */
+function filtroBuscaSga(termo: string) {
+  const t = termo.trim();
+  const alfanumerico = t.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return {
+    OR: [
+      { plate: { contains: alfanumerico } },
+      { chassi: { contains: alfanumerico } },
+      { associateName: { contains: t, mode: 'insensitive' as const } },
+      { cpf: { contains: t.replace(/\D/g, '') } },
+    ],
+  };
+}
+
 // Chave privada da TAG: nunca pode voltar em listagem. Só sai do banco pela
 // rota de plano de polling (getPollingPlan), que escolhe os campos a dedo.
 const OMIT_BLE_KEY = {
@@ -58,6 +91,14 @@ export class BleTagsService {
     return (this.prisma as any).alert;
   }
 
+  private get sgaVehicleModel() {
+    return (this.prisma as any).sgaVehicle;
+  }
+
+  private get vehicleModel() {
+    return (this.prisma as any).vehicle;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   setEmitter(emitter: SightingEmitter) {
@@ -97,53 +138,153 @@ export class BleTagsService {
   }
 
   /**
-   * TAGs em uso: vinculadas a um veículo e ainda instaladas.
+   * TAGs em uso, na régua do dono: "vinculada a algum veículo e em uso já".
    *
-   * É a régua de "Clientes Ativos" aplicada à TAG — quem foi retirado
-   * (`uninstalledAt`) ou nunca foi instalado não conta como ativo. Traz o
-   * cliente junto porque a tela existe pro atendimento, que precisa saber de
-   * quem é a TAG antes de qualquer outra coisa.
+   * A fonte é o espelho do SGA, não o nosso cadastro de equipamento. O SGA é
+   * quem sabe quem contratou TAG (`codigo_tipo_adesao` 8 = rastreador+TAG,
+   * 9 = só TAG); no 21 GO a TAG só existe como equipamento quando alguém a
+   * cadastra com número e MAC, e isso quase nunca aconteceu — listar pelo
+   * nosso cadastro mostrava zero enquanto o SGA tinha ~9,7 mil ativos.
+   *
+   * Quando a TAG TAMBÉM está cadastrada aqui, o card ganha o número, o MAC e a
+   * última detecção. Sem isso, ela aparece como cadastro do SGA mesmo — que é
+   * a verdade: sabemos que o cliente tem TAG, não sabemos onde ela está.
    */
-  async findActive(tenantId: string) {
-    return this.deviceModel.findMany({
+  async findActive(tenantId: string, query: ActiveTagsQuery = {}) {
+    const page = Math.max(1, Math.trunc(query.page ?? 1));
+    const perPage = Math.min(200, Math.max(1, Math.trunc(query.perPage ?? 20)));
+
+    const where: Record<string, unknown> = {
+      tenantId,
+      // Só cliente ATIVO: quem está inativo ou negado não é TAG em uso.
+      situationLabel: 'ATIVO',
+      adhesionCode: query.tipo
+        ? ADHESION_POR_TIPO[query.tipo]
+        : { in: [ADHESION_RASTREADOR_E_TAG, ADHESION_SO_TAG] },
+      ...(query.search ? filtroBuscaSga(query.search) : {}),
+    };
+
+    const [total, comRastreador, soTag, rows] = await Promise.all([
+      this.sgaVehicleModel.count({ where }),
+      this.sgaVehicleModel.count({
+        where: { ...where, adhesionCode: ADHESION_RASTREADOR_E_TAG },
+      }),
+      this.sgaVehicleModel.count({
+        where: { ...where, adhesionCode: ADHESION_SO_TAG },
+      }),
+      this.sgaVehicleModel.findMany({
+        where,
+        orderBy: [{ contractDate: 'desc' }, { plate: 'asc' }],
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+    ]);
+
+    const placas = rows.map((r: any) => r.plate).filter(Boolean);
+    const equipamentoPorPlaca = await this.equipamentoPorPlaca(tenantId, placas);
+
+    return {
+      data: rows.map((r: any) => {
+        const nosso = equipamentoPorPlaca.get(r.plate?.toUpperCase() ?? '');
+        return {
+          id: r.id,
+          plate: r.plate,
+          chassi: r.chassi,
+          brandModel: r.brandModel,
+          associateName: r.associateName,
+          cpf: r.cpf,
+          phone: r.phone,
+          tipo:
+            r.adhesionCode === ADHESION_SO_TAG
+              ? 'SO_TAG'
+              : 'RASTREADOR_E_TAG',
+          contractDate: r.contractDate
+            ? r.contractDate.toISOString().slice(0, 10)
+            : null,
+          hinovaVehicleCode: r.hinovaVehicleCode,
+          vehicleId: nosso?.vehicleId ?? null,
+          tag: nosso?.tag ?? null,
+        };
+      }),
+      meta: {
+        page,
+        perPage,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / perPage)),
+        comRastreador,
+        soTag,
+      },
+    };
+  }
+
+  /**
+   * Cruza as placas da página com o nosso cadastro. Só o que está na tela —
+   * cruzar a base inteira seria varrer 10 mil linhas pra enfeitar 20.
+   */
+  private async equipamentoPorPlaca(tenantId: string, placas: string[]) {
+    const mapa = new Map<
+      string,
+      {
+        vehicleId: string;
+        tag: {
+          id: string;
+          imei: string;
+          model: string;
+          brand: string | null;
+          macAddress: string | null;
+          lastSeenAt: string | null;
+        } | null;
+      }
+    >();
+    if (placas.length === 0) return mapa;
+
+    const veiculos = await this.vehicleModel.findMany({
       where: {
         tenantId,
         deletedAt: null,
-        model: { in: BLE_DEVICE_MODELS },
-        vehicleId: { not: null },
-        uninstalledAt: null,
+        plate: { in: placas.map((p) => p.toUpperCase()) },
       },
-      omit: OMIT_BLE_KEY,
-      include: {
-        vehicle: {
+      select: {
+        id: true,
+        plate: true,
+        device: {
           select: {
             id: true,
-            plate: true,
-            brand: true,
+            imei: true,
             model: true,
-            vehicleType: true,
-            associate: { select: { id: true, name: true, cpf: true } },
-          },
-        },
-        installedByTechnician: { select: { id: true, name: true } },
-        bleSightings: {
-          take: 1,
-          orderBy: { seenAt: 'desc' },
-          select: {
-            id: true,
-            macAddress: true,
-            rssi: true,
-            scannerLat: true,
-            scannerLng: true,
-            scannerSource: true,
-            seenAt: true,
-            accuracy: true,
-            createdAt: true,
+            brand: true,
+            deletedAt: true,
+            bleSightings: {
+              take: 1,
+              orderBy: { seenAt: 'desc' },
+              select: { macAddress: true, seenAt: true },
+            },
           },
         },
       },
-      orderBy: [{ installedAt: 'desc' }, { createdAt: 'desc' }],
     });
+
+    for (const v of veiculos) {
+      const d: any = v.device;
+      const ehTag =
+        d && !d.deletedAt && BLE_DEVICE_MODELS.includes(d.model as string);
+      mapa.set(v.plate.toUpperCase(), {
+        vehicleId: v.id,
+        tag: ehTag
+          ? {
+              id: d.id,
+              imei: d.imei,
+              model: d.model,
+              brand: d.brand,
+              macAddress: d.bleSightings?.[0]?.macAddress ?? null,
+              lastSeenAt: d.bleSightings?.[0]?.seenAt
+                ? d.bleSightings[0].seenAt.toISOString()
+                : null,
+            }
+          : null,
+      });
+    }
+    return mapa;
   }
 
   async findOne(id: string, tenantId: string) {

@@ -9,7 +9,7 @@ import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, 
 import type { DashboardOverview, DashboardPeriod } from '@/types/dashboard';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 import type { GoogleTileSource } from '@/types/map';
-import type { ActiveBleTag, BleTag, BleSighting } from '@/types/ble-tag';
+import type { ActiveTagsResponse, BleTag, BleSighting } from '@/types/ble-tag';
 import type {
   StockItem,
   StockStats,
@@ -569,9 +569,17 @@ export const bleTagsApi = {
     const res = await api.get<ApiResponse<BleTag[]>>('/ble-tags');
     return res.data.data;
   },
-  /** TAGs em uso — vinculadas a um veículo e ainda instaladas. */
-  getActive: async (): Promise<ActiveBleTag[]> => {
-    const res = await api.get<ApiResponse<ActiveBleTag[]>>('/ble-tags/active');
+  /** TAGs em uso — veículos com TAG no SGA, paginado. */
+  getActive: async (params?: {
+    page?: number;
+    perPage?: number;
+    search?: string;
+    tipo?: 'RASTREADOR_E_TAG' | 'SO_TAG';
+  }): Promise<ActiveTagsResponse> => {
+    const res = await api.get<ApiResponse<ActiveTagsResponse>>(
+      '/ble-tags/active',
+      { params },
+    );
     return res.data.data;
   },
   getById: async (id: string): Promise<BleTag> => {
