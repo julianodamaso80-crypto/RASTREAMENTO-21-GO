@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
+import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 import { assessPosition } from '../traccar/position-quality';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
@@ -123,6 +124,7 @@ export class BleTagsService {
     @Optional()
     @Inject(forwardRef(() => TraccarService))
     private traccar?: TraccarService,
+    @Optional() private geocode?: ReverseGeocodeService,
   ) {}
 
   setEmitter(emitter: SightingEmitter) {
@@ -378,7 +380,68 @@ export class BleTagsService {
         confiavel: assessPosition(p, agora).trustworthy,
       });
     }
+
+    await this.preencherEnderecos(mapa);
     return mapa;
+  }
+
+  /**
+   * Endereço das posições da página, pelo cache do geocoder.
+   *
+   * O Traccar não devolve `address` no nosso parque, então sem isto o card
+   * mostraria coordenada crua. Mesma disciplina do estoque: quem está parado
+   * pede resolução nova (e ela aparece na próxima carga da tela); quem está em
+   * movimento só aproveita o que já houver em cache — geocodificar carro
+   * andando é geocodificação em massa, proibida pela política do OSM e capaz
+   * de derrubar o endereço de todas as telas com HTTP 429.
+   */
+  private async preencherEnderecos(
+    mapa: Map<
+      number,
+      {
+        latitude: number;
+        longitude: number;
+        address: string | null;
+        speed: number;
+      }
+    >,
+  ) {
+    if (!this.geocode || mapa.size === 0) return;
+
+    const semEndereco = [...mapa.values()].filter((p) => !p.address);
+    if (semEndereco.length === 0) return;
+
+    const coords = semEndereco.map((p) => ({
+      latitude: p.latitude,
+      longitude: p.longitude,
+    }));
+
+    try {
+      const conhecidos = await this.geocode.lookupCached(coords, undefined, false);
+      for (const p of semEndereco) {
+        const chave = this.geocode.chave({
+          latitude: p.latitude,
+          longitude: p.longitude,
+        });
+        if (chave) p.address = conhecidos.get(chave) ?? null;
+      }
+
+      const faltando = semEndereco.filter((p) => !p.address && p.speed <= 1);
+      if (faltando.length > 0) {
+        await this.geocode.lookupCached(
+          faltando.map((p) => ({
+            latitude: p.latitude,
+            longitude: p.longitude,
+          })),
+        );
+      }
+    } catch (erro) {
+      this.logger.warn(
+        `Geocoder indisponível ao montar as TAGs ativas: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+    }
   }
 
   async findOne(id: string, tenantId: string) {
