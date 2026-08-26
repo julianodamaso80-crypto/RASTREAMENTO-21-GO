@@ -528,10 +528,10 @@ function InstallScreen({
   const [confirmandoSemGps, setConfirmandoSemGps] = useState(false);
 
   const localFinal = local === 'Outro' ? localOutro.trim() : local;
-  // Técnico nunca libera situação irregular — nem inativo, nem mensalidade
-  // vencida. Quem libera é o admin, pelo painel.
-  const podeFinalizar =
-    !!lookup?.encontrado && !!lookup?.ativo && !lookup?.boletoVencido && localFinal.length >= 3;
+  // Técnico nunca libera cadastro irregular — quem libera é o admin, pelo
+  // painel. Boleto vencido não entra nessa conta: é aviso do financeiro, e o
+  // cadastro ATIVO é quem manda (ver StockService.motivoDeBloqueio).
+  const podeFinalizar = !!lookup?.encontrado && !!lookup?.ativo && localFinal.length >= 3;
 
   const buscar = async () => {
     const p = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -550,7 +550,7 @@ function InstallScreen({
           `Veículo ${res.situacao.descricao ?? 'INATIVO'} no SGA — só um administrador libera.`,
         );
       else if (res.boletoVencido)
-        toast.error('Cliente com mensalidade vencida no SGA — só um administrador libera.');
+        toast.warning('Cliente com boleto vencido no SGA. Pode instalar normalmente.');
     } catch (err) {
       toast.error(apiMessage(err, 'Erro ao consultar o SGA'));
     } finally {

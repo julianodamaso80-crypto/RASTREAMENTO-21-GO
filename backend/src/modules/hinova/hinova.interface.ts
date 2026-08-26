@@ -29,9 +29,12 @@ export interface HinovaLookupResult {
   /** codigo_situacao_veiculo === '1' (ATIVO no SGA). */
   ativo: boolean;
   /**
-   * Mensalidade vencida (situacao_financeira === 'INADIMPLENTE'). Só o lookup ao
-   * vivo sabe disto; pelo espelho cadastral vem false. Não bloqueia sozinho —
-   * quem bloqueia é a regra do vínculo, e o admin pode liberar.
+   * Boleto vencido (situacao_financeira === 'INADIMPLENTE'). Só o lookup ao vivo
+   * sabe disto; pelo espelho cadastral vem false.
+   *
+   * É AVISO, não barreira. O endpoint financeiro devolve um boleto isolado, que
+   * pode estar vencido há mais de um ano com o cadastro ATIVO. Quem bloqueia o
+   * vínculo é a situação do cadastro (`ativo`).
    */
   boletoVencido?: boolean;
   /** Motivo quando não encontrado/indisponível (ex.: mensagem de erro do SGA). */

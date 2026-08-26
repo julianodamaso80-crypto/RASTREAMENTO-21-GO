@@ -7,10 +7,14 @@ import type { HinovaLookupResult } from '../hinova/hinova.interface';
 
 /**
  * Regra do vínculo: quem decide é a SITUAÇÃO do cliente no SGA, nunca a
- * existência de boleto. Cliente fora de ATIVO — ou ativo com mensalidade
- * vencida — é bloqueado por padrão, e só um ADMIN libera. Operador (que também
- * chega neste endpoint) e o PWA do técnico — que chama o service sem o
- * argumento de liberação — nunca passam.
+ * existência de boleto. Cliente fora de ATIVO é bloqueado por padrão, e só um
+ * ADMIN libera. Operador (que também chega neste endpoint) e o PWA do técnico —
+ * que chama o service sem o argumento de liberação — nunca passam.
+ *
+ * Boleto vencido é AVISO, não barreira: o endpoint financeiro do SGA devolve um
+ * boleto isolado, que pode estar vencido há mais de um ano enquanto o cadastro
+ * segue ATIVO (LTP8F10 travou o técnico em campo com um boleto de 10/01/2025).
+ * Inadimplência de verdade chega como situação 4 e cai na regra acima.
  */
 
 const TENANT = '11111111-1111-1111-1111-111111111111';
@@ -42,7 +46,7 @@ const DTO_BASE = {
   installLocation: 'atrás do porta-luvas',
 };
 
-/** Ativo no cadastro, mas com mensalidade vencida: mesmo tratamento do inativo. */
+/** Ativo no cadastro, com boleto vencido: aviso na tela, instalacao liberada. */
 const ATIVO_COM_BOLETO_VENCIDO: HinovaLookupResult = {
   ...INATIVO,
   ativo: true,
@@ -120,19 +124,24 @@ describe('StockService.associate — associado inativo no SGA', () => {
   });
 });
 
-describe('StockService.associate — mensalidade vencida', () => {
-  it('ativo com boleto vencido: bloqueia e diz o motivo (não fala em "inativo")', async () => {
+describe('StockService.associate — boleto vencido', () => {
+  it('ativo com boleto vencido: avisa, mas não bloqueia o técnico', async () => {
     const { s } = servico(ATIVO_COM_BOLETO_VENCIDO);
     await expect(s.associate('item-1', TENANT, DTO_BASE)).rejects.toThrow(
-      /mensalidade vencida/i,
+      CHEGOU_NA_GRAVACAO,
     );
   });
 
-  it('admin libera a mensalidade vencida e o vínculo segue', async () => {
-    const { s } = servico(ATIVO_COM_BOLETO_VENCIDO);
-    await expect(
-      s.associate('item-1', TENANT, { ...DTO_BASE, allowInactive: true }, true),
-    ).rejects.toThrow(CHEGOU_NA_GRAVACAO);
+  it('cadastro fora de ATIVO continua bloqueado, mesmo com o boleto em dia', async () => {
+    const canceladoEmDia: HinovaLookupResult = {
+      ...INATIVO,
+      boletoVencido: false,
+      situacao: { ...INATIVO.situacao, financeira: 'ADIMPLENTE' },
+    };
+    const { s } = servico(canceladoEmDia);
+    await expect(s.associate('item-1', TENANT, DTO_BASE)).rejects.toThrow(
+      UnprocessableEntityException,
+    );
   });
 
   it('ativo e em dia: nada bloqueia', async () => {

@@ -372,9 +372,15 @@ export class StockService {
    * Único juiz do "pode instalar". A decisão é pela SITUAÇÃO do cliente no
    * cadastro — nunca pela existência de boleto:
    *
-   * - ATIVO e em dia            → instala, sem perguntar nada;
-   * - mensalidade vencida       → avisa e só passa com liberação de admin;
-   * - inativo/pendente/negado   → mesma coisa.
+   * - ATIVO (situação 1)        → instala, sem perguntar nada;
+   * - inativo/pendente/inadimplente/negado → avisa e só passa com admin.
+   *
+   * Boleto vencido NÃO bloqueia. O `/buscar/situacao-financeira-veiculo` é um
+   * endpoint financeiro e devolve um boleto isolado: LTP8F10 voltava
+   * INADIMPLENTE por um boleto de 10/01/2025 com o cadastro ATIVO, e o técnico
+   * ficava parado no cliente esperando alguém do escritório liberar. Quem está
+   * inadimplente de verdade chega aqui como situação 4 e cai na regra de cima.
+   * A tela mostra o vencimento como aviso — ver `boletoVencido` no lookup.
    */
   private static motivoDeBloqueio(
     lookup: HinovaLookupResult,
@@ -384,12 +390,6 @@ export class StockService {
     if (!lookup.ativo) {
       const situacao = lookup.situacao.descricao ?? 'INATIVA';
       return `Placa ${placa} está ${situacao} no SGA`;
-    }
-    if (lookup.boletoVencido) {
-      const vencimento = lookup.situacao.dataVencimento
-        ? ` (vencimento ${lookup.situacao.dataVencimento})`
-        : '';
-      return `Cliente da placa ${placa} está com mensalidade vencida no SGA${vencimento}`;
     }
     return null;
   }
@@ -506,6 +506,36 @@ export class StockService {
           OR: [{ plate: placa }, { uniqueId: item.imei }],
         },
       });
+
+      // Veículo APAGADO não some do banco — e continua segurando `plate` e
+      // `unique_id`, que são únicos com ou sem `deleted_at`. Como a busca acima
+      // só enxerga vivo, o `create` colidia com esse registro invisível e o
+      // técnico levava "Erro interno do servidor" sem saída: foi o que matou as
+      // seis tentativas do IMEI 866557086559061 entre 24 e 26/08/2026.
+      if (!vehicle) {
+        // Mesma placa: é o mesmo carro voltando: revive em vez de duplicar.
+        const mesmaPlaca = await tx.vehicle.findFirst({
+          where: { tenantId, plate: placa, deletedAt: { not: null } },
+        });
+        if (mesmaPlaca) vehicle = mesmaPlaca;
+      }
+
+      // Outro carro, apagado, segurando este IMEI: solta o número igual ao
+      // desvínculo faz, com o mesmo nome sintético.
+      const apagadoComOImei = await tx.vehicle.findFirst({
+        where: { tenantId, uniqueId: item.imei, deletedAt: { not: null } },
+        select: { id: true, plate: true },
+      });
+      if (apagadoComOImei && apagadoComOImei.id !== vehicle?.id) {
+        await tx.vehicle.update({
+          where: { id: apagadoComOImei.id },
+          data: { uniqueId: `RETIRADO-${apagadoComOImei.id}` },
+        });
+        this.logger.warn(
+          `IMEI ${item.imei} estava preso ao veículo apagado ${apagadoComOImei.plate} ` +
+            `(${apagadoComOImei.id}); número liberado para a placa ${placa}.`,
+        );
+      }
       // A situação no SGA sai de graça aqui: o lookup por placa já foi feito
       // pra validar o vínculo. Sem isto, o ativo nasceria sem situação e só
       // ganharia uma no próximo cron.
@@ -532,6 +562,10 @@ export class StockService {
             associateId: associate.id,
             hinovaCode: lookup.veiculo.codigoVeiculo ?? vehicle.hinovaCode,
             lastSync: new Date(),
+            // Veículo que voltou (mesma placa, apagado antes) precisa renascer
+            // aqui: instalar rastreador num cadastro marcado como excluído o
+            // deixaria fora de toda listagem, invisível no painel e no app.
+            deletedAt: null,
             ...situacaoSga,
           },
         });

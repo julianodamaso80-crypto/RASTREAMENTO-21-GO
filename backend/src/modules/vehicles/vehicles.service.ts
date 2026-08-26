@@ -295,11 +295,21 @@ export class VehiclesService {
   }
 
   async remove(id: string, tenantId: string) {
-    await this.findOne(id, tenantId);
+    const vehicle = await this.findOne(id, tenantId);
+
+    // O veículo some das telas, mas não do banco — e `unique_id` é UNIQUE no
+    // banco inteiro, com ou sem `deleted_at`. Enquanto o registro apagado
+    // segurar o IMEI, aquele rastreador não entra em nenhuma outra placa: o
+    // vínculo não enxerga o dono invisível e morre em constraint. Soltar aqui
+    // é o que o desvínculo do rastreador já faz, com o mesmo nome sintético.
+    const seguraImei = /^\d{10,}$/.test(vehicle.uniqueId);
 
     return this.prisma.vehicle.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: {
+        deletedAt: new Date(),
+        ...(seguraImei ? { uniqueId: `RETIRADO-${id}` } : {}),
+      },
     });
   }
 

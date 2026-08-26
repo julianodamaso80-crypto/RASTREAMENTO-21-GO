@@ -92,10 +92,10 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
             : `Placa ${situacao} no SGA — vínculo bloqueado.`,
         );
       } else if (res.boletoVencido) {
-        toast.error(
-          podeLiberarInativo
-            ? 'Cliente com mensalidade vencida no SGA — só com liberação de administrador.'
-            : 'Cliente com mensalidade vencida no SGA — vínculo bloqueado.',
+        toast.warning(
+          `Cliente com boleto vencido no SGA${
+            res.situacao.dataVencimento ? ` (vencimento ${res.situacao.dataVencimento})` : ''
+          }. A instalação segue normalmente.`,
         );
       }
     } catch {
@@ -106,16 +106,18 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
   };
 
   // Um só motivo de bloqueio, na língua da operação — o servidor aplica a mesma
-  // regra em StockService.motivoDeBloqueio.
-  const motivoBloqueio = !lookup?.encontrado
-    ? null
-    : !lookup.ativo
+  // regra em StockService.motivoDeBloqueio. Quem barra é a situação do cadastro;
+  // boleto vencido é aviso (`avisoBoleto`), não barreira.
+  const motivoBloqueio =
+    lookup?.encontrado && !lookup.ativo
       ? `Veículo ${lookup.situacao.descricao ?? 'INATIVO'} no SGA.`
-      : lookup.boletoVencido
-        ? `Cliente com mensalidade vencida no SGA${
-            lookup.situacao.dataVencimento ? ` (vencimento ${lookup.situacao.dataVencimento})` : ''
-          }.`
-        : null;
+      : null;
+  const avisoBoleto =
+    lookup?.encontrado && lookup.ativo && lookup.boletoVencido
+      ? `Boleto vencido no SGA${
+          lookup.situacao.dataVencimento ? ` em ${lookup.situacao.dataVencimento}` : ''
+        }. A instalação segue; a cobrança é assunto do financeiro.`
+      : null;
   const inativo = !!motivoBloqueio;
   const inativoLiberado = inativo && podeLiberarInativo && liberarInativo;
   const situacaoOk = !!lookup?.encontrado && (!inativo || inativoLiberado);
@@ -204,9 +206,7 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
                 {inativo ? (
                   <Badge className="bg-red-500/15 text-red-400 border border-red-500/30 text-xs">
                     <AlertTriangle className="h-3 w-3 mr-1" />
-                    {lookup.ativo && lookup.boletoVencido
-                      ? 'MENSALIDADE VENCIDA'
-                      : (lookup.situacao.descricao ?? 'INATIVO')}
+                    {lookup.situacao.descricao ?? 'INATIVO'}
                   </Badge>
                 ) : (
                   <Badge className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs">
@@ -224,6 +224,12 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
                 <Field label="Modelo" value={lookup.veiculo.modelo} />
                 <Field label="Vencimento" value={lookup.situacao.dataVencimento} />
               </div>
+              {avisoBoleto && (
+                <p className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  {avisoBoleto}
+                </p>
+              )}
               {inativo &&
                 (podeLiberarInativo ? (
                   <div className="space-y-2">
