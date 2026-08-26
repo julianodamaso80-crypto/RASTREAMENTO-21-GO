@@ -4,6 +4,8 @@ import {
   NotFoundException,
   BadRequestException,
   Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
@@ -118,7 +120,9 @@ export class BleTagsService {
     private prisma: PrismaService,
     // Opcional de propósito: os testes montam o serviço só com o Prisma, e a
     // lista tem que funcionar mesmo com o servidor GPS fora do ar.
-    @Optional() private traccar?: TraccarService,
+    @Optional()
+    @Inject(forwardRef(() => TraccarService))
+    private traccar?: TraccarService,
   ) {}
 
   setEmitter(emitter: SightingEmitter) {
