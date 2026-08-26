@@ -81,6 +81,19 @@ export interface ActiveTagRow {
     macAddress: string | null;
     lastSeenAt: string | null;
   } | null;
+  /**
+   * Última posição do RASTREADOR do veículo (a TAG não reporta sozinha).
+   * Null quando o veículo não é nosso, não tem rastreador ou o servidor GPS
+   * não respondeu.
+   */
+  ultimaPosicao: {
+    latitude: number;
+    longitude: number;
+    fixTime: string | null;
+    address: string | null;
+    speed: number;
+    confiavel: boolean;
+  } | null;
 }
 
 export interface ActiveTagsResponse {

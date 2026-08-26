@@ -204,3 +204,87 @@ describe('BleTagsService.findActive', () => {
     ]);
   });
 });
+
+/**
+ * A posição que aparece no card é a do RASTREADOR do veículo — a TAG não
+ * reporta sozinha. Se o servidor GPS cair, a lista continua de pé sem posição:
+ * é melhor mostrar o cliente sem localização do que uma tela de erro.
+ */
+describe('BleTagsService.findActive — última posição', () => {
+  function montarComTraccar(posicoes: any[], falha = false) {
+    const prisma: any = {
+      sgaVehicle: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 's1',
+            plate: 'RIZ3B88',
+            chassi: null,
+            brandModel: 'HONDA CG 160',
+            associateName: 'LUIZ FERNANDO',
+            cpf: null,
+            phone: null,
+            adhesionCode: '8',
+            contractDate: null,
+            hinovaVehicleCode: '1',
+          },
+        ]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      vehicle: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', plate: 'RIZ3B88', traccarDeviceId: 936, device: null },
+        ]),
+      },
+    };
+    const traccar: any = {
+      getPositions: jest.fn(() =>
+        falha ? Promise.reject(new Error('offline')) : Promise.resolve(posicoes),
+      ),
+    };
+    return new BleTagsService(prisma, traccar);
+  }
+
+  const agora = new Date().toISOString();
+
+  it('traz a posição do rastreador do veículo', async () => {
+    const service = montarComTraccar([
+      {
+        deviceId: 936,
+        latitude: -22.88,
+        longitude: -43.63,
+        fixTime: agora,
+        address: 'Rua 23',
+        speed: 0,
+        valid: true,
+      },
+    ]);
+
+    const r = await service.findActive(TENANT);
+
+    expect(r.data[0].ultimaPosicao).toMatchObject({
+      latitude: -22.88,
+      longitude: -43.63,
+      address: 'Rua 23',
+      confiavel: true,
+    });
+  });
+
+  it('ignora posição de outro veículo', async () => {
+    const service = montarComTraccar([
+      { deviceId: 999, latitude: -1, longitude: -1, fixTime: agora, valid: true },
+    ]);
+
+    const r = await service.findActive(TENANT);
+
+    expect(r.data[0].ultimaPosicao).toBeNull();
+  });
+
+  it('servidor GPS fora do ar não derruba a lista', async () => {
+    const service = montarComTraccar([], true);
+
+    const r = await service.findActive(TENANT);
+
+    expect(r.data).toHaveLength(1);
+    expect(r.data[0].ultimaPosicao).toBeNull();
+  });
+});

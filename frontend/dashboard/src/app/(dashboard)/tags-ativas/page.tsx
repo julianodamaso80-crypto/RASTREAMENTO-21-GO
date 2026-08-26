@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Bluetooth,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
+  MapPin,
   RadioTower,
   RefreshCw,
   Search,
@@ -41,6 +43,7 @@ const MODELO_LABEL: Record<string, string> = {
 
 export default function TagsAtivasPage() {
   const { user } = useAuth();
+  const router = useRouter();
   // Mesma régua do documento no card do ativo: inteiro só pro time interno.
   const podeVerDocumento = canSeeInstallLocation(user?.role);
 
@@ -192,6 +195,11 @@ export default function TagsAtivasPage() {
                 key={linha.id}
                 linha={linha}
                 podeVerDocumento={podeVerDocumento}
+                onMapa={() =>
+                  router.push(
+                    `/mapa?placa=${encodeURIComponent(linha.plate || linha.chassi || '')}`,
+                  )
+                }
               />
             ))}
           </div>
@@ -265,11 +273,14 @@ function Cartao({
 function CardTag({
   linha,
   podeVerDocumento,
+  onMapa,
 }: {
   linha: ActiveTagRow;
   podeVerDocumento: boolean;
+  onMapa: () => void;
 }) {
   const soTag = linha.tipo === 'SO_TAG';
+  const pos = linha.ultimaPosicao;
 
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
@@ -329,6 +340,38 @@ function CardTag({
             </span>
           )}
         </p>
+
+        {/* Onde está: hoje isso só existe pelo rastreador do veículo. Dizer de
+            quem é a posição evita a leitura errada de que a TAG foi localizada. */}
+        {pos ? (
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <p className="flex min-w-0 items-start gap-1.5 text-muted-foreground">
+              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0">
+                <span className="block truncate">
+                  {pos.address ??
+                    `${pos.latitude.toFixed(5)}, ${pos.longitude.toFixed(5)}`}
+                </span>
+                <span className="text-xs">
+                  pelo rastreador ·{' '}
+                  {pos.fixTime ? formatRelativeTime(pos.fixTime) : 'sem horário'}
+                  {!pos.confiavel && ' · posição sem confirmação de GPS'}
+                </span>
+              </span>
+            </p>
+            <Button size="sm" variant="outline" className="h-8" onClick={onMapa}>
+              <MapPin className="mr-1 h-3.5 w-3.5" />
+              Abrir no mapa
+            </Button>
+          </div>
+        ) : (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            {soTag
+              ? 'Sem localização: o veículo só tem TAG, que não reporta posição sozinha'
+              : 'Sem localização: o rastreador deste veículo não está no 21 GO'}
+          </p>
+        )}
 
         {linha.tag ? (
           <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5">

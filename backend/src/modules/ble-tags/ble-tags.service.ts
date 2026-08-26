@@ -3,8 +3,11 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TraccarService } from '../traccar/traccar.service';
+import { assessPosition } from '../traccar/position-quality';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
 import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
@@ -111,7 +114,12 @@ export class BleTagsService {
     return (this.prisma as any).vehicle;
   }
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    // Opcional de propósito: os testes montam o serviço só com o Prisma, e a
+    // lista tem que funcionar mesmo com o servidor GPS fora do ar.
+    @Optional() private traccar?: TraccarService,
+  ) {}
 
   setEmitter(emitter: SightingEmitter) {
     this.emitter = emitter;
@@ -194,6 +202,7 @@ export class BleTagsService {
 
     const placas = rows.map((r: any) => r.plate).filter(Boolean);
     const equipamentoPorPlaca = await this.equipamentoPorPlaca(tenantId, placas);
+    const posicaoPorTraccarId = await this.posicoesDaPagina(equipamentoPorPlaca);
 
     return {
       data: rows.map((r: any) => {
@@ -216,6 +225,12 @@ export class BleTagsService {
           hinovaVehicleCode: r.hinovaVehicleCode,
           vehicleId: nosso?.vehicleId ?? null,
           tag: nosso?.tag ?? null,
+          // Posição do RASTREADOR do veículo, não da TAG — a TAG não reporta
+          // sozinha. A tela diz isso na cara pra ninguém confundir as duas.
+          ultimaPosicao:
+            (nosso?.traccarDeviceId != null
+              ? (posicaoPorTraccarId.get(nosso.traccarDeviceId) ?? null)
+              : null),
         };
       }),
       meta: {
@@ -238,6 +253,7 @@ export class BleTagsService {
       string,
       {
         vehicleId: string;
+        traccarDeviceId: number | null;
         tag: {
           id: string;
           imei: string;
@@ -259,6 +275,7 @@ export class BleTagsService {
       select: {
         id: true,
         plate: true,
+        traccarDeviceId: true,
         device: {
           select: {
             id: true,
@@ -282,6 +299,7 @@ export class BleTagsService {
         d && !d.deletedAt && BLE_DEVICE_MODELS.includes(d.model as string);
       mapa.set(v.plate.toUpperCase(), {
         vehicleId: v.id,
+        traccarDeviceId: v.traccarDeviceId ?? null,
         tag: ehTag
           ? {
               id: d.id,
@@ -294,6 +312,66 @@ export class BleTagsService {
                 : null,
             }
           : null,
+      });
+    }
+    return mapa;
+  }
+
+  /**
+   * Última posição conhecida dos veículos da página, direto do Traccar.
+   *
+   * Uma chamada só (o Traccar devolve todas as posições de uma vez) e apenas
+   * quando a página tem algum veículo nosso ligado ao servidor GPS. Servidor
+   * fora do ar não pode derrubar a lista: sem posição, o card mostra o resto.
+   */
+  private async posicoesDaPagina(
+    equipamentoPorPlaca: Map<string, { traccarDeviceId: number | null }>,
+  ) {
+    const mapa = new Map<
+      number,
+      {
+        latitude: number;
+        longitude: number;
+        fixTime: string | null;
+        address: string | null;
+        speed: number;
+        confiavel: boolean;
+      }
+    >();
+
+    const ids = new Set<number>();
+    for (const v of equipamentoPorPlaca.values()) {
+      if (v.traccarDeviceId != null) ids.add(v.traccarDeviceId);
+    }
+    if (ids.size === 0 || !this.traccar) return mapa;
+
+    let posicoes: any[];
+    try {
+      posicoes = await this.traccar.getPositions();
+    } catch (erro) {
+      this.logger.warn(
+        `Traccar indisponível ao montar as TAGs ativas: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+      return mapa;
+    }
+
+    const agora = Date.now();
+    for (const p of posicoes) {
+      if (!ids.has(p.deviceId)) continue;
+      const anterior = mapa.get(p.deviceId);
+      const fixTime = p.fixTime || p.deviceTime || p.serverTime || null;
+      // O Traccar devolve uma posição por device, mas se vier repetida fica a
+      // mais recente — posição velha por cima da nova é o pior dos mundos.
+      if (anterior?.fixTime && fixTime && anterior.fixTime >= fixTime) continue;
+      mapa.set(p.deviceId, {
+        latitude: p.latitude,
+        longitude: p.longitude,
+        fixTime,
+        address: p.address ?? null,
+        speed: p.speed ?? 0,
+        confiavel: assessPosition(p, agora).trustworthy,
       });
     }
     return mapa;
