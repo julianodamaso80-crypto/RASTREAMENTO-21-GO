@@ -218,6 +218,7 @@ model Tenant {
 
   installationPendings InstallationPending[]
   sgaVehicles          SgaVehicle[]
+  rdvTags              RdvTag[]
   installationRoutes   InstallationRoute[]
 
   @@map("tenants")
@@ -995,4 +996,45 @@ model SgaVehicle {
   @@index([tenantId, chassi])
   @@index([tenantId, situationCode])
   @@map("sga_vehicles")
+}
+
+/// Espelho da TAG que roda na RedeVeiculos (plataforma incumbente).
+///
+/// Não é `Device` de propósito: `Device.vehicleId` é `@unique`, e 8.812 das
+/// TAGs ativas estão em veículo que também tem rastreador — cadastrá-las como
+/// Device desvincularia o rastreador desses veículos. Ver a migration
+/// `20260827150000_espelho_tag_redeveiculos` e a memória `reference_tag_ativa_regra`.
+model RdvTag {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Número de série da TAG na origem (lá aparece no campo "Imei", mas TAG não
+  /// tem IMEI — não confundir com o IMEI do rastreador do mesmo veículo).
+  tagIdentifier String  @map("tag_identifier")
+  plate         String
+  chassi        String?
+  /// Rótulo cru da origem: REDETAG · KTAG · WGPSTAG · TAG-GT06.
+  tagModel      String? @map("tag_model")
+
+  /// Última posição conhecida. NUNCA é tempo real — a TAG só é vista quando
+  /// alguém passa perto dela. `seenAt` é o carimbo que vale e a tela mostra a
+  /// idade dele sempre. Ver `feedback_rastreamento_realtime_sem_heartbeat`.
+  lastLat Float?    @map("last_lat")
+  lastLng Float?    @map("last_lng")
+  seenAt  DateTime? @map("seen_at")
+
+  /// `id_ativo` na origem: reconcilia sem depender da placa.
+  sourceAssetId String? @map("source_asset_id")
+  source        String  @default("REDEVEICULOS")
+
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  syncedAt  DateTime @default(now()) @map("synced_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, tagIdentifier])
+  @@index([tenantId, plate])
+  @@index([tenantId, seenAt(sort: Desc)])
+  @@map("rdv_tags")
 }

@@ -82,6 +82,22 @@ export interface ActiveTagRow {
     lastSeenAt: string | null;
   } | null;
   /**
+   * Qual é a TAG e onde ela foi vista pela última vez, pelo espelho da
+   * plataforma de origem. É o que responde "abrir no mapa" para a TAG.
+   *
+   * `seenAt` NÃO é tempo real: a TAG só é vista quando alguém passa perto.
+   * Em 2 de cada 3 TAGs esse carimbo tem mais de 30 dias — por isso a idade
+   * vai sempre visível no card, nunca escondida.
+   */
+  tagEspelho: {
+    identificador: string;
+    modelo: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    seenAt: string | null;
+    origem: string;
+  } | null;
+  /**
    * Última posição do RASTREADOR do veículo (a TAG não reporta sozinha).
    * Null quando o veículo não é nosso, não tem rastreador ou o servidor GPS
    * não respondeu.

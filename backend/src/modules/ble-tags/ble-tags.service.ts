@@ -55,6 +55,15 @@ type PontoComRegistro = PontoBruto & { createdAt: Date };
 const ADHESION_RASTREADOR_E_TAG = '8';
 const ADHESION_SO_TAG = '9';
 
+/**
+ * Placa é chave de cruzamento entre três cadastros (SGA, o nosso e o espelho
+ * da plataforma de origem) e cada um guarda de um jeito. Caixa e espaço não
+ * podem decidir se o card mostra a TAG ou não.
+ */
+function normalizarPlaca(placa: unknown): string {
+  return typeof placa === 'string' ? placa.trim().toUpperCase() : '';
+}
+
 const ADHESION_POR_TIPO: Record<string, string> = {
   RASTREADOR_E_TAG: ADHESION_RASTREADOR_E_TAG,
   SO_TAG: ADHESION_SO_TAG,
@@ -148,6 +157,10 @@ export class BleTagsService {
     return (this.prisma as any).vehicle;
   }
 
+  private get rdvTagModel() {
+    return (this.prisma as any).rdvTag;
+  }
+
   constructor(
     private prisma: PrismaService,
     // Opcional de propósito: os testes montam o serviço só com o Prisma, e a
@@ -237,13 +250,17 @@ export class BleTagsService {
       }),
     ]);
 
-    const placas = rows.map((r: any) => r.plate).filter(Boolean);
+    const placas = rows
+      .map((r: any) => normalizarPlaca(r.plate))
+      .filter(Boolean);
     const equipamentoPorPlaca = await this.equipamentoPorPlaca(tenantId, placas);
     const posicaoPorTraccarId = await this.posicoesDaPagina(equipamentoPorPlaca);
+    const espelhoPorPlaca = await this.tagEspelhoPorPlaca(tenantId, placas);
 
     return {
       data: rows.map((r: any) => {
-        const nosso = equipamentoPorPlaca.get(r.plate?.toUpperCase() ?? '');
+        const chave = normalizarPlaca(r.plate);
+        const nosso = equipamentoPorPlaca.get(chave);
         return {
           id: r.id,
           plate: r.plate,
@@ -262,6 +279,10 @@ export class BleTagsService {
           hinovaVehicleCode: r.hinovaVehicleCode,
           vehicleId: nosso?.vehicleId ?? null,
           tag: nosso?.tag ?? null,
+          // Qual é a TAG e onde ela foi vista, pelo espelho da plataforma de
+          // origem. Campo separado do `ultimaPosicao` de propósito: TAG e
+          // rastreador têm carimbos de tempo diferentes e não se substituem.
+          tagEspelho: espelhoPorPlaca.get(chave) ?? null,
           // Posição do RASTREADOR do veículo, não da TAG — a TAG não reporta
           // sozinha. A tela diz isso na cara pra ninguém confundir as duas.
           ultimaPosicao:
@@ -279,6 +300,54 @@ export class BleTagsService {
         soTag,
       },
     };
+  }
+
+  /**
+   * Cruza as placas da página com o espelho da plataforma de origem.
+   *
+   * É de lá que sai o que o SGA não sabe: QUAL é a TAG (número e modelo) e
+   * ONDE ela foi vista. Quando a mesma placa tem mais de uma TAG no espelho,
+   * vale a vista mais recente — TAG trocada deixa a antiga parada no passado.
+   */
+  private async tagEspelhoPorPlaca(tenantId: string, placas: string[]) {
+    const mapa = new Map<
+      string,
+      {
+        identificador: string;
+        modelo: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        seenAt: string | null;
+        origem: string;
+      }
+    >();
+    if (placas.length === 0 || !this.rdvTagModel) return mapa;
+
+    const linhas = await this.rdvTagModel.findMany({
+      where: { tenantId, plate: { in: placas } },
+      orderBy: { seenAt: 'desc' },
+    });
+
+    // Quem decide é a comparação aqui, não a ordem que o banco devolveu: TAG
+    // nunca vista (`seenAt` nulo) perde para qualquer uma que tenha carimbo, e
+    // o desempate não depende de como o Postgres trata NULLS no ORDER BY.
+    const carimbo = new Map<string, number>();
+    for (const t of linhas) {
+      const chave = normalizarPlaca(t.plate);
+      const visto = t.seenAt ? new Date(t.seenAt).getTime() : -Infinity;
+      if (mapa.has(chave) && visto <= (carimbo.get(chave) ?? -Infinity)) continue;
+
+      carimbo.set(chave, visto);
+      mapa.set(chave, {
+        identificador: t.tagIdentifier,
+        modelo: t.tagModel ?? null,
+        latitude: t.lastLat ?? null,
+        longitude: t.lastLng ?? null,
+        seenAt: t.seenAt ? new Date(t.seenAt).toISOString() : null,
+        origem: t.source ?? 'REDEVEICULOS',
+      });
+    }
+    return mapa;
   }
 
   /**
