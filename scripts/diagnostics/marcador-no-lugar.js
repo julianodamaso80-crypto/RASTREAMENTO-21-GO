@@ -41,6 +41,7 @@ const RAIZ = path.resolve(__dirname, '..', '..');
 const FONTES = [
   ['mapa de veículos', 'frontend/dashboard/src/components/map/map-container.tsx'],
   ['mapa do estoque', 'frontend/dashboard/src/components/stock/stock-map-container.tsx'],
+  ['rastro da TAG', 'frontend/dashboard/src/components/ble-tags/tag-trail-map.tsx'],
 ];
 const MAPLIBRE_VERSAO = '5.21.1';
 const CACHE = path.join(__dirname, '.cache-maplibre');

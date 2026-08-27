@@ -107,3 +107,56 @@ export interface ActiveTagsResponse {
     soTag: number;
   };
 }
+
+/**
+ * Um avistamento pronto para desenhar. `latenciaSeg` é a distância entre a
+ * TAG ter sido vista e o relatório chegar até nós — vai sempre à tela, porque
+ * é o que impede o operador de ler posição de TAG como posição atual.
+ */
+export interface PontoTrilha {
+  lat: number;
+  lng: number;
+  accuracy: number | null;
+  seenAt: string;
+  latenciaSeg: number;
+}
+
+/** Trecho contínuo da trilha. A quebra entre segmentos é buraco de sinal. */
+export interface SegmentoTrilha {
+  pontos: PontoTrilha[];
+}
+
+export interface TrailResposta {
+  segmentos: SegmentoTrilha[];
+  totalAvistamentos: number;
+}
+
+export interface LocalHabitualInfo {
+  centroLat: number;
+  centroLng: number;
+  totalAvistamentos: number;
+  diasDistintos: number;
+  faixaHorariaTexto: string;
+  participacaoPct: number;
+  endereco: string | null;
+}
+
+export type PernoiteInfo = LocalHabitualInfo;
+
+export interface UltimaParadaInfo {
+  centroLat: number;
+  centroLng: number;
+  paradoDesde: string;
+  /** Falso quando o avistamento envelheceu: a TAG pode já ter saído de lá. */
+  aindaLa: boolean;
+  ultimoAvistamento: string;
+  endereco: string | null;
+}
+
+export interface InsightsResposta {
+  janelaDias: number;
+  totalAvistamentos: number;
+  locaisHabituais: LocalHabitualInfo[];
+  pernoite: PernoiteInfo | null;
+  ultimaParada: UltimaParadaInfo | null;
+}
