@@ -14,7 +14,9 @@
     "dev:backend": "cd backend && npm run start:dev",
     "dev:frontend": "cd frontend/dashboard && npm run dev",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "test:mapa": "node scripts/diagnostics/marcador-no-lugar.js"
+    "test:mapa": "node scripts/diagnostics/marcador-no-lugar.js",
+    "test:tag": "node scripts/diagnostics/tag-historico-honesto.js",
+    "test:front": "npm run test:mapa && npm run test:tag"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
