@@ -7,5 +7,8 @@ import { TraccarModule } from '../traccar/traccar.module';
   imports: [TraccarModule],
   controllers: [ReportsController],
   providers: [ReportsService],
+  // O app do associado reusa o mesmo motor de viagens do painel — regra de
+  // corte de trajeto tem que ser uma só nos dois lugares.
+  exports: [ReportsService],
 })
 export class ReportsModule {}

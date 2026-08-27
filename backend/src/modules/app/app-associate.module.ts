@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { TraccarModule } from '../traccar/traccar.module';
+import { ReportsModule } from '../reports/reports.module';
+import { GeocodingModule } from '../geocoding/geocoding.module';
 import { AssociateAuthService } from './associate-auth.service';
 import { AssociateAuthController } from './associate-auth.controller';
 import { AppDataService } from './app-data.service';
@@ -15,6 +17,8 @@ import { AssociateJwtGuard } from './guards/associate-jwt.guard';
 @Module({
   imports: [
     TraccarModule,
+    ReportsModule,
+    GeocodingModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Region } from 'react-native-maps';
 import { useRouter } from 'expo-router';
 import { SatelliteTiles } from '@/components/satellite-tiles';
+import { AlertBanner } from '@/components/alert-banner';
 import { VehicleCard } from '@/components/vehicle-card';
 import { VehicleMarker } from '@/components/vehicle-marker';
 import { AppApi, Vehicle, Position } from '@/lib/api';
@@ -193,6 +194,7 @@ export default function MapScreen() {
             {withPos.length} de {vehicles.length} {vehicles.length === 1 ? 'veículo' : 'veículos'} no mapa
           </Text>
         </View>
+        <AlertBanner />
       </SafeAreaView>
 
       <Animated.View style={[styles.sheet, { height: sheetH }]}>

@@ -38,6 +38,22 @@ export class AppDataController {
     return this.service.getHistory(associateId, tenantId, vehicleId, from, to);
   }
 
+  @Get('vehicles/:id/trips')
+  @ApiOperation({
+    summary: 'Trajetos do veículo no período (aba Trajetos do app)',
+  })
+  @ApiQuery({ name: 'from', required: true, description: 'Início (ISO 8601)' })
+  @ApiQuery({ name: 'to', required: true, description: 'Fim (ISO 8601)' })
+  async getTrips(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id') vehicleId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    return this.service.getTrips(associateId, tenantId, vehicleId, from, to);
+  }
+
   @Get('alerts')
   @ApiOperation({ summary: 'Alertas dos veículos do associado' })
   @ApiQuery({ name: 'limit', required: false, description: 'Máx 100 (default 50)' })

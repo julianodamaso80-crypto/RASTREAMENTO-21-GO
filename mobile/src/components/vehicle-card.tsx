@@ -58,10 +58,23 @@ export function VehicleCard({
   const ativo = [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'Veículo';
   const lowVolt = p?.voltage != null && p.voltage > 0 && p.voltage < 11.8;
 
-  function openStreetView() {
+  /**
+   * Abre o ponto exato no Google Maps — app nativo se instalado, site se não.
+   *
+   * Aqui era "Street View", que mandava `map_action=pano&viewpoint=...`. Esse
+   * parâmetro faz o Google procurar o panorama MAIS PRÓXIMO, sem limite de
+   * distância: onde não há cobertura de rua ele caía na avenida seguinte, ou
+   * noutro bairro, e o dono via um lugar que não é o dele. Ponto no mapa
+   * sempre existe, em qualquer coordenada — e de lá o próprio Google oferece
+   * o Street View quando de fato houver.
+   */
+  function abrirNoGoogleMaps() {
     if (!p) return;
-    const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.latitude},${p.longitude}`;
-    Linking.openURL(url).catch(() => {});
+    const coord = `${p.latitude},${p.longitude}`;
+    const site = `https://www.google.com/maps/search/?api=1&query=${coord}`;
+    Linking.openURL(`comgooglemaps://?q=${coord}&center=${coord}&zoom=17`).catch(() =>
+      Linking.openURL(site).catch(() => {}),
+    );
   }
 
   return (
@@ -137,9 +150,9 @@ export function VehicleCard({
               <Ionicons name="time-outline" size={16} color={colors.navy} />
               <Text style={styles.btnText}>Histórico</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btn} onPress={openStreetView}>
-              <Ionicons name="man-outline" size={16} color={colors.navy} />
-              <Text style={styles.btnText}>Street View</Text>
+            <TouchableOpacity style={styles.btn} onPress={abrirNoGoogleMaps}>
+              <Ionicons name="logo-google" size={16} color={colors.navy} />
+              <Text style={styles.btnText}>Google Maps</Text>
             </TouchableOpacity>
           </View>
         </>

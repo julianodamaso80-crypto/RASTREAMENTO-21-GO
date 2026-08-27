@@ -30,11 +30,16 @@ const RANGES = [
 ];
 
 export default function VehicleHistoryScreen() {
-  const { id, plate, type } = useLocalSearchParams<{
+  const { id, plate, type, from: fromParam, to: toParam } = useLocalSearchParams<{
     id: string;
     plate?: string;
     type?: VehicleType;
+    from?: string;
+    to?: string;
   }>();
+  // Vindo da aba Trajetos a janela é a da viagem escolhida; sem isso, o
+  // seletor de período manda.
+  const trajetoEscolhido = Boolean(fromParam && toParam);
   const [hours, setHours] = useState(24);
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,13 +47,15 @@ export default function VehicleHistoryScreen() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    const to = new Date();
-    const from = new Date(to.getTime() - hours * 3600_000);
+    const to = trajetoEscolhido ? new Date(String(toParam)) : new Date();
+    const from = trajetoEscolhido
+      ? new Date(String(fromParam))
+      : new Date(to.getTime() - hours * 3600_000);
     AppApi.history(id, from.toISOString(), to.toISOString())
       .then(setPositions)
       .catch(() => setPositions([]))
       .finally(() => setLoading(false));
-  }, [id, hours]);
+  }, [id, hours, trajetoEscolhido, fromParam, toParam]);
 
   const coords = useMemo(
     () => positions.map((p) => ({ latitude: p.latitude, longitude: p.longitude })),
@@ -82,6 +89,12 @@ export default function VehicleHistoryScreen() {
     return sum;
   }, [positions]);
 
+  /**
+   * Rastreador parado repete a mesma coordenada a cada respiro de GPRS. Abaixo
+   * de 50 m o que existe é oscilação de GPS, não deslocamento.
+   */
+  const parado = totalMeters < 50;
+
   // Nome de rua de início e fim (geocoding reverso client-side).
   const startAddress = useAddress(start?.latitude, start?.longitude);
   const endAddress = useAddress(end?.latitude, end?.longitude);
@@ -92,6 +105,7 @@ export default function VehicleHistoryScreen() {
         options={{ title: plate ? String(plate) : 'Histórico' }}
       />
 
+      {trajetoEscolhido ? null : (
       <View style={styles.ranges}>
         {RANGES.map((r) => (
           <TouchableOpacity
@@ -105,6 +119,7 @@ export default function VehicleHistoryScreen() {
           </TouchableOpacity>
         ))}
       </View>
+      )}
 
       <View style={styles.mapWrap}>
         {loading ? (
@@ -165,27 +180,56 @@ export default function VehicleHistoryScreen() {
           style={styles.panel}
           contentContainerStyle={{ paddingBottom: 16 }}
         >
-          <View style={styles.stats}>
-            <Stat label="Distância" value={formatDistance(totalMeters)} />
-            <Stat label="Duração" value={formatDuration(start?.fixTime, end?.fixTime)} />
-            <Stat label="Vel. máx" value={`${Math.round(maxSpeed)} km/h`} />
-            <Stat label="Pontos" value={String(positions.length)} />
-          </View>
+          {parado ? (
+            /*
+             * Sem deslocamento não há viagem pra resumir. Antes esta faixa
+             * mostrava "0 m · 0 min · 0 km/h · 247 Pontos" — e os 247 eram a
+             * MESMA coordenada repetida em heartbeat, o que dava a impressão
+             * de movimento. Aqui o texto diz o que de fato aconteceu.
+             */
+            <View style={styles.stoppedBox}>
+              <Ionicons name="home-outline" size={22} color={colors.navy} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.stoppedTitle}>O veículo não saiu do lugar</Text>
+                <Text style={styles.stoppedText}>
+                  Parado desde {formatDateTime(end?.fixTime)}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.stats}>
+              <Stat label="Distância" value={formatDistance(totalMeters)} />
+              <Stat label="Duração" value={formatDuration(start?.fixTime, end?.fixTime)} />
+              <Stat label="Vel. máx" value={`${Math.round(maxSpeed)} km/h`} />
+            </View>
+          )}
 
-          <AddressRow
-            icon="flag"
-            tint={colors.green}
-            label="Saída"
-            address={startAddress}
-            fallback={start}
-          />
-          <AddressRow
-            icon="location"
-            tint={colors.navy}
-            label={`Chegada${type ? ` · ${vehicleTypeLabel(type)}` : ''}`}
-            address={endAddress}
-            fallback={end}
-          />
+          {parado ? (
+            <AddressRow
+              icon="location"
+              tint={colors.navy}
+              label={`Onde está${type ? ` · ${vehicleTypeLabel(type)}` : ''}`}
+              address={endAddress}
+              fallback={end}
+            />
+          ) : (
+            <>
+              <AddressRow
+                icon="flag"
+                tint={colors.green}
+                label="Saída"
+                address={startAddress}
+                fallback={start}
+              />
+              <AddressRow
+                icon="location"
+                tint={colors.navy}
+                label={`Chegada${type ? ` · ${vehicleTypeLabel(type)}` : ''}`}
+                address={endAddress}
+                fallback={end}
+              />
+            </>
+          )}
         </ScrollView>
       )}
     </View>
@@ -287,6 +331,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  stoppedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  stoppedTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
+  stoppedText: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
   stats: {
     flexDirection: 'row',
     paddingVertical: 16,

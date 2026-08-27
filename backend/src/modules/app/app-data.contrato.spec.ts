@@ -52,7 +52,7 @@ function servico(vehicles: any[]) {
     getPositions: jest.fn().mockResolvedValue([]),
     getDevices: jest.fn().mockResolvedValue([]),
   };
-  return new AppDataService(prisma, traccar);
+  return new AppDataService(prisma, traccar, {} as any, {} as any);
 }
 
 function chaves(obj: any): string[] {
@@ -108,7 +108,7 @@ describe('contrato do associado — /app/alerts', () => {
       getPositions: jest.fn().mockResolvedValue([]),
       getDevices: jest.fn().mockResolvedValue([]),
     };
-    return new AppDataService(prisma, traccar);
+    return new AppDataService(prisma, traccar, {} as any, {} as any);
   }
 
   it('nenhum campo interno sai na resposta, nem no alerta nem no veículo aninhado', async () => {
@@ -132,9 +132,11 @@ describe('contrato do associado — /app/alerts', () => {
       getPositions: jest.fn().mockResolvedValue([]),
       getDevices: jest.fn().mockResolvedValue([]),
     };
-    await new AppDataService(prisma, traccar).getAlerts('a1', 'tn1');
+    await new AppDataService(prisma, traccar, {} as any, {} as any).getAlerts('a1', 'tn1');
     const where = prisma.alert.findMany.mock.calls[0][0].where;
-    expect(where.type).toEqual({ notIn: ['GPS_SILENT'] });
+    // A lista completa do que é escondido vive em app-trajetos.spec.ts; aqui o
+    // que importa é que o alerta técnico interno nunca sai por /app/*.
+    expect(where.type.notIn).toContain('GPS_SILENT');
   });
 });
 

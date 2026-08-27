@@ -80,6 +80,26 @@ export interface Vehicle {
   connection: Connection | null;
 }
 
+/**
+ * Um trajeto de verdade: só existe onde o carro andou. Rastreador parado
+ * repetindo a mesma coordenada em heartbeat não vira Trip nenhuma — é assim
+ * que a tela sabe dizer "não saiu do lugar" em vez de contar pontos.
+ */
+export interface Trip {
+  id: string;
+  startTime: string;
+  endTime: string;
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  startAddress: string | null;
+  endAddress: string | null;
+  distanceKm: number;
+  durationMin: number;
+  maxSpeed: number;
+}
+
 export interface Alert {
   id: string;
   type: string;
@@ -156,6 +176,11 @@ export const AppApi = {
       .get<Position[]>(`/app/vehicles/${vehicleId}/history`, {
         params: { from, to },
       })
+      .then((r) => r.data),
+
+  trips: (vehicleId: string, from: string, to: string) =>
+    api
+      .get<Trip[]>(`/app/vehicles/${vehicleId}/trips`, { params: { from, to } })
       .then((r) => r.data),
 
   alerts: (limit = 50) =>

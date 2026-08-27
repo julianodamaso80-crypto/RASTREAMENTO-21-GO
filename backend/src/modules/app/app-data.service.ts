@@ -5,14 +5,31 @@ import {
   TraccarService,
   TraccarPosition,
 } from '../traccar/traccar.service';
+import { ReportsService, type Trip } from '../reports/reports.service';
+import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 
 const KNOTS_TO_KMH = 1.852;
 
-// Alertas técnicos internos (antifurto encoberto) que NUNCA vão pro app do
-// associado — só confundem e alarmam o cliente. Mesma regra da TAG: o que é
-// interno fica interno. GPS_SILENT segue disparando pro time interno; aqui ele
-// só é omitido da visão do associado.
-const ALERTAS_OCULTOS_DO_ASSOCIADO: AlertType[] = [AlertType.GPS_SILENT];
+// Alertas que NUNCA vão pro app do associado. Duas famílias:
+//
+// 1. Técnico interno (antifurto encoberto) — mesma regra da TAG: o que é
+//    interno fica interno. GPS_SILENT segue disparando pro time interno.
+// 2. Ruído puro pro dono do carro. Medido em 30 dias (ago/2026): dos 47.624
+//    alertas gerados, IGNITION_ON/OFF somaram 19.931 e OFFLINE 17.819 — 79%
+//    do que chegava no app era "seu carro ligou", "seu carro desligou". Quem
+//    dirige o carro já sabe disso. Condução brusca é insumo de score do
+//    motorista, não aviso. O que sobra aqui é o que faz o dono agir.
+//
+// Nada disso apaga alerta: o painel interno continua vendo tudo.
+const ALERTAS_OCULTOS_DO_ASSOCIADO: AlertType[] = [
+  AlertType.GPS_SILENT,
+  AlertType.IGNITION_ON,
+  AlertType.IGNITION_OFF,
+  AlertType.OFFLINE,
+  AlertType.HARSH_BRAKE,
+  AlertType.HARSH_ACCEL,
+  AlertType.BATTERY_LOW, // bateria do rastreador — quem troca é o técnico
+];
 
 /** Posição "limpa" pro app — só o que a UI do associado precisa. */
 function toPositionDto(p: TraccarPosition) {
@@ -96,6 +113,8 @@ export class AppDataService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly traccar: TraccarService,
+    private readonly reports: ReportsService,
+    private readonly geocode: ReverseGeocodeService,
   ) {}
 
   /** Veículos do associado + última posição + status de conexão. */
@@ -177,6 +196,83 @@ export class AppDataService {
       to,
     );
     return positions.map(toPositionDto);
+  }
+
+  /**
+   * Trajetos do veículo no período — a aba que substituiu "Alertas" no app.
+   *
+   * Viagem só existe onde houve movimento de verdade (o corte é do
+   * ReportsService, por velocidade). Rastreador que ficou repetindo a mesma
+   * coordenada em heartbeat não gera viagem nenhuma — e é isso que o app usa
+   * pra dizer "seu carro não saiu do lugar desde X" em vez de exibir contagem
+   * de pontos que parece movimento.
+   */
+  async getTrips(
+    associateId: string,
+    tenantId: string,
+    vehicleId: string,
+    from: string,
+    to: string,
+  ) {
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: { id: vehicleId, associateId, tenantId, deletedAt: null },
+      select: { traccarDeviceId: true },
+    });
+
+    if (!vehicle) {
+      throw new NotFoundException('Veículo não encontrado');
+    }
+    if (!vehicle.traccarDeviceId) {
+      return [];
+    }
+
+    const trips = await this.reports.getTrips(
+      vehicle.traccarDeviceId,
+      from,
+      to,
+    );
+    if (trips.length === 0) return [];
+
+    const enderecos = await this.enderecosDasPontas(trips);
+
+    return trips
+      .map((t) => ({
+        id: t.startTime,
+        startTime: t.startTime,
+        endTime: t.endTime,
+        startLat: t.startLat,
+        startLng: t.startLng,
+        endLat: t.endLat,
+        endLng: t.endLng,
+        startAddress: this.endereco(enderecos, t.startLat, t.startLng),
+        endAddress: this.endereco(enderecos, t.endLat, t.endLng),
+        distanceKm: t.distance,
+        durationMin: t.duration,
+        maxSpeed: t.maxSpeed,
+      }))
+      .sort((a, b) => b.startTime.localeCompare(a.startTime));
+  }
+
+  /**
+   * Endereço das duas pontas de cada viagem numa tacada só. Em lote porque o
+   * geocoder tem portão de 1 req/s: pedir ponto a ponto faria a aba abrir em
+   * dezenas de segundos.
+   */
+  private async enderecosDasPontas(trips: Trip[]): Promise<Map<string, string>> {
+    const coordenadas = trips.flatMap((t) => [
+      { latitude: t.startLat, longitude: t.startLng },
+      { latitude: t.endLat, longitude: t.endLng },
+    ]);
+    return this.geocode.lookupCached(coordenadas);
+  }
+
+  private endereco(
+    enderecos: Map<string, string>,
+    latitude: number,
+    longitude: number,
+  ): string | null {
+    const chave = this.geocode.chave({ latitude, longitude });
+    return (chave && enderecos.get(chave)) || null;
   }
 
   /** Alertas dos veículos do associado, mais recentes primeiro. */

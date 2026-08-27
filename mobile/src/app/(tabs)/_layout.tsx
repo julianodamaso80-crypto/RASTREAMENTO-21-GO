@@ -25,12 +25,17 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/*
+        Era "Alertas": 79% do que caía ali era ignição ligada/desligada e
+        offline — o dono do carro não faz nada com isso. Virou onde ele
+        esteve. Alerta que exige ação aparece no topo do mapa.
+      */}
       <Tabs.Screen
-        name="alerts"
+        name="trips"
         options={{
-          title: 'Alertas',
+          title: 'Trajetos',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="notifications" size={size} color={color} />
+            <Ionicons name="navigate" size={size} color={color} />
           ),
         }}
       />
