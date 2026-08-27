@@ -31,12 +31,14 @@ module.exports = ({ config }) => {
         googleMaps: { apiKey: chave },
       },
     },
-    // O plugin do react-native-maps (≥1.22) é o que instala o Google Maps SDK
-    // no projeto iOS e grava a GMSApiKey no Info.plist. Sem ele, `provider`
-    // Google no iPhone não tem efeito nenhum — o MapView continua MapKit.
+    // No iOS o Google Maps SDK não vem sozinho: precisa do pod, da GMSApiKey
+    // no Info.plist e do GMSServices no AppDelegate. Quem faz isso é o plugin
+    // da casa — o oficial do react-native-maps só existe da 1.22 pra frente,
+    // e daquela versão em diante a lib exige a New Architecture, que é o que
+    // deixou o app com tela branca no iOS 26. Ver plugins/with-google-maps-ios.js.
     plugins: [
       ...(config.plugins ?? []),
-      ['react-native-maps', { iosGoogleMapsApiKey: chave, androidGoogleMapsApiKey: chave }],
+      ['./plugins/with-google-maps-ios', { apiKey: chave }],
     ],
   };
 };
