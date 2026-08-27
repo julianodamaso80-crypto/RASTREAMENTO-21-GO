@@ -8,10 +8,9 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import MapView, { Marker, Polyline, Region } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SatelliteTiles } from '@/components/satellite-tiles';
 import { AppApi, Position, VehicleType } from '@/lib/api';
 import { markerSource, vehicleTypeLabel } from '@/lib/vehicle-visual';
 import { useAddress } from '@/lib/geocode';
@@ -132,8 +131,12 @@ export default function VehicleHistoryScreen() {
             <Text style={styles.empty}>Sem trajeto registrado nesse período.</Text>
           </View>
         ) : (
-          <MapView style={StyleSheet.absoluteFill} initialRegion={region} mapType="standard">
-            <SatelliteTiles />
+          <MapView
+            provider={PROVIDER_GOOGLE}
+            style={StyleSheet.absoluteFill}
+            initialRegion={region}
+            mapType="hybrid"
+          >
             <Polyline
               coordinates={coords}
               strokeColor={colors.orange}

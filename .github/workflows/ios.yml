@@ -2,6 +2,11 @@ name: Build iOS (local no runner macOS)
 
 on:
   workflow_dispatch:
+    inputs:
+      submit:
+        description: 'Enviar pro App Store Connect ao final'
+        type: boolean
+        default: true
 
 jobs:
   build:
@@ -60,6 +65,9 @@ jobs:
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # Mesma chave do Android: ja vinha embutida no app publicado, e o
+          # plugin do react-native-maps grava ela como GMSApiKey no Info.plist.
+          GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
         run: eas build --local --platform ios --profile production --non-interactive --output "$GITHUB_WORKSPACE/app.ipa"
 
       - name: Upload do IPA como artefato
@@ -68,7 +76,10 @@ jobs:
           name: app-ipa
           path: app.ipa
 
+      # Build de validacao (submit=false) so gera o IPA: serve pra saber se a
+      # troca de biblioteca compila antes de qualquer coisa chegar na Apple.
       - name: Enviar pro App Store Connect
+        if: ${{ inputs.submit }}
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

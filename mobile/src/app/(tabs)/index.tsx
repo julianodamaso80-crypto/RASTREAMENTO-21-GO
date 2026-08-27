@@ -13,9 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Region } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { useRouter } from 'expo-router';
-import { SatelliteTiles } from '@/components/satellite-tiles';
 import { AlertBanner } from '@/components/alert-banner';
 import { VehicleCard } from '@/components/vehicle-card';
 import { VehicleMarker } from '@/components/vehicle-marker';
@@ -167,15 +166,20 @@ export default function MapScreen() {
 
   return (
     <View style={styles.root}>
+      {/*
+        Google Maps nos dois sistemas. No iPhone era Apple Maps com satélite
+        Esri por cima — imagem que no Brasil para no zoom 19 e envelhece. O
+        `hybrid` do Google já traz a foto com ruas e rótulos, sem camada extra.
+      */}
       <MapView
         ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
-        mapType="standard"
+        mapType="hybrid"
         showsUserLocation={false}
         showsMyLocationButton={false}
       >
-        <SatelliteTiles />
         {withPos.map((v) => (
           <VehicleMarker key={v.id} vehicle={v} onPress={() => pickVehicle(v)} />
         ))}
