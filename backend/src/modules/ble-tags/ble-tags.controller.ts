@@ -52,6 +52,7 @@ export class BleTagsController {
       perPage: query.perPage,
       search: query.search,
       tipo: query.tipo,
+      cobertura: query.cobertura,
     });
   }
 

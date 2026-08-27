@@ -154,3 +154,80 @@ describe('rotas de trilha e histórico (HTTP)', () => {
     expect(service.getInsights).toHaveBeenCalledWith(TAG_ID, TENANT, {});
   });
 });
+
+/**
+ * O controller monta o objeto do service campo a campo — e um campo esquecido
+ * ali não aparece em teste nenhum de service: a rota responde 200, o filtro é
+ * silenciosamente ignorado e a tela mostra o recorte errado.
+ *
+ * Foi o que aconteceu em 27/08/2026: `cobertura` chegava do navegador, passava
+ * pela validação e morria no controller. A aba abriu zerada em produção.
+ */
+describe('GET /ble-tags/active — o repasse dos filtros (HTTP)', () => {
+  let app2: INestApplication;
+  let base2: string;
+  const svc = { findActive: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
+
+  beforeAll(async () => {
+    const ref = await Test.createTestingModule({
+      controllers: [BleTagsController],
+      providers: [
+        { provide: BleTagsService, useValue: svc },
+        { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
+      ],
+    }).compile();
+
+    app2 = ref.createNestApplication();
+    app2.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
+    app2.use((req: Record<string, unknown>, _r: unknown, next: () => void) => {
+      req.tenantId = TENANT;
+      req.user = { id: 'u', role: 'ADMIN' };
+      next();
+    });
+    await app2.init();
+    await app2.listen(0);
+    base2 = await app2.getUrl();
+  });
+
+  afterAll(async () => {
+    await app2?.close();
+  });
+
+  beforeEach(() => svc.findActive.mockClear());
+
+  it('leva TODOS os filtros da query até o service', async () => {
+    await fetch(
+      `${base2}/ble-tags/active?page=2&perPage=50&search=ABC1D23&tipo=SO_TAG&cobertura=TODAS`,
+    );
+
+    expect(svc.findActive).toHaveBeenCalledWith(TENANT, {
+      page: 2,
+      perPage: 50,
+      search: 'ABC1D23',
+      tipo: 'SO_TAG',
+      cobertura: 'TODAS',
+    });
+  });
+
+  it('cobertura=SEM_POSICAO chega intacta', async () => {
+    await fetch(`${base2}/ble-tags/active?cobertura=SEM_POSICAO`);
+    expect(svc.findActive.mock.calls[0][1].cobertura).toBe('SEM_POSICAO');
+  });
+
+  it('sem cobertura na URL, o service decide o padrão', async () => {
+    await fetch(`${base2}/ble-tags/active`);
+    expect(svc.findActive.mock.calls[0][1].cobertura).toBeUndefined();
+  });
+
+  it('cobertura inválida é recusada com 400', async () => {
+    const res = await fetch(`${base2}/ble-tags/active?cobertura=QUALQUER`);
+    expect(res.status).toBe(400);
+    expect(svc.findActive).not.toHaveBeenCalled();
+  });
+});
