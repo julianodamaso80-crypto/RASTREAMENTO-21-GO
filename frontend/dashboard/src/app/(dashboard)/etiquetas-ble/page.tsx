@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Tag, Wifi, WifiOff, RefreshCw, Bluetooth } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTracking } from '@/contexts/tracking-context';
@@ -51,6 +52,7 @@ function isOnline(lastConnection: string | null): boolean {
 }
 
 export default function EtiquetasBlePage() {
+  const router = useRouter();
   const { bleTags, refreshBleTags, isSocketConnected } = useTracking();
   const [refreshing, setRefreshing] = useState(false);
   const [, forceRender] = useState(0);
@@ -186,7 +188,20 @@ export default function EtiquetasBlePage() {
                     const idade = lastSighting ? idadeLegivel(lastSighting.seenAt) : null;
 
                     return (
-                      <tr key={tag.id} className="border-b border-border/30 hover:bg-muted/20">
+                      <tr
+                        key={tag.id}
+                        onClick={() => router.push(`/etiquetas-ble/${tag.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            router.push(`/etiquetas-ble/${tag.id}`);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="link"
+                        aria-label={`Abrir histórico da TAG ${tag.imei}`}
+                        className="cursor-pointer border-b border-border/30 hover:bg-muted/20 focus:bg-muted/30 focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500"
+                      >
                         <td className="px-4 py-3">
                           <div className="font-medium flex items-center gap-2">
                             <span

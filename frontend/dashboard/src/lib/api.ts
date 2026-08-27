@@ -9,7 +9,13 @@ import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, 
 import type { DashboardOverview, DashboardPeriod } from '@/types/dashboard';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
 import type { GoogleTileSource } from '@/types/map';
-import type { ActiveTagsResponse, BleTag, BleSighting } from '@/types/ble-tag';
+import type {
+  ActiveTagsResponse,
+  BleTag,
+  BleSighting,
+  TrailResposta,
+  InsightsResposta,
+} from '@/types/ble-tag';
 import type {
   StockItem,
   StockStats,
@@ -590,6 +596,28 @@ export const bleTagsApi = {
   getSightings: async (id: string, params?: { page?: number; perPage?: number }): Promise<PaginatedResponse<BleSighting>> => {
     const res = await api.get<PaginatedResponse<BleSighting>>(`/ble-tags/${id}/sightings`, { params });
     return res.data;
+  },
+  /** Trilha para desenhar: já vem quebrada nos buracos de sinal. */
+  getTrail: async (
+    id: string,
+    params?: { from?: string; to?: string },
+  ): Promise<TrailResposta> => {
+    const res = await api.get<ApiResponse<TrailResposta>>(
+      `/ble-tags/${id}/trail`,
+      { params },
+    );
+    return res.data.data;
+  },
+  /** Histórico narrado: locais habituais, pernoite e última parada. */
+  getInsights: async (
+    id: string,
+    days = 7,
+  ): Promise<InsightsResposta> => {
+    const res = await api.get<ApiResponse<InsightsResposta>>(
+      `/ble-tags/${id}/insights`,
+      { params: { days } },
+    );
+    return res.data.data;
   },
 };
 
