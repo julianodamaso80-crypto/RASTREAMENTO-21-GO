@@ -63,10 +63,33 @@ describe('BleTagsService.findActive — espelho da TAG', () => {
       linhaSga({ id: 's2', plate: 'KXW8940' }),
     ]);
 
-    await service.findActive(TENANT);
+    await service.findActive(TENANT, { cobertura: 'TODAS' });
 
-    expect(rdvArgs[0].where.tenantId).toBe(TENANT);
-    expect(rdvArgs[0].where.plate).toEqual({ in: ['RIZ3B88', 'KXW8940'] });
+    // Duas consultas batem no espelho e elas têm papéis diferentes: a de
+    // COBERTURA varre tudo (precisa saber quais placas são rastreáveis antes
+    // de paginar) e a de CRUZAMENTO enriquece só os cards da página. O que
+    // este teste protege é a segunda — puxar a base inteira para montar 20
+    // cards seria o desperdício.
+    const cruzamento = rdvArgs.find((a: any) => a.where.plate);
+    expect(cruzamento).toBeDefined();
+    expect(cruzamento.where.tenantId).toBe(TENANT);
+    expect(cruzamento.where.plate).toEqual({ in: ['RIZ3B88', 'KXW8940'] });
+  });
+
+  it('a consulta de cobertura pede só o que precisa do espelho', async () => {
+    const { service, rdvArgs } = montar([linhaSga()]);
+
+    await service.findActive(TENANT, { cobertura: 'TODAS' });
+
+    const cobertura = rdvArgs.find((a: any) => !a.where.plate);
+    expect(cobertura).toBeDefined();
+    expect(cobertura.where.tenantId).toBe(TENANT);
+    // Sem `select`, seriam 4,8 mil linhas inteiras a cada página.
+    expect(Object.keys(cobertura.select ?? {}).sort()).toEqual([
+      'lastLat',
+      'lastLng',
+      'plate',
+    ]);
   });
 
   it('põe número, modelo e posição da TAG no card', async () => {
@@ -147,5 +170,114 @@ describe('BleTagsService.findActive — espelho da TAG', () => {
     const r = await service.findActive(TENANT);
 
     expect(r.data[0].tagEspelho?.identificador).toBe('000092603014784');
+  });
+});
+
+/**
+ * A regra de "TAG ativa", do dono, em 27/08/2026:
+ *
+ *   "Só entra ali veículo que consigo rastrear a TAG — clicar e ver
+ *    localização e histórico. Saber quem é o associado e onde essa TAG está
+ *    marcando. Se não, ela não está ativa."
+ *
+ * Antes disso a aba listava os 9.764 contratos do SGA e a maioria abria sem
+ * posição nenhuma. O número era grande e não servia para trabalhar.
+ */
+describe('BleTagsService.findActive — a régua de "ativa"', () => {
+  function montarComEspelho(placasComPosicao: string[], contratos: any[]) {
+    const espelho = placasComPosicao.map((plate, i) => ({
+      id: `r${i}`,
+      plate,
+      tagIdentifier: `tag-${i}`,
+      tagModel: 'KTAG',
+      lastLat: -22.939,
+      lastLng: -43.56,
+      seenAt: new Date('2026-08-20T10:00:00.000Z'),
+    }));
+
+    const prisma: any = {
+      sgaVehicle: {
+        findMany: jest.fn(({ where }: any) =>
+          Promise.resolve(filtrar(contratos, where)),
+        ),
+        count: jest.fn(({ where }: any) =>
+          Promise.resolve(filtrar(contratos, where).length),
+        ),
+      },
+      vehicle: { findMany: jest.fn(() => Promise.resolve([])) },
+      rdvTag: {
+        findMany: jest.fn(({ where }: any) =>
+          Promise.resolve(
+            where?.plate?.in
+              ? espelho.filter((e) => where.plate.in.includes(e.plate))
+              : espelho,
+          ),
+        ),
+      },
+    };
+    return new BleTagsService(prisma);
+  }
+
+  /** Imita o recorte por placa que o Prisma faria. */
+  function filtrar(linhas: any[], where: any) {
+    if (!where?.plate) return linhas;
+    if (where.plate.in) return linhas.filter((l) => where.plate.in.includes(l.plate));
+    if (where.plate.notIn)
+      return linhas.filter((l) => !where.plate.notIn.includes(l.plate));
+    return linhas;
+  }
+
+  const contratos = [
+    linhaSga({ id: 'a', plate: 'AAA1A11' }),
+    linhaSga({ id: 'b', plate: 'BBB2B22' }),
+    linhaSga({ id: 'c', plate: 'CCC3C33' }),
+  ];
+
+  it('por padrão mostra só quem tem posição da TAG', async () => {
+    const service = montarComEspelho(['AAA1A11'], contratos);
+
+    const r = await service.findActive(TENANT);
+
+    expect(r.data.map((d: any) => d.plate)).toEqual(['AAA1A11']);
+    expect(r.meta.cobertura).toBe('RASTREAVEL');
+  });
+
+  it('conta contratadas e rastreáveis lado a lado, sem esconder a diferença', async () => {
+    const service = montarComEspelho(['AAA1A11'], contratos);
+
+    const r = await service.findActive(TENANT);
+
+    expect(r.meta.contratadas).toBe(3);
+    expect(r.meta.rastreaveis).toBe(1);
+    expect(r.meta.semPosicao).toBe(2);
+  });
+
+  it('SEM_POSICAO mostra exatamente o que falta importar', async () => {
+    const service = montarComEspelho(['AAA1A11'], contratos);
+
+    const r = await service.findActive(TENANT, { cobertura: 'SEM_POSICAO' });
+
+    expect(r.data.map((d: any) => d.plate).sort()).toEqual([
+      'BBB2B22',
+      'CCC3C33',
+    ]);
+  });
+
+  it('TODAS mantém a lista completa de contratos', async () => {
+    const service = montarComEspelho(['AAA1A11'], contratos);
+
+    const r = await service.findActive(TENANT, { cobertura: 'TODAS' });
+
+    expect(r.data).toHaveLength(3);
+  });
+
+  it('espelho vazio não deixa a aba mentir: nenhuma ativa', async () => {
+    const service = montarComEspelho([], contratos);
+
+    const r = await service.findActive(TENANT);
+
+    expect(r.data).toHaveLength(0);
+    expect(r.meta.rastreaveis).toBe(0);
+    expect(r.meta.contratadas).toBe(3);
   });
 });

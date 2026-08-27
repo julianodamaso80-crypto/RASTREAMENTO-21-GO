@@ -35,6 +35,13 @@ const TAMANHOS_PAGINA = [20, 60, 140, 200];
 
 type Filtro = 'TODOS' | 'RASTREADOR_E_TAG' | 'SO_TAG';
 
+/**
+ * A régua de "TAG ativa" (dono, 27/08/2026): só é ativa quando sabemos quem é
+ * o associado E onde a TAG está marcando. `SEM_POSICAO` é a fila do que ainda
+ * falta importar.
+ */
+type Cobertura = 'RASTREAVEL' | 'SEM_POSICAO' | 'TODAS';
+
 const MODELO_LABEL: Record<string, string> = {
   BLE_KTAG: 'K-Tag',
   BLE_REDTAG: 'RedTag',
@@ -51,6 +58,8 @@ export default function TagsAtivasPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [filtro, setFiltro] = useState<Filtro>('TODOS');
+  // Começa na régua do dono: a aba abre mostrando só o que dá para rastrear.
+  const [cobertura, setCobertura] = useState<Cobertura>('RASTREAVEL');
   const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(true);
   const primeiraCarga = useRef(true);
@@ -64,6 +73,7 @@ export default function TagsAtivasPage() {
           perPage,
           search: busca.trim() || undefined,
           tipo: filtro === 'TODOS' ? undefined : filtro,
+          cobertura,
         }),
       );
     } catch {
@@ -72,7 +82,7 @@ export default function TagsAtivasPage() {
       setCarregando(false);
       primeiraCarga.current = false;
     }
-  }, [page, perPage, busca, filtro]);
+  }, [page, perPage, busca, filtro, cobertura]);
 
   // Busca digitada não pode disparar uma consulta por tecla.
   useEffect(() => {
@@ -82,6 +92,11 @@ export default function TagsAtivasPage() {
 
   const meta = resposta?.meta;
   const linhas = resposta?.data ?? [];
+
+  const trocarCobertura = (novo: Cobertura) => {
+    setCobertura(novo);
+    setPage(1);
+  };
 
   const trocarFiltro = (novo: Filtro) => {
     setFiltro(novo);
@@ -134,7 +149,11 @@ export default function TagsAtivasPage() {
             TAGs Ativas
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Um card por veículo com TAG contratada e cliente ativo — fonte: SGA
+            {cobertura === 'RASTREAVEL'
+              ? 'Veículos em que sabemos quem é o associado e onde a TAG está marcando'
+              : cobertura === 'SEM_POSICAO'
+                ? 'TAG contratada no SGA que ainda não conseguimos localizar'
+                : 'Todo veículo com TAG contratada e cliente ativo — fonte: SGA'}
           </p>
         </div>
         <Button
@@ -148,8 +167,25 @@ export default function TagsAtivasPage() {
         </Button>
       </div>
 
-      {/* Os três recortes são também o filtro: o operador clica no número que
-          quer ver, em vez de procurar um seletor separado. */}
+      {/* A régua de "ativa" é do dono: só é ativa a TAG que conseguimos
+          localizar. O contrato sem posição continua acessível ao lado, porque
+          é a fila de trabalho de quem vai importar as chaves que faltam. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Cartao
+          rotulo="TAGs ativas"
+          valor={meta?.rastreaveis ?? 0}
+          ativo={cobertura === 'RASTREAVEL'}
+          onClick={() => trocarCobertura('RASTREAVEL')}
+          cor="text-brand-orange-500"
+        />
+        <Cartao
+          rotulo="Contratadas sem posição"
+          valor={meta?.semPosicao ?? 0}
+          ativo={cobertura === 'SEM_POSICAO'}
+          onClick={() => trocarCobertura('SEM_POSICAO')}
+        />
+      </div>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Cartao
           rotulo="Veículos com TAG"
@@ -440,8 +476,9 @@ function CardTag({
           )}
         </p>
 
-        {/* Onde está: hoje isso só existe pelo rastreador do veículo. Dizer de
-            quem é a posição evita a leitura errada de que a TAG foi localizada. */}
+        {/* Posição do rastreador. O rótulo "pelo rastreador" é obrigatório:
+            logo abaixo vem a da TAG, e o operador precisa saber de qual
+            equipamento é cada ponto. */}
         {pos ? (
           <div className="flex flex-wrap items-start justify-between gap-2">
             <p className="flex min-w-0 items-start gap-1.5 text-muted-foreground">

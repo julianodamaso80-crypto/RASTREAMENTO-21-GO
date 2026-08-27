@@ -14,6 +14,7 @@ import { assessPosition } from '../traccar/position-quality';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
 import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
+import { ehTagRastreavel } from './tag-ativa-regra';
 import {
   segmentar,
   detectarLocaisHabituais,
@@ -74,6 +75,12 @@ export type ActiveTagsQuery = {
   perPage?: number;
   search?: string;
   tipo?: 'RASTREADOR_E_TAG' | 'SO_TAG';
+  /**
+   * `RASTREAVEL` (padrão) aplica a regra do dono: só entra quem tem associado
+   * E posição da TAG. `SEM_POSICAO` mostra o contrário — serve para saber o
+   * que falta importar. `TODAS` é o comportamento antigo.
+   */
+  cobertura?: 'RASTREAVEL' | 'SEM_POSICAO' | 'TODAS';
 };
 
 /**
@@ -223,6 +230,7 @@ export class BleTagsService {
   async findActive(tenantId: string, query: ActiveTagsQuery = {}) {
     const page = Math.max(1, Math.trunc(query.page ?? 1));
     const perPage = Math.min(200, Math.max(1, Math.trunc(query.perPage ?? 20)));
+    const cobertura = query.cobertura ?? 'RASTREAVEL';
 
     const where: Record<string, unknown> = {
       tenantId,
@@ -234,21 +242,43 @@ export class BleTagsService {
       ...(query.search ? filtroBuscaSga(query.search) : {}),
     };
 
-    const [total, comRastreador, soTag, rows] = await Promise.all([
-      this.sgaVehicleModel.count({ where }),
-      this.sgaVehicleModel.count({
-        where: { ...where, adhesionCode: ADHESION_RASTREADOR_E_TAG },
-      }),
-      this.sgaVehicleModel.count({
-        where: { ...where, adhesionCode: ADHESION_SO_TAG },
-      }),
-      this.sgaVehicleModel.findMany({
-        where,
-        orderBy: [{ contractDate: 'desc' }, { plate: 'asc' }],
-        skip: (page - 1) * perPage,
-        take: perPage,
-      }),
-    ]);
+    // A regra de "TAG ativa" (ver tag-ativa-regra.ts) mora no espelho, que é
+    // outra tabela sem relação declarada no Prisma. Por isso o recorte vira
+    // uma lista de placas em vez de um join.
+    const placasRastreaveis = await this.placasComPosicaoDeTag(tenantId);
+    if (cobertura === 'RASTREAVEL') {
+      where.plate = { in: placasRastreaveis };
+    } else if (cobertura === 'SEM_POSICAO') {
+      where.plate = { notIn: placasRastreaveis };
+    }
+
+    // Contagem de cobertura: quantos contratos existem ao todo e quantos deles
+    // conseguimos mesmo rastrear. Sem os dois números lado a lado, "4.442
+    // ativas" pareceria que sumiram 5 mil clientes.
+    const whereContratado = { ...where };
+    delete (whereContratado as Record<string, unknown>).plate;
+    if (query.search) Object.assign(whereContratado, filtroBuscaSga(query.search));
+
+    const [total, comRastreador, soTag, rows, contratadas, rastreaveis] =
+      await Promise.all([
+        this.sgaVehicleModel.count({ where }),
+        this.sgaVehicleModel.count({
+          where: { ...where, adhesionCode: ADHESION_RASTREADOR_E_TAG },
+        }),
+        this.sgaVehicleModel.count({
+          where: { ...where, adhesionCode: ADHESION_SO_TAG },
+        }),
+        this.sgaVehicleModel.findMany({
+          where,
+          orderBy: [{ contractDate: 'desc' }, { plate: 'asc' }],
+          skip: (page - 1) * perPage,
+          take: perPage,
+        }),
+        this.sgaVehicleModel.count({ where: whereContratado }),
+        this.sgaVehicleModel.count({
+          where: { ...whereContratado, plate: { in: placasRastreaveis } },
+        }),
+      ]);
 
     const placas = rows
       .map((r: any) => normalizarPlaca(r.plate))
@@ -298,6 +328,12 @@ export class BleTagsService {
         totalPages: Math.max(1, Math.ceil(total / perPage)),
         comRastreador,
         soTag,
+        cobertura,
+        /** Contratos de TAG no SGA, independentemente de conseguirmos achá-la. */
+        contratadas,
+        /** Destes, quantos têm posição conhecida — as ativas de verdade. */
+        rastreaveis,
+        semPosicao: Math.max(0, contratadas - rastreaveis),
       },
     };
   }
@@ -309,6 +345,48 @@ export class BleTagsService {
    * ONDE ela foi vista. Quando a mesma placa tem mais de uma TAG no espelho,
    * vale a vista mais recente — TAG trocada deixa a antiga parada no passado.
    */
+  /**
+   * Placas cuja TAG tem posição conhecida — o recorte de "TAG ativa".
+   *
+   * Vem do espelho inteiro, não da página: o filtro precisa valer sobre os
+   * 9,7 mil contratos antes de paginar, senão a contagem mentiria.
+   *
+   * São ~4,8 mil placas hoje. Cabe num `IN` do Postgres com folga, e evita a
+   * alternativa (SQL cru com join) que sairia do Prisma e do TenantGuard.
+   */
+  private async placasComPosicaoDeTag(tenantId: string): Promise<string[]> {
+    if (!this.rdvTagModel) return [];
+
+    const linhas = await this.rdvTagModel.findMany({
+      where: {
+        tenantId,
+        lastLat: { not: null },
+        lastLng: { not: null },
+      },
+      select: { plate: true, lastLat: true, lastLng: true },
+    });
+
+    const placas = new Set<string>();
+    for (const l of linhas) {
+      // Passa pela mesma regra da tela: (0,0) da origem não é posição.
+      if (
+        !ehTagRastreavel({
+          identificador: '',
+          modelo: null,
+          latitude: l.lastLat,
+          longitude: l.lastLng,
+          seenAt: null,
+          origem: '',
+        })
+      ) {
+        continue;
+      }
+      const chave = normalizarPlaca(l.plate);
+      if (chave) placas.add(chave);
+    }
+    return [...placas];
+  }
+
   private async tagEspelhoPorPlaca(tenantId: string, placas: string[]) {
     const mapa = new Map<
       string,

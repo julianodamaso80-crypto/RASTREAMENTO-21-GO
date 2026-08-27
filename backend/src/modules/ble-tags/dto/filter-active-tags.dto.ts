@@ -27,4 +27,15 @@ export class FilterActiveTagsDto {
   @IsOptional()
   @IsIn(['RASTREADOR_E_TAG', 'SO_TAG'])
   tipo?: 'RASTREADOR_E_TAG' | 'SO_TAG';
+
+  @ApiPropertyOptional({
+    enum: ['RASTREAVEL', 'SEM_POSICAO', 'TODAS'],
+    default: 'RASTREAVEL',
+    description:
+      'RASTREAVEL (padrão) = só quem tem associado E posição da TAG. ' +
+      'SEM_POSICAO = o que falta importar. TODAS = todo contrato de TAG.',
+  })
+  @IsOptional()
+  @IsIn(['RASTREAVEL', 'SEM_POSICAO', 'TODAS'])
+  cobertura?: 'RASTREAVEL' | 'SEM_POSICAO' | 'TODAS';
 }

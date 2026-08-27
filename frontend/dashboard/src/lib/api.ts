@@ -581,6 +581,7 @@ export const bleTagsApi = {
     perPage?: number;
     search?: string;
     tipo?: 'RASTREADOR_E_TAG' | 'SO_TAG';
+    cobertura?: 'RASTREAVEL' | 'SEM_POSICAO' | 'TODAS';
   }): Promise<ActiveTagsResponse> => {
     // O backend responde no formato paginado ({ data, meta }) — pegar só o
     // `data` deixaria a tela sem total, sem páginas e sem os contadores.

@@ -121,6 +121,13 @@ export interface ActiveTagsResponse {
     totalPages: number;
     comRastreador: number;
     soTag: number;
+    /** Recorte aplicado — ver a régua de "TAG ativa". */
+    cobertura?: 'RASTREAVEL' | 'SEM_POSICAO' | 'TODAS';
+    /** Contratos de TAG no SGA, achando a TAG ou não. */
+    contratadas?: number;
+    /** Destes, quantos têm posição conhecida: as ativas de verdade. */
+    rastreaveis?: number;
+    semPosicao?: number;
   };
 }
 
