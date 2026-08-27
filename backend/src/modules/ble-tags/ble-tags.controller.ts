@@ -17,6 +17,7 @@ import { BleTagsService } from './ble-tags.service';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
 import { FilterActiveTagsDto } from './dto/filter-active-tags.dto';
+import { TrailQueryDto, InsightsQueryDto } from './dto/trail-query.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -82,6 +83,32 @@ export class BleTagsController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.bleTagsService.listSightings(id, req.tenantId, filters);
+  }
+
+  @Get(':id/trail')
+  @ApiOperation({
+    summary:
+      'Trilha da TAG, quebrada nos buracos de sinal, com a latência de cada ponto',
+  })
+  async trail(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: TrailQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.bleTagsService.getTrail(id, req.tenantId, query);
+  }
+
+  @Get(':id/insights')
+  @ApiOperation({
+    summary:
+      'Histórico narrado: locais habituais, onde passa a noite e onde parou por último',
+  })
+  async insights(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: InsightsQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.bleTagsService.getInsights(id, req.tenantId, query);
   }
 
   @Post('sightings')

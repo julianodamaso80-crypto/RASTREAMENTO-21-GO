@@ -14,8 +14,39 @@ import { assessPosition } from '../traccar/position-quality';
 import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
 import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
+import {
+  segmentar,
+  detectarLocaisHabituais,
+  detectarPernoite,
+  detectarUltimaParada,
+  PontoBruto,
+} from './tag-insights';
 
 const BLE_DEVICE_MODELS = ['BLE_KTAG', 'BLE_REDTAG', 'BLE_AIRTAG_GENERIC'];
+
+/**
+ * Buraco a partir do qual a trilha quebra em dois segmentos. Ligar os dois
+ * lados de um intervalo maior que este afirmaria um trajeto que ninguém viu.
+ */
+const GAP_SEGMENTO_MIN = 30;
+
+/** Janela padrão do histórico narrado — a Apple guarda 7 dias de relatórios. */
+const JANELA_INSIGHTS_DIAS = 7;
+
+/** Quantos locais habituais a tela mostra antes de virar ruído. */
+const MAX_LOCAIS_HABITUAIS = 5;
+
+/** Linha de ble_sightings, no que interessa para trilha e análise. */
+type SightingRow = {
+  scannerLat: number | null;
+  scannerLng: number | null;
+  accuracy: number | null;
+  seenAt: Date;
+  createdAt: Date;
+};
+
+/** Ponto de análise que ainda carrega quando o relatório chegou até nós. */
+type PontoComRegistro = PontoBruto & { createdAt: Date };
 
 /**
  * `codigo_tipo_adesao` do SGA — a lista completa vive no mapper das pendências.
@@ -484,6 +515,170 @@ export class BleTagsService {
     ]);
 
     return { data, meta: { total, page, perPage } };
+  }
+
+  /**
+   * Avistamentos crus viram pontos de análise. Sem coordenada não há o que
+   * desenhar nem o que concluir — a linha é descartada em vez de virar um
+   * ponto em (0,0) no meio do Atlântico.
+   */
+  private toPontosDeAnalise(rows: SightingRow[]): PontoComRegistro[] {
+    return rows
+      .filter((s) => s.scannerLat != null && s.scannerLng != null)
+      .map((s) => ({
+        lat: s.scannerLat as number,
+        lng: s.scannerLng as number,
+        accuracy: s.accuracy ?? null,
+        seenAt: s.seenAt,
+        createdAt: s.createdAt,
+      }));
+  }
+
+  /**
+   * Endereço de cada coordenada, em uma tanque só. Falha de geocoder devolve
+   * nulo: o histórico vale sem o nome da rua, e derrubar a tela por causa do
+   * OSM seria trocar informação por nada.
+   */
+  private async enderecosDe(
+    coords: Array<{ lat: number; lng: number }>,
+  ): Promise<Map<number, string | null>> {
+    const vazio = new Map<number, string | null>(
+      coords.map((_, i) => [i, null]),
+    );
+    if (!this.geocode || coords.length === 0) return vazio;
+
+    try {
+      const pedidos = coords.map((c) => ({
+        latitude: c.lat,
+        longitude: c.lng,
+      }));
+      const conhecidos = await this.geocode.lookupCached(pedidos);
+      const resultado = new Map<number, string | null>();
+      coords.forEach((c, i) => {
+        const chave = this.geocode!.chave({
+          latitude: c.lat,
+          longitude: c.lng,
+        });
+        resultado.set(i, (chave && conhecidos.get(chave)) || null);
+      });
+      return resultado;
+    } catch (erro) {
+      this.logger.warn(
+        `Geocoder indisponível ao montar o histórico da TAG: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+      return vazio;
+    }
+  }
+
+  /**
+   * Trilha da TAG, quebrada nos buracos de sinal.
+   *
+   * Cada ponto leva junto a própria latência (quanto tempo passou entre a TAG
+   * ser vista e o relatório chegar até nós). É esse número que impede o
+   * operador de tratar posição de TAG como posição atual.
+   */
+  async getTrail(
+    deviceId: string,
+    tenantId: string,
+    q: { from?: string; to?: string },
+  ) {
+    await this.findOne(deviceId, tenantId);
+
+    const where: Record<string, unknown> = { deviceId, tenantId };
+    if (q.from || q.to) {
+      const janela: Record<string, Date> = {};
+      if (q.from) janela.gte = new Date(q.from);
+      if (q.to) janela.lte = new Date(q.to);
+      where.seenAt = janela;
+    }
+
+    const rows: SightingRow[] = await this.sightingModel.findMany({
+      where,
+      orderBy: { seenAt: 'asc' },
+    });
+
+    const pontos = this.toPontosDeAnalise(rows);
+    const segmentos = segmentar(pontos, GAP_SEGMENTO_MIN).map((seg) => ({
+      pontos: (seg.pontos as PontoComRegistro[]).map((p) => ({
+        lat: p.lat,
+        lng: p.lng,
+        accuracy: p.accuracy,
+        seenAt: p.seenAt,
+        latenciaSeg: Math.max(
+          0,
+          Math.round((p.createdAt.getTime() - p.seenAt.getTime()) / 1000),
+        ),
+      })),
+    }));
+
+    return { segmentos, totalAvistamentos: pontos.length };
+  }
+
+  /**
+   * Histórico narrado: onde o veículo costuma ficar, onde passa a noite e onde
+   * parou por último.
+   *
+   * Só descreve o que os avistamentos sustentam. A TAG é vista quando alguém
+   * passa perto dela, então isto é padrão observado — nunca trajeto contínuo,
+   * nunca estado do motor.
+   */
+  async getInsights(
+    deviceId: string,
+    tenantId: string,
+    q: { days?: number },
+    agora: Date = new Date(),
+  ) {
+    await this.findOne(deviceId, tenantId);
+
+    const days = q.days ?? JANELA_INSIGHTS_DIAS;
+    const desde = new Date(agora.getTime() - days * 86400000);
+
+    const rows: SightingRow[] = await this.sightingModel.findMany({
+      where: { deviceId, tenantId, seenAt: { gte: desde } },
+      orderBy: { seenAt: 'asc' },
+    });
+
+    const pontos = this.toPontosDeAnalise(rows);
+    const habituais = detectarLocaisHabituais(pontos).slice(
+      0,
+      MAX_LOCAIS_HABITUAIS,
+    );
+    const pernoite = detectarPernoite(pontos);
+    const ultimaParada = detectarUltimaParada(pontos, agora);
+
+    // Um único lote de geocodificação para tudo que a tela vai mostrar.
+    const alvos = [
+      ...habituais.map((h) => ({ lat: h.centroLat, lng: h.centroLng })),
+      ...(pernoite
+        ? [{ lat: pernoite.centroLat, lng: pernoite.centroLng }]
+        : []),
+      ...(ultimaParada
+        ? [{ lat: ultimaParada.centroLat, lng: ultimaParada.centroLng }]
+        : []),
+    ];
+    const enderecos = await this.enderecosDe(alvos);
+
+    let cursor = 0;
+    const locaisHabituais = habituais.map((h) => ({
+      ...h,
+      endereco: enderecos.get(cursor++) ?? null,
+    }));
+    const pernoiteComEndereco = pernoite
+      ? { ...pernoite, endereco: enderecos.get(cursor++) ?? null }
+      : null;
+    const ultimaParadaComEndereco = ultimaParada
+      ? { ...ultimaParada, endereco: enderecos.get(cursor++) ?? null }
+      : null;
+
+    return {
+      janelaDias: days,
+      totalAvistamentos: pontos.length,
+      locaisHabituais,
+      pernoite: pernoiteComEndereco,
+      ultimaParada: ultimaParadaComEndereco,
+    };
   }
 
   async createSighting(dto: CreateSightingDto, tenantId: string) {
