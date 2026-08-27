@@ -196,6 +196,15 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get sgaVehicle() {
     return this.base.sgaVehicle;
   }
+  // Espelho das TAGs da plataforma de origem: é de lá que sai QUAL é a TAG e
+  // ONDE ela foi vista. Sem soft delete — reescrito a cada carga.
+  //
+  // Este getter faltou quando o model nasceu, e o efeito foi mudo: a tela não
+  // quebrou, só mostrou zero TAG ativa em produção com 8,6 mil no banco. Por
+  // isso existe prisma-service-expoe-models.spec.ts.
+  get rdvTag() {
+    return this.base.rdvTag;
+  }
   // Rota inteligente de instalação (sem soft delete — rota é efêmera).
   get cepCoordinate() {
     return this.base.cepCoordinate;
