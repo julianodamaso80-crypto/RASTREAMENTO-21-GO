@@ -72,19 +72,31 @@ function aplicarInit(src, apiKey) {
  * O pod `react-native-google-maps` não é autolinkado (é um segundo podspec
  * dentro do mesmo pacote), então entra na mão. Ele traz GoogleMaps 8.4.0 e
  * define HAVE_GOOGLE_MAPS=1.
+ *
+ * A inserção é depois da LINHA inteira, não depois do texto casado. O Expo
+ * gera `config = use_native_modules!(config_command)`, e emendar logo após o
+ * `!` deixava o `(config_command)` órfão na linha seguinte: o autolinking caía
+ * no caminho do @react-native-community/cli e o pod install morria com
+ * "Invalid Podfile file: exit" (build 36, 27/08/2026).
  */
 function aplicarPodfile(src) {
   if (src.includes(MARCA_POD)) return src;
-  if (!ANCORA_PODFILE.test(src)) {
+  const linhas = src.split('\n');
+  const alvo = linhas.findIndex((l) => ANCORA_PODFILE.test(l));
+  if (alvo === -1) {
     throw new Error(
       '[with-google-maps-ios] use_native_modules! não encontrado no Podfile.',
     );
   }
-  const pod =
-    `  ${MARCA_POD}\n` +
-    "  rn_maps_path = File.dirname(`node --print \"require.resolve('react-native-maps/package.json')\"`)\n" +
-    "  pod 'react-native-google-maps', :path => rn_maps_path\n";
-  return src.replace(ANCORA_PODFILE, (match) => `${match}\n${pod}`);
+  const indent = (linhas[alvo].match(/^\s*/) || [''])[0];
+  linhas.splice(
+    alvo + 1,
+    0,
+    `${indent}${MARCA_POD}`,
+    `${indent}rn_maps_path = File.dirname(\`node --print "require.resolve('react-native-maps/package.json')"\`)`,
+    `${indent}pod 'react-native-google-maps', :path => rn_maps_path`,
+  );
+  return linhas.join('\n');
 }
 
 function withGoogleMapsIOS(config, { apiKey } = {}) {

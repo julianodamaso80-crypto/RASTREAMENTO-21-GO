@@ -1,0 +1,71 @@
+# Confere o que os config plugins escrevem no projeto iOS SEM gastar runner
+# macOS. O prebuild e Node puro e roda em Linux; so o pod install/Xcode e que
+# exigem Mac. Um build iOS custa ~40 minutos de macOS — este check custa ~3 de
+# Ubuntu e pega erro de ancora, de Podfile e de AppDelegate antes.
+#
+# Nao substitui o build: nao compila nada. Serve pra saber que o projeto foi
+# gerado do jeito esperado.
+name: Conferir prebuild iOS (Ubuntu, sem compilar)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  prebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias
+        working-directory: mobile
+        run: npm install
+
+      - name: Testes dos config plugins
+        working-directory: mobile
+        run: npx jest plugins
+
+      - name: Gerar projeto iOS
+        working-directory: mobile
+        env:
+          GOOGLE_MAPS_ANDROID_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_KEY }}
+        run: npx expo prebuild --platform ios --no-install --clean
+
+      - name: Conferir o que o plugin escreveu
+        working-directory: mobile
+        run: |
+          echo "=== Podfile (bloco do autolinking) ==="
+          grep -n -B2 -A6 'use_native_modules!' ios/Podfile
+
+          echo "=== AppDelegate.swift ==="
+          grep -n -A2 'import Expo\|GMSServices\|super.application' ios/*/AppDelegate.swift
+
+          echo "=== GMSApiKey no Info.plist? ==="
+          grep -q 'GMSApiKey' ios/*/Info.plist && echo "OK: GMSApiKey presente" || {
+            echo "FALHOU: GMSApiKey ausente do Info.plist"; exit 1; }
+
+          echo "=== o argumento do autolinking sobreviveu? ==="
+          grep -q 'use_native_modules!(config_command)' ios/Podfile && \
+            echo "OK: config_command intacto" || {
+              echo "FALHOU: use_native_modules! perdeu o argumento — foi o bug do build 36"; exit 1; }
+
+          echo "=== o pod do Google Maps entrou? ==="
+          grep -q "pod 'react-native-google-maps'" ios/Podfile && \
+            echo "OK: pod declarado" || { echo "FALHOU: pod ausente"; exit 1; }
+
+          echo "=== provideAPIKey antes do super? ==="
+          python3 - <<'PY'
+          import glob, sys
+          arq = glob.glob('ios/*/AppDelegate.swift')[0]
+          src = open(arq, encoding='utf-8').read()
+          i, j = src.find('GMSServices.provideAPIKey'), src.find('super.application(')
+          if i == -1 or j == -1 or i > j:
+              print('FALHOU: provideAPIKey ausente ou depois do super'); sys.exit(1)
+          print('OK: provideAPIKey vem antes do super')
+          PY
