@@ -722,7 +722,10 @@ export class BleTagsService {
     const sighting = await this.sightingModel.create({
       data: {
         deviceId: device.id,
-        macAddress: dto.macAddress,
+        // Vazio quando o relatório veio da rede Apple, que identifica a TAG
+        // pelo hash da chave e nunca expõe o MAC. Vazio diz "não temos";
+        // preencher com um MAC inventado seria pior que não ter.
+        macAddress: dto.macAddress ?? '',
         rssi: dto.rssi ?? null,
         accuracy: dto.accuracy ?? null,
         seenAt,

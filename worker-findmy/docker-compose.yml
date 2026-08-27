@@ -1,0 +1,38 @@
+services:
+  # Autenticação com a Apple. O login guarda estado em volume: sem ele, todo
+  # restart pede 2FA de novo.
+  anisette:
+    image: dadoum/anisette-v3-server:latest
+    container_name: findmy-anisette
+    restart: unless-stopped
+    volumes:
+      - ./data/anisette:/home/Alcoholic/.config/anisette-v3/lib/
+
+  # Busca os relatórios na Apple. NÃO decifra nada — quem abre o envelope é o
+  # worker, com a chave privada de cada TAG.
+  macless-haystack:
+    image: christld/macless-haystack:latest-dev
+    container_name: findmy-decoder
+    restart: unless-stopped
+    depends_on:
+      - anisette
+    environment:
+      - TZ=America/Sao_Paulo
+    volumes:
+      - ./keys:/app/endpoint/data
+      - ./data/haystack:/app/endpoint/data/state
+    # Porta exposta só para o login inicial pela interface web. Depois disso o
+    # worker fala com ele pela rede interna do compose.
+    ports:
+      - "127.0.0.1:6176:6176"
+
+  worker:
+    build: .
+    container_name: findmy-worker
+    restart: unless-stopped
+    depends_on:
+      - macless-haystack
+    env_file:
+      - .env
+    environment:
+      - DECODER_BASE_URL=http://macless-haystack:6176

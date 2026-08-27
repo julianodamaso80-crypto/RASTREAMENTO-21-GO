@@ -17,12 +17,16 @@ export class CreateSightingDto {
   @IsString()
   deviceImei: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'EB:25:02:3C:02:0E',
-    description: 'MAC observado no pacote BLE (formato little-endian do scanner)',
+    description:
+      'MAC observado no pacote BLE (formato little-endian do scanner). ' +
+      'Ausente em relatório da rede Apple: lá a TAG é identificada pelo hash ' +
+      'da chave, e o MAC nunca chega até nós.',
   })
+  @IsOptional()
   @IsString()
-  macAddress: string;
+  macAddress?: string;
 
   @ApiPropertyOptional({
     example: -55,
