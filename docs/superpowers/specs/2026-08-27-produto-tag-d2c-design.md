@@ -1,10 +1,23 @@
-# Produto novo de TAG para consumidor final — Design
+# MonitoraBem — Design do produto
 
 > Marca nova, domínio novo, app novo, painel novo. Nasce em repositório próprio,
 > importando quatro ou cinco núcleos já testados do 21 GO Rastreamento.
 
-**Data:** 2026-08-27
+**Data:** 2026-08-27 (marca definida em 2026-08-29)
 **Origem:** brainstorming a partir do módulo `ble-tags` e do worker Find My do 21 GO.
+
+## Marca
+
+**Nome:** MonitoraBem. O nome carrega dois sentidos ao mesmo tempo: monitora
+bem-feito, e monitora **o seu bem** — o carro, a bike, o cachorro.
+
+**Domínio:** `monitorabem.site`, registrado em 29/08/2026 (expira 29/08/2027),
+DNS na Cloudflare (conta PROJETOS), renovação automática ligada.
+
+**Pendente:** `monitorabem.com.br` e `monitorabem.app` seguem livres e devem ser
+registrados como defesa de marca. Registro da marca no INPI nas classes 9
+(aparelhos e software), 38 (telecomunicação), 42 (serviços de tecnologia) e 45
+(segurança e localização de bens).
 
 ---
 
@@ -348,9 +361,6 @@ existir worker.
 
 Não bloqueiam o início do bloco 1, mas precisam ser fechadas antes do bloco 7:
 
-- **Nome e domínio da marca.** Direções levantadas: *Achei*, *Farejo*, *Pinga*,
-  *Nunca Perco*. Registrar domínio e conferir a marca no INPI antes de encomendar
-  embalagem.
 - **Fornecedor da TAG.** Importar direto (com homologação Anatel própria) ou
   comprar de importador que já tenha o modelo homologado.
 - **Fornecedor de proxy residencial** e custo mensal por volume de consulta.
