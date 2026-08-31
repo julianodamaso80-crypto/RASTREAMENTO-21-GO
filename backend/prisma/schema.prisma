@@ -219,6 +219,8 @@ model Tenant {
   installationPendings InstallationPending[]
   sgaVehicles          SgaVehicle[]
   rdvTags              RdvTag[]
+  tagKeys              TagKey[]
+  tagPositions         TagPosition[]
   installationRoutes   InstallationRoute[]
 
   @@map("tenants")
@@ -1037,4 +1039,89 @@ model RdvTag {
   @@index([tenantId, plate])
   @@index([tenantId, seenAt(sort: Desc)])
   @@map("rdv_tags")
+}
+
+/// Chave de uma TAG, como o fabricante entrega no `.xlsx` por lote.
+///
+/// É o que torna o rastreamento NOSSO: com a chave privada nós mesmos pedimos
+/// os relatórios à rede Find My e abrimos o envelope. Sem ela, o número de
+/// série não serve para nada — a consulta é feita pelo hash, e a resposta só
+/// abre com a privada.
+///
+/// Fica numa tabela própria, sem relação obrigatória com Device ou Vehicle, de
+/// propósito: a chave existe desde a compra do lote, muito antes de a TAG ser
+/// instalada em algum veículo.
+model TagKey {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Número impresso na TAG (coluna SN do arquivo do fabricante).
+  serialNumber String  @map("serial_number")
+  macAddress   String? @map("mac_address")
+
+  /// Segredo operacional: NUNCA sai em resposta de API. Só o coletor lê.
+  privateKey String @map("private_key")
+  /// SHA-256 da advertisement key: é por ele que se pergunta à Apple.
+  hashedAdvKey String @map("hashed_adv_key")
+
+  /// Lote de compra (os 6 primeiros dígitos do SN), para saber de qual arquivo
+  /// veio e o que ainda falta pedir ao fabricante.
+  batch String?
+
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, serialNumber])
+  @@index([tenantId, hashedAdvKey])
+  @@index([tenantId, batch])
+  @@map("tag_keys")
+}
+
+/// Histórico de onde cada TAG foi vista. Um ponto por avistamento, para sempre.
+///
+/// Diferente de `rdv_tags`, que guarda UMA linha por TAG e é sobrescrita a cada
+/// sincronização: aqui nada é sobrescrito, e é disso que nascem o rastro e a
+/// análise de padrão.
+///
+/// `source` existe para o dia em que a RedeVeiculos for cortada: quando o
+/// coletor próprio assumir, ele grava nesta mesma tabela com
+/// `source = 'APPLE_FINDMY'` e nenhuma tela precisa mudar.
+model TagPosition {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Número da TAG. Não é chave estrangeira de propósito: chega posição de TAG
+  /// cuja chave ainda não temos, e perder o ponto seria pior.
+  serialNumber String  @map("serial_number")
+  /// Placa do veículo no momento do avistamento, quando conhecida.
+  plate        String?
+
+  latitude  Float
+  longitude Float
+  /// Raio de confiança em metros informado pela rede.
+  accuracyM Int? @map("accuracy_m")
+
+  /// Quando a TAG foi vista. É o carimbo que vale.
+  seenAt     DateTime @map("seen_at")
+  /// Quando nós soubemos. A diferença para `seenAt` é a idade do dado, e é ela
+  /// que impede a tela de apresentar isso como posição do momento.
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  /// APPLE_FINDMY (coletor próprio) · ESPELHO_RDV (plataforma de origem).
+  source String
+
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// O mesmo avistamento nunca entra duas vezes, mesmo que a coleta repita a
+  /// janela — o que acontece sempre, porque a Apple devolve 7 dias a cada
+  /// consulta.
+  @@unique([tenantId, serialNumber, seenAt])
+  @@index([tenantId, serialNumber, seenAt(sort: Desc)])
+  @@index([tenantId, plate, seenAt(sort: Desc)])
+  @@index([tenantId, seenAt(sort: Desc)])
+  @@map("tag_positions")
 }
