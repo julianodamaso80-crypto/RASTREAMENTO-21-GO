@@ -142,6 +142,7 @@ export default function MapaPage() {
         <MapContainer
           ref={mapRef}
           vehicles={filteredVehicles}
+          selectedVehicleId={selectedVehicleId}
           onVehicleClick={handleVehicleClick}
           onReady={onMapaPronto}
           // O painel de detalhe cobre os 380px da direita e engolia o seletor
