@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { CARTO_DARK_MATTER_URL, MAP_CENTER } from '@/lib/constants';
+import { BASEMAPS, MAP_CENTER, type BasemapId } from '@/lib/constants';
+import { resolveSatelliteStyle, type SatelliteProvider } from '@/lib/basemap';
+import { mapApi } from '@/lib/api';
+import { BasemapToggle } from '@/components/map/basemap-toggle';
+import { GoogleMapsAttribution } from '@/components/map/google-attribution';
 import type { SegmentoTrilha, PontoTrilha } from '@/types/ble-tag';
 
 /**
@@ -25,11 +29,20 @@ import type { SegmentoTrilha, PontoTrilha } from '@/types/ble-tag';
  *
  * Nada de quilometragem: somar as retas entre avistamentos não é a distância
  * que o veículo percorreu, e publicar esse número seria inventar dado.
+ *
+ * A escolha de mapa (Padrão / Satélite grátis / Satélite Google) é a mesma do
+ * mapa de rastreador, pelo mesmo componente: quem procura um veículo precisa
+ * ver o telhado e o pátio, e aprender dois seletores diferentes na mesma
+ * plataforma é atrito à toa.
  */
 
 /** Cor da marca (laranja 21Go) — TAG nunca usa o verde do rastreador. */
 const COR_TRILHA = '#f2911d';
 const COR_PONTO = '#c0700a';
+
+/** Ids das camadas que este mapa cria. Trocar de basemap apaga todas. */
+const CAMADAS = ['trilha-linha', 'precisao-preenchimento'] as const;
+const FONTES = ['trilha', 'precisao'] as const;
 
 /**
  * Anel que aproxima um círculo de raio em METROS, para virar polígono GeoJSON.
@@ -87,44 +100,34 @@ export function TagTrailMap({ segmentos }: TagTrailMapProps) {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const marcadoresRef = useRef<maplibregl.Marker[]>([]);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
+  const [basemap, setBasemap] = useState<BasemapId>('streets');
+  const [satProvider, setSatProvider] = useState<SatelliteProvider | null>(null);
+  const [googleMinZoom, setGoogleMinZoom] = useState<number | null>(null);
+  const [googleVisible, setGoogleVisible] = useState(false);
+  const [googleCopyright, setGoogleCopyright] = useState('');
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: CARTO_DARK_MATTER_URL,
-      center: MAP_CENTER,
-      zoom: 12,
-      attributionControl: false,
-    });
-    map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
-    mapRef.current = map;
+  /**
+   * Enquadrar é gesto de chegada, não de troca de mapa. Sem esta trava, mudar
+   * para satélite jogaria a câmera de volta ao enquadramento inicial e o
+   * operador perderia o lugar que estava olhando.
+   */
+  const jaEnquadrouRef = useRef(false);
 
-    return () => {
-      map.remove();
-      mapRef.current = null;
-      marcadoresRef.current = [];
-    };
-  }, []);
+  /**
+   * `setStyle` descarta TODAS as sources e layers do mapa — inclusive as
+   * nossas. Diferente do mapa de rastreador, que só tem marcador (nó DOM, que
+   * sobrevive à troca), aqui a trilha e os círculos de precisão precisam ser
+   * redesenhados depois de cada troca de basemap. Sem isto, escolher satélite
+   * apagaria o rastro e sobrariam só os pontos soltos.
+   */
+  const redesenharCamadasRef = useRef<() => void>(() => {});
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const todos: PontoTrilha[] = segmentos.flatMap((s) => s.pontos);
-
-    function desenhar() {
-      if (!map) return;
-
-      // Marcadores são donos do próprio ciclo de vida: removê-los pela
-      // referência (e não varrendo o DOM) evita apagar marcador de outro mapa.
-      marcadoresRef.current.forEach((m) => m.remove());
-      marcadoresRef.current = [];
-
-      for (const id of ['trilha-linha', 'precisao-preenchimento']) {
+  const desenharCamadas = useCallback(
+    (map: maplibregl.Map, todos: PontoTrilha[]) => {
+      for (const id of CAMADAS) {
         if (map.getLayer(id)) map.removeLayer(id);
       }
-      for (const id of ['trilha', 'precisao']) {
+      for (const id of FONTES) {
         if (map.getSource(id)) map.removeSource(id);
       }
 
@@ -183,6 +186,157 @@ export function TagTrailMap({ segmentos }: TagTrailMapProps) {
           'line-opacity': 0.9,
         },
       });
+    },
+    [segmentos],
+  );
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      // Mesmo mapa inicial do rastreador: o operador troca de tela e encontra
+      // a mesma base, em vez de um mapa escuro que parece outro sistema.
+      style: BASEMAPS[0].url,
+      center: MAP_CENTER,
+      zoom: 12,
+      attributionControl: false,
+    });
+    map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      marcadoresRef.current = [];
+      jaEnquadrouRef.current = false;
+    };
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────
+  // Troca de basemap. Mesma lógica do mapa de rastreador, com um passo a
+  // mais: redesenhar as camadas depois que o estilo novo terminar de carregar.
+  // ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const def = BASEMAPS.find((b) => b.id === basemap);
+    if (!def || !def.url) return;
+
+    let cancelado = false;
+
+    const aplicar = (style: Parameters<typeof map.setStyle>[0]) => {
+      if (cancelado) return;
+      map.setStyle(style);
+      // `once` e não `on`: cada troca registra o seu próprio redesenho, e o
+      // ouvinte morre depois de disparar em vez de empilhar.
+      map.once('styledata', () => {
+        if (!cancelado) redesenharCamadasRef.current();
+      });
+    };
+
+    if (basemap === 'satellite-google') {
+      // A sessão do Google é criada no backend; se falhar, resolve() já
+      // devolve o Esri e o mapa continua de pé.
+      resolveSatelliteStyle().then(({ provider, style, googleMinZoom: minZoom }) => {
+        if (cancelado) return;
+        setSatProvider(provider);
+        setGoogleMinZoom(minZoom);
+        aplicar(style);
+      });
+    } else {
+      setSatProvider(null);
+      setGoogleMinZoom(null);
+      setGoogleVisible(false);
+      setGoogleCopyright('');
+      aplicar(def.url);
+    }
+
+    return () => {
+      cancelado = true;
+    };
+  }, [basemap]);
+
+  // ─────────────────────────────────────────────────────────────────
+  // Acompanha o zoom pra saber se a camada do Google está em cena.
+  // ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || googleMinZoom === null) {
+      setGoogleVisible(false);
+      return;
+    }
+
+    const conferir = () => setGoogleVisible(map.getZoom() >= googleMinZoom);
+
+    conferir();
+    map.on('zoomend', conferir);
+
+    return () => {
+      map.off('zoomend', conferir);
+    };
+  }, [googleMinZoom]);
+
+  // ─────────────────────────────────────────────────────────────────
+  // Atribuição do viewport, exigida pela política do Google. Segundo a doc,
+  // esta chamada não consome cota de tiles. O debounce evita um request por
+  // frame durante o arrasto.
+  // ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !googleVisible) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+
+    const atualizar = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const b = map.getBounds();
+        mapApi
+          .getAttribution({
+            zoom: Math.round(map.getZoom()),
+            north: b.getNorth(),
+            south: b.getSouth(),
+            east: b.getEast(),
+            west: b.getWest(),
+          })
+          .then(({ copyright }) => setGoogleCopyright(copyright))
+          .catch(() => setGoogleCopyright('Google'));
+      }, 600);
+    };
+
+    atualizar();
+    map.on('moveend', atualizar);
+
+    return () => {
+      clearTimeout(timer);
+      map.off('moveend', atualizar);
+    };
+  }, [googleVisible]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const todos: PontoTrilha[] = segmentos.flatMap((s) => s.pontos);
+
+    redesenharCamadasRef.current = () => {
+      const atual = mapRef.current;
+      if (atual) desenharCamadas(atual, todos);
+    };
+
+    function desenhar() {
+      if (!map) return;
+
+      // Marcadores são donos do próprio ciclo de vida: removê-los pela
+      // referência (e não varrendo o DOM) evita apagar marcador de outro mapa.
+      marcadoresRef.current.forEach((m) => m.remove());
+      marcadoresRef.current = [];
+
+      desenharCamadas(map, todos);
+
+      if (todos.length === 0) return;
 
       todos.forEach((p, i) => {
         const ehUltimo = i === todos.length - 1;
@@ -214,19 +368,35 @@ export function TagTrailMap({ segmentos }: TagTrailMapProps) {
         marcadoresRef.current.push(marcador);
       });
 
-      const limites = new maplibregl.LngLatBounds();
-      todos.forEach((p) => limites.extend([p.lng, p.lat]));
-      map.fitBounds(limites, { padding: 60, duration: 800, maxZoom: 16 });
+      if (!jaEnquadrouRef.current) {
+        const limites = new maplibregl.LngLatBounds();
+        todos.forEach((p) => limites.extend([p.lng, p.lat]));
+        map.fitBounds(limites, { padding: 60, duration: 800, maxZoom: 16 });
+        jaEnquadrouRef.current = true;
+      }
     }
 
     if (map.isStyleLoaded()) desenhar();
     else map.once('load', desenhar);
-  }, [segmentos]);
+  }, [segmentos, desenharCamadas]);
 
   return (
-    <div
-      ref={containerRef}
-      className="h-full w-full min-h-[360px] overflow-hidden rounded-lg"
-    />
+    <div className="relative h-full w-full min-h-[360px]">
+      <div ref={containerRef} className="h-full w-full overflow-hidden rounded-lg" />
+
+      <BasemapToggle current={basemap} onChange={setBasemap} />
+
+      {satProvider === 'google' && googleVisible && (
+        <GoogleMapsAttribution copyright={googleCopyright} />
+      )}
+      {basemap === 'satellite-google' && satProvider === 'google' && !googleVisible && (
+        // Sem isto o operador escolhe "Satélite Google", vê a mesma imagem
+        // de antes (porque de longe o Esri já basta) e conclui que o botão
+        // não funcionou.
+        <div className="pointer-events-none absolute bottom-8 left-2 z-10 rounded-md bg-background/85 px-2 py-1 text-[11px] text-muted-foreground shadow-md backdrop-blur-md">
+          Aproxime o zoom para a imagem em alta do Google
+        </div>
+      )}
+    </div>
   );
 }
