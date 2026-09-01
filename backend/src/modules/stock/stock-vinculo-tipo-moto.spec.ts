@@ -43,7 +43,8 @@ const DTO = {
   installLocation: 'Embaixo do tanque',
 };
 
-function servico(tipoNoEspelho: string | null) {
+function servico(tipoNoEspelho: string | null, chassi = VIVO.veiculo.chassi) {
+  const vivo = { ...VIVO, veiculo: { ...VIVO.veiculo, chassi } };
   const tx = {
     associate: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -77,7 +78,7 @@ function servico(tipoNoEspelho: string | null) {
 
   const s = new StockService(
     prisma as never,
-    { lookupByPlate: jest.fn().mockResolvedValue(VIVO) } as never,
+    { lookupByPlate: jest.fn().mockResolvedValue(vivo) } as never,
     { getDeviceByUniqueId: jest.fn().mockResolvedValue(null) } as never,
     { notifyDeviceChanged: jest.fn() } as never,
     {} as never,
@@ -125,8 +126,21 @@ describe('StockService.associate — carro x moto no vínculo', () => {
     );
   });
 
-  it('espelho sem resposta não força tipo nenhum', async () => {
+  it('espelho calado: o chassi decide, em vez de virar carro por omissão', async () => {
+    // 9C2 é a Moto Honda da Amazônia — chassi do próprio veículo do lookup.
     const { s, tx } = servico(null);
+
+    await s.associate('item-1', TENANT, DTO);
+
+    expect(tx.vehicle.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ vehicleType: 'MOTORCYCLE' }),
+      }),
+    );
+  });
+
+  it('espelho calado e chassi de fábrica desconhecida: não grava tipo nenhum', async () => {
+    const { s, tx } = servico(null, '93XSTGK1WNCM02140'); // Mitsubishi, fora da lista medida
 
     await s.associate('item-1', TENANT, DTO);
 

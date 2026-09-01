@@ -21,7 +21,7 @@ import {
   normalizeFinancialStatus,
   normalizeSgaStatusLabel,
 } from '../hinova/sga-status';
-import { tipoVeiculoDoSga } from '../hinova/tipo-veiculo';
+import { decidirTipoVeiculo } from '../hinova/tipo-veiculo';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
@@ -558,9 +558,20 @@ export class StockService {
         sgaStatusLabel: normalizeSgaStatusLabel(lookup.situacao.descricao),
       };
 
-      // Carro ou moto — o mapa desenha o ícone e escreve "Moto ligada" a
-      // partir disto. `null` = SGA não informou; nesse caso não se mexe.
-      const tipoSga = tipoVeiculoDoSga(lookup.veiculo.tipo);
+      // Carro ou moto — o mapa e o app do associado desenham o ícone e escrevem
+      // "Moto ligada" a partir disto. Duas fontes: o tipo do SGA e o chassi.
+      // `null` = nenhuma das duas sabe; nesse caso não se mexe no cadastro.
+      const { tipo: tipoSga, divergencia } = decidirTipoVeiculo({
+        tipoSga: lookup.veiculo.tipo,
+        chassi: lookup.veiculo.chassi,
+      });
+      if (divergencia) {
+        this.logger.warn(
+          `Placa ${placa}: SGA diz "${lookup.veiculo.tipo}" e o chassi ` +
+            `${lookup.veiculo.chassi} diz o contrário. Gravando o do SGA — ` +
+            'confira o cadastro (ver scripts/diagnostics/wmi-chassi.sql).',
+        );
+      }
 
       if (vehicle) {
         vehicle = await tx.vehicle.update({

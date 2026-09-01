@@ -7,7 +7,7 @@ import {
   type HinovaRawVehicle,
   type IHinovaClient,
 } from '../hinova/hinova.interface';
-import { tipoVeiculoDoSga } from '../hinova/tipo-veiculo';
+import { decidirTipoVeiculo } from '../hinova/tipo-veiculo';
 
 /**
  * Espelho cadastral do SGA — todo veículo, em qualquer situação.
@@ -310,12 +310,25 @@ export class SgaMirrorService implements OnModuleInit {
 
     const virarMoto: string[] = [];
     const virarCarro: string[] = [];
+    const divergentes: string[] = [];
     for (const v of veiculos) {
       const bruto =
         porPlaca.get(v.plate) ?? (v.chassi ? porChassi.get(v.chassi) : null);
-      const tipo = tipoVeiculoDoSga(bruto);
+      const { tipo, divergencia } = decidirTipoVeiculo({
+        tipoSga: bruto,
+        chassi: v.chassi,
+      });
+      if (divergencia) divergentes.push(v.plate);
       if (!tipo || tipo === v.vehicleType) continue;
       (tipo === 'MOTORCYCLE' ? virarMoto : virarCarro).push(v.id);
+    }
+
+    if (divergentes.length > 0) {
+      this.logger.warn(
+        `Tipo do veículo: SGA e chassi discordam em ${divergentes.length} ` +
+          `placa(s) — ${divergentes.slice(0, 10).join(', ')}. Ficou valendo o ` +
+          'SGA; confira o cadastro (scripts/diagnostics/wmi-chassi.sql).',
+      );
     }
 
     if (virarMoto.length === 0 && virarCarro.length === 0) return 0;
