@@ -320,8 +320,20 @@ export class StockService {
   ): Promise<HinovaLookupResult> {
     const vivo = await this.hinova.lookupByPlate(placaOuChassi);
     if (vivo.encontrado) {
+      // O lookup ao vivo é financeiro e NÃO devolve o tipo do veículo. Sem
+      // completar pelo espelho, toda moto que já tem boleto — o caminho comum —
+      // nascia como carro no mapa, com desenho e texto errados.
+      const tipo =
+        vivo.veiculo.tipo ??
+        (await this.mirror.tipoCru(
+          tenantId,
+          vivo.veiculo.placa,
+          vivo.veiculo.chassi,
+          placaOuChassi,
+        ));
       return {
         ...vivo,
+        veiculo: { ...vivo.veiculo, tipo },
         fonte: 'sga',
         boletoVencido: vivo.situacao.financeira === 'INADIMPLENTE',
       };

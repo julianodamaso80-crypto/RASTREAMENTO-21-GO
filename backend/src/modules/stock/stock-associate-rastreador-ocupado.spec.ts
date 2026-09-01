@@ -89,6 +89,8 @@ function servico(deviceJaNoVeiculo: { id: string; imei: string } | null) {
     {
       lookup: jest.fn().mockResolvedValue(null),
       contato: jest.fn().mockResolvedValue(null),
+      // tipo do veiculo (carro x moto) — o lookup ao vivo nao devolve
+      tipoCru: jest.fn().mockResolvedValue(null),
     } as never,
     {} as never,
     {} as never,

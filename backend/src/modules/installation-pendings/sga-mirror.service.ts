@@ -119,6 +119,35 @@ export class SgaMirrorService implements OnModuleInit {
     };
   }
 
+  /**
+   * Rótulo de tipo do SGA ("MOTOCICLETA (ATé 400CC)", "VEICULOS LEVES"…).
+   *
+   * Existe porque o lookup financeiro ao vivo — o caminho normal de quem já tem
+   * boleto — não devolve o tipo. Sem completar por aqui, toda moto instalada
+   * nascia como carro no mapa: TUG1G87, TTW6E05 e TUM4I83 (CG 160 e YBR 150)
+   * entraram assim em 01/09/2026, horas depois de o parque ter sido alinhado.
+   */
+  async tipoCru(
+    tenantId: string,
+    ...identificadores: Array<string | null | undefined>
+  ): Promise<string | null> {
+    const idents = identificadores
+      .map((i) => (i ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''))
+      .filter((i) => i.length >= 7);
+    if (idents.length === 0) return null;
+
+    const v = await this.prisma.sgaVehicle.findFirst({
+      where: {
+        tenantId,
+        vehicleType: { not: null },
+        OR: [{ plate: { in: idents } }, { chassi: { in: idents } }],
+      },
+      orderBy: { syncedAt: 'desc' },
+      select: { vehicleType: true },
+    });
+    return v?.vehicleType ?? null;
+  }
+
   /** Telefone/e-mail do associado — o lookup ao vivo do SGA não devolve nenhum dos dois. */
   async contato(
     tenantId: string,

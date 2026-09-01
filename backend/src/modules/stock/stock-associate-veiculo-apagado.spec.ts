@@ -113,6 +113,8 @@ function servico(apagados: VeiculoMock[]) {
     {
       lookup: jest.fn().mockResolvedValue(null),
       contato: jest.fn().mockResolvedValue(null),
+      // tipo do veiculo (carro x moto) — o lookup ao vivo nao devolve
+      tipoCru: jest.fn().mockResolvedValue(null),
     } as never,
     { markStopDoneByPlate: jest.fn().mockResolvedValue(undefined) } as never,
     { persistIfRelevant: jest.fn().mockResolvedValue(undefined) } as never,

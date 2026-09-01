@@ -132,7 +132,11 @@ describe('StockService.lookupSga', () => {
     const pendings = {
       lookupNoEspelho: jest.fn().mockResolvedValue(espelho),
     };
-    const mirror = { lookup: jest.fn().mockResolvedValue(cadastro) };
+    const mirror = {
+      lookup: jest.fn().mockResolvedValue(cadastro),
+      // tipo do veiculo (carro x moto): o lookup ao vivo nao devolve
+      tipoCru: jest.fn().mockResolvedValue(null),
+    };
     const s = new StockService(
       {} as never,
       hinova as never,
