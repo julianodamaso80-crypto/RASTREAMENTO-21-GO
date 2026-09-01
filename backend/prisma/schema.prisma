@@ -984,6 +984,9 @@ model SgaVehicle {
   situationLabel String  @map("situation_label")
   /// codigo_tipo_adesao: 1 pendente rastreador · 2 instalado · 10 pendente TAG…
   adhesionCode   String? @map("adhesion_code")
+  /// `tipo` do SGA, cru: "MOTOCICLETA (ATé 400CC)", "VEICULOS LEVES"… É daqui
+  /// que sai `Vehicle.vehicleType` (carro x moto) — ver tipoVeiculoDoSga().
+  vehicleType    String? @map("vehicle_type")
 
   contractDate DateTime? @map("contract_date") @db.Date
 

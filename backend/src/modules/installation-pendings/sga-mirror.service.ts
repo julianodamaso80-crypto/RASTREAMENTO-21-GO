@@ -7,6 +7,7 @@ import {
   type HinovaRawVehicle,
   type IHinovaClient,
 } from '../hinova/hinova.interface';
+import { tipoVeiculoDoSga } from '../hinova/tipo-veiculo';
 
 /**
  * Espelho cadastral do SGA — todo veículo, em qualquer situação.
@@ -107,6 +108,7 @@ export class SgaMirrorService implements OnModuleInit {
         codigoModelo: null,
         modelo: v.brandModel || null,
         codigoVeiculo: v.hinovaVehicleCode || null,
+        tipo: v.vehicleType,
       },
       situacao: {
         codigo: v.situationCode,
@@ -230,10 +232,84 @@ export class SgaMirrorService implements OnModuleInit {
       }
 
       this.logger.warn(`Espelho cadastral sincronizado: ${total} veículo(s).`);
+      await this.alinharTipoDosVeiculos(tenantId);
       return { total, porSituacao };
     } finally {
       this.sincronizando = false;
     }
+  }
+
+  /**
+   * Alinha carro x moto dos veículos já cadastrados com o que o SGA diz.
+   *
+   * `Vehicle.vehicleType` nasce com o default `CAR` e só mudava se alguém
+   * clicasse no botão da tela do veículo: em 01/09/2026 eram 401 de 403 como
+   * carro, com CG 160 TITAN, PCX 160 e ADV 160 no meio — o mapa desenhava
+   * carro em cima de moto e escrevia "Carro ligado". Aqui o espelho, que já
+   * carrega o `tipo` do SGA, corrige o parque inteiro depois de cada sync.
+   *
+   * Só mexe em quem está divergente e só quando o SGA tem opinião: veículo
+   * fora do espelho fica como está.
+   */
+  async alinharTipoDosVeiculos(tenantId: string): Promise<number> {
+    const veiculos = await this.prisma.vehicle.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, plate: true, chassi: true, vehicleType: true },
+    });
+    if (veiculos.length === 0) return 0;
+
+    const placas = veiculos.map((v) => v.plate).filter(Boolean);
+    const chassis = veiculos
+      .map((v) => v.chassi)
+      .filter((c): c is string => !!c);
+
+    const espelho = await this.prisma.sgaVehicle.findMany({
+      where: {
+        tenantId,
+        vehicleType: { not: null },
+        OR: [{ plate: { in: placas } }, { chassi: { in: chassis } }],
+      },
+      select: { plate: true, chassi: true, vehicleType: true },
+    });
+
+    const porPlaca = new Map<string, string>();
+    const porChassi = new Map<string, string>();
+    for (const e of espelho) {
+      if (e.plate && e.vehicleType) porPlaca.set(e.plate, e.vehicleType);
+      if (e.chassi && e.vehicleType) porChassi.set(e.chassi, e.vehicleType);
+    }
+
+    const virarMoto: string[] = [];
+    const virarCarro: string[] = [];
+    for (const v of veiculos) {
+      const bruto =
+        porPlaca.get(v.plate) ?? (v.chassi ? porChassi.get(v.chassi) : null);
+      const tipo = tipoVeiculoDoSga(bruto);
+      if (!tipo || tipo === v.vehicleType) continue;
+      (tipo === 'MOTORCYCLE' ? virarMoto : virarCarro).push(v.id);
+    }
+
+    if (virarMoto.length === 0 && virarCarro.length === 0) return 0;
+
+    if (virarMoto.length > 0) {
+      await this.prisma.vehicle.updateMany({
+        where: { id: { in: virarMoto } },
+        data: { vehicleType: 'MOTORCYCLE' },
+      });
+    }
+    if (virarCarro.length > 0) {
+      await this.prisma.vehicle.updateMany({
+        where: { id: { in: virarCarro } },
+        data: { vehicleType: 'CAR' },
+      });
+    }
+
+    const total = virarMoto.length + virarCarro.length;
+    this.logger.warn(
+      `Tipo do veículo alinhado com o SGA: ${virarMoto.length} moto(s) e ` +
+        `${virarCarro.length} carro(s) corrigidos.`,
+    );
+    return total;
   }
 
   /**
@@ -296,6 +372,9 @@ export class SgaMirrorService implements OnModuleInit {
         SITUACOES_SGA[codigoSituacao] ||
         'DESCONHECIDA',
       adhesionCode: v.codigo_tipo_adesao ? String(v.codigo_tipo_adesao) : null,
+      /// Rótulo cru do SGA ("MOTOCICLETA (ATé 400CC)", "VEICULOS LEVES"…). É a
+      /// única fonte que sabe se o ativo é moto — o modelo sozinho não serve.
+      vehicleType: String(v.tipo ?? '').trim() || null,
       contractDate: SgaMirrorService.data(v.data_contrato),
       tenantId,
       syncedAt: new Date(),

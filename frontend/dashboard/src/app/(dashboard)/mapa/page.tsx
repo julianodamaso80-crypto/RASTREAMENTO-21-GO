@@ -43,6 +43,18 @@ export default function MapaPage() {
 
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
 
+  // Com um veículo selecionado o mapa mostra SÓ ele.
+  //
+  // Antes ficavam no mapa os 399 marcadores da frota inteira: a câmera até
+  // enquadrava o escolhido, mas em bairro com outros ativos por perto (12 num
+  // raio de 1 km, medido em 01/09/2026) ele virava mais um pin no meio dos
+  // demais — o operador seleciona um carro e não acha o carro. Selecionar é
+  // justamente dizer "quero este"; o resto volta ao soltar a seleção (X).
+  //
+  // Vem de `vehicles`, não de `filteredVehicles`: o selecionado não pode sumir
+  // do mapa porque a busca ou a aba de status deixou de casar com ele.
+  const vehiclesNoMapa = selectedVehicle ? [selectedVehicle] : filteredVehicles;
+
   // Selecionou um veículo na lista (mobile) → fecha a gaveta pra revelar o
   // mapa já centrado nele, sem precisar de um segundo toque no X.
   useEffect(() => {
@@ -141,7 +153,7 @@ export default function MapaPage() {
       <div className="flex-1 relative">
         <MapContainer
           ref={mapRef}
-          vehicles={filteredVehicles}
+          vehicles={vehiclesNoMapa}
           selectedVehicleId={selectedVehicleId}
           onVehicleClick={handleVehicleClick}
           onReady={onMapaPronto}

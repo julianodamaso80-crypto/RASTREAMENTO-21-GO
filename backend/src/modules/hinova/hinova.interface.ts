@@ -56,6 +56,13 @@ export interface HinovaLookupResult {
     codigoModelo: string | null;
     modelo: string | null;
     codigoVeiculo: string | null;
+    /**
+     * `tipo` do SGA, cru ("MOTOCICLETA (ATé 400CC)", "VEICULOS LEVES"…).
+     * Traduzido por `tipoVeiculoDoSga()` na hora de gravar o veículo — é o que
+     * decide se o mapa desenha carro ou moto. Só o espelho cadastral preenche;
+     * o lookup financeiro ao vivo não devolve o tipo.
+     */
+    tipo?: string | null;
   };
   situacao: {
     codigo: string | null;

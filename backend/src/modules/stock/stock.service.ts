@@ -21,6 +21,7 @@ import {
   normalizeFinancialStatus,
   normalizeSgaStatusLabel,
 } from '../hinova/sga-status';
+import { tipoVeiculoDoSga } from '../hinova/tipo-veiculo';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
@@ -545,6 +546,10 @@ export class StockService {
         sgaStatusLabel: normalizeSgaStatusLabel(lookup.situacao.descricao),
       };
 
+      // Carro ou moto — o mapa desenha o ícone e escreve "Moto ligada" a
+      // partir disto. `null` = SGA não informou; nesse caso não se mexe.
+      const tipoSga = tipoVeiculoDoSga(lookup.veiculo.tipo);
+
       if (vehicle) {
         vehicle = await tx.vehicle.update({
           where: { id: vehicle.id },
@@ -558,6 +563,9 @@ export class StockService {
             uniqueId: item.imei,
             chassi: lookup.veiculo.chassi ?? vehicle.chassi,
             model: lookup.veiculo.modelo ?? vehicle.model,
+            // Carro x moto vem do SGA; sem resposta dele, mantém o que está
+            // no cadastro (pode ter sido corrigido na mão).
+            ...(tipoSga ? { vehicleType: tipoSga } : {}),
             status: 'ACTIVE',
             associateId: associate.id,
             hinovaCode: lookup.veiculo.codigoVeiculo ?? vehicle.hinovaCode,
@@ -576,6 +584,7 @@ export class StockService {
             uniqueId: item.imei,
             chassi: lookup.veiculo.chassi,
             model: lookup.veiculo.modelo,
+            ...(tipoSga ? { vehicleType: tipoSga } : {}),
             status: 'ACTIVE',
             tenantId,
             associateId: associate.id,
