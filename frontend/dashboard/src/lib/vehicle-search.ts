@@ -57,6 +57,11 @@ export function matchesVehicleSearch(v: Vehicle, query: string): boolean {
 
   return termos.every((termo) => {
     if (texto.includes(termo)) return true;
+    // O casamento por dígitos (CPF/IMEI/telefone digitados com pontuação) só
+    // vale quando o termo é SÓ número. Placa tem letra: "sis1f13" viraria
+    // "113" e casaria com qualquer IMEI/telefone/CPF que contenha "113" —
+    // trazendo a base inteira. Termo com letra casa apenas pelo texto acima.
+    if (/[a-z]/.test(termo)) return false;
     const soDigitos = termo.replace(/\D/g, '');
     return soDigitos.length > 0 && digitos.includes(soDigitos);
   });
