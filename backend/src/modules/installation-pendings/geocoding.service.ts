@@ -51,6 +51,35 @@ export class GeocodingService {
   }
 
   /**
+   * Só o cache local — zero rede, resposta em milissegundos.
+   *
+   * É o que o sync usa no caminho crítico: 5.793 CEPs já resolvidos cobrem a
+   * maior parte da fila na hora, e o resíduo vai pra `resolverLote` depois da
+   * gravação. Antes, a fila inteira esperava a rede pelos CEPs desconhecidos —
+   * eram ~1.900s medidos em 03/09/2026, com a tela desistindo aos 20 minutos.
+   */
+  async resolverDoCache(ceps: string[]): Promise<Map<string, Coordenada>> {
+    const normalizados = [
+      ...new Set(
+        ceps
+          .map((c) => GeocodingService.normalizarCep(c))
+          .filter((c) => c.length === 8),
+      ),
+    ];
+    if (normalizados.length === 0) return new Map();
+
+    const cacheados = await this.prisma.cepCoordinate.findMany({
+      where: { cep: { in: normalizados } },
+    });
+    return new Map(
+      cacheados.map((c) => [
+        c.cep,
+        { lat: c.lat, lng: c.lng, source: c.source as Coordenada['source'] },
+      ]),
+    );
+  }
+
+  /**
    * Resolve uma lista de endereços, aproveitando o cache. Retorna um mapa
    * cep→coordenada com o que conseguiu. Best-effort: CEP que nenhuma fonte
    * resolve simplesmente não entra no mapa (o chamador trata como "sem local").

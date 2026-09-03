@@ -106,7 +106,10 @@ function montarService() {
     ),
   };
   const config = { get: jest.fn().mockReturnValue('true') };
-  const geocoding = { resolverLote: jest.fn().mockResolvedValue(new Map()) };
+  const geocoding = {
+    resolverLote: jest.fn().mockResolvedValue(new Map()),
+    resolverDoCache: jest.fn().mockResolvedValue(new Map()),
+  };
   const mirror = { sincronizar: jest.fn().mockResolvedValue({ total: 0, porSituacao: {} }) };
 
   return new InstallationPendingsService(

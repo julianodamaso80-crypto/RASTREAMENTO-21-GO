@@ -33,8 +33,13 @@ export class SgaMirrorService implements OnModuleInit {
   /** Trava contra varredura dupla: o sync de pendências também chama sincronizar(). */
   private sincronizando = false;
 
-  /** Mesmo lote e pausa do sync de pendências — o SGA responde 406 sob rajada. */
-  private static readonly LOTE = 1000;
+  /**
+   * Mesmo lote e pausa do sync de pendências — o SGA responde 406 sob rajada.
+   * 5.000 é o teto da API (acima disso ela devolve 406) e o default do apidoc:
+   * a situação 2, com 10.984 veículos, cai de 11 páginas e 90s para 3 páginas
+   * e 50s. Medido em 03/09/2026.
+   */
+  private static readonly LOTE = 5000;
   private static readonly MAX_PAGINAS = 50;
   private static readonly PAUSA_ENTRE_PAGINAS_MS = 2500;
 

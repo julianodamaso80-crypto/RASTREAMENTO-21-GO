@@ -214,6 +214,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get cepGeocodeFailure() {
     return this.base.cepGeocodeFailure;
   }
+  // Chaves Find My das TAGs e os avistamentos decifrados. Sem soft delete —
+  // chave vem do arquivo do fabricante e posição é histórico.
+  get tagKey() {
+    return this.base.tagKey;
+  }
+  get tagPosition() {
+    return this.base.tagPosition;
+  }
   get installationRoute() {
     return this.base.installationRoute;
   }

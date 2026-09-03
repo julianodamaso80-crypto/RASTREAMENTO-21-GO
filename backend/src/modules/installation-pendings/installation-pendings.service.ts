@@ -34,12 +34,18 @@ export class InstallationPendingsService implements OnModuleInit {
   private readonly logger = new Logger(InstallationPendingsService.name);
 
   /**
-   * Lote da varredura. Medido ao vivo em 2026-07-23 no offset 0: lote 500 = 5s,
-   * 1.000 = 9,5s, 2.000 = 39s — e o tempo ainda cresce com o offset. O lote de
-   * 2.000 estourava o timeout sob a lentidão do SGA; 1.000 responde rápido e
-   * dobra a folga sem multiplicar demais o número de páginas.
+   * Lote da varredura — 5.000 é o teto do SGA e o default do próprio apidoc.
+   *
+   * Medido contra a API real em 03/09/2026: com 1.000 são 27 páginas de 6,5s
+   * mais 26 pausas de rate limit, 240s no total; com 5.000 são 6 páginas de
+   * 23s e 5 pausas, 141s. Nos associados, 193s viram 105s. Pedir 10.000 ou
+   * 30.000 devolve HTTP 406 — 5.000 é o limite, não uma escolha.
+   *
+   * A medição de 2026-07-23 que fixou o lote em 1.000 ("2.000 = 39s") não se
+   * sustenta mais: hoje o SGA entrega 5.000 registros em 23s, e a degradação
+   * por offset que existia sumiu (offset 0 e offset 20.000 respondem igual).
    */
-  private static readonly LOTE = 1000;
+  private static readonly LOTE = 5000;
 
   /** Trava contra paginação infinita se o SGA parar de encurtar o último lote. */
   private static readonly MAX_PAGINAS = 50;
@@ -282,12 +288,42 @@ export class InstallationPendingsService implements OnModuleInit {
     }, 30_000).unref();
   }
 
+  /**
+   * Idade a partir da qual a fila é considerada velha no boot.
+   *
+   * O cron roda 09h e 17h, então o intervalo normal entre duas passadas é de
+   * no máximo 16h — mas a fila só precisa estar velha em relação ao dia de
+   * trabalho. 12h pega o backend que voltou depois do horário sem re-disparar
+   * a varredura a cada deploy do mesmo dia.
+   */
+  private static readonly FILA_VELHA_HORAS = 12;
+
   private async cargaInicial(): Promise<void> {
     try {
-      const jaTem = await this.prisma.installationPending.count();
       // Espelho cadastral tem carga própria (SgaMirrorService.cargaInicial) —
       // aqui só a fila de pendências, senão são duas varreduras do SGA no boot.
-      if (jaTem > 0) return;
+      const jaTem = await this.prisma.installationPending.count();
+
+      let motivo: string | null = null;
+      if (jaTem === 0) {
+        motivo = 'fila vazia';
+      } else {
+        // Fila cheia porém velha: é o backend que voltou DEPOIS do horário do
+        // cron. Sem isto ele esperava até as 17h — foi o que aconteceu em
+        // 03/09/2026, quando o container morreu no meio do sync das 09h e a
+        // tela passou o dia mostrando "atualizado há 23h".
+        const ultima = await this.prisma.installationPending.findFirst({
+          orderBy: { syncedAt: 'desc' },
+          select: { syncedAt: true },
+        });
+        const horas = ultima
+          ? (Date.now() - ultima.syncedAt.getTime()) / 3_600_000
+          : Infinity;
+        if (horas >= InstallationPendingsService.FILA_VELHA_HORAS) {
+          motivo = `última sincronização há ${Math.round(horas)}h`;
+        }
+      }
+      if (!motivo) return;
 
       const tenant = await this.prisma.tenant.findFirst({
         where: { active: true, deletedAt: null },
@@ -295,7 +331,9 @@ export class InstallationPendingsService implements OnModuleInit {
       });
       if (!tenant) return;
 
-      this.logger.log('Fila de pendências vazia — disparando carga inicial.');
+      this.logger.warn(
+        `Pendências: ${motivo} — disparando sincronização no boot.`,
+      );
       await this.sync(tenant.id);
     } catch (erro) {
       this.logger.error(
@@ -363,15 +401,23 @@ export class InstallationPendingsService implements OnModuleInit {
     try {
       await this.hinova.authenticate();
 
-      const veiculos = await this.varrer((offset, limite) =>
-        this.hinova.listRawActiveVehicles(offset, limite),
+      // As duas listagens são independentes — o cruzamento só acontece depois
+      // que ambas chegam. Em série custam 246s; em paralelo, 134s, medido
+      // contra a API real em 03/09/2026 sem nenhum 406. São duas conexões, não
+      // uma rajada: o rate limit do SGA continua respeitado pela pausa entre
+      // páginas de cada varredura.
+      const [veiculos, associados] = await Promise.all([
+        this.varrer((offset, limite) =>
+          this.hinova.listRawActiveVehicles(offset, limite),
+        ),
+        this.varrer((offset, limite) =>
+          this.hinova.listRawActiveAssociates(offset, limite),
+        ),
+      ]);
+      this.marco(
+        `varredura ${veiculos.length} veículos + ${associados.length} associados`,
+        inicio,
       );
-      this.marco(`veiculos ${veiculos.length}`, inicio);
-
-      const associados = await this.varrer((offset, limite) =>
-        this.hinova.listRawActiveAssociates(offset, limite),
-      );
-      this.marco(`associados ${associados.length}`, inicio);
 
       const linhasSga = montarFila(veiculos, associados, tenantId);
       this.marco(`fila montada ${linhasSga.length}`, inicio);
@@ -400,17 +446,17 @@ export class InstallationPendingsService implements OnModuleInit {
         throw new Error(aviso);
       }
 
-      // Geocodifica os CEPs (cache cobre o que já foi resolvido antes) e preenche
-      // lat/lng — é o que alimenta a rota inteligente. Best-effort: CEP que não
-      // resolve fica sem coordenada e cai na lista "sem localização".
-      const coords = await this.geocoding.resolverLote(
-        linhas.map((l) => ({
-          cep: l.cep ?? '',
-          street: l.street,
-          number: l.number,
-          city: l.city,
-          state: 'RJ',
-        })),
+      // Coordenada do CACHE apenas — nenhuma chamada de rede aqui.
+      //
+      // O geocoding alimenta a rota inteligente, não a tela de pendências: CEP
+      // sem coordenada entra na fila do mesmo jeito, só cai na lista "sem
+      // localização". Deixá-lo no caminho crítico custava ~1.900s medidos em
+      // 03/09/2026 (1.277 CEPs desconhecidos a ~1,5s cada) e a fila só era
+      // gravada no fim — com a tela desistindo aos 20 minutos, o operador via
+      // "não concluiu" enquanto o servidor ainda pedia CEP. O resíduo vai pra
+      // rede depois de gravar, em `resolverCoordenadasPendentes`.
+      const coords = await this.geocoding.resolverDoCache(
+        linhas.map((l) => l.cep ?? ''),
       );
       let comCoord = 0;
       for (const l of linhas) {
@@ -421,7 +467,7 @@ export class InstallationPendingsService implements OnModuleInit {
           comCoord++;
         }
       }
-      this.marco(`geocoding ${comCoord}/${linhas.length}`, inicio);
+      this.marco(`coordenadas do cache ${comCoord}/${linhas.length}`, inicio);
 
       // Espelho: o que saiu da pendência no SGA some daqui. Trocar tudo numa
       // transação evita a tela ficar vazia no meio do sync.
@@ -474,6 +520,11 @@ export class InstallationPendingsService implements OnModuleInit {
       // não podem continuar mandando técnico à casa do cliente. Ver P1.5.
       await this.cancelarParadasSemPendencia(tenantId);
 
+      // Coordenadas que faltaram: vão pra rede AGORA, mas sem segurar o sync.
+      // Quem clicou já tem a fila na tela; a rota inteligente ganha o ponto
+      // assim que o CEP resolver.
+      void this.resolverCoordenadasPendentes(tenantId);
+
       this.lastSync = resultado;
       // warn, não log: em produção o logger corta `info` e o fim do sync — a
       // única linha que diz se ele concluiu — nunca aparecia no `docker logs`.
@@ -487,6 +538,60 @@ export class InstallationPendingsService implements OnModuleInit {
     } finally {
       this.syncing = false;
       this.syncStartedAt = null;
+    }
+  }
+
+  /**
+   * Resolve pela rede as coordenadas que o cache não cobriu e grava nas linhas.
+   *
+   * Roda solto, depois que a fila já está na tela. Best-effort do começo ao
+   * fim: o CEP que nenhuma fonte resolve entra na quarentena do
+   * `GeocodingService` e não volta à rede por 30 dias, então a partir da
+   * segunda passada isto custa quase nada.
+   */
+  private async resolverCoordenadasPendentes(tenantId: string): Promise<void> {
+    try {
+      const semCoordenada = await this.prisma.installationPending.findMany({
+        where: { tenantId, lat: null, cep: { not: null } },
+        select: { id: true, cep: true, street: true, number: true, city: true },
+      });
+      if (semCoordenada.length === 0) return;
+
+      const coords = await this.geocoding.resolverLote(
+        semCoordenada.map((l) => ({
+          cep: l.cep ?? '',
+          street: l.street,
+          number: l.number,
+          city: l.city,
+          // O SGA devolve o estado do associado e 99% da base é RJ, mas há CEP
+          // de SP, PE, RS e outros: chumbar 'RJ' fazia o Nominatim procurar rua
+          // paulista no Rio e não achar nada.
+          state: null,
+        })),
+      );
+      if (coords.size === 0) return;
+
+      let gravadas = 0;
+      for (const l of semCoordenada) {
+        const c = l.cep ? coords.get(l.cep.replace(/\D/g, '')) : undefined;
+        if (!c) continue;
+        await this.prisma.installationPending.update({
+          where: { id: l.id },
+          data: { lat: c.lat, lng: c.lng },
+        });
+        gravadas++;
+      }
+      if (gravadas > 0) {
+        this.logger.warn(
+          `Geocoding em segundo plano: ${gravadas} pendência(s) ganharam coordenada.`,
+        );
+      }
+    } catch (erro) {
+      this.logger.warn(
+        `Geocoding em segundo plano falhou: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
     }
   }
 
