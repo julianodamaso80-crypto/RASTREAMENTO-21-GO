@@ -34,6 +34,16 @@ export class GeocodingService {
   private static readonly PAUSA_NOMINATIM_MS = 1100;
   private static readonly TIMEOUT_MS = 10_000;
 
+  /**
+   * Quarentena do CEP que nenhuma fonte resolveu.
+   *
+   * Sem ela o sync repetia a rede pelos mesmos endereços insolúveis toda vez:
+   * 1.277 CEPs em 03/09/2026, ~1,5s cada, cerca de 32 minutos por passada —
+   * o maior item do tempo do sync. 30 dias porque rua nova aparece no
+   * OpenStreetMap com o tempo, mas não de um dia pro outro.
+   */
+  private static readonly QUARENTENA_DIAS = 30;
+
   constructor(private prisma: PrismaService) {}
 
   private static normalizarCep(cep: string): string {
@@ -70,13 +80,25 @@ export class GeocodingService {
     }
 
     if (porCep.size === 0) return resultado;
-    this.logger.log(`Geocoding: ${porCep.size} CEPs novos (cache cobriu ${cacheados.length}).`);
 
-    // 2) Resolve os que faltam e grava no cache
+    // 2) Cache negativo: CEP que já falhou não volta à rede antes da quarentena.
+    const emQuarentena = await this.emQuarentena([...porCep.keys()]);
+    for (const cep of emQuarentena) porCep.delete(cep);
+
+    if (porCep.size === 0) return resultado;
+    this.logger.log(
+      `Geocoding: ${porCep.size} CEPs novos (cache cobriu ${cacheados.length}, ` +
+        `${emQuarentena.size} em quarentena por falha anterior).`,
+    );
+
+    // 3) Resolve os que faltam e grava no cache
     for (const [cep, endereco] of porCep) {
       const coord =
         (await this.viaAwesome(cep)) ?? (await this.viaNominatim(endereco));
-      if (!coord) continue;
+      if (!coord) {
+        await this.registrarFalha(cep);
+        continue;
+      }
 
       resultado.set(cep, coord);
       try {
@@ -91,6 +113,35 @@ export class GeocodingService {
     }
 
     return resultado;
+  }
+
+  /** CEPs que falharam há menos que a quarentena — não tentar de novo agora. */
+  private async emQuarentena(ceps: string[]): Promise<Set<string>> {
+    const corte = new Date();
+    corte.setDate(corte.getDate() - GeocodingService.QUARENTENA_DIAS);
+
+    const falhas = await this.prisma.cepGeocodeFailure.findMany({
+      where: { cep: { in: ceps }, lastTriedAt: { gte: corte } },
+      select: { cep: true },
+    });
+    return new Set(falhas.map((f) => f.cep));
+  }
+
+  /**
+   * Marca o CEP como insolúvel por ora. Best-effort: falhar aqui só faz o CEP
+   * ser tentado de novo no sync seguinte, que é exatamente o comportamento
+   * antigo — nunca pode derrubar o sync.
+   */
+  private async registrarFalha(cep: string): Promise<void> {
+    try {
+      await this.prisma.cepGeocodeFailure.upsert({
+        where: { cep },
+        create: { cep },
+        update: { attempts: { increment: 1 }, lastTriedAt: new Date() },
+      });
+    } catch {
+      // corrida entre dois syncs, ou tabela indisponível: segue sem cachear.
+    }
   }
 
   private async viaAwesome(cep: string): Promise<Coordenada | null> {

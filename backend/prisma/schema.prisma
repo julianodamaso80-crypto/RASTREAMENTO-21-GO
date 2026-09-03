@@ -292,6 +292,20 @@ model CepCoordinate {
   @@map("cep_coordinates")
 }
 
+/// CEP que nenhuma fonte de geocoding resolveu — cache negativo.
+///
+/// Sem ele o sync de pendências repetia a rede pelos mesmos CEPs em toda
+/// passada: eram 1.277 em 03/09/2026, ~32 minutos por sync gastos em endereço
+/// que já se sabia insolúvel. `lastTriedAt` deixa o CEP voltar à fila depois da
+/// quarentena — rua nova entra no OpenStreetMap com o tempo.
+model CepGeocodeFailure {
+  cep         String   @id
+  attempts    Int      @default(1)
+  lastTriedAt DateTime @default(now()) @map("last_tried_at")
+
+  @@map("cep_geocode_failures")
+}
+
 /// Rota de instalação montada pelo operador e enviada a um técnico.
 model InstallationRoute {
   id           String   @id @default(uuid()) @db.Uuid

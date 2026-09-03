@@ -209,6 +209,11 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get cepCoordinate() {
     return this.base.cepCoordinate;
   }
+  // Cache negativo do geocoding: CEP que nenhuma fonte resolveu. Mesma
+  // natureza do cepCoordinate — sem tenant, sem soft delete.
+  get cepGeocodeFailure() {
+    return this.base.cepGeocodeFailure;
+  }
   get installationRoute() {
     return this.base.installationRoute;
   }

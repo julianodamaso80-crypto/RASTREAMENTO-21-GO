@@ -47,6 +47,13 @@ export class InstallationPendingsService implements OnModuleInit {
   /** Espaçamento entre páginas pra não bater no rate limit do SGA (406). */
   private static readonly PAUSA_ENTRE_PAGINAS_MS = 2500;
 
+  /**
+   * Limite da transação que regrava a fila. Medido em produção: 9.167 ms para
+   * 8.449 linhas. O default do Prisma é 5.000 ms — folga nenhuma. 120s cobre a
+   * fila crescendo bastante e ainda denuncia banco travado de verdade.
+   */
+  private static readonly TIMEOUT_GRAVACAO_MS = 120_000;
+
   private syncing = false;
   private syncStartedAt: Date | null = null;
   private lastSync: SyncOutcome | null = null;
@@ -359,11 +366,15 @@ export class InstallationPendingsService implements OnModuleInit {
       const veiculos = await this.varrer((offset, limite) =>
         this.hinova.listRawActiveVehicles(offset, limite),
       );
+      this.marco(`veiculos ${veiculos.length}`, inicio);
+
       const associados = await this.varrer((offset, limite) =>
         this.hinova.listRawActiveAssociates(offset, limite),
       );
+      this.marco(`associados ${associados.length}`, inicio);
 
       const linhasSga = montarFila(veiculos, associados, tenantId);
+      this.marco(`fila montada ${linhasSga.length}`, inicio);
 
       // O espelho é reconstruído do zero a cada sync, e o SGA só deixa de
       // listar a placa quando alguém troca o tipo_adesao lá dentro — coisa que
@@ -410,13 +421,24 @@ export class InstallationPendingsService implements OnModuleInit {
           comCoord++;
         }
       }
+      this.marco(`geocoding ${comCoord}/${linhas.length}`, inicio);
 
       // Espelho: o que saiu da pendência no SGA some daqui. Trocar tudo numa
       // transação evita a tela ficar vazia no meio do sync.
-      await this.prisma.$transaction([
-        this.prisma.installationPending.deleteMany({ where: { tenantId } }),
-        this.prisma.installationPending.createMany({ data: linhas }),
-      ]);
+      //
+      // Callback em vez da forma em array porque só o callback aceita
+      // `timeout`: a forma em array herda o default global de 5s do
+      // PrismaClient, e apagar+regravar 8.449 linhas levou 9.167 ms em
+      // produção (02/09/2026, 20:45 UTC). O sync agendado abortou inteiro —
+      // nada gravado e o espelho cadastral nem chegou a rodar.
+      await this.prisma.$transaction(
+        async (tx) => {
+          await tx.installationPending.deleteMany({ where: { tenantId } });
+          await tx.installationPending.createMany({ data: linhas });
+        },
+        { timeout: InstallationPendingsService.TIMEOUT_GRAVACAO_MS },
+      );
+      this.marco('fila gravada', inicio);
 
       // Espelho cadastral: o vínculo do estoque consulta por placa, e o SGA não
       // tem busca por placa que funcione sem boleto. Reaproveita os ativos já
@@ -424,6 +446,7 @@ export class InstallationPendingsService implements OnModuleInit {
       // pode invalidar a fila de pendências, que já está gravada.
       try {
         await this.mirror.sincronizar(tenantId, veiculos);
+        this.marco('espelho cadastral', inicio);
       } catch (erro) {
         this.logger.error(
           `Espelho cadastral do SGA falhou: ${erro instanceof Error ? erro.message : erro}`,
@@ -452,7 +475,9 @@ export class InstallationPendingsService implements OnModuleInit {
       await this.cancelarParadasSemPendencia(tenantId);
 
       this.lastSync = resultado;
-      this.logger.log(
+      // warn, não log: em produção o logger corta `info` e o fim do sync — a
+      // única linha que diz se ele concluiu — nunca aparecia no `docker logs`.
+      this.logger.warn(
         `Pendências sincronizadas: ${resultado.total} (${resultado.tracker} rastreador, ${resultado.tag} TAG) em ${resultado.duration}`,
       );
       return resultado;
@@ -623,6 +648,26 @@ export class InstallationPendingsService implements OnModuleInit {
         }`,
       );
     }
+  }
+
+  /**
+   * Carimba heap e tempo de cada etapa do sync.
+   *
+   * Em 03/09/2026, 12:50 UTC, o backend inteiro caiu com
+   * "FATAL ERROR: Reached heap limit Allocation failed" — heap em 2.031 MB de
+   * um teto de 2.096 MB, 50 minutos depois de o cron das 9h ter disparado.
+   * A varredura acumulada foi medida em só 32 MB para os 27 mil veículos, ou
+   * seja, o consumo vem de outro ponto do sync e não dá pra descobrir qual sem
+   * carimbo por etapa. Sai em `warn` de propósito: em produção o logger corta
+   * `info` (ver LOG_LEVEL no app.module) e `log()` nunca chegaria ao operador.
+   */
+  private marco(etapa: string, desde: number): void {
+    const heap = Math.round(process.memoryUsage().heapUsed / 1048576);
+    const rss = Math.round(process.memoryUsage().rss / 1048576);
+    const seg = ((Date.now() - desde) / 1000).toFixed(1);
+    this.logger.warn(
+      `Sync SGA [${etapa}]: ${seg}s acumulados · heap ${heap} MB · rss ${rss} MB`,
+    );
   }
 
   /** Pagina até o SGA devolver um lote menor que o pedido. */
