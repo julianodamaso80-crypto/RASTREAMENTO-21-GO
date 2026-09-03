@@ -33,6 +33,15 @@ export class HinovaService implements IHinovaClient {
   private readonly usuario: string;
   private readonly senha: string;
   private tokenUsuario: string | null = null; // token de sessão (cacheado)
+  /**
+   * Login em voo. O SGA mantém UMA sessão por usuário: autenticar de novo
+   * invalida o `token_usuario` anterior (medido em 03/09/2026). Com as duas
+   * varreduras do sync rodando em paralelo, dois 401 simultâneos fariam dois
+   * logins, e o segundo derrubaria o token que o primeiro acabou de guardar —
+   * os dois entrariam num vaivém de 401 até esgotar o retry. Mesmo padrão do
+   * `inFlight` em map.service.ts.
+   */
+  private autenticando: Promise<void> | null = null;
 
   constructor(private configService: ConfigService) {
     const baseUrl = this.configService.get<string>('hinova.baseUrl')!;
@@ -58,6 +67,15 @@ export class HinovaService implements IHinovaClient {
 
   /** Autentica e cacheia o token_usuario em memória (não expira; reautentica em 401). */
   async authenticate(): Promise<void> {
+    // Quem chega no meio de um login espera o mesmo — ver `autenticando`.
+    if (this.autenticando) return this.autenticando;
+    this.autenticando = this.autenticar().finally(() => {
+      this.autenticando = null;
+    });
+    return this.autenticando;
+  }
+
+  private async autenticar(): Promise<void> {
     if (!this.configured()) {
       throw new Error(
         'Hinova SGA: credenciais ausentes (HINOVA_SGA_TOKEN/USUARIO/SENHA).',
