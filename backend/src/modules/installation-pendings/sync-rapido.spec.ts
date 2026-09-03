@@ -181,3 +181,34 @@ describe('geocoding em segundo plano', () => {
     expect(simultaneidadeMax).toBe(1);
   }, 30_000);
 });
+
+describe('espelho cadastral fora da espera da tela', () => {
+  it('o sync termina assim que a fila está gravada', async () => {
+    // O espelho cadastral alimenta a busca por placa do vínculo de estoque,
+    // não a tela de pendências. Enquanto ele estava dentro do `sync()`, o
+    // badge "Sincronizando" ficava aceso por mais alguns minutos depois da
+    // fila já estar pronta na tela.
+    const eventos: string[] = [];
+    const espelhoLento = jest.fn(async () => {
+      eventos.push('espelho-comecou');
+      await new Promise((r) => setTimeout(r, 3_000));
+      eventos.push('espelho-terminou');
+    });
+
+    const { service, prisma } = servicoDeTeste({});
+    (
+      service as unknown as { mirror: { sincronizar: jest.Mock } }
+    ).mirror.sincronizar = espelhoLento;
+    const fila = prisma.installationPending as Record<string, jest.Mock>;
+    fila.createMany.mockImplementation(() => {
+      eventos.push('fila-gravada');
+      return Promise.resolve({ count: 1 });
+    });
+
+    await service.sync('tenant-1');
+
+    expect(eventos).toContain('fila-gravada');
+    // O sync devolveu sem esperar os 3s do espelho.
+    expect(eventos).not.toContain('espelho-terminou');
+  }, 30_000);
+});

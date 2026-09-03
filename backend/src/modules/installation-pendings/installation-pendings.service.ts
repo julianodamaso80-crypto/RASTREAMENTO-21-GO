@@ -490,16 +490,22 @@ export class InstallationPendingsService implements OnModuleInit {
 
       // Espelho cadastral: o vínculo do estoque consulta por placa, e o SGA não
       // tem busca por placa que funcione sem boleto. Reaproveita os ativos já
-      // lidos acima e varre só as outras situações. Best-effort: falhar aqui não
-      // pode invalidar a fila de pendências, que já está gravada.
-      try {
-        await this.mirror.sincronizar(tenantId, veiculos);
-        this.marco('espelho cadastral', inicio);
-      } catch (erro) {
-        this.logger.error(
-          `Espelho cadastral do SGA falhou: ${erro instanceof Error ? erro.message : erro}`,
+      // lidos acima e varre só as outras situações.
+      //
+      // Roda SOLTO: ele alimenta a busca por placa do estoque, não a tela de
+      // pendências, e custa mais uns minutos (a situação 2 sozinha tem 10.984
+      // veículos). Enquanto estava aqui dentro com `await`, o badge
+      // "Sincronizando" seguia aceso depois da fila já estar pronta na tela —
+      // medido em 03/09/2026: fila gravada aos 4min16, espelho só bem depois.
+      // A trava contra varredura dupla é do próprio SgaMirrorService.
+      void this.mirror
+        .sincronizar(tenantId, veiculos)
+        .then(() => this.marco('espelho cadastral', inicio))
+        .catch((erro: unknown) =>
+          this.logger.error(
+            `Espelho cadastral do SGA falhou: ${erro instanceof Error ? erro.message : erro}`,
+          ),
         );
-      }
 
       const resultado: SyncOutcome = {
         started: false,
