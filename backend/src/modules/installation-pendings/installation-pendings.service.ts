@@ -61,6 +61,8 @@ export class InstallationPendingsService implements OnModuleInit {
   private static readonly TIMEOUT_GRAVACAO_MS = 120_000;
 
   private syncing = false;
+  /** Trava do geocoding de segundo plano — ver resolverCoordenadasPendentes(). */
+  private geocodificando = false;
   private syncStartedAt: Date | null = null;
   private lastSync: SyncOutcome | null = null;
   private lastError: string | null = null;
@@ -550,6 +552,11 @@ export class InstallationPendingsService implements OnModuleInit {
    * segunda passada isto custa quase nada.
    */
   private async resolverCoordenadasPendentes(tenantId: string): Promise<void> {
+    // Duas rodadas ao mesmo tempo (cron + clique do operador) são as MESMAS
+    // ~1.277 chamadas em dobro, e 429 no Nominatim tira o endereço de todas as
+    // telas que dependem do geocoder. Uma por vez.
+    if (this.geocodificando) return;
+    this.geocodificando = true;
     try {
       const semCoordenada = await this.prisma.installationPending.findMany({
         where: { tenantId, lat: null, cep: { not: null } },
@@ -592,6 +599,8 @@ export class InstallationPendingsService implements OnModuleInit {
           erro instanceof Error ? erro.message : erro
         }`,
       );
+    } finally {
+      this.geocodificando = false;
     }
   }
 

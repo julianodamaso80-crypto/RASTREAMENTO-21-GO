@@ -146,3 +146,38 @@ describe('clique em Sincronizar', () => {
     expect(geocoding.resolverDoCache).toHaveBeenCalled();
   }, 30_000);
 });
+
+describe('geocoding em segundo plano', () => {
+  it('não roda duas vezes ao mesmo tempo', async () => {
+    // Dois syncs seguidos (cron + clique do operador) não podem colocar duas
+    // rodadas de geocoding na rede ao mesmo tempo: são as mesmas ~1.277
+    // chamadas, e 429 no Nominatim derruba o endereço de todas as telas.
+    let emVoo = 0;
+    let simultaneidadeMax = 0;
+    const resolverLote = jest.fn(async () => {
+      emVoo++;
+      simultaneidadeMax = Math.max(simultaneidadeMax, emVoo);
+      await new Promise((r) => setTimeout(r, 300));
+      emVoo--;
+      return new Map();
+    });
+
+    const { service, prisma } = servicoDeTeste({
+      aoResolverLote: resolverLote as never,
+    });
+    const fila = prisma.installationPending as Record<string, jest.Mock>;
+    fila.findMany.mockResolvedValue([
+      { id: 'p1', cep: '20000000', street: 'Rua Um', number: '1', city: 'Rio' },
+    ]);
+
+    const backgroundDe = (
+      service as unknown as {
+        resolverCoordenadasPendentes: (t: string) => Promise<void>;
+      }
+    ).resolverCoordenadasPendentes.bind(service);
+
+    await Promise.all([backgroundDe('tenant-1'), backgroundDe('tenant-1')]);
+
+    expect(simultaneidadeMax).toBe(1);
+  }, 30_000);
+});
