@@ -107,6 +107,16 @@ function paginaDeTeste(css) {
     '// redesenha o conteudo visual sem trocar o no que o MapLibre controla',
     'window.redesenhar=()=>{markers.forEach(m=>{',
     'm.getElement().innerHTML=\'<div style="width:54px;height:54px;background:#0f0"></div>\';});return true;};',
+    '// Marcar varios: cada pino ganha a etiqueta numerada que amarra o pino a',
+    '// linha do painel de marcados. Ela pendura ABAIXO do icone com',
+    '// position:absolute + top:100%. Se um dia entrar no fluxo, empurra o',
+    '// proprio marcador pra fora da coordenada - e este teste cai.',
+    'window.marcarTodos=()=>{let n=0;markers.forEach(m=>{n++;',
+    'const el=m.getElement();',
+    "const et=document.createElement('div');",
+    "et.style.cssText='position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;padding:4px 9px;background:#0f172a;border:1px solid #10b981;border-radius:6px;white-space:nowrap;font-size:11px;line-height:1.35;z-index:9;pointer-events:none;';",
+    "et.textContent=n+' ABC1D23';",
+    'el.appendChild(et);});return true;};',
     "map.on('load',()=>{window.pronto=true});",
     '<\/script></body></html>',
   ].join('\n');
@@ -150,6 +160,11 @@ function paginaDeTeste(css) {
     etapas.push(['depois de trocar o basemap', await page.evaluate('window.medir()')]);
     await page.evaluate('window.redesenhar()');
     etapas.push(['depois de redesenhar o icone', await page.evaluate('window.medir()')]);
+    await page.evaluate('window.marcarTodos()');
+    etapas.push([
+      'com os 8 marcados e etiqueta numerada',
+      await page.evaluate('window.medir()'),
+    ]);
     await page.close();
 
     for (const [nome, medidas] of etapas) {

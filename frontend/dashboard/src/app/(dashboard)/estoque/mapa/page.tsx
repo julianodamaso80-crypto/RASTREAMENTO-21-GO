@@ -32,6 +32,9 @@ import {
   textoVoltagem,
 } from '@/components/stock/stock-format';
 import { StockMapDetail } from '@/components/stock/stock-map-detail';
+import { SelectionCheckbox } from '@/components/map/selection-checkbox';
+import { SelectionListPanel } from '@/components/map/selection-list-panel';
+import { corDaConexao } from '@/components/stock/stock-map-container';
 import type { StockConexao, StockMapPoint } from '@/types/stock';
 import type { StockMapRef } from '@/components/stock/stock-map-container';
 
@@ -60,7 +63,11 @@ export default function EstoqueMapaPage() {
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
-  const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
+  // Marcados, na ordem em que foram marcados — é ela que numera pino e linha.
+  const [selecionadosIds, setSelecionadosIds] = useState<string[]>([]);
+  // Com vários marcados, o detalhe completo de UM abre por cima da lista; o
+  // conjunto continua intacto embaixo, e fechar o detalhe volta pra lista.
+  const [detalheId, setDetalheId] = useState<string | null>(null);
   const [validarItem, setValidarItem] = useState<StockMapPoint | null>(null);
   const [associarItem, setAssociarItem] = useState<StockMapPoint | null>(null);
   // Abaixo de lg a aside com a lista some — sem esta gaveta, no celular só
@@ -89,9 +96,29 @@ export default function EstoqueMapaPage() {
     return () => clearInterval(timer);
   }, [carregar]);
 
+  /** Troca a seleção inteira por este — o clique no corpo do card. */
   const selecionar = useCallback(
     (id: string) => {
-      setSelecionadoId(id);
+      setSelecionadosIds([id]);
+      setDetalheId(null);
+      const p = pontos.find((x) => x.id === id);
+      if (p?.latitude != null && p?.longitude != null) {
+        mapRef.current?.flyTo(p.longitude, p.latitude, FOCO_ZOOM, PAINEL_LARGURA);
+      }
+    },
+    [pontos],
+  );
+
+  /** Marca/desmarca sem mexer nos outros — o clique na caixinha. */
+  const marcar = useCallback((id: string) => {
+    setSelecionadosIds((atual) =>
+      atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
+    );
+  }, []);
+
+  /** Centraliza sem mexer na seleção. */
+  const focar = useCallback(
+    (id: string) => {
       const p = pontos.find((x) => x.id === id);
       if (p?.latitude != null && p?.longitude != null) {
         mapRef.current?.flyTo(p.longitude, p.latitude, FOCO_ZOOM, PAINEL_LARGURA);
@@ -102,8 +129,8 @@ export default function EstoqueMapaPage() {
 
   // Selecionou um item na gaveta (mobile) → fecha pra revelar o mapa focado.
   useEffect(() => {
-    if (selecionadoId) setListaOpen(false);
-  }, [selecionadoId]);
+    if (selecionadosIds.length > 0) setListaOpen(false);
+  }, [selecionadosIds]);
 
   // Abrir no mapa a partir do estoque: já entra com o equipamento focado.
   useEffect(() => {
@@ -111,7 +138,7 @@ export default function EstoqueMapaPage() {
     const alvo = pontos.find((p) => p.imei === imeiInicial);
     if (!alvo) return;
     focouInicial.current = true;
-    setSelecionadoId(alvo.id);
+    setSelecionadosIds([alvo.id]);
     if (alvo.latitude != null && alvo.longitude != null) {
       mapRef.current?.flyTo(alvo.longitude, alvo.latitude, FOCO_ZOOM, PAINEL_LARGURA);
     } else {
@@ -154,7 +181,44 @@ export default function EstoqueMapaPage() {
     });
   }, [pontos, busca, filtro]);
 
-  const selecionado = pontos.find((p) => p.id === selecionadoId) ?? null;
+  const marcados = selecionadosIds
+    .map((id) => pontos.find((p) => p.id === id))
+    .filter((p): p is StockMapPoint => p !== undefined);
+  const varios = marcados.length > 1;
+  // Painel de detalhe: com um marcado é ele; com vários, só quando o operador
+  // pede "detalhes" numa linha da lista.
+  const selecionado = varios
+    ? (pontos.find((p) => p.id === detalheId) ?? null)
+    : (marcados[0] ?? null);
+
+  const enquadrarMarcados = useCallback(() => {
+    const alvos = marcados
+      .filter((p) => p.latitude != null && p.longitude != null)
+      .map((p) => [p.longitude!, p.latitude!] as [number, number]);
+    if (alvos.length > 0) mapRef.current?.fitTo(alvos, PAINEL_LARGURA);
+  }, [marcados]);
+
+  // Vários marcados: enquadra todos UMA vez, quando o conjunto muda. Sem
+  // perseguir ninguém depois — o mapa é de quem está olhando, e pra
+  // reenquadrar existe o botão "Enquadrar" no painel.
+  const assinaturaMarcados = selecionadosIds.join(',');
+  const enquadradoRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!varios) {
+      enquadradoRef.current = null;
+      return;
+    }
+    if (enquadradoRef.current === assinaturaMarcados) return;
+    const alvos = marcados
+      .filter((p) => p.latitude != null && p.longitude != null)
+      .map((p) => [p.longitude!, p.latitude!] as [number, number]);
+    if (alvos.length === 0) return;
+    enquadradoRef.current = assinaturaMarcados;
+    mapRef.current?.fitTo(alvos, PAINEL_LARGURA);
+    // `marcados` é recriado a cada recarga de 15s; a assinatura do conjunto é
+    // o que de fato manda aqui.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [varios, assinaturaMarcados]);
 
   return (
     <div className="flex h-full">
@@ -171,8 +235,9 @@ export default function EstoqueMapaPage() {
           onFiltroChange={setFiltro}
           contagem={contagem}
           lista={lista}
-          selecionadoId={selecionadoId}
+          selecionadosIds={selecionadosIds}
           onSelecionar={selecionar}
+          onMarcar={marcar}
         />
       </aside>
 
@@ -187,8 +252,11 @@ export default function EstoqueMapaPage() {
         <StockMap
           ref={mapRef}
           pontos={pontos}
-          selecionadoId={selecionadoId}
-          onSelect={selecionar}
+          selecionadosIds={selecionadosIds}
+          // Com um grupo marcado, clicar num pino centraliza nele e pronto:
+          // trocar a seleção desmancharia os outros por um clique de quem só
+          // queria olhar de perto.
+          onSelect={varios ? focar : selecionar}
         />
 
         <Button
@@ -196,9 +264,10 @@ export default function EstoqueMapaPage() {
           size="sm"
           className="absolute bottom-24 right-2 z-10 h-8 gap-1 bg-background/90 text-xs backdrop-blur"
           onClick={() => {
-            // Com um rastreador escolhido o mapa mostra só ele; "Ver todos"
-            // precisa desfazer a escolha, senão o botão não faz nada visível.
-            setSelecionadoId(null);
+            // Com rastreadores marcados o mapa mostra só eles; "Ver todos"
+            // precisa desfazer a marcação, senão o botão não faz nada visível.
+            setSelecionadosIds([]);
+            setDetalheId(null);
             mapRef.current?.fitAll();
           }}
         >
@@ -219,11 +288,49 @@ export default function EstoqueMapaPage() {
           Estoque
         </button>
 
+        {/* Vários marcados: a localização escrita de cada um. O detalhe
+            completo de um item abre POR CIMA desta lista e, ao fechar, o
+            conjunto continua marcado. */}
+        {varios && !selecionado && (
+          <div className="absolute right-0 top-0 z-20 h-full w-full max-w-[360px]">
+            <SelectionListPanel
+              linhas={marcados.map((p) => ({
+                id: p.id,
+                titulo: p.imei,
+                estado: [
+                  badgeConexao(p.conexao).rotulo,
+                  textoIgnicao(p.ignicao),
+                  `atualizado ${haQuantoTempo(p.lastUpdate)}`,
+                ].join(' · '),
+                cor: corDaConexao(p),
+                // O endereço do estoque já vem resolvido do backend junto com
+                // o ponto — nada a buscar aqui.
+                endereco: p.endereco,
+                enderecoCarregando: false,
+                temPosicao: p.latitude != null && p.longitude != null,
+              }))}
+              onFocar={focar}
+              onDetalhe={setDetalheId}
+              onRemover={marcar}
+              onEnquadrar={enquadrarMarcados}
+              onLimpar={() => {
+                setSelecionadosIds([]);
+                setDetalheId(null);
+              }}
+            />
+          </div>
+        )}
+
         {selecionado && (
           <div className="absolute right-0 top-0 z-20 h-full w-full max-w-[360px] border-l shadow-xl">
             <StockMapDetail
               ponto={selecionado}
-              onClose={() => setSelecionadoId(null)}
+              onClose={() => {
+                // Com um grupo marcado, fechar o detalhe volta pra lista dos
+                // marcados; com um só, desfaz a seleção como sempre.
+                if (varios) setDetalheId(null);
+                else setSelecionadosIds([]);
+              }}
               onValidar={() => setValidarItem(selecionado)}
               onAssociar={() => setAssociarItem(selecionado)}
             />
@@ -246,8 +353,9 @@ export default function EstoqueMapaPage() {
             onFiltroChange={setFiltro}
             contagem={contagem}
             lista={lista}
-            selecionadoId={selecionadoId}
+            selecionadosIds={selecionadosIds}
             onSelecionar={selecionar}
+            onMarcar={marcar}
           />
         </SheetContent>
       </Sheet>
@@ -264,7 +372,8 @@ export default function EstoqueMapaPage() {
         open={associarItem !== null}
         onOpenChange={(o) => !o && setAssociarItem(null)}
         onAssociated={() => {
-          setSelecionadoId(null);
+          setSelecionadosIds([]);
+          setDetalheId(null);
           void carregar(true);
         }}
       />
@@ -287,8 +396,9 @@ function SidebarContent({
   onFiltroChange,
   contagem,
   lista,
-  selecionadoId,
+  selecionadosIds,
   onSelecionar,
+  onMarcar,
 }: {
   total: number;
   carregando: boolean;
@@ -306,8 +416,9 @@ function SidebarContent({
     ligados: number;
   };
   lista: StockMapPoint[];
-  selecionadoId: string | null;
+  selecionadosIds: string[];
   onSelecionar: (id: string) => void;
+  onMarcar: (id: string) => void;
 }) {
   return (
     <>
@@ -401,8 +512,9 @@ function SidebarContent({
             <CardEstoque
               key={p.id}
               ponto={p}
-              selecionado={p.id === selecionadoId}
+              selecionado={selecionadosIds.includes(p.id)}
               onClick={() => onSelecionar(p.id)}
+              onMarcar={() => onMarcar(p.id)}
             />
           ))
         )}
@@ -443,21 +555,34 @@ function CardEstoque({
   ponto,
   selecionado,
   onClick,
+  onMarcar,
 }: {
   ponto: StockMapPoint;
   selecionado: boolean;
   onClick: () => void;
+  onMarcar: () => void;
 }) {
   const badge = badgeConexao(ponto.conexao);
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        'w-full border-b px-3 py-2 text-left transition-colors hover:bg-muted/40',
+        'flex items-start gap-2 border-b px-2 py-2 transition-colors hover:bg-muted/40',
         selecionado && 'bg-brand-orange-500/10',
       )}
     >
+      {/* Caixinha = acrescenta este rastreador aos que já estão marcados.
+          Clicar no corpo do card continua trocando a seleção por este. */}
+      <SelectionCheckbox
+        marcado={selecionado}
+        onToggle={onMarcar}
+        rotulo={ponto.imei}
+        className="mt-0.5"
+      />
+      <button
+        type="button"
+        onClick={onClick}
+        className="min-w-0 flex-1 text-left"
+      >
       <div className="flex items-center gap-2">
         <span className={cn('h-2 w-2 shrink-0 rounded-full', badge.ponto)} />
         <span className="font-mono text-xs font-semibold">{ponto.imei}</span>
@@ -503,7 +628,8 @@ function CardEstoque({
           valor={ponto.satelites === null ? '—' : String(ponto.satelites)}
         />
       </div>
-    </button>
+      </button>
+    </div>
   );
 }
 

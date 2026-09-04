@@ -1,11 +1,14 @@
 'use client';
 
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { ChevronLeft, List, X } from 'lucide-react';
 import { useTracking } from '@/contexts/tracking-context';
 import { VehicleSidebar } from '@/components/vehicles/vehicle-sidebar';
 import { VehicleDetailPanel } from '@/components/vehicles/vehicle-detail-panel';
+import { SelectionListPanel } from '@/components/map/selection-list-panel';
+import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
+import { formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { STATUS_COLORS } from '@/lib/constants';
 import type { MapContainerRef } from '@/components/map/map-container';
@@ -24,7 +27,14 @@ const FOCUS_ZOOM = 17;
 const PANEL_WIDTH = 380;
 
 export default function MapaPage() {
-  const { filteredVehicles, selectedVehicleId, selectVehicle, vehicles } = useTracking();
+  const {
+    filteredVehicles,
+    selectedIds,
+    selectedVehicleId,
+    selectVehicle,
+    toggleVehicle,
+    vehicles,
+  } = useTracking();
   const mapRef = useRef<MapContainerRef>(null);
   // Painel nasce RECOLHIDO: a prioridade é ver o máximo do mapa. Quem quiser
   // informação extra abre pela aba lateral.
@@ -43,6 +53,30 @@ export default function MapaPage() {
 
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
 
+  // Os marcados, na ordem em que foram marcados — é dela que sai a numeração
+  // que aparece igual no pino e na linha do painel.
+  const marcados = useMemo(
+    () =>
+      selectedIds
+        .map((id) => vehicles.find((v) => v.id === id))
+        .filter((v): v is NonNullable<typeof v> => v !== undefined),
+    [selectedIds, vehicles],
+  );
+  const varios = marcados.length > 1;
+
+  // Endereço de cada marcado. Só busca quando o painel de lista está em cena:
+  // com um só quem resolve é o painel de detalhe, e pedir duas vezes o mesmo
+  // ponto seria gastar o dobro do limite do geocoder por nada.
+  const enderecos = useReverseGeocodeMany(
+    varios
+      ? marcados.map((v) => ({
+          id: v.id,
+          latitude: v.latitude,
+          longitude: v.longitude,
+        }))
+      : [],
+  );
+
   // Com um veículo selecionado o mapa mostra SÓ ele.
   //
   // Antes ficavam no mapa os 399 marcadores da frota inteira: a câmera até
@@ -53,7 +87,7 @@ export default function MapaPage() {
   //
   // Vem de `vehicles`, não de `filteredVehicles`: o selecionado não pode sumir
   // do mapa porque a busca ou a aba de status deixou de casar com ele.
-  const vehiclesNoMapa = selectedVehicle ? [selectedVehicle] : filteredVehicles;
+  const vehiclesNoMapa = marcados.length > 0 ? marcados : filteredVehicles;
 
   // Selecionou um veículo na lista (mobile) → fecha a gaveta pra revelar o
   // mapa já centrado nele, sem precisar de um segundo toque no X.
@@ -61,22 +95,40 @@ export default function MapaPage() {
     if (selectedVehicleId) setVehicleListOpen(false);
   }, [selectedVehicleId]);
 
+  /** Coordenadas dos marcados que já reportaram posição. */
+  const pontosMarcados = useMemo(
+    () =>
+      marcados
+        .filter((v) => v.latitude && v.longitude)
+        .map((v) => [v.longitude, v.latitude] as [number, number]),
+    [marcados],
+  );
+
+  const enquadrarMarcados = useCallback(() => {
+    if (pontosMarcados.length > 0) {
+      mapRef.current?.fitTo(pontosMarcados, PANEL_WIDTH);
+    }
+  }, [pontosMarcados]);
+
   const onMapaPronto = useCallback(() => setMapaPronto(true), []);
 
   const handleVehicleClick = useCallback(
     (vehicleId: string) => {
-      selectVehicle(vehicleId);
+      // Com um grupo marcado, clicar num pino CENTRALIZA nele e pronto. Trocar
+      // a seleção aqui desmancharia os outros marcados por um clique de quem
+      // só queria olhar de perto — e remontar o grupo é caixinha por caixinha.
+      if (!varios) selectVehicle(vehicleId);
       const v = vehicles.find((veh) => veh.id === vehicleId);
       if (v && v.latitude && v.longitude) {
         mapRef.current?.flyTo(
           v.longitude,
           v.latitude,
           FOCUS_ZOOM,
-          panelOpen ? PANEL_WIDTH : 0,
+          panelOpen || varios ? PANEL_WIDTH : 0,
         );
       }
     },
-    [selectVehicle, vehicles, panelOpen],
+    [selectVehicle, vehicles, panelOpen, varios],
   );
 
   // Placa vinda de "Abrir no mapa" em outra tela. Lida do location (e não com
@@ -134,6 +186,31 @@ export default function MapaPage() {
     );
   }, [selectedVehicleId, alvoLat, alvoLng, panelOpen, mapaPronto]);
 
+  // Vários marcados: enquadra todos UMA vez, quando o conjunto muda. E só.
+  //
+  // Nada de perseguir: com quatro carros indo pra lados diferentes, câmera que
+  // segue fica pulando entre eles e não dá pra ler nada. Depois do
+  // enquadramento o mapa é de quem está olhando; pra reenquadrar existe o
+  // botão "Enquadrar" no painel.
+  //
+  // A dependência é a assinatura do conjunto (ids em ordem), não o array de
+  // veículos — que é recriado a cada posição recebida de QUALQUER um do parque
+  // e faria a câmera reenquadrar ~1x por segundo.
+  const assinaturaMarcados = selectedIds.join(',');
+  const enquadradoRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!varios || !mapaPronto) {
+      if (!varios) enquadradoRef.current = null;
+      return;
+    }
+    if (enquadradoRef.current === assinaturaMarcados) return;
+    // Sem coordenada ainda (as posições chegam depois da lista): espera a
+    // próxima passagem em vez de dar um enquadramento vazio.
+    if (pontosMarcados.length === 0) return;
+    enquadradoRef.current = assinaturaMarcados;
+    mapRef.current?.fitTo(pontosMarcados, PANEL_WIDTH);
+  }, [varios, mapaPronto, assinaturaMarcados, pontosMarcados]);
+
   // Seguimento: mantém o veículo à vista enquanto ele anda, sem tocar no zoom
   // e sem brigar com quem arrastou o mapa — a câmera só reage quando o veículo
   // sai do quadro.
@@ -154,7 +231,7 @@ export default function MapaPage() {
         <MapContainer
           ref={mapRef}
           vehicles={vehiclesNoMapa}
-          selectedVehicleId={selectedVehicleId}
+          selectedIds={selectedIds}
           onVehicleClick={handleVehicleClick}
           onReady={onMapaPronto}
           // O painel de detalhe cobre os 380px da direita e engolia o seletor
@@ -162,7 +239,7 @@ export default function MapaPage() {
           // de baixo: à esquerda do painel no desktop, no canto esquerdo no
           // celular, onde o painel toma quase a tela toda.
           basemapToggleClassName={
-            selectedVehicleId && panelOpen
+            varios || (selectedVehicleId && panelOpen)
               ? 'left-3 right-auto lg:left-auto lg:right-[392px]'
               : undefined
           }
@@ -218,6 +295,55 @@ export default function MapaPage() {
         {selectedVehicleId && panelOpen && (
           <div className="absolute inset-y-0 right-0 z-30">
             <VehicleDetailPanel onCollapse={() => setPanelOpen(false)} />
+          </div>
+        )}
+
+        {/* Vários marcados: a localização escrita de cada um, lado a lado com
+            o mapa. Fica no lugar do painel de detalhe — a pergunta aqui é
+            "onde estão estes?", não "tudo sobre um". */}
+        {varios && (
+          <div className="absolute inset-y-0 right-0 z-30 w-full max-w-[360px]">
+            <SelectionListPanel
+              linhas={marcados.map((v) => {
+                const geo = enderecos.get(v.id);
+                const movendo =
+                  v.displayStatus === 'ignition_on' && v.speed > 0;
+                return {
+                  id: v.id,
+                  titulo: v.plate,
+                  estado: [
+                    getVehicleStatusLabel(v.displayStatus, v.vehicleType),
+                    movendo ? formatSpeed(v.speed) : null,
+                    formatRelativeTime(v.positionTime ?? v.lastUpdate),
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                  cor: STATUS_COLORS[v.displayStatus],
+                  endereco: geo?.address ?? null,
+                  enderecoCarregando: geo?.loading ?? false,
+                  temPosicao: Boolean(v.latitude && v.longitude),
+                };
+              })}
+              onFocar={(id) => {
+                const v = vehicles.find((x) => x.id === id);
+                if (v?.latitude && v?.longitude) {
+                  mapRef.current?.flyTo(
+                    v.longitude,
+                    v.latitude,
+                    FOCUS_ZOOM,
+                    PANEL_WIDTH,
+                  );
+                }
+              }}
+              onDetalhe={(id) => {
+                // Cai pro modo de um só, que é onde mora o detalhe completo.
+                selectVehicle(id);
+                setPanelOpen(true);
+              }}
+              onRemover={toggleVehicle}
+              onEnquadrar={enquadrarMarcados}
+              onLimpar={() => selectVehicle(null)}
+            />
           </div>
         )}
       </div>

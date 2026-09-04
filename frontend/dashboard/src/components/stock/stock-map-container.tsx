@@ -20,11 +20,14 @@ import { GoogleMapsAttribution } from '@/components/map/google-attribution';
 export interface StockMapRef {
   flyTo: (lng: number, lat: number, zoom?: number, paddingRight?: number) => void;
   fitAll: () => void;
+  /** Enquadra vários pontos de uma vez — os marcados vistos juntos. */
+  fitTo: (pontos: [number, number][], paddingRight?: number) => void;
 }
 
 interface Props {
   pontos: StockMapPoint[];
-  selecionadoId: string | null;
+  /** Marcados, na ordem em que foram marcados — é ela que numera os pinos. */
+  selecionadosIds: string[];
   onSelect: (id: string) => void;
 }
 
@@ -47,7 +50,7 @@ export function corDaConexao(ponto: StockMapPoint): string {
  * enfraquecer a regra do mapa de rastreamento, que é crítica.
  */
 const StockMapContainer = forwardRef<StockMapRef, Props>(
-  function StockMapContainer({ pontos, selecionadoId, onSelect }, ref) {
+  function StockMapContainer({ pontos, selecionadosIds, onSelect }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -61,12 +64,13 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
       (p) => p.latitude !== null && p.longitude !== null,
     );
 
-    // Escolheu um rastreador → o mapa mostra só ele. Com centenas de
+    // Marcou rastreadores → o mapa mostra só eles. Com centenas de
     // equipamentos na mesma rua, o pino do escolhido some no meio dos outros e
     // o operador não sabe qual está olhando.
-    const comPosicao = selecionadoId
-      ? todosComPosicao.filter((p) => p.id === selecionadoId)
-      : todosComPosicao;
+    const comPosicao =
+      selecionadosIds.length > 0
+        ? todosComPosicao.filter((p) => selecionadosIds.includes(p.id))
+        : todosComPosicao;
 
     useImperativeHandle(ref, () => ({
       flyTo: (lng, lat, zoom = 16, paddingRight = 0) => {
@@ -83,6 +87,22 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
         const bounds = new maplibregl.LngLatBounds();
         todosComPosicao.forEach((p) => bounds.extend([p.longitude!, p.latitude!]));
         map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 800 });
+      },
+      /**
+       * Com um ponto só `fitBounds` iria ao zoom máximo — aí centraliza no
+       * zoom de leitura de rua. `maxZoom` cobre dois marcados no mesmo pátio.
+       */
+      fitTo: (alvos, paddingRight = 0) => {
+        const map = mapRef.current;
+        if (!map || alvos.length === 0) return;
+        const padding = { top: 80, bottom: 80, left: 80, right: paddingRight + 80 };
+        if (alvos.length === 1) {
+          map.easeTo({ center: alvos[0], zoom: 15, duration: 800, padding });
+          return;
+        }
+        const bounds = new maplibregl.LngLatBounds();
+        alvos.forEach((a) => bounds.extend(a));
+        map.fitBounds(bounds, { padding, maxZoom: 16, duration: 800 });
       },
     }));
 
@@ -205,7 +225,12 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
     }, [googleVisible]);
 
     const criarMarcador = useCallback(
-      (ponto: StockMapPoint, selecionado: boolean) => {
+      (
+        ponto: StockMapPoint,
+        selecionado: boolean,
+        /** Posição entre os marcados (1, 2, 3…) quando são vários. */
+        ordem: number | null,
+      ) => {
         const el = document.createElement('div');
         // width/height fixos: sem isso o div vira block, estica pela largura do
         // mapa e o ícone aparece deslocado do ponto real.
@@ -226,9 +251,21 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
              <path d="M12 2 L19 21 L12 17 L5 21 Z" fill="${cor}" stroke="#0f172a" stroke-width="1.2" stroke-linejoin="round"/>
            </svg>`;
 
+        // Etiqueta com número + IMEI curto: é ela que diz qual pino é qual
+        // quando vários estão marcados. O mesmo número aparece na linha do
+        // painel de marcados. Com um só não há o que desambiguar, e a
+        // etiqueta não entra.
+        const etiqueta =
+          ordem === null
+            ? ''
+            : `<div style="position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:3px;padding:3px 7px;background:rgba(15,23,42,0.95);border:1px solid ${cor};border-radius:6px;white-space:nowrap;font-size:10px;line-height:1.3;color:#e2e8f0;z-index:9;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,0.55);display:flex;align-items:center;gap:4px;font-weight:700;">
+                 <span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${cor};color:#0f172a;font-size:9px;">${ordem}</span>…${ponto.imei.slice(-6)}
+               </div>`;
+
         el.innerHTML = `
           <div style="position:absolute;width:${selecionado ? 42 : 34}px;height:${selecionado ? 42 : 34}px;border-radius:50%;border:2px solid ${cor};background:rgba(15,23,42,0.35);box-shadow:0 2px 8px rgba(0,0,0,0.5);"></div>
           <div style="position:relative;z-index:1;display:flex;align-items:center;justify-content:center;">${forma}</div>
+          ${etiqueta}
         `;
 
         const tooltip = document.createElement('div');
@@ -255,12 +292,20 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
       const map = mapRef.current;
       if (!map) return;
       const vivos = new Set<string>();
+      // Ordem de marcação → número da etiqueta. `null` com um só marcado.
+      const ordemPorId = new Map<string, number>();
+      if (selecionadosIds.length > 1) {
+        selecionadosIds.forEach((id, i) => ordemPorId.set(id, i + 1));
+      }
 
       for (const ponto of comPosicao) {
         vivos.add(ponto.id);
         const lngLat: [number, number] = [ponto.longitude!, ponto.latitude!];
-        const selecionado = ponto.id === selecionadoId;
-        const chave = `${ponto.conexao}|${ponto.gpsConfiavel}|${ponto.direcao}|${selecionado}`;
+        const selecionado = selecionadosIds.includes(ponto.id);
+        const ordem = ordemPorId.get(ponto.id) ?? null;
+        // A ordem entra na chave: desmarcar um vizinho renumera os outros, e
+        // sem isso a etiqueta ficaria com o número velho.
+        const chave = `${ponto.conexao}|${ponto.gpsConfiavel}|${ponto.direcao}|${selecionado}|${ordem}`;
         const existente = markersRef.current.get(ponto.id);
 
         if (existente) {
@@ -274,7 +319,7 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
             // e o operador via o mapa certo sem pino nenhum. Refazer o
             // marcador é o caminho que o MapLibre suporta.
             existente.remove();
-            const novoEl = criarMarcador(ponto, selecionado);
+            const novoEl = criarMarcador(ponto, selecionado, ordem);
             novoEl.dataset.chave = chave;
             markersRef.current.set(
               ponto.id,
@@ -284,7 +329,7 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
             );
           }
         } else {
-          const el = criarMarcador(ponto, selecionado);
+          const el = criarMarcador(ponto, selecionado, ordem);
           el.dataset.chave = chave;
           markersRef.current.set(
             ponto.id,
@@ -299,7 +344,7 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
           markersRef.current.delete(id);
         }
       });
-    }, [comPosicao, selecionadoId, criarMarcador]);
+    }, [comPosicao, selecionadosIds, criarMarcador]);
 
     return (
       <div className="relative h-full w-full">

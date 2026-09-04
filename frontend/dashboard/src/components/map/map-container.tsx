@@ -34,6 +34,8 @@ export interface MapContainerRef {
   ) => void;
   /** Traz o ponto de volta ao quadro se ele saiu — sem mexer no zoom. */
   keepInView: (lng: number, lat: number, paddingRight?: number) => void;
+  /** Enquadra vários pontos de uma vez — os marcados vistos juntos. */
+  fitTo: (pontos: [number, number][], paddingRight?: number) => void;
 }
 
 interface MapContainerProps {
@@ -42,11 +44,15 @@ interface MapContainerProps {
   /** Reposiciona o seletor de mapa quando algo cobre o canto superior direito
    *  — no /mapa é o painel de detalhe do veículo. */
   basemapToggleClassName?: string;
-  /** Veículo selecionado na lista/painel. O marcador dele ganha etiqueta
-   *  fixa com placa e estado da ignição — sem depender do hover, que some
-   *  assim que o operador tira o mouse e deixa o pin anônimo no meio dos
-   *  outros. */
-  selectedVehicleId?: string | null;
+  /** Veículos marcados na lista/painel, na ordem em que foram marcados.
+   *
+   *  O marcador de cada um ganha etiqueta fixa — sem depender do hover, que
+   *  some assim que o operador tira o mouse e deixa o pin anônimo no meio dos
+   *  outros. Com UM marcado a etiqueta traz placa e estado da ignição; com
+   *  vários ela encolhe pra "① ABC1D23", porque etiqueta de duas linhas em
+   *  quatro pinos na mesma rua vira mancha ilegível. O número é o mesmo da
+   *  linha no painel de marcados: é ele que diz qual pino é qual. */
+  selectedIds?: string[];
   /** Avisa que o mapa já existe e aceita comandos de câmera. Quem chega com um
    *  veículo pra abrir (ex.: "Abrir no mapa") precisa disso: o componente é
    *  carregado sob demanda e o `flyTo` disparado antes disso ia pro vazio. */
@@ -104,7 +110,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       onVehicleClick,
       basemapToggleClassName,
       onReady,
-      selectedVehicleId,
+      selectedIds,
     },
     ref,
   ) {
@@ -179,6 +185,26 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           duration: 600,
           padding: { top: 0, bottom: 0, left: 0, right: paddingRight },
         });
+      },
+
+      /**
+       * Enquadra todos os pontos marcados de uma vez.
+       *
+       * Com um ponto só, `fitBounds` levaria ao zoom máximo do mapa; aí o
+       * comportamento certo é o mesmo de sempre — centraliza no zoom de leitura
+       * de rua. `maxZoom` cobre também o caso de dois marcados no mesmo pátio.
+       */
+      fitTo: (pontos, paddingRight = 0) => {
+        const map = mapRef.current;
+        if (!map || pontos.length === 0) return;
+        const padding = { top: 90, bottom: 90, left: 90, right: paddingRight + 90 };
+        if (pontos.length === 1) {
+          map.easeTo({ center: pontos[0], zoom: 15, duration: 800, padding });
+          return;
+        }
+        const bounds = new maplibregl.LngLatBounds();
+        pontos.forEach((p) => bounds.extend(p));
+        map.fitBounds(bounds, { padding, maxZoom: 16, duration: 800 });
       },
     }));
 
@@ -335,7 +361,13 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     // posterior o traz de volta. Ver scripts/diagnostics/marcador-no-lugar.js.
     // ─────────────────────────────────────────────────────────────────
     const pintarMarcador = useCallback(
-      (el: HTMLElement, vehicle: VehicleWithTracking, selecionado: boolean) => {
+      (
+        el: HTMLElement,
+        vehicle: VehicleWithTracking,
+        selecionado: boolean,
+        /** Posição do veículo entre os marcados (1, 2, 3…) quando são vários. */
+        ordem: number | null,
+      ) => {
         const color = STATUS_COLORS[vehicle.displayStatus];
         // Pulse só quando carro REALMENTE está se movendo (motor ligado +
         // velocidade > 0). Não pulsa só por ignição ligada parado.
@@ -381,10 +413,17 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         if (selecionado) {
           const etiqueta = document.createElement('div');
           etiqueta.style.cssText = `position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;padding:4px 9px;background:rgba(15,23,42,0.95);border:1px solid ${color};border-radius:6px;white-space:nowrap;font-size:11px;line-height:1.35;color:#e2e8f0;text-align:center;z-index:9;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,0.55);backdrop-filter:blur(8px);`;
-          etiqueta.innerHTML = `
+          etiqueta.innerHTML =
+            ordem === null
+              ? `
             <div style="font-weight:700;letter-spacing:0.6px;">${vehicle.plate}</div>
             <div style="display:flex;align-items:center;justify-content:center;gap:4px;color:${color};font-weight:600;">
               <span style="width:6px;height:6px;border-radius:50%;background:${color};"></span>${rotuloEstado(vehicle)}
+            </div>
+          `
+              : `
+            <div style="display:flex;align-items:center;gap:5px;font-weight:700;letter-spacing:0.6px;">
+              <span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:${color};color:#0f172a;font-size:10px;">${ordem}</span>${vehicle.plate}
             </div>
           `;
           el.appendChild(etiqueta);
@@ -422,12 +461,16 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
      * estica pra largura inteira do mapa.
      */
     const createMarkerElement = useCallback(
-      (vehicle: VehicleWithTracking, selecionado: boolean) => {
+      (
+        vehicle: VehicleWithTracking,
+        selecionado: boolean,
+        ordem: number | null,
+      ) => {
         const el = document.createElement('div');
         el.className = 'vehicle-marker-container';
         el.style.cssText =
           'cursor:pointer;width:54px;height:54px;display:flex;align-items:center;justify-content:center;';
-        pintarMarcador(el, vehicle, selecionado);
+        pintarMarcador(el, vehicle, selecionado, ordem);
         return el;
       },
       [pintarMarcador],
@@ -508,6 +551,13 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       if (!map) return;
 
       const currentIds = new Set<string>();
+      // Ordem em que cada marcado entrou — é o número da etiqueta e o da linha
+      // no painel. `null` quando há um só: aí a etiqueta volta a ser a de
+      // sempre (placa + estado da ignição), sem número pra decorar.
+      const ordemPorId = new Map<string, number>();
+      if (selectedIds && selectedIds.length > 1) {
+        selectedIds.forEach((id, i) => ordemPorId.set(id, i + 1));
+      }
 
       for (const vehicle of vehicles) {
         if (!vehicle.latitude || !vehicle.longitude) continue;
@@ -517,12 +567,15 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         const lngLat: [number, number] = [vehicle.longitude, vehicle.latitude];
         const isMoving =
           vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0;
-        const selecionado = vehicle.id === selectedVehicleId;
+        const selecionado = selectedIds?.includes(vehicle.id) ?? false;
+        const ordem = ordemPorId.get(vehicle.id) ?? null;
         // chave do "visual": só muda quando precisa redesenhar (cor/ícone/
         // pulse/seleção). A ignição entra aqui porque a etiqueta do
         // selecionado a exibe — sem isso ela ficaria mostrando "Ignição
         // ligada" depois do motorista desligar o carro.
-        const vkey = `${vehicle.displayStatus}|${vehicle.vehicleType}|${isMoving}|${selecionado}|${vehicle.ignition}`;
+        // A ordem entra na chave: marcar/desmarcar um vizinho renumera os
+        // outros, e sem isso a etiqueta continuaria mostrando o número velho.
+        const vkey = `${vehicle.displayStatus}|${vehicle.vehicleType}|${isMoving}|${selecionado}|${ordem}|${vehicle.ignition}`;
 
         if (existing) {
           const el = existing.getElement();
@@ -555,7 +608,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
             // status/tipo/movimento mudou → repinta o conteúdo DENTRO do mesmo
             // nó. Trocar o nó por outro tirava dele a classe que o MapLibre usa
             // pra posicionar e mandava o marcador pro canto do mapa de vez.
-            pintarMarcador(el, vehicle, selecionado);
+            pintarMarcador(el, vehicle, selecionado, ordem);
             el.dataset.vkey = vkey;
           } else {
             // só posição/direção mudou (carro andando) → gira a img no lugar,
@@ -566,7 +619,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
             }
           }
         } else {
-          const el = createMarkerElement(vehicle, selecionado);
+          const el = createMarkerElement(vehicle, selecionado, ordem);
           el.dataset.vkey = vkey;
           destinosRef.current.set(vehicle.id, lngLat);
           const marker = new maplibregl.Marker({ element: el })
@@ -591,7 +644,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       });
     }, [
       vehicles,
-      selectedVehicleId,
+      selectedIds,
       createMarkerElement,
       pintarMarcador,
       animarMarcador,

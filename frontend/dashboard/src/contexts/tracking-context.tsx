@@ -31,8 +31,24 @@ interface StatusCounts {
 interface TrackingContextType {
   vehicles: VehicleWithTracking[];
   filteredVehicles: VehicleWithTracking[];
+  /**
+   * Veículos marcados, na ordem em que foram marcados — é essa ordem que
+   * numera o pino no mapa e a linha do painel.
+   */
+  selectedIds: string[];
+  /**
+   * O único marcado, ou `null` quando são vários (ou nenhum).
+   *
+   * Derivado de `selectedIds`. Quem só sabe lidar com um veículo — o painel de
+   * detalhe, o seguimento da câmera — lê daqui e continua funcionando sem
+   * mudança: com 2+ marcados a resposta é `null` e essas peças saem de cena
+   * pro painel de lista entrar.
+   */
   selectedVehicleId: string | null;
+  /** Troca a seleção inteira por este veículo (ou limpa tudo com `null`). */
   selectVehicle: (id: string | null) => void;
+  /** Marca/desmarca sem mexer nos outros — é o clique na caixinha da lista. */
+  toggleVehicle: (id: string) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   statusFilter: 'all' | DisplayStatus;
@@ -58,7 +74,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [vehicleMap, setVehicleMap] = useState<Map<string, Vehicle>>(new Map());
   const [deviceMap, setDeviceMap] = useState<Map<number, TraccarDevice>>(new Map());
   const [positionMap, setPositionMap] = useState<Map<number, TraccarPosition>>(new Map());
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -319,8 +335,21 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     return counts;
   }, [vehicles]);
 
+  // Só existe "o veículo selecionado" quando há exatamente um marcado. Com
+  // vários, quem manda na tela é o painel de lista — e a câmera não persegue
+  // ninguém, senão fica pulando entre carros indo pra lados diferentes.
+  const selectedVehicleId = selectedIds.length === 1 ? selectedIds[0] : null;
+
   const selectVehicle = useCallback((id: string | null) => {
-    setSelectedVehicleId(id);
+    setSelectedIds(id ? [id] : []);
+  }, []);
+
+  // Marcar acrescenta no FIM da lista: a numeração do pino no mapa é a ordem
+  // em que o operador marcou, e ela não pode dançar quando ele marca o quarto.
+  const toggleVehicle = useCallback((id: string) => {
+    setSelectedIds((atual) =>
+      atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
+    );
   }, []);
 
   const markAlertRead = useCallback(async (id: string) => {
@@ -340,8 +369,10 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       value={{
         vehicles,
         filteredVehicles,
+        selectedIds,
         selectedVehicleId,
         selectVehicle,
+        toggleVehicle,
         searchQuery,
         setSearchQuery,
         statusFilter,
