@@ -11,6 +11,7 @@ import {
   PasswordResetService,
   RepositorioReset,
 } from '../auth/password-reset.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
 import { normalizeCpf } from '../technicians/technicians.service';
 import { TechLoginDto } from './dto/tech-login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -25,6 +26,7 @@ export class TechAuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly reset: PasswordResetService,
+    private readonly whatsapp: WhatsappService,
   ) {}
 
   async login(dto: TechLoginDto) {
@@ -85,8 +87,14 @@ export class TechAuthService {
     });
     if (!technician) throw new UnauthorizedException('Técnico não encontrado');
     const { phoneVerifiedAt, ...resto } = technician;
-    // O PWA usa esta flag pra abrir o popup obrigatório de cadastro do WhatsApp.
-    return { ...resto, phoneVerified: Boolean(phoneVerifiedAt) };
+    const verificado = Boolean(phoneVerifiedAt);
+    return {
+      ...resto,
+      phoneVerified: verificado,
+      // Mesma regra do painel: sem canal de envio o popup trancaria o técnico
+      // fora do PWA, em campo, sem como receber o código.
+      phoneVerificationRequired: this.whatsapp.habilitado && !verificado,
+    };
   }
 
   async changePassword(technicianId: string, dto: ChangePasswordDto) {

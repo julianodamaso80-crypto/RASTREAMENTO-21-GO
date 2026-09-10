@@ -53,15 +53,39 @@ describe('orDeCampos', () => {
     expect(json).toContain('SIS1F13');
   });
 
-  it('documento só entra com dígitos suficientes', () => {
-    // "232" é pedaço de placa, não documento.
-    expect(JSON.stringify(orDeCampos(interpretarTermo('232')!, campos))).not.toContain('cpf');
-    expect(JSON.stringify(orDeCampos(interpretarTermo('12345678901')!, campos))).toContain('cpf');
+  it('acha o CPF digitado de qualquer jeito', () => {
+    // Ponto, traço, espaço ou nada: o banco guarda só dígitos, então o termo
+    // vai limpo. Exigir um formato seria barreira à toa.
+    for (const forma of [
+      '12345678901',
+      '123.456.789-01',
+      '123 456 789 01',
+      '  123.456.789-01  ',
+    ]) {
+      expect(orDeCampos(interpretarTermo(forma)!, campos)).toContainEqual({
+        associate: { cpf: { contains: '12345678901' } },
+      });
+    }
   });
 
-  it('identificador (IMEI/ICCID) entra a partir de 4 dígitos', () => {
-    expect(JSON.stringify(orDeCampos(interpretarTermo('123')!, campos))).not.toContain('imei');
+  it('pedaço de documento também acha (o final do CPF, que é o que o cliente diz)', () => {
+    // Medido em produção: "746" casa com 9 associados de 3.374 — é lista de
+    // trabalho, não a base inteira. Exigir 6 dígitos barrava sem proteger nada.
+    expect(JSON.stringify(orDeCampos(interpretarTermo('746')!, campos))).toContain('cpf');
+    expect(JSON.stringify(orDeCampos(interpretarTermo('13746')!, campos))).toContain('cpf');
+  });
+
+  it('um ou dois dígitos não entram em campo numérico', () => {
+    // "46" casaria com metade do cadastro — aí sim é a base inteira de volta.
+    const or = orDeCampos(interpretarTermo('46')!, campos);
+    const json = JSON.stringify(or);
+    expect(json).not.toContain('cpf');
+    expect(json).not.toContain('imei');
+  });
+
+  it('identificador (IMEI/ICCID/linha) aceita os últimos dígitos', () => {
     expect(JSON.stringify(orDeCampos(interpretarTermo('0854')!, campos))).toContain('imei');
+    expect(JSON.stringify(orDeCampos(interpretarTermo('854')!, campos))).toContain('imei');
   });
 
   it('monta caminho aninhado como o Prisma espera', () => {

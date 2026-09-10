@@ -34,16 +34,16 @@ export interface CamposBuscaveis {
 }
 
 /**
- * Documento tem 11 ou 14 dígitos. Buscar "232" em CPF traria meio cadastro —
- * e "232" quase sempre é pedaço de placa, não documento.
+ * Piso para procurar em campo numérico (CPF/CNPJ, IMEI, ICCID, linha).
+ *
+ * Três dígitos. O cliente ao telefone diz o final do documento, e o operador
+ * digita os últimos dígitos do IMEI — exigir o número inteiro é barreira sem
+ * ganho: medido em produção, "746" casa com 9 associados de 3.374. Abaixo de
+ * três aí sim seria a base de volta ("46" pega metade do cadastro).
+ *
+ * Vale só para termo SEM letra — "sis1f13" nunca vira "113" (ver orDeCampos).
  */
-const MIN_DIGITOS_DOCUMENTO = 6;
-
-/**
- * IMEI/ICCID/linha: o operador costuma digitar os últimos 4 dígitos ("…0854"),
- * que é como o parque é identificado no dia a dia.
- */
-const MIN_DIGITOS_IDENTIFICADOR = 4;
+const MIN_DIGITOS_NUMERO = 3;
 
 export function interpretarTermo(bruto?: string | null): TermoBusca | null {
   const texto = (bruto ?? '').trim();
@@ -95,14 +95,11 @@ export function orDeCampos(
   // com qualquer IMEI, CPF ou telefone que contenha 113 — a base inteira.
   if (termo.temLetra) return or;
 
-  if (termo.digitos.length >= MIN_DIGITOS_DOCUMENTO) {
-    for (const campo of campos.documento ?? []) {
-      or.push(aninhar(campo, { contains: termo.digitos }));
-    }
-  }
-
-  if (termo.digitos.length >= MIN_DIGITOS_IDENTIFICADOR) {
-    for (const campo of campos.identificador ?? []) {
+  if (termo.digitos.length >= MIN_DIGITOS_NUMERO) {
+    for (const campo of [
+      ...(campos.documento ?? []),
+      ...(campos.identificador ?? []),
+    ]) {
       or.push(aninhar(campo, { contains: termo.digitos }));
     }
   }

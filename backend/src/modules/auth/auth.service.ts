@@ -21,6 +21,7 @@ import {
   PasswordResetService,
   RepositorioReset,
 } from './password-reset.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
 
 const RESET_TOKEN_LIFETIME_MINUTES = 60;
 const BCRYPT_ROUNDS = 10;
@@ -42,6 +43,7 @@ export class AuthService {
     private traccarService: TraccarService,
     private emailService: EmailService,
     private readonly reset: PasswordResetService,
+    private readonly whatsapp: WhatsappService,
   ) {}
 
   private checkRateLimit(key: string, max: number, windowMs: number): boolean {
@@ -258,8 +260,14 @@ export class AuthService {
     }
 
     const { phoneVerifiedAt, ...resto } = user;
-    // O painel usa esta flag pra abrir o popup obrigatório de cadastro do WhatsApp.
-    return { ...resto, phoneVerified: Boolean(phoneVerifiedAt) };
+    const verificado = Boolean(phoneVerifiedAt);
+    return {
+      ...resto,
+      phoneVerified: verificado,
+      // O popup bloqueia a navegação — exigir com o canal desligado trancaria
+      // o usuário fora do painel, sem como receber o código pra sair de lá.
+      phoneVerificationRequired: this.whatsapp.habilitado && !verificado,
+    };
   }
 
   // ---------------------------------------------------------------------------
