@@ -64,6 +64,30 @@ export const techApi = {
     const res = await techHttp.post('/tech/auth/login', { cpf, password });
     return unwrap<TechLoginResponse>(res.data);
   },
+  /** Pede o código de 6 dígitos no WhatsApp cadastrado. */
+  forgotPassword: async (
+    cpf: string,
+  ): Promise<{
+    message: string;
+    sentTo: string | null;
+    canUseWhatsapp: boolean;
+  }> => {
+    const res = await techHttp.post('/tech/auth/forgot-password', { cpf });
+    return unwrap(res.data);
+  },
+  /** Confere o código e grava a senha escolhida pelo técnico. */
+  resetPassword: async (
+    cpf: string,
+    code: string,
+    newPassword: string,
+  ): Promise<{ ok: true }> => {
+    const res = await techHttp.post('/tech/auth/reset-password', {
+      cpf,
+      code,
+      newPassword,
+    });
+    return unwrap(res.data);
+  },
   me: async (): Promise<TechMe> => {
     const res = await techHttp.get('/tech/auth/me');
     return unwrap<TechMe>(res.data);

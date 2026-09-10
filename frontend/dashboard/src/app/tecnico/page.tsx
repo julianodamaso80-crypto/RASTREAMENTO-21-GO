@@ -80,6 +80,7 @@ export default function TecnicoPage() {
   const [assignments, setAssignments] = useState<TechAssignment[] | null>(null);
   const [route, setRoute] = useState<TechRoute | null>(null);
   const [installing, setInstalling] = useState<TechAssignment | null>(null);
+  const [recuperandoSenha, setRecuperandoSenha] = useState(false);
 
   const loadMe = useCallback(async () => {
     if (!techApi.getToken()) {
@@ -137,7 +138,16 @@ export default function TecnicoPage() {
     );
   }
 
-  if (!me) return <LoginScreen onLogged={loadMe} />;
+  if (!me) {
+    return recuperandoSenha ? (
+      <ForgotPasswordScreen onBack={() => setRecuperandoSenha(false)} />
+    ) : (
+      <LoginScreen
+        onLogged={loadMe}
+        onForgot={() => setRecuperandoSenha(true)}
+      />
+    );
+  }
 
   if (me.mustChangePassword) {
     return <ChangePasswordScreen name={me.name} onDone={loadMe} onLogout={handleLogout} />;
@@ -170,7 +180,13 @@ export default function TecnicoPage() {
 
 /* ------------------------------- Login ---------------------------------- */
 
-function LoginScreen({ onLogged }: { onLogged: () => void }) {
+function LoginScreen({
+  onLogged,
+  onForgot,
+}: {
+  onLogged: () => void;
+  onForgot: () => void;
+}) {
   const [cpf, setCpf] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -236,9 +252,148 @@ function LoginScreen({ onLogged }: { onLogged: () => void }) {
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-xs text-muted-foreground">
-        Esqueceu a senha? Peça uma nova ao escritório.
-      </p>
+      <button
+        type="button"
+        onClick={onForgot}
+        className="mt-6 w-full text-center text-sm font-medium text-brand-orange-500 underline-offset-4 hover:underline"
+      >
+        Esqueci minha senha
+      </button>
+    </div>
+  );
+}
+
+/* ----------------------- Esqueci minha senha ----------------------------- */
+
+/**
+ * Duas etapas: pede o CPF, recebe o código no WhatsApp e escolhe a senha nova.
+ * O código nunca é a senha — quem escolhe a senha é o técnico.
+ */
+function ForgotPasswordScreen({ onBack }: { onBack: () => void }) {
+  const [etapa, setEtapa] = useState<'cpf' | 'codigo'>('cpf');
+  const [cpf, setCpf] = useState('');
+  const [enviadoPara, setEnviadoPara] = useState<string | null>(null);
+  const [codigo, setCodigo] = useState('');
+  const [senha, setSenha] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const pedirCodigo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cpf.replace(/\D/g, '').length !== 11) {
+      toast.error('Digite o CPF completo.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await techApi.forgotPassword(cpf.replace(/\D/g, ''));
+      setEnviadoPara(res.sentTo);
+      toast.success(res.message);
+      setEtapa('codigo');
+    } catch (err) {
+      toast.error(apiMessage(err, 'Não consegui enviar o código'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const definirSenha = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (senha.length < 6) {
+      toast.error('A nova senha precisa ter ao menos 6 caracteres.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await techApi.resetPassword(cpf.replace(/\D/g, ''), codigo, senha);
+      toast.success('Senha alterada. Entre com a senha nova.');
+      onBack();
+    } catch (err) {
+      toast.error(apiMessage(err, 'Código inválido ou expirado'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-[80dvh] flex-col justify-center">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-orange-500/15">
+          <KeyRound className="h-7 w-7 text-brand-orange-500" />
+        </div>
+        <h1 className="text-xl font-bold">Esqueci minha senha</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {etapa === 'cpf'
+            ? 'Vamos enviar um código no seu WhatsApp cadastrado.'
+            : `Código enviado para ${enviadoPara ?? 'o seu WhatsApp'}. Vale 15 minutos.`}
+        </p>
+      </div>
+
+      {etapa === 'cpf' ? (
+        <form onSubmit={pedirCodigo} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="cpf-recuperar">CPF</Label>
+            <Input
+              id="cpf-recuperar"
+              value={cpf}
+              onChange={(e) => setCpf(e.target.value)}
+              inputMode="numeric"
+              autoComplete="username"
+              className="h-12 text-lg"
+            />
+          </div>
+          <Button
+            type="submit"
+            className="h-12 w-full text-base"
+            disabled={loading}
+          >
+            {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+            Enviar código
+          </Button>
+        </form>
+      ) : (
+        <form onSubmit={definirSenha} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="codigo">Código de 6 números</Label>
+            <Input
+              id="codigo"
+              value={codigo}
+              onChange={(e) =>
+                setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))
+              }
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              className="h-12 text-center text-2xl tracking-[0.4em]"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="nova-senha">Nova senha</Label>
+            <Input
+              id="nova-senha"
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              autoComplete="new-password"
+              className="h-12 text-lg"
+            />
+          </div>
+          <Button
+            type="submit"
+            className="h-12 w-full text-base"
+            disabled={loading}
+          >
+            {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+            Salvar senha
+          </Button>
+        </form>
+      )}
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-6 text-center text-sm text-muted-foreground"
+      >
+        Voltar para o login
+      </button>
     </div>
   );
 }
