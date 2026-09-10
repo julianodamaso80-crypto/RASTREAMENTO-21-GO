@@ -305,19 +305,19 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   }, [vehicleMap, deviceMap, positionMap]);
 
   // Filtros
+  //
+  // A busca vem antes das abas: elas contam DENTRO do que a busca achou, senão
+  // "Todos" continuaria dizendo 491 com o termo escrito em cima e o operador
+  // leria isso como "não filtrou nada".
+  const searchedVehicles = useMemo(() => {
+    if (!searchQuery) return vehicles;
+    return vehicles.filter((v) => matchesVehicleSearch(v, searchQuery));
+  }, [vehicles, searchQuery]);
+
   const filteredVehicles = useMemo(() => {
-    let list = vehicles;
-
-    if (searchQuery) {
-      list = list.filter((v) => matchesVehicleSearch(v, searchQuery));
-    }
-
-    if (statusFilter !== 'all') {
-      list = list.filter((v) => v.displayStatus === statusFilter);
-    }
-
-    return list;
-  }, [vehicles, searchQuery, statusFilter]);
+    if (statusFilter === 'all') return searchedVehicles;
+    return searchedVehicles.filter((v) => v.displayStatus === statusFilter);
+  }, [searchedVehicles, statusFilter]);
 
   // Contadores
   const statusCounts = useMemo<StatusCounts>(() => {
@@ -328,12 +328,12 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       offline: 0,
       alert: 0,
     };
-    vehicles.forEach((v) => {
+    searchedVehicles.forEach((v) => {
       counts.total++;
       counts[v.displayStatus]++;
     });
     return counts;
-  }, [vehicles]);
+  }, [searchedVehicles]);
 
   // Só existe "o veículo selecionado" quando há exatamente um marcado. Com
   // vários, quem manda na tela é o painel de lista — e a câmera não persegue

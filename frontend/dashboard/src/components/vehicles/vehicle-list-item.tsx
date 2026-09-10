@@ -65,6 +65,14 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
           {statusLabel}
         </Badge>
       </div>
+      {/* De quem é o veículo. Sem isto, quem busca pelo nome do cliente vê uma
+          lista de placas e não tem como saber por que aquele carro apareceu —
+          parecia que a busca por nome não tinha filtrado nada. */}
+      {vehicle.associate?.name && (
+        <div className="mt-0.5 ml-4 text-xs font-medium text-foreground/80 truncate">
+          {vehicle.associate.name}
+        </div>
+      )}
       <div className="flex items-center justify-between mt-1 ml-4">
         <span className="text-xs text-muted-foreground">
           {vehicle.brand} {vehicle.model} · {vehicle.color}
