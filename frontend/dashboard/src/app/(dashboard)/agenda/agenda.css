@@ -1,0 +1,66 @@
+/*
+ * Ajustes do FullCalendar ao tema do painel.
+ *
+ * A v6 injeta o CSS próprio via JS, então aqui só entra o que precisa ceder ao
+ * nosso tema: as variáveis de cor da grade e o tamanho do texto do bloco, que
+ * no padrão da biblioteca fica grande demais para caber duas OS no mesmo dia.
+ */
+
+.fc {
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: color-mix(in oklab, var(--muted) 60%, transparent);
+  --fc-today-bg-color: color-mix(in oklab, var(--emerald-500, #f2911d) 12%, transparent);
+  --fc-list-event-hover-bg-color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.fc .fc-button {
+  background: var(--secondary);
+  border-color: var(--border);
+  color: var(--secondary-foreground);
+  text-transform: capitalize;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8125rem;
+}
+
+.fc .fc-button:hover {
+  background: var(--muted);
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.fc .fc-daygrid-event {
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc .fc-daygrid-day-number,
+.fc .fc-col-header-cell-cushion {
+  color: var(--muted-foreground);
+}
+
+.fc .fc-more-link {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+/* O item arrastado da fila herda o visual do bloco de instalação. */
+.fc-fila-item {
+  user-select: none;
+}
