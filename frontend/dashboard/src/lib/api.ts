@@ -109,9 +109,9 @@ export const authApi = {
   resetPassword: async (token: string, password: string): Promise<void> => {
     await api.post('/auth/reset-password', { token, password });
   },
-  /** Pede o código de 6 dígitos no WhatsApp cadastrado do usuário. */
+  /** Pede o código de 6 dígitos: a pessoa informa o WhatsApp cadastrado. */
   forgotPasswordWhatsapp: async (
-    email: string,
+    phone: string,
   ): Promise<{
     message: string;
     sentTo: string | null;
@@ -123,7 +123,7 @@ export const authApi = {
         sentTo: string | null;
         canUseWhatsapp: boolean;
       }>
-    >('/auth/forgot-password-whatsapp', { email });
+    >('/auth/forgot-password-whatsapp', { phone });
     return res.data.data;
   },
   /** Popup obrigatório: manda o código pro número informado. */
@@ -144,12 +144,12 @@ export const authApi = {
   },
   /** Confere o código e grava a senha nova. */
   resetPasswordWhatsapp: async (
-    email: string,
+    phone: string,
     code: string,
     newPassword: string,
   ): Promise<void> => {
     await api.post('/auth/reset-password-whatsapp', {
-      email,
+      phone,
       code,
       newPassword,
     });

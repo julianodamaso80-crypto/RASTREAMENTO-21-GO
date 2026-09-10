@@ -12,6 +12,8 @@ import {
   RepositorioReset,
 } from '../auth/password-reset.service';
 import { WhatsappService } from '../notifications/whatsapp.service';
+import { Prisma } from '.prisma/client';
+import { variantesTelefone } from '../auth/telefone';
 import { normalizeCpf } from '../technicians/technicians.service';
 import { TechLoginDto } from './dto/tech-login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -125,20 +127,31 @@ export class TechAuthService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Port do motor de recuperação sobre a tabela de técnicos.
+   * Port do motor de recuperação sobre a tabela de técnicos, achando o técnico
+   * pelo WhatsApp que ele digita.
    *
-   * Rota pública, antes do login: não há `tenantId`. O CPF é único por tenant,
-   * então a busca global pode encontrar o mesmo CPF em tenants diferentes —
-   * nesse caso não enviamos nada, e a resposta genérica cobre o caso sem
-   * revelar que houve ambiguidade.
+   * Rota pública, antes do login: não há `tenantId`. O mesmo número pode estar
+   * em tenants diferentes — nesse caso não enviamos nada, e a resposta genérica
+   * cobre o caso sem revelar que houve ambiguidade.
    */
   private repoReset(): RepositorioReset {
     return {
-      buscar: async (cpf) => {
-        const candidatos = await this.prisma.technician.findMany({
-          where: { cpf, deletedAt: null, active: true },
+      buscar: async (telefone) => {
+        const variantes = variantesTelefone(telefone);
+        if (!variantes.length) return null;
+        // Classe [^0-9] e não \D: o Prisma lê o template "cooked", onde \D vira D.
+        const achados = await this.prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM technicians
+          WHERE deleted_at IS NULL
+            AND active = true
+            AND regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') IN (${Prisma.join(variantes)})
+          LIMIT 2`;
+        if (achados.length !== 1) return null;
+        const t = await this.prisma.technician.findFirst({
+          where: { id: achados[0].id },
           select: {
             id: true,
+            cpf: true,
             phone: true,
             resetCodeHash: true,
             resetCodeExpiresAt: true,
@@ -146,7 +159,9 @@ export class TechAuthService {
             resetCodeSentAt: true,
           },
         });
-        return candidatos.length === 1 ? candidatos[0] : null;
+        if (!t) return null;
+        const { cpf, ...resto } = t;
+        return { ...resto, documento: cpf };
       },
       gravarCodigo: async (id, hash, expiraEm) => {
         await this.prisma.technician.update({
@@ -185,27 +200,23 @@ export class TechAuthService {
     };
   }
 
-  async forgotPassword(rawCpf: string) {
-    return this.reset.enviarCodigo(
-      this.repoReset(),
-      normalizeCpf(rawCpf),
-      'CPF',
-    );
+  async forgotPassword(telefone: string) {
+    return this.reset.enviarCodigo(this.repoReset(), telefone, 'WhatsApp');
   }
 
   async resetPasswordWithCode(
-    rawCpf: string,
+    telefone: string,
     codigo: string,
     novaSenha: string,
   ) {
-    const cpf = normalizeCpf(rawCpf);
     return this.reset.redefinirSenha(
       this.repoReset(),
-      cpf,
+      telefone,
       codigo,
       novaSenha,
-      (senha) => {
-        if (senha.replace(/\D/g, '') === cpf) {
+      (senha, sujeito) => {
+        const cpf = normalizeCpf(sujeito.documento ?? '');
+        if (cpf && senha.replace(/\D/g, '') === cpf) {
           throw new BadRequestException(
             'A nova senha não pode ser o seu CPF. Escolha outra.',
           );

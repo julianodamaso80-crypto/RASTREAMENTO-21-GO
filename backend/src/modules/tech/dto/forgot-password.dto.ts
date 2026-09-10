@@ -7,21 +7,20 @@ import {
   MinLength,
 } from 'class-validator';
 
-/** Pedido do código de recuperação do técnico — só o CPF. */
+/** Pedido do código de recuperação do técnico — só o WhatsApp. */
 export class TechForgotPasswordDto {
-  @ApiProperty({ example: '12345678901' })
+  @ApiProperty({ example: '(21) 99834-5046' })
   @IsString()
-  // 11 (CPF cru) a 14 (com máscara: 123.456.789-01).
-  @Length(11, 14, { message: 'Informe um CPF válido.' })
-  cpf!: string;
+  @Length(10, 20, { message: 'Informe o WhatsApp com DDD.' })
+  phone!: string;
 }
 
 /** Confirmação do código + senha nova. */
 export class TechResetPasswordDto {
-  @ApiProperty({ example: '12345678901' })
+  @ApiProperty({ example: '(21) 99834-5046' })
   @IsString()
-  @Length(11, 14, { message: 'Informe um CPF válido.' })
-  cpf!: string;
+  @Length(10, 20, { message: 'Informe o WhatsApp com DDD.' })
+  phone!: string;
 
   @ApiProperty({ example: '482913', description: 'Código de 6 dígitos' })
   @IsString()

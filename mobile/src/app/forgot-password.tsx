@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { AppApi } from '@/lib/api';
-import { maskDocumento, onlyDigits } from '@/lib/format';
+import { onlyDigits } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
 import { PasswordInput } from '@/components/password-input';
 
@@ -26,33 +26,34 @@ import { PasswordInput } from '@/components/password-input';
  */
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const [etapa, setEtapa] = useState<'cpf' | 'codigo'>('cpf');
-  const [cpf, setCpf] = useState('');
+  const [etapa, setEtapa] = useState<'whatsapp' | 'codigo'>('whatsapp');
+  const [whatsapp, setWhatsapp] = useState('');
   const [aviso, setAviso] = useState<string | null>(null);
   const [codigo, setCodigo] = useState('');
   const [nova, setNova] = useState('');
   const [confirma, setConfirma] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const cpfValido = [11, 14].includes(onlyDigits(cpf).length);
+  // Com DDD: 10 (fixo) ou 11 (celular) dígitos, e aceita o +55 na frente.
+  const whatsappValido = onlyDigits(whatsapp).length >= 10;
   const novaValida = nova.trim().length >= 6;
   const conferem = nova === confirma;
-  const naoEhCpf = onlyDigits(nova) !== onlyDigits(cpf) || !onlyDigits(nova);
-  const podeSalvar =
-    codigo.length === 6 && novaValida && conferem && naoEhCpf && !loading;
+  // "A senha não pode ser o CPF" é conferido no servidor, que conhece o CPF do
+  // cadastro — aqui o cliente digitou o WhatsApp, não o documento.
+  const podeSalvar = codigo.length === 6 && novaValida && conferem && !loading;
 
   async function pedirCodigo() {
-    if (!cpfValido || loading) return;
+    if (!whatsappValido || loading) return;
     setLoading(true);
     try {
-      const r = await AppApi.forgotPassword(onlyDigits(cpf));
+      const r = await AppApi.forgotPassword(onlyDigits(whatsapp));
       setAviso(
         r.sentTo
           ? `Enviamos um código no WhatsApp ${r.sentTo}.`
           : r.message,
       );
       // Avança mesmo sem confirmação de envio: a resposta é propositalmente
-      // igual pra CPF que existe e pra CPF que não existe.
+      // igual pra número cadastrado e pra número que não existe.
       setEtapa('codigo');
     } catch (e: any) {
       RNAlert.alert(
@@ -69,7 +70,7 @@ export default function ForgotPasswordScreen() {
     if (!podeSalvar) return;
     setLoading(true);
     try {
-      await AppApi.resetPassword(onlyDigits(cpf), codigo, nova);
+      await AppApi.resetPassword(onlyDigits(whatsapp), codigo, nova);
       RNAlert.alert(
         'Senha criada',
         'Pronto. Entre com a sua nova senha.',
@@ -95,33 +96,35 @@ export default function ForgotPasswordScreen() {
         <View style={styles.container}>
           <Text style={styles.title}>Esqueci minha senha</Text>
 
-          {etapa === 'cpf' ? (
+          {etapa === 'whatsapp' ? (
             <>
               <Text style={styles.subtitle}>
-                Digite o seu CPF. Vamos mandar um código no WhatsApp que está
-                cadastrado na sua associação.
+                Digite o seu WhatsApp cadastrado na associação. Vamos mandar um
+                código nele.
               </Text>
 
               <View style={styles.field}>
-                <Text style={styles.label}>CPF</Text>
+                <Text style={styles.label}>WhatsApp com DDD</Text>
                 <TextInput
-                  value={cpf}
-                  onChangeText={(t) => setCpf(maskDocumento(t))}
-                  placeholder="000.000.000-00"
+                  value={whatsapp}
+                  onChangeText={setWhatsapp}
+                  placeholder="(21) 99999-8888"
                   placeholderTextColor={colors.textFaint}
-                  keyboardType="number-pad"
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
+                  textContentType="telephoneNumber"
                   style={styles.input}
-                  maxLength={18}
+                  maxLength={20}
                 />
               </View>
 
               <TouchableOpacity
                 onPress={pedirCodigo}
-                disabled={!cpfValido || loading}
+                disabled={!whatsappValido || loading}
                 activeOpacity={0.85}
                 style={[
                   styles.button,
-                  (!cpfValido || loading) && styles.buttonOff,
+                  (!whatsappValido || loading) && styles.buttonOff,
                 ]}
               >
                 {loading ? (
@@ -135,7 +138,7 @@ export default function ForgotPasswordScreen() {
             <>
               <Text style={styles.subtitle}>
                 {aviso ??
-                  'Se esse CPF estiver cadastrado, enviamos um código no WhatsApp.'}
+                  'Se esse WhatsApp estiver cadastrado, enviamos um código nele.'}
               </Text>
 
               <View style={styles.field}>
@@ -174,11 +177,6 @@ export default function ForgotPasswordScreen() {
               {!!confirma && !conferem && (
                 <Text style={styles.erro}>As duas senhas não são iguais.</Text>
               )}
-              {novaValida && !naoEhCpf && (
-                <Text style={styles.erro}>
-                  A nova senha não pode ser o seu CPF.
-                </Text>
-              )}
 
               <TouchableOpacity
                 onPress={salvarSenha}
@@ -195,7 +193,7 @@ export default function ForgotPasswordScreen() {
 
               <TouchableOpacity
                 onPress={() => {
-                  setEtapa('cpf');
+                  setEtapa('whatsapp');
                   setCodigo('');
                 }}
                 style={styles.link}

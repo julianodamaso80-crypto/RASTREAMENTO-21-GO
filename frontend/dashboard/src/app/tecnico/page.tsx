@@ -283,12 +283,12 @@ function LoginScreen({
 /* ----------------------- Esqueci minha senha ----------------------------- */
 
 /**
- * Duas etapas: pede o CPF, recebe o código no WhatsApp e escolhe a senha nova.
- * O código nunca é a senha — quem escolhe a senha é o técnico.
+ * Duas etapas: pede o WhatsApp, manda o código nele e o técnico escolhe a senha
+ * nova. O código nunca é a senha — quem escolhe a senha é o técnico.
  */
 function ForgotPasswordScreen({ onBack }: { onBack: () => void }) {
-  const [etapa, setEtapa] = useState<'cpf' | 'codigo'>('cpf');
-  const [cpf, setCpf] = useState('');
+  const [etapa, setEtapa] = useState<'whatsapp' | 'codigo'>('whatsapp');
+  const [whatsapp, setWhatsapp] = useState('');
   const [enviadoPara, setEnviadoPara] = useState<string | null>(null);
   const [codigo, setCodigo] = useState('');
   const [senha, setSenha] = useState('');
@@ -296,13 +296,13 @@ function ForgotPasswordScreen({ onBack }: { onBack: () => void }) {
 
   const pedirCodigo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (cpf.replace(/\D/g, '').length !== 11) {
-      toast.error('Digite o CPF completo.');
+    if (whatsapp.replace(/\D/g, '').length < 10) {
+      toast.error('Digite o WhatsApp com DDD.');
       return;
     }
     setLoading(true);
     try {
-      const res = await techApi.forgotPassword(cpf.replace(/\D/g, ''));
+      const res = await techApi.forgotPassword(whatsapp);
       setEnviadoPara(res.sentTo);
       toast.success(res.message);
       setEtapa('codigo');
@@ -321,7 +321,7 @@ function ForgotPasswordScreen({ onBack }: { onBack: () => void }) {
     }
     setLoading(true);
     try {
-      await techApi.resetPassword(cpf.replace(/\D/g, ''), codigo, senha);
+      await techApi.resetPassword(whatsapp, codigo, senha);
       toast.success('Senha alterada. Entre com a senha nova.');
       onBack();
     } catch (err) {
@@ -339,22 +339,23 @@ function ForgotPasswordScreen({ onBack }: { onBack: () => void }) {
         </div>
         <h1 className="text-xl font-bold">Esqueci minha senha</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {etapa === 'cpf'
-            ? 'Vamos enviar um código no seu WhatsApp cadastrado.'
+          {etapa === 'whatsapp'
+            ? 'Digite o seu WhatsApp cadastrado. Vamos mandar um código nele.'
             : `Código enviado para ${enviadoPara ?? 'o seu WhatsApp'}. Vale 15 minutos.`}
         </p>
       </div>
 
-      {etapa === 'cpf' ? (
+      {etapa === 'whatsapp' ? (
         <form onSubmit={pedirCodigo} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="cpf-recuperar">CPF</Label>
+            <Label htmlFor="whatsapp-recuperar">WhatsApp com DDD</Label>
             <Input
-              id="cpf-recuperar"
-              value={cpf}
-              onChange={(e) => setCpf(e.target.value)}
-              inputMode="numeric"
-              autoComplete="username"
+              id="whatsapp-recuperar"
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(21) 99999-8888"
               className="h-12 text-lg"
             />
           </div>

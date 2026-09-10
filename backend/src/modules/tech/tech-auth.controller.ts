@@ -37,11 +37,11 @@ export class TechAuthController {
   @ApiOperation({
     summary: 'Envia código de 6 dígitos no WhatsApp cadastrado do técnico',
     description:
-      'Responde igual exista ou não o CPF — a rota não pode virar consulta de ' +
-      '"esse CPF trabalha com vocês?". Um envio a cada 2 minutos por CPF.',
+      'O técnico informa o WhatsApp; o código vai para esse número. Responde ' +
+      'igual exista ou não o cadastro. Um envio a cada 2 minutos.',
   })
   forgotPassword(@Body() dto: TechForgotPasswordDto) {
-    return this.service.forgotPassword(dto.cpf);
+    return this.service.forgotPassword(dto.phone);
   }
 
   @Public()
@@ -49,7 +49,7 @@ export class TechAuthController {
   @ApiOperation({ summary: 'Confere o código e grava a senha nova' })
   resetPassword(@Body() dto: TechResetPasswordDto) {
     return this.service.resetPasswordWithCode(
-      dto.cpf,
+      dto.phone,
       dto.code,
       dto.newPassword,
     );

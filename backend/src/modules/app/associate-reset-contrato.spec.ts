@@ -18,6 +18,7 @@ describe('Contrato de recuperação do associado', () => {
     enviados = [];
     associado = {
       id: 'a-1',
+      cpf: '08577590780',
       phone: '21999998888',
       resetCodeHash: null,
       resetCodeExpiresAt: null,
@@ -25,6 +26,7 @@ describe('Contrato de recuperação do associado', () => {
       resetCodeSentAt: null,
     };
     const prisma = {
+      $queryRaw: jest.fn(async () => [{ id: 'a-1' }]),
       associate: {
         findFirst: jest.fn(async () => associado),
         update: jest.fn(
@@ -91,6 +93,26 @@ describe('Contrato de recuperação do associado', () => {
 
     await expect(
       service.resetPasswordWithCode('08577590780', enviados[0], '08577590780'),
+    ).rejects.toThrow('A nova senha não pode ser o seu CPF. Escolha outra.');
+  });
+
+  it('pelo WhatsApp: acha o associado e manda o código pro número dele', async () => {
+    const res = await service.forgotPasswordByPhone('(21) 99999-8888');
+
+    expect(enviados[0]).toMatch(/^\d{6}$/);
+    expect(res.sentTo).toBe('*****-8888');
+    expect(res.message).toContain('Se esse WhatsApp estiver cadastrado');
+  });
+
+  it('pelo WhatsApp: continua recusando senha igual ao CPF do cadastro', async () => {
+    await service.forgotPasswordByPhone('21999998888');
+
+    await expect(
+      service.resetPasswordWithCodeByPhone(
+        '21999998888',
+        enviados[0],
+        '085.775.907-80',
+      ),
     ).rejects.toThrow('A nova senha não pode ser o seu CPF. Escolha outra.');
   });
 });

@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import {
   ForgotPasswordDto,
+  ForgotPasswordWhatsappDto,
   ResetPasswordWhatsappDto,
 } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -96,11 +97,12 @@ export class AuthController {
   @ApiOperation({
     summary: 'Envia código de 6 dígitos no WhatsApp cadastrado do usuário',
     description:
-      'Responde igual exista ou não o e-mail (anti-enumeração). Um envio a ' +
-      'cada 2 minutos por e-mail. O código vale 15 minutos.',
+      'A pessoa informa o WhatsApp; a conta é achada por ele e o código vai ' +
+      'para esse número. Responde igual exista ou não (anti-enumeração). Um ' +
+      'envio a cada 2 minutos. O código vale 15 minutos.',
   })
-  forgotPasswordWhatsapp(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPasswordWhatsapp(dto.email);
+  forgotPasswordWhatsapp(@Body() dto: ForgotPasswordWhatsappDto) {
+    return this.authService.forgotPasswordWhatsapp(dto.phone);
   }
 
   @Public()
@@ -112,7 +114,7 @@ export class AuthController {
   })
   resetPasswordWhatsapp(@Body() dto: ResetPasswordWhatsappDto) {
     return this.authService.resetPasswordWhatsapp(
-      dto.email,
+      dto.phone,
       dto.code,
       dto.newPassword,
     );
