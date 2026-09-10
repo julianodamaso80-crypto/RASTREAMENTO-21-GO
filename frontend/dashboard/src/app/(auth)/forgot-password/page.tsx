@@ -12,8 +12,12 @@ import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api';
 import { toast } from 'sonner';
 
-const emailSchema = z.object({
-  email: z.string().email({ message: 'Email inválido' }),
+const whatsappSchema = z.object({
+  phone: z
+    .string()
+    .refine((v) => v.replace(/\D/g, '').length >= 10, {
+      message: 'Informe o WhatsApp com DDD',
+    }),
 });
 
 const codigoSchema = z.object({
@@ -23,7 +27,7 @@ const codigoSchema = z.object({
     .min(6, { message: 'A nova senha precisa ter ao menos 6 caracteres' }),
 });
 
-type EmailValues = z.infer<typeof emailSchema>;
+type WhatsappValues = z.infer<typeof whatsappSchema>;
 type CodigoValues = z.infer<typeof codigoSchema>;
 
 function BrandHeader() {
@@ -49,22 +53,22 @@ function BrandHeader() {
 }
 
 /**
- * Recuperação de senha em duas etapas: informa o e-mail, recebe um código de
- * 6 dígitos no WhatsApp cadastrado e escolhe ali mesmo a senha nova.
+ * Recuperação de senha em duas etapas: informa o WhatsApp cadastrado, recebe
+ * nele um código de 6 dígitos e escolhe ali mesmo a senha nova.
  *
  * O código nunca é a senha, e não vai link nenhum na mensagem — link em
  * WhatsApp é o formato do golpe, e a plataforma não treina o usuário a clicar.
  */
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const [etapa, setEtapa] = useState<'email' | 'codigo'>('email');
-  const [email, setEmail] = useState('');
+  const [etapa, setEtapa] = useState<'whatsapp' | 'codigo'>('whatsapp');
+  const [whatsapp, setWhatsapp] = useState('');
   const [enviadoPara, setEnviadoPara] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const formEmail = useForm<EmailValues>({
-    resolver: zodResolver(emailSchema),
-    defaultValues: { email: '' },
+  const formWhatsapp = useForm<WhatsappValues>({
+    resolver: zodResolver(whatsappSchema),
+    defaultValues: { phone: '' },
   });
 
   const formCodigo = useForm<CodigoValues>({
@@ -72,11 +76,11 @@ export default function ForgotPasswordPage() {
     defaultValues: { code: '', newPassword: '' },
   });
 
-  const pedirCodigo = async (values: EmailValues) => {
+  const pedirCodigo = async (values: WhatsappValues) => {
     setSubmitting(true);
     try {
-      const res = await authApi.forgotPasswordWhatsapp(values.email);
-      setEmail(values.email);
+      const res = await authApi.forgotPasswordWhatsapp(values.phone);
+      setWhatsapp(values.phone);
       setEnviadoPara(res.sentTo);
       toast.success(res.message);
       setEtapa('codigo');
@@ -86,8 +90,8 @@ export default function ForgotPasswordPage() {
         toast.error('Muitas tentativas. Tente novamente mais tarde.');
       } else {
         // Erro genérico segue pra etapa do código: revelar falha aqui entregaria
-        // quais e-mails existem.
-        setEmail(values.email);
+        // quais números estão cadastrados.
+        setWhatsapp(values.phone);
         setEtapa('codigo');
       }
     } finally {
@@ -98,7 +102,7 @@ export default function ForgotPasswordPage() {
   const salvarSenha = async (values: CodigoValues) => {
     setSubmitting(true);
     try {
-      await authApi.resetPasswordWhatsapp(email, values.code, values.newPassword);
+      await authApi.resetPasswordWhatsapp(whatsapp, values.code, values.newPassword);
       toast.success('Senha alterada. Entre com a senha nova.');
       router.push('/login');
     } catch {
@@ -173,11 +177,11 @@ export default function ForgotPasswordPage() {
 
         <button
           type="button"
-          onClick={() => setEtapa('email')}
+          onClick={() => setEtapa('whatsapp')}
           className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-orange-600 hover:text-brand-orange-700 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Usar outro e-mail
+          Usar outro número
         </button>
       </div>
     );
@@ -193,26 +197,27 @@ export default function ForgotPasswordPage() {
 
       <h1 className="text-2xl font-bold text-slate-900">Esqueceu sua senha?</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Informe seu e-mail e enviaremos um código no seu WhatsApp cadastrado.
+        Digite o seu WhatsApp cadastrado e enviaremos um código nele.
       </p>
 
-      <form onSubmit={formEmail.handleSubmit(pedirCodigo)} className="mt-8 space-y-5" noValidate>
+      <form onSubmit={formWhatsapp.handleSubmit(pedirCodigo)} className="mt-8 space-y-5" noValidate>
         <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium text-slate-700">
-            Email
+          <label htmlFor="phone" className="text-sm font-medium text-slate-700">
+            WhatsApp com DDD
           </label>
           <Input
-            id="email"
-            type="email"
-            autoComplete="email"
+            id="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             autoFocus
-            placeholder="seu@email.com"
-            aria-invalid={!!formEmail.formState.errors.email}
+            placeholder="(21) 99999-8888"
+            aria-invalid={!!formWhatsapp.formState.errors.phone}
             className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
-            {...formEmail.register('email')}
+            {...formWhatsapp.register('phone')}
           />
-          {formEmail.formState.errors.email && (
-            <p className="text-xs text-red-600">{formEmail.formState.errors.email.message}</p>
+          {formWhatsapp.formState.errors.phone && (
+            <p className="text-xs text-red-600">{formWhatsapp.formState.errors.phone.message}</p>
           )}
         </div>
 

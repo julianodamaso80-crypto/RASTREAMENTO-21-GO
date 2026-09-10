@@ -66,23 +66,23 @@ export const techApi = {
   },
   /** Pede o código de 6 dígitos no WhatsApp cadastrado. */
   forgotPassword: async (
-    cpf: string,
+    phone: string,
   ): Promise<{
     message: string;
     sentTo: string | null;
     canUseWhatsapp: boolean;
   }> => {
-    const res = await techHttp.post('/tech/auth/forgot-password', { cpf });
+    const res = await techHttp.post('/tech/auth/forgot-password', { phone });
     return unwrap(res.data);
   },
   /** Confere o código e grava a senha escolhida pelo técnico. */
   resetPassword: async (
-    cpf: string,
+    phone: string,
     code: string,
     newPassword: string,
   ): Promise<{ ok: true }> => {
     const res = await techHttp.post('/tech/auth/reset-password', {
-      cpf,
+      phone,
       code,
       newPassword,
     });

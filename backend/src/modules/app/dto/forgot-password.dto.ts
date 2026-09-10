@@ -1,22 +1,46 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, Length, Matches, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
-/** Pedido do código de recuperação — só o CPF. */
+/**
+ * Pedido do código de recuperação: WhatsApp (telas novas) ou CPF (app
+ * publicado nas lojas, que ainda pede o documento). Um dos dois é obrigatório.
+ */
 export class AssociateForgotPasswordDto {
-  @ApiProperty({ example: '08577590780' })
+  @ApiPropertyOptional({ example: '08577590780' })
+  @IsOptional()
   @IsString()
   // 11 (CPF cru) a 18 (CNPJ com máscara: 49.410.571/0001-93).
   @Length(11, 18, { message: 'Informe um CPF ou CNPJ válido.' })
-  cpf!: string;
+  cpf?: string;
+
+  @ApiPropertyOptional({ example: '(21) 99834-5046' })
+  @IsOptional()
+  @IsString()
+  @Length(10, 20, { message: 'Informe o WhatsApp com DDD.' })
+  phone?: string;
 }
 
-/** Confirmação do código + senha nova. */
+/** Confirmação do código + senha nova — pelo mesmo caminho do pedido. */
 export class AssociateResetPasswordDto {
-  @ApiProperty({ example: '08577590780' })
+  @ApiPropertyOptional({ example: '08577590780' })
+  @IsOptional()
   @IsString()
   // 11 (CPF cru) a 18 (CNPJ com máscara: 49.410.571/0001-93).
   @Length(11, 18, { message: 'Informe um CPF ou CNPJ válido.' })
-  cpf!: string;
+  cpf?: string;
+
+  @ApiPropertyOptional({ example: '(21) 99834-5046' })
+  @IsOptional()
+  @IsString()
+  @Length(10, 20, { message: 'Informe o WhatsApp com DDD.' })
+  phone?: string;
 
   @ApiProperty({ example: '482913', description: 'Código de 6 dígitos' })
   @IsString()

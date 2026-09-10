@@ -14,6 +14,11 @@ const BCRYPT_ROUNDS = 10;
 export interface SujeitoReset {
   id: string;
   phone: string | null;
+  /**
+   * CPF/CNPJ do cadastro, quando o mundo tem. Quem entra pelo WhatsApp não
+   * digita o documento, e a regra "a senha não pode ser o CPF" precisa dele.
+   */
+  documento?: string | null;
   resetCodeHash: string | null;
   resetCodeExpiresAt: Date | null;
   resetCodeAttempts: number;
@@ -140,7 +145,7 @@ export class PasswordResetService {
     identificador: string,
     codigo: string,
     novaSenha: string,
-    validarSenha?: (senha: string) => void,
+    validarSenha?: (senha: string, sujeito: SujeitoReset) => void,
   ): Promise<{ ok: true }> {
     const digitos = (codigo || '').replace(/\D/g, '');
     const sujeito = await repo.buscar(identificador);
@@ -175,7 +180,7 @@ export class PasswordResetService {
       throw invalido;
     }
 
-    validarSenha?.(novaSenha);
+    validarSenha?.(novaSenha, sujeito);
     if (novaSenha.trim().length < 6) {
       throw new BadRequestException(
         'A nova senha precisa ter ao menos 6 caracteres.',

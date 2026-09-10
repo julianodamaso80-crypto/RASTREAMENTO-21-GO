@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators';
 import { AssociateAuthService } from './associate-auth.service';
@@ -37,18 +44,30 @@ export class AssociateAuthController {
       'de "esse CPF é cliente?". Um envio a cada 2 minutos por CPF.',
   })
   async forgotPassword(@Body() dto: AssociateForgotPasswordDto) {
-    return this.service.forgotPassword(dto.cpf);
+    if (dto.phone) return this.service.forgotPasswordByPhone(dto.phone);
+    if (dto.cpf) return this.service.forgotPassword(dto.cpf);
+    throw new BadRequestException('Informe o seu WhatsApp.');
   }
 
   @Public()
   @Post('reset-password')
   @ApiOperation({ summary: 'Confere o código e grava a senha nova' })
   async resetPassword(@Body() dto: AssociateResetPasswordDto) {
-    return this.service.resetPasswordWithCode(
-      dto.cpf,
-      dto.code,
-      dto.newPassword,
-    );
+    if (dto.phone) {
+      return this.service.resetPasswordWithCodeByPhone(
+        dto.phone,
+        dto.code,
+        dto.newPassword,
+      );
+    }
+    if (dto.cpf) {
+      return this.service.resetPasswordWithCode(
+        dto.cpf,
+        dto.code,
+        dto.newPassword,
+      );
+    }
+    throw new BadRequestException('Informe o seu WhatsApp.');
   }
 
   @Public()

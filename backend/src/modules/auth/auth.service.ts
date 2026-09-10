@@ -22,6 +22,8 @@ import {
   RepositorioReset,
 } from './password-reset.service';
 import { WhatsappService } from '../notifications/whatsapp.service';
+import { Prisma } from '.prisma/client';
+import { variantesTelefone } from './telefone';
 
 const RESET_TOKEN_LIFETIME_MINUTES = 60;
 const BCRYPT_ROUNDS = 10;
@@ -281,13 +283,22 @@ export class AuthService {
   /** Port do motor de recuperação sobre a tabela de usuários do painel. */
   private repoReset(): RepositorioReset {
     return {
-      buscar: async (email) => {
+      buscar: async (telefone) => {
+        // Só telefone VERIFICADO recebe código — é o número que a pessoa
+        // provou ter no popup do login.
+        const variantes = variantesTelefone(telefone);
+        if (!variantes.length) return null;
+        const achados = await this.prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM users
+          WHERE deleted_at IS NULL
+            AND active = true
+            AND phone_verified_at IS NOT NULL
+            AND regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') IN (${Prisma.join(variantes)})
+          LIMIT 2`;
+        // Mesmo número em duas contas: ninguém recebe, e a resposta neutra cobre.
+        if (achados.length !== 1) return null;
         const u = await this.prisma.user.findFirst({
-          where: {
-            email: email.trim().toLowerCase(),
-            active: true,
-            deletedAt: null,
-          },
+          where: { id: achados[0].id },
           select: {
             id: true,
             phone: true,
@@ -340,18 +351,18 @@ export class AuthService {
     };
   }
 
-  async forgotPasswordWhatsapp(email: string) {
-    return this.reset.enviarCodigo(this.repoReset(), email, 'e-mail');
+  async forgotPasswordWhatsapp(telefone: string) {
+    return this.reset.enviarCodigo(this.repoReset(), telefone, 'WhatsApp');
   }
 
   async resetPasswordWhatsapp(
-    email: string,
+    telefone: string,
     codigo: string,
     novaSenha: string,
   ) {
     return this.reset.redefinirSenha(
       this.repoReset(),
-      email,
+      telefone,
       codigo,
       novaSenha,
     );

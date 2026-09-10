@@ -13,7 +13,10 @@ import { WhatsappService } from '../notifications/whatsapp.service';
 import {
   PasswordResetService,
   RepositorioReset,
+  SujeitoReset,
 } from '../auth/password-reset.service';
+import { Prisma } from '.prisma/client';
+import { variantesTelefone } from '../auth/telefone';
 import { AssociateLoginDto } from './dto/associate-login.dto';
 import {
   docVariants,
@@ -346,22 +349,58 @@ export class AssociateAuthService {
    * O motor (`PasswordResetService`) é o mesmo do painel e do PWA do técnico:
    * as travas — validade, tentativas, anti-flood, resposta neutra — vivem lá.
    */
-  private repoReset(): RepositorioReset {
+  private static readonly CAMPOS_RESET = {
+    id: true,
+    cpf: true,
+    phone: true,
+    resetCodeHash: true,
+    resetCodeExpiresAt: true,
+    resetCodeAttempts: true,
+    resetCodeSentAt: true,
+  } as const;
+
+  /** App publicado nas lojas: o associado digita o CPF. */
+  private async buscarPorCpf(doc: string): Promise<SujeitoReset | null> {
+    const a = await this.prisma.associate.findFirst({
+      where: { cpf: { in: docVariants(doc) }, deletedAt: null },
+      select: AssociateAuthService.CAMPOS_RESET,
+    });
+    if (!a) return null;
+    const { cpf, ...resto } = a;
+    return { ...resto, documento: cpf };
+  }
+
+  /**
+   * Caminho novo: o associado digita o WhatsApp. O código vai para o mesmo
+   * número que ele digitou e que está no cadastro — só quem tem o aparelho
+   * recebe. Número presente em dois cadastros: ninguém recebe.
+   */
+  private async buscarPorTelefone(
+    telefone: string,
+  ): Promise<SujeitoReset | null> {
+    const variantes = variantesTelefone(telefone);
+    if (!variantes.length) return null;
+    // Classe [^0-9] e não \D: o Prisma lê o template "cooked", onde \D vira D.
+    const achados = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM associates
+      WHERE deleted_at IS NULL
+        AND regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') IN (${Prisma.join(variantes)})
+      LIMIT 2`;
+    if (achados.length !== 1) return null;
+    const a = await this.prisma.associate.findFirst({
+      where: { id: achados[0].id },
+      select: AssociateAuthService.CAMPOS_RESET,
+    });
+    if (!a) return null;
+    const { cpf, ...resto } = a;
+    return { ...resto, documento: cpf };
+  }
+
+  private repoReset(
+    buscar: (identificador: string) => Promise<SujeitoReset | null>,
+  ): RepositorioReset {
     return {
-      buscar: async (doc) => {
-        const a = await this.prisma.associate.findFirst({
-          where: { cpf: { in: docVariants(doc) }, deletedAt: null },
-          select: {
-            id: true,
-            phone: true,
-            resetCodeHash: true,
-            resetCodeExpiresAt: true,
-            resetCodeAttempts: true,
-            resetCodeSentAt: true,
-          },
-        });
-        return a ?? null;
-      },
+      buscar,
       gravarCodigo: async (id, hash, expiraEm) => {
         await this.prisma.associate.update({
           where: { id },
@@ -414,7 +453,33 @@ export class AssociateAuthService {
         canUseWhatsapp: this.whatsapp.habilitado,
       };
     }
-    return this.reset.enviarCodigo(this.repoReset(), cpf, 'CPF');
+    return this.reset.enviarCodigo(
+      this.repoReset((d) => this.buscarPorCpf(d)),
+      cpf,
+      'CPF',
+    );
+  }
+
+  /** "Esqueci a senha" pelo WhatsApp — o caminho que todas as telas usam. */
+  async forgotPasswordByPhone(telefone: string) {
+    return this.reset.enviarCodigo(
+      this.repoReset((t) => this.buscarPorTelefone(t)),
+      telefone,
+      'WhatsApp',
+    );
+  }
+
+  /** Mesma regra dos dois caminhos: a senha nova não pode ser o documento. */
+  private static validarSenhaNaoEhDocumento(
+    senha: string,
+    sujeito: SujeitoReset,
+  ) {
+    const doc = normalizeDoc(sujeito.documento ?? '');
+    if (doc && normalizeDoc(senha) === doc) {
+      throw new BadRequestException(
+        'A nova senha não pode ser o seu CPF. Escolha outra.',
+      );
+    }
   }
 
   /**
@@ -430,17 +495,25 @@ export class AssociateAuthService {
   ): Promise<{ ok: true }> {
     const cpf = normalizeDoc(rawCpf);
     return this.reset.redefinirSenha(
-      this.repoReset(),
+      this.repoReset((d) => this.buscarPorCpf(d)),
       cpf,
       codigo,
       novaSenha,
-      (senha) => {
-        if (normalizeDoc(senha) === cpf) {
-          throw new BadRequestException(
-            'A nova senha não pode ser o seu CPF. Escolha outra.',
-          );
-        }
-      },
+      AssociateAuthService.validarSenhaNaoEhDocumento,
+    );
+  }
+
+  async resetPasswordWithCodeByPhone(
+    telefone: string,
+    codigo: string,
+    novaSenha: string,
+  ): Promise<{ ok: true }> {
+    return this.reset.redefinirSenha(
+      this.repoReset((t) => this.buscarPorTelefone(t)),
+      telefone,
+      codigo,
+      novaSenha,
+      AssociateAuthService.validarSenhaNaoEhDocumento,
     );
   }
 

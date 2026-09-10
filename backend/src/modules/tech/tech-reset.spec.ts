@@ -19,6 +19,7 @@ describe('Recuperação de senha do técnico', () => {
     tecnico = {
       id: 't-1',
       name: 'Marcos',
+      cpf: '12345678901',
       phone: '21988887777',
       resetCodeHash: null,
       resetCodeExpiresAt: null,
@@ -26,6 +27,7 @@ describe('Recuperação de senha do técnico', () => {
       resetCodeSentAt: null,
     };
     const prisma = {
+      $queryRaw: jest.fn(async () => [{ id: 't-1' }]),
       technician: {
         findFirst: jest.fn(async () => tecnico),
         findMany: jest.fn(async () => [tecnico]),
@@ -67,16 +69,16 @@ describe('Recuperação de senha do técnico', () => {
   });
 
   it('envia o código pro WhatsApp do técnico', async () => {
-    const res = await service.forgotPassword('12345678901');
+    const res = await service.forgotPassword('(21) 98888-7777');
 
     expect(enviados[0]).toMatch(/^\d{6}$/);
     expect(res.sentTo).toBe('*****-7777');
   });
 
   it('grava a senha nova e libera o mustChangePassword', async () => {
-    await service.forgotPassword('12345678901');
+    await service.forgotPassword('(21) 98888-7777');
     const res = await service.resetPasswordWithCode(
-      '12345678901',
+      '21988887777',
       enviados[0],
       'senhaDoTecnico1',
     );
@@ -89,18 +91,18 @@ describe('Recuperação de senha do técnico', () => {
   });
 
   it('recusa código errado', async () => {
-    await service.forgotPassword('12345678901');
+    await service.forgotPassword('(21) 98888-7777');
 
     await expect(
-      service.resetPasswordWithCode('12345678901', '000000', 'senhaDoTecnico1'),
+      service.resetPasswordWithCode('21988887777', '000000', 'senhaDoTecnico1'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('recusa senha igual ao CPF', async () => {
-    await service.forgotPassword('12345678901');
+    await service.forgotPassword('(21) 98888-7777');
 
     await expect(
-      service.resetPasswordWithCode('12345678901', enviados[0], '12345678901'),
+      service.resetPasswordWithCode('21988887777', enviados[0], '12345678901'),
     ).rejects.toThrow('A nova senha não pode ser o seu CPF. Escolha outra.');
   });
 });
