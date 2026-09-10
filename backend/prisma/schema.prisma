@@ -398,6 +398,21 @@ model User {
   tenantId            String    @map("tenant_id") @db.Uuid
   resetTokenHash      String?   @map("reset_token_hash")
   resetTokenExpiresAt DateTime? @map("reset_token_expires_at")
+
+  // --- Recuperação de senha por código no WhatsApp ---
+  /// Telefone verificado. Só ele recebe código de recuperação.
+  phone               String?   @map("phone")
+  /// Número informado no popup, ainda não confirmado por código.
+  pendingPhone        String?   @map("pending_phone")
+  /// Quando o número foi confirmado por código. Null = não verificado.
+  phoneVerifiedAt     DateTime? @map("phone_verified_at")
+  /// Hash do código de 6 dígitos (nunca o código em texto puro).
+  resetCodeHash       String?   @map("reset_code_hash")
+  resetCodeExpiresAt  DateTime? @map("reset_code_expires_at")
+  /// Tentativas erradas. Estoura o limite, o código morre.
+  resetCodeAttempts   Int       @default(0) @map("reset_code_attempts")
+  /// Quando o último código saiu — base do anti-flood.
+  resetCodeSentAt     DateTime? @map("reset_code_sent_at")
   deletedAt           DateTime? @map("deleted_at")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
@@ -571,6 +586,11 @@ model Associate {
   resetCodeAttempts  Int       @default(0) @map("reset_code_attempts")
   /// Quando o último código foi enviado — base do limite de envios por hora.
   resetCodeSentAt    DateTime? @map("reset_code_sent_at")
+  /// Número informado no popup, ainda não confirmado por código.
+  pendingPhone       String?   @map("pending_phone")
+  /// Quando o número foi confirmado por código. Null = não verificado.
+  /// Telefone vindo do SGA NÃO conta como verificado — ninguém provou que recebe.
+  phoneVerifiedAt    DateTime? @map("phone_verified_at")
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -597,6 +617,20 @@ model Technician {
   password            String?
   mustChangePassword  Boolean   @default(true) @map("must_change_password")
   lastLoginAt         DateTime? @map("last_login_at")
+
+  // --- Recuperação de senha por código no WhatsApp ---
+  /// Número informado no popup, ainda não confirmado por código.
+  pendingPhone        String?   @map("pending_phone")
+  /// Quando o número foi confirmado por código. Null = não verificado.
+  phoneVerifiedAt     DateTime? @map("phone_verified_at")
+  /// Hash do código de 6 dígitos (nunca o código em texto puro).
+  resetCodeHash       String?   @map("reset_code_hash")
+  resetCodeExpiresAt  DateTime? @map("reset_code_expires_at")
+  /// Tentativas erradas. Estoura o limite, o código morre.
+  resetCodeAttempts   Int       @default(0) @map("reset_code_attempts")
+  /// Quando o último código saiu — base do anti-flood.
+  resetCodeSentAt     DateTime? @map("reset_code_sent_at")
+
   tenantId            String    @map("tenant_id") @db.Uuid
   deletedAt           DateTime? @map("deleted_at")
   createdAt           DateTime  @default(now()) @map("created_at")
