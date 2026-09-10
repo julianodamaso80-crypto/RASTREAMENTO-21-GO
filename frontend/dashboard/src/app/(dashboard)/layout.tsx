@@ -50,8 +50,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   if (!isAuthenticated) return null;
 
   // Sem WhatsApp confirmado não se navega: é esse número que recebe o código
-  // quando a pessoa esquecer a senha.
-  if (user && user.phoneVerified === false) {
+  // quando a pessoa esquecer a senha. Quem decide é o backend — com o canal de
+  // envio desligado a exigência não vale, senão o popup tranca todo mundo do
+  // lado de fora sem ter como receber o código.
+  if (user && user.phoneVerificationRequired) {
     return (
       <VerificarWhatsappDialog
         nome={user.name?.split(' ')[0]}

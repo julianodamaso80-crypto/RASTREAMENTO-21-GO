@@ -155,8 +155,10 @@ export default function TecnicoPage() {
   }
 
   // Sem WhatsApp confirmado o técnico não recupera a senha depois — por isso
-  // o cadastro é obrigatório antes de qualquer tela.
-  if (!me.phoneVerified) {
+  // o cadastro é obrigatório antes de qualquer tela. Quem decide é o backend:
+  // com o canal desligado a exigência não vale, senão o técnico fica trancado
+  // fora do PWA em campo, sem como receber o código.
+  if (me.phoneVerificationRequired) {
     return (
       <VerificarWhatsappDialog
         nome={me.name?.split(' ')[0]}

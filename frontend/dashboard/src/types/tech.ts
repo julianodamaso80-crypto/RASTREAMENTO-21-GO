@@ -5,6 +5,8 @@ export interface TechMe {
   phone: string | null;
   /** Falso enquanto o número não foi confirmado por código. */
   phoneVerified: boolean;
+  /** Só true quando falta verificar E o WhatsApp está configurado pra enviar. */
+  phoneVerificationRequired: boolean;
   mustChangePassword: boolean;
   tenant: {
     id: string;
