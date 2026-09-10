@@ -10,6 +10,10 @@ import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsappService } from '../notifications/whatsapp.service';
+import {
+  PasswordResetService,
+  RepositorioReset,
+} from '../auth/password-reset.service';
 import { AssociateLoginDto } from './dto/associate-login.dto';
 import {
   docVariants,
@@ -110,6 +114,7 @@ export class AssociateAuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly whatsapp: WhatsappService,
+    private readonly reset: PasswordResetService,
   ) {}
 
   /**
@@ -335,20 +340,63 @@ export class AssociateAuthService {
   // ---------------------------------------------------------------------------
   // Recuperação de senha — "esqueci minha senha" no app
   // ---------------------------------------------------------------------------
-
-  /** Validade do código. Curta de propósito: código vivo é código atacável. */
-  private static readonly CODIGO_VALIDADE_MIN = 15;
-  /** Tentativas erradas antes de o código morrer. */
-  private static readonly CODIGO_MAX_TENTATIVAS = 5;
-  /** Espaçamento mínimo entre envios pro mesmo CPF (anti-flood). */
-  private static readonly CODIGO_INTERVALO_MIN = 2;
+  /**
+   * Port do motor de recuperação sobre a tabela de associados.
+   *
+   * O motor (`PasswordResetService`) é o mesmo do painel e do PWA do técnico:
+   * as travas — validade, tentativas, anti-flood, resposta neutra — vivem lá.
+   */
+  private repoReset(): RepositorioReset {
+    return {
+      buscar: async (doc) => {
+        const a = await this.prisma.associate.findFirst({
+          where: { cpf: { in: docVariants(doc) }, deletedAt: null },
+          select: {
+            id: true,
+            phone: true,
+            resetCodeHash: true,
+            resetCodeExpiresAt: true,
+            resetCodeAttempts: true,
+            resetCodeSentAt: true,
+          },
+        });
+        return a ?? null;
+      },
+      gravarCodigo: async (id, hash, expiraEm) => {
+        await this.prisma.associate.update({
+          where: { id },
+          data: {
+            resetCodeHash: hash,
+            resetCodeExpiresAt: expiraEm,
+            resetCodeAttempts: 0,
+            resetCodeSentAt: new Date(),
+          },
+        });
+      },
+      contarTentativa: async (id) => {
+        await this.prisma.associate.update({
+          where: { id },
+          data: { resetCodeAttempts: { increment: 1 } },
+        });
+      },
+      limparCodigo: async (id) => {
+        await this.limparCodigo(id);
+      },
+      gravarSenha: async (id, hash) => {
+        await this.prisma.associate.update({
+          where: { id },
+          // Senha própria encerra o período em que o CPF vale como senha.
+          data: { password: hash, mustChangePassword: false },
+        });
+      },
+    };
+  }
 
   /**
    * Envia um código de 6 dígitos pro WhatsApp cadastrado do associado.
    *
    * A resposta é SEMPRE a mesma, exista ou não o CPF: senão a rota vira um
    * verificador de "esse CPF é cliente de vocês?" pra qualquer um na internet.
-   * O telefone volta mascarado só quando o envio aconteceu de fato.
    */
   async forgotPassword(rawCpf: string): Promise<{
     message: string;
@@ -356,98 +404,24 @@ export class AssociateAuthService {
     canUseWhatsapp: boolean;
   }> {
     const cpf = normalizeDoc(rawCpf);
-    const generico = {
-      message:
-        'Se esse CPF estiver cadastrado, enviamos um código no WhatsApp. ' +
-        'Não chegou em alguns minutos? Fale com a sua associação.',
-      sentTo: null as string | null,
-      canUseWhatsapp: this.whatsapp.habilitado,
-    };
-
     // CPF (11) ou CNPJ (14): a base tem associado pessoa jurídica.
-    if (cpf.length !== 11 && cpf.length !== 14) return generico;
-
-    const associate = await this.prisma.associate.findFirst({
-      where: { cpf: { in: docVariants(cpf) }, deletedAt: null },
-      select: {
-        id: true,
-        phone: true,
-        resetCodeSentAt: true,
-      },
-    });
-    if (!associate?.phone) {
-      // Sem cadastro ou sem telefone: nada a enviar, resposta idêntica.
-      if (associate) {
-        this.logger.warn(
-          `Recuperação pedida sem telefone cadastrado: CPF ...${cpf.slice(-4)}`,
-        );
-      }
-      return generico;
-    }
-
-    // Anti-flood: um envio a cada 2 minutos por CPF.
-    if (associate.resetCodeSentAt) {
-      const desdeUltimo = Date.now() - associate.resetCodeSentAt.getTime();
-      if (
-        desdeUltimo <
-        AssociateAuthService.CODIGO_INTERVALO_MIN * 60 * 1000
-      ) {
-        return {
-          ...generico,
-          message:
-            'Já enviamos um código há pouco. Confira o WhatsApp e aguarde ' +
-            'dois minutos antes de pedir outro.',
-        };
-      }
-    }
-
-    // randomInt do crypto: previsível é o que não pode ser.
-    const codigo = String(randomInt(0, 1_000_000)).padStart(6, '0');
-    const expiraEm = new Date(
-      Date.now() + AssociateAuthService.CODIGO_VALIDADE_MIN * 60 * 1000,
-    );
-
-    await this.prisma.associate.update({
-      where: { id: associate.id },
-      data: {
-        resetCodeHash: await bcrypt.hash(codigo, BCRYPT_ROUNDS),
-        resetCodeExpiresAt: expiraEm,
-        resetCodeAttempts: 0,
-        resetCodeSentAt: new Date(),
-      },
-    });
-
-    const envio = await this.whatsapp.enviarCodigo(
-      associate.phone,
-      codigo,
-      AssociateAuthService.CODIGO_VALIDADE_MIN,
-    );
-
-    if (!envio.enviado) {
-      this.logger.warn(
-        `Não consegui enviar o código pro CPF ...${cpf.slice(-4)}: ${envio.motivo}`,
-      );
+    if (cpf.length !== 11 && cpf.length !== 14) {
       return {
         message:
-          'No momento não consigo enviar o código pelo WhatsApp. ' +
-          'Fale com a sua associação para redefinir a sua senha.',
+          'Se esse CPF estiver cadastrado, enviamos um código no WhatsApp. ' +
+          'Não chegou em alguns minutos? Fale com a sua associação.',
         sentTo: null,
-        canUseWhatsapp: false,
+        canUseWhatsapp: this.whatsapp.habilitado,
       };
     }
-
-    return {
-      ...generico,
-      sentTo: WhatsappService.mascarar(associate.phone),
-    };
+    return this.reset.enviarCodigo(this.repoReset(), cpf, 'CPF');
   }
 
   /**
    * Confere o código e grava a senha nova.
    *
-   * Erros aqui são específicos de propósito (código errado x expirado): quem
-   * chega nesta etapa já provou ter o WhatsApp do titular, e mensagem vaga só
-   * atrapalharia o cliente legítimo.
+   * A nova senha não pode ser o próprio CPF — seria voltar ao problema que a
+   * troca obrigatória do primeiro acesso resolve.
    */
   async resetPasswordWithCode(
     rawCpf: string,
@@ -455,72 +429,19 @@ export class AssociateAuthService {
     novaSenha: string,
   ): Promise<{ ok: true }> {
     const cpf = normalizeDoc(rawCpf);
-    const digitos = (codigo || '').replace(/\D/g, '');
-
-    const associate = await this.prisma.associate.findFirst({
-      where: { cpf: { in: docVariants(cpf) }, deletedAt: null },
-      select: {
-        id: true,
-        resetCodeHash: true,
-        resetCodeExpiresAt: true,
-        resetCodeAttempts: true,
+    return this.reset.redefinirSenha(
+      this.repoReset(),
+      cpf,
+      codigo,
+      novaSenha,
+      (senha) => {
+        if (normalizeDoc(senha) === cpf) {
+          throw new BadRequestException(
+            'A nova senha não pode ser o seu CPF. Escolha outra.',
+          );
+        }
       },
-    });
-
-    const invalido = new UnauthorizedException(
-      'Código inválido ou expirado. Peça um novo código.',
     );
-    if (!associate?.resetCodeHash || !associate.resetCodeExpiresAt) {
-      throw invalido;
-    }
-    if (associate.resetCodeExpiresAt.getTime() < Date.now()) {
-      await this.limparCodigo(associate.id);
-      throw invalido;
-    }
-    if (
-      associate.resetCodeAttempts >= AssociateAuthService.CODIGO_MAX_TENTATIVAS
-    ) {
-      await this.limparCodigo(associate.id);
-      throw new UnauthorizedException(
-        'Muitas tentativas erradas. Peça um novo código.',
-      );
-    }
-
-    if (!(await bcrypt.compare(digitos, associate.resetCodeHash))) {
-      // Conta a tentativa ANTES de responder — senão força bruta é de graça.
-      await this.prisma.associate.update({
-        where: { id: associate.id },
-        data: { resetCodeAttempts: { increment: 1 } },
-      });
-      throw invalido;
-    }
-
-    if (normalizeDoc(novaSenha) === cpf) {
-      throw new BadRequestException(
-        'A nova senha não pode ser o seu CPF. Escolha outra.',
-      );
-    }
-    if (novaSenha.trim().length < 6) {
-      throw new BadRequestException(
-        'A nova senha precisa ter ao menos 6 caracteres.',
-      );
-    }
-
-    await this.prisma.associate.update({
-      where: { id: associate.id },
-      data: {
-        password: await bcrypt.hash(novaSenha, BCRYPT_ROUNDS),
-        mustChangePassword: false,
-        resetCodeHash: null,
-        resetCodeExpiresAt: null,
-        resetCodeAttempts: 0,
-      },
-    });
-
-    this.logger.log(
-      `Senha redefinida por código: CPF ...${cpf.slice(-4)}`,
-    );
-    return { ok: true };
   }
 
   private async limparCodigo(associateId: string) {

@@ -169,7 +169,8 @@ describe('contrato do associado — /app/auth/login', () => {
     };
     const jwt: any = { sign: jest.fn().mockReturnValue('tok') };
     const whatsapp: any = {};
-    return new AssociateAuthService(prisma, jwt, whatsapp);
+    const reset: any = {};
+    return new AssociateAuthService(prisma, jwt, whatsapp, reset);
   }
 
   beforeEach(() => {
@@ -221,7 +222,8 @@ describe('contrato do associado — /app/me', () => {
     };
     const jwt: any = { sign: jest.fn().mockReturnValue('tok') };
     const whatsapp: any = {};
-    return new AssociateAuthService(prisma, jwt, whatsapp);
+    const reset: any = {};
+    return new AssociateAuthService(prisma, jwt, whatsapp, reset);
   }
 
   it('nenhum campo interno sai na resposta, nem no topo nem no tenant aninhado', async () => {
