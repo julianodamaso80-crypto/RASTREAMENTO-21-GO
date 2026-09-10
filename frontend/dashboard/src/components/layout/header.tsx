@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { LogOut, Search, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon } from 'lucide-react';
 import { AlertsDropdown } from '@/components/alerts/alerts-dropdown';
 import { AssistantDrawer } from '@/components/assistant/assistant-drawer';
+import { BuscaGlobal } from '@/components/layout/busca-global';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,9 +12,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/auth-context';
-import { useTracking } from '@/contexts/tracking-context';
-import { matchesVehicleSearch } from '@/lib/vehicle-search';
-import { cn } from '@/lib/utils';
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
@@ -27,55 +23,6 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function Header() {
   const { user, logout } = useAuth();
-  const { setSearchQuery, filteredVehicles, vehicles, selectVehicle } = useTracking();
-  const router = useRouter();
-  const pathname = usePathname();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState('');
-  const [isMac, setIsMac] = useState(false);
-
-  useEffect(() => {
-    setIsMac(/Mac|iPhone|iPad/.test(navigator.platform));
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const termo = value.trim();
-    if (!termo) return;
-    setSearchQuery(termo);
-
-    // Quem digita um IMEI (ou placa) quer ver AQUELE rastreador aberto no
-    // mapa. Só filtrar a lista deixava o mapa no enquadramento padrão, com o
-    // veículo procurado fora da tela: o operador digitava o IMEI e não via
-    // nada. Quando a busca resolve num único veículo, ele já entra aberto.
-    const achados = vehicles.filter((v) => matchesVehicleSearch(v, termo));
-    const alvo = achados.length === 1 ? achados[0] : null;
-
-    if (!alvo) {
-      router.push('/mapa');
-      return;
-    }
-
-    // Já dentro do mapa a URL não é reprocessada (o parâmetro só é lido na
-    // montagem), então a seleção tem que ser direta pra segunda busca também
-    // funcionar.
-    if (pathname === '/mapa') selectVehicle(alvo.id);
-    else router.push(`/mapa?placa=${encodeURIComponent(alvo.plate)}`);
-  };
-
-  // Tenta achar uma placa exata pra dar feedback rápido (não obrigatório)
-  const hint =
-    value.length >= 2 && filteredVehicles.length > 0
-      ? `${filteredVehicles.length} veículo${filteredVehicles.length === 1 ? '' : 's'}`
-      : null;
 
   return (
     <header className="h-16 bg-[#293c82] border-b border-white/5 flex items-center justify-between gap-4 px-4 md:px-6">
@@ -85,32 +32,7 @@ export function Header() {
         </span>
       </div>
 
-      <form onSubmit={onSubmit} className="flex-1 max-w-xl mx-auto">
-        <div className="relative">
-          <Search className="h-4 w-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            ref={inputRef}
-            type="search"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="Buscar veículo, placa, motorista…"
-            className={cn(
-              'w-full h-10 pl-10 pr-20 rounded-lg text-sm',
-              'bg-[#1f2d63] text-slate-100 placeholder:text-slate-500',
-              'border border-white/5',
-              'focus:outline-none focus:border-brand-orange-500 focus:ring-2 focus:ring-brand-orange-500/20',
-              'transition-colors',
-            )}
-          />
-          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[10px] font-semibold text-slate-500">
-            <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5">{isMac ? '⌘' : 'Ctrl'}</span>
-            <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5">K</span>
-          </kbd>
-          {hint && (
-            <span className="absolute -bottom-5 left-3 text-[10px] text-slate-500">{hint}</span>
-          )}
-        </div>
-      </form>
+      <BuscaGlobal />
 
       <div className="flex items-center gap-2 shrink-0">
         <AssistantDrawer />

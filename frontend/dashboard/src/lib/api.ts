@@ -936,3 +936,52 @@ export const usersApi = {
 
 export default api;
 
+
+// ---------------------------------------------------------------------------
+// Busca única do painel
+// ---------------------------------------------------------------------------
+
+export type TipoResultadoBusca =
+  | 'ATIVO'
+  | 'VEICULO'
+  | 'PENDENCIA'
+  | 'CADASTRO_SGA'
+  | 'ESTOQUE'
+  | 'CHIP'
+  | 'TAG';
+
+export interface ItemResultadoBusca {
+  tipo: TipoResultadoBusca;
+  id: string;
+  titulo: string;
+  subtitulo: string;
+  detalhes: string[];
+  href: string | null;
+  situacao?: string;
+}
+
+export interface GrupoResultadoBusca {
+  tipo: TipoResultadoBusca;
+  titulo: string;
+  itens: ItemResultadoBusca[];
+}
+
+export interface RespostaBusca {
+  termo: string;
+  total: number;
+  grupos: GrupoResultadoBusca[];
+}
+
+export const searchApi = {
+  /**
+   * Acha associado, veículo, pendência, estoque, chip ou TAG a partir de um
+   * dado só: placa, chassi, CPF/CNPJ, nome, telefone, chip ou IMEI.
+   */
+  buscar: async (q: string, signal?: AbortSignal): Promise<RespostaBusca> => {
+    const res = await api.get<ApiResponse<RespostaBusca>>('/search', {
+      params: { q },
+      signal,
+    });
+    return res.data.data;
+  },
+};

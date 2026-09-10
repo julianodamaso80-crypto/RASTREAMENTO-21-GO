@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { filtroBusca } from '../../common/search/termo-busca';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -89,7 +90,7 @@ export class InstallationPendingsService implements OnModuleInit {
         contractDate: { gte: this.dataCorte(query.days) },
         ...(query.type ? { pendingType: query.type } : {}),
         ...(query.city ? { city: query.city } : {}),
-        ...(query.search ? this.filtroBusca(query.search) : {}),
+        ...(query.search ? this.filtroDaTela(query.search) : {}),
       },
       orderBy: [{ protectedValue: 'desc' }, { contractDate: 'asc' }],
       take: query.limit ?? 1000,
@@ -257,17 +258,20 @@ export class InstallationPendingsService implements OnModuleInit {
     return corte;
   }
 
-  private filtroBusca(termo: string) {
-    const t = termo.trim();
-    const alfanumerico = t.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    return {
-      OR: [
-        { plate: { contains: alfanumerico } },
-        { chassi: { contains: alfanumerico } },
-        { associateName: { contains: t, mode: 'insensitive' as const } },
-        { cpf: { contains: t.replace(/\D/g, '') } },
-      ],
-    };
+  /**
+   * Busca única da tela. Antes, um termo sem dígito ("ana") virava
+   * `cpf: { contains: '' }`, que casa com TODAS as linhas — a tela parecia
+   * filtrada e mostrava a base inteira. Ver [[reference_busca_contains_vazio]].
+   */
+  private filtroDaTela(termo: string) {
+    return (
+      filtroBusca(termo, {
+        texto: ['associateName', 'brandModel', 'city', 'neighborhood'],
+        alfanumerico: ['plate', 'chassi'],
+        documento: ['cpf'],
+        identificador: ['phone'],
+      }) ?? { OR: [{ id: '00000000-0000-0000-0000-000000000000' }] }
+    );
   }
 
   // ---------------------------------------------------------------------------

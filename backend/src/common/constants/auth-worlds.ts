@@ -37,6 +37,7 @@ export const INTERNAL_CONTROLLERS: readonly string[] = [
   'installation-pendings/installation-pendings.controller.ts',
   'maintenance/maintenance.controller.ts',
   'map/map.controller.ts',
+  'search/search.controller.ts',
   'reports/reports.controller.ts',
   'scoring/scoring.controller.ts',
   'server-info/server-info.controller.ts',
@@ -166,6 +167,7 @@ export const LEAK_PROBES: readonly LeakProbe[] = [
     path: '/maintenance-plans',
   },
   { world: 'internal', controller: 'map/map.controller.ts', path: '/map/tiles' },
+  { world: 'internal', controller: 'search/search.controller.ts', path: '/search' },
   { world: 'internal', controller: 'reports/reports.controller.ts', path: '/reports/positions' },
   {
     world: 'internal',

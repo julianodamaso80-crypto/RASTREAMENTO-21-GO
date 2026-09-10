@@ -26,6 +26,7 @@ import type {
   InstallationPendingStats,
   PendingType,
 } from '@/types/installation-pending';
+import { useBuscaDaUrl } from '@/lib/use-busca-url';
 
 /**
  * Fila de instalação pendente vinda do SGA Hinova.
@@ -122,6 +123,7 @@ export default function PendenciasPage() {
   const [type, setType] = useState<PendingType | ''>('');
   const [city, setCity] = useState('');
   const [search, setSearch] = useState('');
+  useBuscaDaUrl(setSearch);
 
   const filters = useMemo(
     () => ({
@@ -308,7 +310,7 @@ export default function PendenciasPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Placa, chassi, nome ou CPF..."
+            placeholder="Placa, chassi, nome, CPF, telefone ou cidade..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"

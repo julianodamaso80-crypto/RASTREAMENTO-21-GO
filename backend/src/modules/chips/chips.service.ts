@@ -4,6 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { filtroBusca } from '../../common/search/termo-busca';
 import { CreateChipDto } from './dto/create-chip.dto';
 import { UpdateChipDto } from './dto/update-chip.dto';
 import { FilterChipsDto } from './dto/filter-chips.dto';
@@ -51,12 +52,16 @@ export class ChipsService {
 
     if (operator) where.operator = operator;
     if (status) where.status = status;
-    if (search) {
-      where.OR = [
-        { iccid: { contains: search, mode: 'insensitive' } },
-        { phoneNumber: { contains: search, mode: 'insensitive' } },
-      ];
-    }
+    // O chip é achado pelo número dele, mas também por quem está com ele: o
+    // rastreador onde foi instalado e o veículo/associado desse rastreador.
+    const filtro = filtroBusca(search, {
+      texto: ['device.vehicle.associate.name'],
+      alfanumerico: ['device.vehicle.plate', 'device.vehicle.chassi'],
+      documento: ['device.vehicle.associate.cpf'],
+      identificador: ['iccid', 'phoneNumber', 'device.imei'],
+    });
+    if (filtro) where.OR = filtro.OR;
+    else if (search?.trim()) where.id = '00000000-0000-0000-0000-000000000000';
 
     const [data, total] = await Promise.all([
       this.chipModel.findMany({

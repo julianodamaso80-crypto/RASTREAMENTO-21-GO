@@ -5,6 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { Prisma } from '.prisma/client';
+import { filtroBusca } from '../../common/search/termo-busca';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
@@ -41,12 +42,22 @@ export class DevicesService {
 
     if (status) where.status = status;
     if (model) where.model = model;
-    if (search) {
-      where.OR = [
-        { imei: { contains: search, mode: 'insensitive' } },
-        { vehicle: { plate: { contains: search, mode: 'insensitive' } } },
-      ];
-    }
+    // Mesma busca única do resto do painel: quem procura um rastreador
+    // costuma ter o dado do cliente na mão, não o IMEI.
+    const filtro = filtroBusca(search, {
+      texto: ['brand', 'vehicle.brand', 'vehicle.model', 'vehicle.associate.name'],
+      alfanumerico: ['vehicle.plate', 'vehicle.chassi'],
+      documento: ['vehicle.associate.cpf'],
+      identificador: [
+        'imei',
+        'serialNumber',
+        'chip.iccid',
+        'chip.phoneNumber',
+        'vehicle.associate.phone',
+      ],
+    });
+    if (filtro) where.OR = filtro.OR;
+    else if (search?.trim()) where.id = '00000000-0000-0000-0000-000000000000';
 
     const [data, total] = await Promise.all([
       this.deviceModel.findMany({

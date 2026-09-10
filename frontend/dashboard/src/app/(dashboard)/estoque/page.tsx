@@ -44,6 +44,7 @@ import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog'
 import { AssignTechnicianDialog } from '@/components/stock/assign-technician-dialog';
 import { InstallCheckSheet } from '@/components/stock/install-check-sheet';
 import type { StockConnectivity, StockItem, StockStats } from '@/types/stock';
+import { useBuscaDaUrl } from '@/lib/use-busca-url';
 
 // Cor do badge por status (case-insensitive, com fallback neutro).
 function statusColor(status: string | null): string {
@@ -68,6 +69,7 @@ export default function EstoquePage() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
+  useBuscaDaUrl(setSearch);
   const [statusFilter, setStatusFilter] = useState('');
   const [assignmentFilter, setAssignmentFilter] = useState('');
   // Estado no servidor GPS. Vai pro backend, não filtra aqui: a lista é

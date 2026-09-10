@@ -3,6 +3,7 @@ import { Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assessComms } from './asset-comms';
 import { BLE_DEVICE_MODELS } from '../../common/constants/ble-models';
+import { filtroBusca } from '../../common/search/termo-busca';
 
 /** Situação financeira do ativo no SGA. */
 export type FinancialStatus = 'ADIMPLENTE' | 'INADIMPLENTE';
@@ -29,8 +30,8 @@ export class ClientsService {
 
   /**
    * Lista paginada de ativos. A busca é única e cobre tudo que o atendimento
-   * tem em mãos quando o cliente liga: nome, CPF, IMEI, placa, chassi, marca e
-   * modelo.
+   * tem em mãos quando o cliente liga: nome, CPF/CNPJ, telefone, IMEI, chip
+   * (ICCID ou linha), placa, chassi, renavam, marca, modelo e cor.
    */
   async findAssets(tenantId: string, params: FindAssetsParams = {}) {
     const page = Math.max(1, Math.trunc(params.page ?? 1));
@@ -54,21 +55,25 @@ export class ClientsService {
       device: { is: { deletedAt: null, model: { notIn: [...BLE_DEVICE_MODELS] } } },
     };
 
-    const search = params.search?.trim();
-    if (search) {
-      const digits = search.replace(/\D/g, '');
-      const or: Prisma.VehicleWhereInput[] = [
-        { plate: { contains: search.toUpperCase() } },
-        { chassi: { contains: search.toUpperCase() } },
-        { brand: { contains: search, mode: 'insensitive' } },
-        { model: { contains: search, mode: 'insensitive' } },
-        { associate: { name: { contains: search, mode: 'insensitive' } } },
-        { device: { imei: { contains: search } } },
-      ];
-      // Só busca por CPF quando o termo tem dígito — senão "ana" viraria uma
-      // busca por CPF vazio, que casa com todo mundo.
-      if (digits) or.push({ associate: { cpf: { contains: digits } } });
-      where.OR = or;
+    // Busca única, mesmos campos em todas as telas do painel: placa, chassi,
+    // renavam, marca, modelo, cor, nome, CPF/CNPJ, telefone, IMEI e chip.
+    const filtro = filtroBusca(params.search, {
+      texto: ['brand', 'model', 'color', 'associate.name'],
+      alfanumerico: ['plate', 'chassi', 'renavam'],
+      documento: ['associate.cpf'],
+      identificador: [
+        'device.imei',
+        'uniqueId',
+        'associate.phone',
+        'device.chip.iccid',
+        'device.chip.phoneNumber',
+      ],
+    });
+    if (filtro) {
+      where.OR = filtro.OR as Prisma.VehicleWhereInput[];
+    } else if (params.search?.trim()) {
+      // Termo que não pode casar em campo nenhum não devolve a base inteira.
+      where.id = '00000000-0000-0000-0000-000000000000';
     }
 
     const [total, vehicles] = await Promise.all([

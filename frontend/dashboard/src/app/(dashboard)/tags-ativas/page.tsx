@@ -30,6 +30,7 @@ import {
   maskCPF,
 } from '@/lib/utils';
 import type { ActiveTagRow, ActiveTagsResponse } from '@/types/ble-tag';
+import { useBuscaDaUrl } from '@/lib/use-busca-url';
 
 const TAMANHOS_PAGINA = [20, 60, 140, 200];
 
@@ -61,6 +62,7 @@ export default function TagsAtivasPage() {
   // Começa na régua do dono: a aba abre mostrando só o que dá para rastrear.
   const [cobertura, setCobertura] = useState<Cobertura>('RASTREAVEL');
   const [busca, setBusca] = useState('');
+  useBuscaDaUrl(setBusca);
   const [carregando, setCarregando] = useState(true);
   const primeiraCarga = useRef(true);
 
@@ -217,7 +219,7 @@ export default function TagsAtivasPage() {
               setBusca(e.target.value);
               setPage(1);
             }}
-            placeholder="Buscar por nome, CPF, placa ou chassi..."
+            placeholder="Nome, CPF/CNPJ, placa, chassi ou telefone..."
             className="pl-9"
           />
         </div>

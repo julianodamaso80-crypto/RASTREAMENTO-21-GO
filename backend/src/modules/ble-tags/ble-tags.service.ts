@@ -7,6 +7,7 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
+import { filtroBusca } from '../../common/search/termo-busca';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
@@ -84,29 +85,21 @@ export type ActiveTagsQuery = {
 };
 
 /**
- * Busca por placa, chassi, nome ou CPF.
+ * Busca por placa, chassi, nome, CPF/CNPJ ou telefone no espelho do SGA.
  *
- * Cada pedaço só entra quando tem o que casar: `contains: ''` casa com TODAS as
- * linhas, então buscar um nome (que não tem dígito) trazia a base inteira de
- * volta como se nada tivesse sido filtrado.
+ * Usa o núcleo compartilhado do painel: um campo só entra no OR quando tem o
+ * que casar. `contains: ''` casa com TODAS as linhas, e buscar um nome (que não
+ * tem dígito) trazia a base inteira de volta como se nada tivesse sido filtrado.
  */
 function filtroBuscaSga(termo: string) {
-  const t = termo.trim();
-  const alfanumerico = t.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const digitos = t.replace(/\D/g, '');
-
-  const OR: Record<string, unknown>[] = [
-    { associateName: { contains: t, mode: 'insensitive' as const } },
-  ];
-  if (alfanumerico) {
-    OR.push({ plate: { contains: alfanumerico } });
-    OR.push({ chassi: { contains: alfanumerico } });
-  }
-  // CPF tem 11 dígitos: pedaço curto (o "232" de uma placa) casaria com meio
-  // mundo. Só busca por documento quando o termo é mesmo um documento.
-  if (digitos.length >= 6) OR.push({ cpf: { contains: digitos } });
-
-  return { OR };
+  return (
+    filtroBusca(termo, {
+      texto: ['associateName'],
+      alfanumerico: ['plate', 'chassi'],
+      documento: ['cpf'],
+      identificador: ['phone'],
+    }) ?? { OR: [{ id: '00000000-0000-0000-0000-000000000000' }] }
+  );
 }
 
 // Chave privada da TAG: nunca pode voltar em listagem. Só sai do banco pela

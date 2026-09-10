@@ -222,6 +222,10 @@ export class StockService {
     if (assignment === 'free') where.assignedTechnicianId = null;
     if (assignment === 'assigned') where.assignedTechnicianId = { not: null };
     if (search) {
+      // Só campos do equipamento: esta lista mostra apenas o que ainda está
+      // disponível (associatedAt: null), então placa e nome de cliente nunca
+      // casariam aqui — quem tem esse dado acha o aparelho pela busca do topo
+      // ou por Clientes Ativos.
       where.OR = [
         { imei: { contains: search, mode: 'insensitive' } },
         { iccid: { contains: search, mode: 'insensitive' } },

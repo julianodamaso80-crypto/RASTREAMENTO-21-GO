@@ -20,6 +20,7 @@ import type { Chip, ChipOperator, OperatorApn } from '@/types/device';
 import {
   CHIP_STATUS_LABELS, CHIP_STATUS_COLORS, OPERATOR_LABELS,
 } from '@/types/device';
+import { useBuscaDaUrl } from '@/lib/use-busca-url';
 
 const OPERATORS: ChipOperator[] = ['VIVO', 'CLARO', 'TIM', 'OI', 'MULTI_OPERATOR'];
 const PROVIDERS = ['Voxter', 'Datatem', 'Allcom', 'TrackPlus', 'Sigmais', 'Arqia', 'LinkField', 'Outro'];
@@ -28,6 +29,7 @@ export default function ChipsPage() {
   const [chips, setChips] = useState<Chip[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  useBuscaDaUrl(setSearch);
   const [operatorFilter, setOperatorFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -130,7 +132,7 @@ export default function ChipsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Buscar por ICCID..."
+            placeholder="ICCID, linha, IMEI, placa ou nome do cliente..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"

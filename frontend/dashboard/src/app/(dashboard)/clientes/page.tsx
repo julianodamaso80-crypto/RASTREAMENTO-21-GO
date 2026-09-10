@@ -217,7 +217,7 @@ export default function ClientesPage() {
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome, CPF, IMEI, placa, chassi, marca ou modelo..."
+              placeholder="Nome, CPF/CNPJ, telefone, placa, chassi, IMEI, chip, marca ou modelo..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
