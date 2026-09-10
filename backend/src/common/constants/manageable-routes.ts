@@ -17,6 +17,7 @@ export const MANAGEABLE_ROUTES = [
   { key: 'clientes', label: 'Clientes ativos', path: '/clientes' },
   { key: 'tags-ativas', label: 'TAGs ativas', path: '/tags-ativas' },
   { key: 'pendencias', label: 'Pendentes de instalação', path: '/pendencias' },
+  { key: 'agenda', label: 'Agenda e ordens de serviço', path: '/agenda' },
   { key: 'rotas', label: 'Rota inteligente', path: '/rotas' },
   { key: 'tecnicos', label: 'Técnicos', path: '/tecnicos' },
   { key: 'geofencing', label: 'Cercas virtuais', path: '/geofencing' },

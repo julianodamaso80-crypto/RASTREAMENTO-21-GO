@@ -8,6 +8,15 @@ import type { Geofence, CreateGeofencePayload } from '@/types/geofence';
 import type { Device, Chip, SmsCommand, GeneratedCommandsResponse, OperatorApn, ServerInfo } from '@/types/device';
 import type { DashboardOverview, DashboardPeriod } from '@/types/dashboard';
 import type { PaginatedResponse, ApiResponse } from '@/types/api';
+import type {
+  AgendaFiltro,
+  AgendaPendencia,
+  Appointment,
+  AppointmentEvent,
+  AppointmentStatus,
+  CriarAgendamentoPayload,
+  PreenchimentoVeiculo,
+} from '@/types/appointment';
 import type { GoogleTileSource } from '@/types/map';
 import type {
   ActiveTagsResponse,
@@ -1028,5 +1037,92 @@ export const searchApi = {
       signal,
     });
     return res.data.data;
+  },
+};
+
+export const appointmentsApi = {
+  /** Eventos do calendário no período. */
+  agenda: async (f: AgendaFiltro): Promise<AppointmentEvent[]> => {
+    const res = await api.get<ApiResponse<AppointmentEvent[]>>('/appointments', {
+      params: {
+        from: f.from,
+        to: f.to,
+        technicianIds: f.technicianIds?.length
+          ? f.technicianIds.join(',')
+          : undefined,
+        status: f.status?.length ? f.status.join(',') : undefined,
+        serviceType: f.serviceType,
+        search: f.search || undefined,
+      },
+    });
+    return res.data.data;
+  },
+
+  porId: async (id: string): Promise<Appointment> => {
+    const res = await api.get<ApiResponse<Appointment>>(`/appointments/${id}`);
+    return res.data.data;
+  },
+
+  /** Fila de serviços a agendar, espelhada do SGA. */
+  pendencias: async (search?: string): Promise<AgendaPendencia[]> => {
+    const res = await api.get<ApiResponse<AgendaPendencia[]>>(
+      '/appointments/pendencias',
+      { params: search ? { search } : undefined },
+    );
+    return res.data.data;
+  },
+
+  /** Preenche o formulário a partir da placa ou do chassi. */
+  lookup: async (termo: string): Promise<PreenchimentoVeiculo | null> => {
+    const res = await api.get<ApiResponse<PreenchimentoVeiculo | null>>(
+      '/appointments/lookup',
+      { params: { termo } },
+    );
+    return res.data.data;
+  },
+
+  criar: async (payload: CriarAgendamentoPayload): Promise<Appointment> => {
+    const res = await api.post<ApiResponse<Appointment>>('/appointments', payload);
+    return res.data.data;
+  },
+
+  editar: async (
+    id: string,
+    payload: Partial<CriarAgendamentoPayload>,
+  ): Promise<Appointment> => {
+    const res = await api.patch<ApiResponse<Appointment>>(
+      `/appointments/${id}`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  /** Remarcar arrastando o bloco no calendário. */
+  remarcar: async (id: string, start: string, end: string): Promise<Appointment> => {
+    const res = await api.patch<ApiResponse<Appointment>>(
+      `/appointments/${id}/remarcar`,
+      { start, end },
+    );
+    return res.data.data;
+  },
+
+  mudarStatus: async (
+    id: string,
+    payload: {
+      status: AppointmentStatus;
+      note?: string | null;
+      lat?: number | null;
+      lng?: number | null;
+    },
+  ): Promise<Appointment> => {
+    const res = await api.patch<ApiResponse<Appointment>>(
+      `/appointments/${id}/status`,
+      payload,
+    );
+    return res.data.data;
+  },
+
+  remover: async (id: string): Promise<void> => {
+    await api.delete(`/appointments/${id}`);
   },
 };

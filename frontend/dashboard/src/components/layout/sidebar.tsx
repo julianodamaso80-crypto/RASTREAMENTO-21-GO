@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Route,
   ShieldCheck,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { canAccessRoute, type ManageableRouteKey } from '@/lib/manageable-routes';
@@ -61,6 +62,7 @@ const navItems: NavItem[] = [
   { href: '/clientes', label: 'Clientes Ativos', icon: Users, roles: NON_CLIENT_ROLES, route: 'clientes' },
   { href: '/tags-ativas', label: 'TAGs Ativas', icon: Bluetooth, roles: NON_CLIENT_ROLES, route: 'tags-ativas' },
   { href: '/pendencias', label: 'Pendentes de Instalação', icon: ClipboardList, roles: NON_CLIENT_ROLES, route: 'pendencias' },
+  { href: '/agenda', label: 'Agenda', icon: CalendarDays, roles: NON_CLIENT_ROLES, route: 'agenda' },
   { href: '/rotas', label: 'Rota Inteligente', icon: Route, roles: NON_CLIENT_ROLES, route: 'rotas' },
   { href: '/tecnicos', label: 'Técnicos', icon: HardHat, roles: NON_CLIENT_ROLES, route: 'tecnicos' },
   { href: '/usuarios', label: 'Usuários e Acessos', icon: ShieldCheck, roles: ['SUPER_ADMIN', 'ADMIN'], route: 'usuarios' },

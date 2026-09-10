@@ -223,6 +223,7 @@ model Tenant {
   tagPositions         TagPosition[]
   installationRoutes   InstallationRoute[]
 
+  appointments Appointment[]
   @@map("tenants")
 }
 
@@ -421,6 +422,7 @@ model User {
   vehicleAccess UserVehicleAccess[]
 
   @@index([tenantId, deletedAt])
+  appointments Appointment[]
   @@map("users")
 }
 
@@ -485,6 +487,7 @@ model Vehicle {
   scores           VehicleScore[]
 
   @@unique([plate, tenantId])
+  appointments Appointment[]
   @@map("vehicles")
 }
 
@@ -643,6 +646,7 @@ model Technician {
 
   @@unique([tenantId, cpf])
   @@index([tenantId, deletedAt])
+  appointments Appointment[]
   @@map("technicians")
 }
 
@@ -1175,4 +1179,174 @@ model TagPosition {
   @@index([tenantId, plate, seenAt(sort: Desc)])
   @@index([tenantId, seenAt(sort: Desc)])
   @@map("tag_positions")
+}
+
+// ============================================================================
+// AGENDA / ORDENS DE SERVIÇO
+//
+// Espelha o módulo `/agendamentos/` da plataforma de origem (RedeVeiculos),
+// medido em 10/09/2026 contra a instância `21go.rastreamento.vip`: mesmos tipos
+// de serviço, mesmos status, mesmo par status-da-OS × status-do-técnico.
+// ============================================================================
+
+enum ServiceType {
+  INSTALLATION
+  MAINTENANCE
+  REMOVAL
+  OTHER
+}
+
+/// Motivo obrigatório quando o serviço é manutenção. Os oito da origem.
+enum MaintenanceReason {
+  WITH_REPLACEMENT
+  WITHOUT_REPLACEMENT
+  INSTALL_FAILURE
+  SIGNAL_FAILURE
+  WORKSHOP
+  AFTER_THEFT
+  LINE_OFF
+  GPS_FAILURE
+}
+
+/// Ponto fixo (cliente vai até a base) ou volante (técnico vai até o cliente).
+enum ServiceConduction {
+  FIXED_POINT
+  MOBILE
+}
+
+enum AppointmentShift {
+  MORNING
+  AFTERNOON
+  NIGHT
+  ALL_DAY
+  CUSTOM
+}
+
+/// Status da OS. CLOSED_BY_SYSTEM é o único que ninguém escolhe na tela: entra
+/// por rotina quando o agendamento vence sem desfecho.
+enum AppointmentStatus {
+  SCHEDULED
+  CANCELED
+  COMPLETED
+  POSTPONED
+  ANTICIPATED
+  FRUSTRATED_CLIENT
+  FRUSTRATED_TECHNICIAN
+  CLOSED_BY_SYSTEM
+  EXECUTED
+  CLIENT_NO_SHOW
+  CANCELED_BY_CLIENT
+}
+
+/// O que o TÉCNICO declarou, que é coisa diferente do status da OS. Divergência
+/// entre os dois é sinal de tratativa pendente, e a tela precisa mostrar isso.
+enum TechnicianServiceStatus {
+  SCHEDULED
+  CANCELED
+  COMPLETED
+  FRUSTRATED
+}
+
+/// Quando a execução saiu do horário combinado.
+enum ExecutionTiming {
+  ON_TIME
+  TECHNICIAN_LATE
+  ANTICIPATED_BY_TECHNICIAN
+  TECHNICIAN_EARLY
+}
+
+model Appointment {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Número da OS no formato da origem: `AAAAMMDD/sequencial`, gerado na
+  /// criação e nunca reaproveitado.
+  osNumber String @map("os_number")
+
+  serviceType       ServiceType        @map("service_type")
+  maintenanceReason MaintenanceReason? @map("maintenance_reason")
+  conduction        ServiceConduction  @default(MOBILE)
+
+  // --- Quando ---
+  scheduledStart DateTime         @map("scheduled_start")
+  scheduledEnd   DateTime         @map("scheduled_end")
+  shift          AppointmentShift @default(CUSTOM)
+
+  // --- Quem executa ---
+  technicianId String     @map("technician_id") @db.Uuid
+  technician   Technician @relation(fields: [technicianId], references: [id])
+
+  // --- Estado ---
+  status           AppointmentStatus        @default(SCHEDULED)
+  technicianStatus TechnicianServiceStatus? @map("technician_status")
+  executionTiming  ExecutionTiming          @default(ON_TIME) @map("execution_timing")
+  /// Preenchido quando o desfecho é visita frustrada / cancelamento: a origem
+  /// recusa esses status sem observação escrita, e nós também.
+  statusNote       String?                  @map("status_note")
+  statusChangedAt  DateTime?                @map("status_changed_at")
+  completedAt      DateTime?                @map("completed_at")
+
+  /// Coordenada de onde o técnico declarou o desfecho. Null com
+  /// `locationDenied = true` significa que ele negou o GPS — a OS fica marcada
+  /// "sem localização válida", igual à origem.
+  completedLat   Float?  @map("completed_lat")
+  completedLng   Float?  @map("completed_lng")
+  locationDenied Boolean @default(false) @map("location_denied")
+
+  // --- Veículo ---
+  /// Preenchido quando o ativo já existe aqui. Agendamento de veículo que ainda
+  /// não é nosso (pendência do SGA) nasce sem isso e só com placa/chassi.
+  vehicleId String?  @map("vehicle_id") @db.Uuid
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id])
+
+  plate           String?
+  chassi          String?
+  imei            String?
+  brand           String?
+  model           String?
+  /// Onde o rastreador foi/será instalado no veículo.
+  installLocation String? @map("install_location")
+
+  // --- Cliente ---
+  clientName String? @map("client_name")
+  cpfCnpj    String? @map("cpf_cnpj")
+  phone      String?
+  email      String?
+
+  // --- Onde ---
+  cep        String?
+  address    String?
+  complement String?
+  lat        Float?
+  lng        Float?
+
+  // --- Resto ---
+  value           Decimal @default(0) @db.Decimal(10, 2)
+  description     String?
+  /// Observação que só o técnico vê. Campo separado na origem, separado aqui.
+  technicianNote  String? @map("technician_note")
+  /// Resposta que o técnico devolveu pela OS (o 💬 do calendário da origem).
+  technicianReply String? @map("technician_reply")
+
+  /// Marcado quando o próprio cliente agendou pelo link público (o 💡).
+  autoScheduled Boolean @default(false) @map("auto_scheduled")
+
+  /// Pendência do SGA que originou a OS, quando veio da lista arrastável.
+  installationPendingId String? @map("installation_pending_id") @db.Uuid
+
+  createdById String? @map("created_by_id") @db.Uuid
+  createdBy   User?   @relation(fields: [createdById], references: [id])
+
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, osNumber])
+  @@index([tenantId, technicianId, scheduledStart])
+  @@index([tenantId, scheduledStart, deletedAt])
+  @@index([tenantId, status])
+  @@index([tenantId, plate])
+  @@map("appointments")
 }
