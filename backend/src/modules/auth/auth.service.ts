@@ -238,6 +238,8 @@ export class AuthService {
         role: true,
         tenantId: true,
         allowedRoutes: true,
+        phone: true,
+        phoneVerifiedAt: true,
         tenant: {
           select: {
             id: true,
@@ -255,7 +257,9 @@ export class AuthService {
       throw new UnauthorizedException('Usuário não encontrado');
     }
 
-    return user;
+    const { phoneVerifiedAt, ...resto } = user;
+    // O painel usa esta flag pra abrir o popup obrigatório de cadastro do WhatsApp.
+    return { ...resto, phoneVerified: Boolean(phoneVerifiedAt) };
   }
 
   // ---------------------------------------------------------------------------

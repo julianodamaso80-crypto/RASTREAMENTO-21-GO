@@ -17,6 +17,10 @@ export interface User {
   tenant: Tenant;
   /** Telas liberadas. Vazio = todas as telas que o perfil já permite. */
   allowedRoutes?: string[];
+  /** WhatsApp cadastrado (só o verificado recebe código de recuperação). */
+  phone?: string | null;
+  /** Falso enquanto o número não foi confirmado por código. */
+  phoneVerified?: boolean;
   createdAt: string;
 }
 

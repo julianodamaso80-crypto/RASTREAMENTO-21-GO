@@ -88,6 +88,16 @@ export const techApi = {
     });
     return unwrap(res.data);
   },
+  /** Popup obrigatório: manda o código pro número informado. */
+  startPhone: async (phone: string): Promise<{ sentTo: string }> => {
+    const res = await techHttp.post('/tech/auth/phone/start', { phone });
+    return unwrap(res.data);
+  },
+  /** Popup obrigatório: confirma o código e marca o número como verificado. */
+  confirmPhone: async (code: string): Promise<{ ok: true }> => {
+    const res = await techHttp.post('/tech/auth/phone/confirm', { code });
+    return unwrap(res.data);
+  },
   me: async (): Promise<TechMe> => {
     const res = await techHttp.get('/tech/auth/me');
     return unwrap<TechMe>(res.data);

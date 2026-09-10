@@ -117,6 +117,22 @@ export const authApi = {
     >('/auth/forgot-password-whatsapp', { email });
     return res.data.data;
   },
+  /** Popup obrigatório: manda o código pro número informado. */
+  startPhone: async (phone: string): Promise<{ sentTo: string }> => {
+    const res = await api.post<ApiResponse<{ sentTo: string }>>(
+      '/auth/phone/start',
+      { phone },
+    );
+    return res.data.data;
+  },
+  /** Popup obrigatório: confirma o código e marca o número como verificado. */
+  confirmPhone: async (code: string): Promise<{ ok: true }> => {
+    const res = await api.post<ApiResponse<{ ok: true }>>(
+      '/auth/phone/confirm',
+      { code },
+    );
+    return res.data.data;
+  },
   /** Confere o código e grava a senha nova. */
   resetPasswordWhatsapp: async (
     email: string,

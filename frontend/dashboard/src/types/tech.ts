@@ -3,6 +3,8 @@ export interface TechMe {
   name: string;
   cpf: string;
   phone: string | null;
+  /** Falso enquanto o número não foi confirmado por código. */
+  phoneVerified: boolean;
   mustChangePassword: boolean;
   tenant: {
     id: string;

@@ -19,13 +19,39 @@ import {
   ResetPasswordWhatsappDto,
 } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ConfirmPhoneDto, StartPhoneDto } from './dto/phone.dto';
+import { PhoneVerificationService } from './phone-verification.service';
 import { Public, Roles, CurrentUser } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private phoneVerification: PhoneVerificationService,
+  ) {}
+
+  @Post('phone/start')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Envia código para verificar o WhatsApp do usuário logado',
+    description:
+      'O número fica pendente até o código conferir — número errado não ' +
+      'substitui o que já estava cadastrado.',
+  })
+  startPhone(@CurrentUser('id') userId: string, @Body() dto: StartPhoneDto) {
+    return this.phoneVerification.iniciar('user', userId, dto.phone);
+  }
+
+  @Post('phone/confirm')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirma o código e marca o WhatsApp como verificado' })
+  confirmPhone(@CurrentUser('id') userId: string, @Body() dto: ConfirmPhoneDto) {
+    return this.phoneVerification.confirmar('user', userId, dto.code);
+  }
 
   @Public()
   @Post('login')

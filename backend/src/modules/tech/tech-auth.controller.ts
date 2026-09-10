@@ -8,6 +8,8 @@ import {
   TechForgotPasswordDto,
   TechResetPasswordDto,
 } from './dto/forgot-password.dto';
+import { ConfirmPhoneDto, StartPhoneDto } from '../auth/dto/phone.dto';
+import { PhoneVerificationService } from '../auth/phone-verification.service';
 import { TechnicianJwtGuard } from './guards/technician-jwt.guard';
 import { CurrentTechnician } from './decorators/current-technician.decorator';
 
@@ -18,7 +20,10 @@ import { CurrentTechnician } from './decorators/current-technician.decorator';
 @ApiTags('Técnico - Auth')
 @Controller('tech/auth')
 export class TechAuthController {
-  constructor(private readonly service: TechAuthService) {}
+  constructor(
+    private readonly service: TechAuthService,
+    private readonly phoneVerification: PhoneVerificationService,
+  ) {}
 
   @Public()
   @Post('login')
@@ -57,6 +62,32 @@ export class TechAuthController {
   @ApiOperation({ summary: 'Dados do técnico logado' })
   me(@CurrentTechnician('id') id: string) {
     return this.service.me(id);
+  }
+
+  @Public()
+  @UseGuards(TechnicianJwtGuard)
+  @ApiBearerAuth()
+  @Post('phone/start')
+  @ApiOperation({
+    summary: 'Envia código para verificar o WhatsApp do técnico logado',
+  })
+  startPhone(
+    @CurrentTechnician('id') id: string,
+    @Body() dto: StartPhoneDto,
+  ) {
+    return this.phoneVerification.iniciar('technician', id, dto.phone);
+  }
+
+  @Public()
+  @UseGuards(TechnicianJwtGuard)
+  @ApiBearerAuth()
+  @Post('phone/confirm')
+  @ApiOperation({ summary: 'Confirma o código e marca o WhatsApp como verificado' })
+  confirmPhone(
+    @CurrentTechnician('id') id: string,
+    @Body() dto: ConfirmPhoneDto,
+  ) {
+    return this.phoneVerification.confirmar('technician', id, dto.code);
   }
 
   @Public()

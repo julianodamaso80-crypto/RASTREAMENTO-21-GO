@@ -76,6 +76,7 @@ export class TechAuthService {
         name: true,
         cpf: true,
         phone: true,
+        phoneVerifiedAt: true,
         mustChangePassword: true,
         tenant: {
           select: { id: true, name: true, logoUrl: true, primaryColor: true },
@@ -83,7 +84,9 @@ export class TechAuthService {
       },
     });
     if (!technician) throw new UnauthorizedException('Técnico não encontrado');
-    return technician;
+    const { phoneVerifiedAt, ...resto } = technician;
+    // O PWA usa esta flag pra abrir o popup obrigatório de cadastro do WhatsApp.
+    return { ...resto, phoneVerified: Boolean(phoneVerifiedAt) };
   }
 
   async changePassword(technicianId: string, dto: ChangePasswordDto) {

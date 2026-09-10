@@ -11,6 +11,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Relê o /auth/me — usado depois que o usuário verifica o WhatsApp. */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -42,6 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('token', res.accessToken);
     setToken(res.accessToken);
     setUser(res.user);
+    // A resposta do login não carrega o estado do WhatsApp verificado; sem esta
+    // leitura o popup obrigatório apareceria pra quem já confirmou o número.
+    try {
+      setUser(await authApi.me());
+    } catch {
+      // Falhar aqui não pode barrar quem acabou de entrar: o /me é relido no
+      // próximo carregamento.
+    }
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    setUser(await authApi.me());
   }, []);
 
   const logout = useCallback(() => {
@@ -60,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user && !!token,
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}

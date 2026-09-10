@@ -13,9 +13,11 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { StatusBar } from '@/components/layout/status-bar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { VerificarWhatsappDialog } from '@/components/auth/verificar-whatsapp-dialog';
+import { authApi } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, logout, refreshUser } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -46,6 +48,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated) return null;
+
+  // Sem WhatsApp confirmado não se navega: é esse número que recebe o código
+  // quando a pessoa esquecer a senha.
+  if (user && user.phoneVerified === false) {
+    return (
+      <VerificarWhatsappDialog
+        nome={user.name?.split(' ')[0]}
+        iniciar={authApi.startPhone}
+        confirmar={authApi.confirmPhone}
+        onVerificado={refreshUser}
+        onSair={logout}
+      />
+    );
+  }
 
   return (
     <TrackingProvider>

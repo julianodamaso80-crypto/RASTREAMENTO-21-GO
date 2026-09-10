@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { VerificarWhatsappDialog } from '@/components/auth/verificar-whatsapp-dialog';
 import { SelectNative } from '@/components/ui/select-native';
 import type {
   TechAssignment,
@@ -151,6 +152,20 @@ export default function TecnicoPage() {
 
   if (me.mustChangePassword) {
     return <ChangePasswordScreen name={me.name} onDone={loadMe} onLogout={handleLogout} />;
+  }
+
+  // Sem WhatsApp confirmado o técnico não recupera a senha depois — por isso
+  // o cadastro é obrigatório antes de qualquer tela.
+  if (!me.phoneVerified) {
+    return (
+      <VerificarWhatsappDialog
+        nome={me.name?.split(' ')[0]}
+        iniciar={techApi.startPhone}
+        confirmar={techApi.confirmPhone}
+        onVerificado={loadMe}
+        onSair={handleLogout}
+      />
+    );
   }
 
   if (installing) {
