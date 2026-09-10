@@ -2,20 +2,29 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft, CheckCircle2, Loader2, Mail } from 'lucide-react';
+import { ArrowLeft, Loader2, MessageCircle, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api';
 import { toast } from 'sonner';
 
-const schema = z.object({
+const emailSchema = z.object({
   email: z.string().email({ message: 'Email inválido' }),
 });
 
-type FormValues = z.infer<typeof schema>;
+const codigoSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, { message: 'O código tem 6 números' }),
+  newPassword: z
+    .string()
+    .min(6, { message: 'A nova senha precisa ter ao menos 6 caracteres' }),
+});
+
+type EmailValues = z.infer<typeof emailSchema>;
+type CodigoValues = z.infer<typeof codigoSchema>;
 
 function BrandHeader() {
   return (
@@ -39,70 +48,137 @@ function BrandHeader() {
   );
 }
 
+/**
+ * Recuperação de senha em duas etapas: informa o e-mail, recebe um código de
+ * 6 dígitos no WhatsApp cadastrado e escolhe ali mesmo a senha nova.
+ *
+ * O código nunca é a senha, e não vai link nenhum na mensagem — link em
+ * WhatsApp é o formato do golpe, e a plataforma não treina o usuário a clicar.
+ */
 export default function ForgotPasswordPage() {
+  const router = useRouter();
+  const [etapa, setEtapa] = useState<'email' | 'codigo'>('email');
+  const [email, setEmail] = useState('');
+  const [enviadoPara, setEnviadoPara] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [lastEmail, setLastEmail] = useState('');
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+  const formEmail = useForm<EmailValues>({
+    resolver: zodResolver(emailSchema),
     defaultValues: { email: '' },
   });
 
-  const onSubmit = async (values: FormValues) => {
+  const formCodigo = useForm<CodigoValues>({
+    resolver: zodResolver(codigoSchema),
+    defaultValues: { code: '', newPassword: '' },
+  });
+
+  const pedirCodigo = async (values: EmailValues) => {
     setSubmitting(true);
     try {
-      await authApi.forgotPassword(values.email);
-      setLastEmail(values.email);
-      setSent(true);
+      const res = await authApi.forgotPasswordWhatsapp(values.email);
+      setEmail(values.email);
+      setEnviadoPara(res.sentTo);
+      toast.success(res.message);
+      setEtapa('codigo');
     } catch (err: unknown) {
       const e = err as { response?: { status?: number } };
       if (e.response?.status === 429) {
-        toast.error('Muitas tentativas. Tente novamente em 1 hora.');
+        toast.error('Muitas tentativas. Tente novamente mais tarde.');
       } else {
-        // Em caso de erro genérico, ainda mostra sucesso pra não revelar enumeração
-        setLastEmail(values.email);
-        setSent(true);
+        // Erro genérico segue pra etapa do código: revelar falha aqui entregaria
+        // quais e-mails existem.
+        setEmail(values.email);
+        setEtapa('codigo');
       }
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (sent) {
+  const salvarSenha = async (values: CodigoValues) => {
+    setSubmitting(true);
+    try {
+      await authApi.resetPasswordWhatsapp(email, values.code, values.newPassword);
+      toast.success('Senha alterada. Entre com a senha nova.');
+      router.push('/login');
+    } catch {
+      toast.error('Código inválido ou expirado. Peça um novo código.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (etapa === 'codigo') {
     return (
       <div>
         <BrandHeader />
 
         <div className="flex items-center justify-center w-12 h-12 rounded-xl mb-6" style={{ background: 'rgba(199,211,1,0.15)', border: '1px solid rgba(199,211,1,0.3)' }}>
-          <CheckCircle2 className="h-6 w-6" style={{ color: '#9fab01' }} />
+          <ShieldCheck className="h-6 w-6" style={{ color: '#9fab01' }} />
         </div>
 
-        <h1 className="text-2xl font-bold text-slate-900">Verifique seu email</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Digite o código</h1>
         <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-          Se <span className="text-slate-900 font-medium">{lastEmail}</span> estiver cadastrado,
-          você receberá um link de redefinição em instantes. O link expira em 60 minutos e só
-          pode ser usado uma vez.
+          Enviamos um código de 6 números para o WhatsApp{' '}
+          <span className="text-slate-900 font-medium">{enviadoPara ?? 'cadastrado'}</span>.
+          Ele vale 15 minutos.
         </p>
 
-        <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs text-slate-600">
-            Não recebeu? Verifique a caixa de spam ou aguarde alguns minutos antes de tentar
-            novamente. Você pode solicitar até 3 emails por hora.
-          </p>
-        </div>
+        <form onSubmit={formCodigo.handleSubmit(salvarSenha)} className="mt-8 space-y-5" noValidate>
+          <div className="space-y-2">
+            <label htmlFor="code" className="text-sm font-medium text-slate-700">
+              Código
+            </label>
+            <Input
+              id="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              maxLength={6}
+              placeholder="000000"
+              aria-invalid={!!formCodigo.formState.errors.code}
+              className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900 text-center text-2xl tracking-[0.4em]"
+              {...formCodigo.register('code')}
+            />
+            {formCodigo.formState.errors.code && (
+              <p className="text-xs text-red-600">{formCodigo.formState.errors.code.message}</p>
+            )}
+          </div>
 
-        <Link
-          href="/login"
+          <div className="space-y-2">
+            <label htmlFor="newPassword" className="text-sm font-medium text-slate-700">
+              Nova senha
+            </label>
+            <Input
+              id="newPassword"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Mínimo de 6 caracteres"
+              aria-invalid={!!formCodigo.formState.errors.newPassword}
+              className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
+              {...formCodigo.register('newPassword')}
+            />
+            {formCodigo.formState.errors.newPassword && (
+              <p className="text-xs text-red-600">
+                {formCodigo.formState.errors.newPassword.message}
+              </p>
+            )}
+          </div>
+
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Salvar nova senha
+          </Button>
+        </form>
+
+        <button
+          type="button"
+          onClick={() => setEtapa('email')}
           className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-orange-600 hover:text-brand-orange-700 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Voltar para o login
-        </Link>
+          Usar outro e-mail
+        </button>
       </div>
     );
   }
@@ -112,15 +188,15 @@ export default function ForgotPasswordPage() {
       <BrandHeader />
 
       <div className="flex items-center justify-center w-12 h-12 rounded-xl mb-6" style={{ background: 'rgba(242,145,29,0.12)', border: '1px solid rgba(242,145,29,0.3)' }}>
-        <Mail className="h-6 w-6" style={{ color: '#f2911d' }} />
+        <MessageCircle className="h-6 w-6" style={{ color: '#f2911d' }} />
       </div>
 
       <h1 className="text-2xl font-bold text-slate-900">Esqueceu sua senha?</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Informe seu email e enviaremos um link para redefinir sua senha.
+        Informe seu e-mail e enviaremos um código no seu WhatsApp cadastrado.
       </p>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5" noValidate>
+      <form onSubmit={formEmail.handleSubmit(pedirCodigo)} className="mt-8 space-y-5" noValidate>
         <div className="space-y-2">
           <label htmlFor="email" className="text-sm font-medium text-slate-700">
             Email
@@ -131,26 +207,18 @@ export default function ForgotPasswordPage() {
             autoComplete="email"
             autoFocus
             placeholder="seu@email.com"
-            aria-invalid={!!errors.email}
+            aria-invalid={!!formEmail.formState.errors.email}
             className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
-            {...register('email')}
+            {...formEmail.register('email')}
           />
-          {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
+          {formEmail.formState.errors.email && (
+            <p className="text-xs text-red-600">{formEmail.formState.errors.email.message}</p>
+          )}
         </div>
 
-        <Button
-          type="submit"
-          disabled={submitting}
-          className="w-full bg-brand-orange-500 hover:bg-brand-orange-600 text-white font-semibold"
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Enviando...
-            </>
-          ) : (
-            'Enviar link de redefinição'
-          )}
+        <Button type="submit" className="w-full" disabled={submitting}>
+          {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Enviar código
         </Button>
       </form>
 

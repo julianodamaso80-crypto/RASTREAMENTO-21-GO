@@ -17,6 +17,10 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import {
+  PasswordResetService,
+  RepositorioReset,
+} from './password-reset.service';
 
 const RESET_TOKEN_LIFETIME_MINUTES = 60;
 const BCRYPT_ROUNDS = 10;
@@ -37,6 +41,7 @@ export class AuthService {
     private jwtService: JwtService,
     private traccarService: TraccarService,
     private emailService: EmailService,
+    private readonly reset: PasswordResetService,
   ) {}
 
   private checkRateLimit(key: string, max: number, windowMs: number): boolean {
@@ -251,5 +256,92 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Esqueci minha senha — código de 6 dígitos no WhatsApp
+  //
+  // Mesmo motor do app do associado e do PWA do técnico. O caminho antigo por
+  // e-mail (`forgotPassword`/`resetPassword`) continua funcionando, mas o painel
+  // não o oferece mais na tela.
+  // ---------------------------------------------------------------------------
+
+  /** Port do motor de recuperação sobre a tabela de usuários do painel. */
+  private repoReset(): RepositorioReset {
+    return {
+      buscar: async (email) => {
+        const u = await this.prisma.user.findFirst({
+          where: {
+            email: email.trim().toLowerCase(),
+            active: true,
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+            phone: true,
+            resetCodeHash: true,
+            resetCodeExpiresAt: true,
+            resetCodeAttempts: true,
+            resetCodeSentAt: true,
+          },
+        });
+        return u ?? null;
+      },
+      gravarCodigo: async (id, hash, expiraEm) => {
+        await this.prisma.user.update({
+          where: { id },
+          data: {
+            resetCodeHash: hash,
+            resetCodeExpiresAt: expiraEm,
+            resetCodeAttempts: 0,
+            resetCodeSentAt: new Date(),
+          },
+        });
+      },
+      contarTentativa: async (id) => {
+        await this.prisma.user.update({
+          where: { id },
+          data: { resetCodeAttempts: { increment: 1 } },
+        });
+      },
+      limparCodigo: async (id) => {
+        await this.prisma.user.update({
+          where: { id },
+          data: {
+            resetCodeHash: null,
+            resetCodeExpiresAt: null,
+            resetCodeAttempts: 0,
+          },
+        });
+      },
+      gravarSenha: async (id, hash) => {
+        await this.prisma.user.update({
+          where: { id },
+          // Invalida também o token de e-mail: uma recuperação encerra a outra.
+          data: {
+            password: hash,
+            resetTokenHash: null,
+            resetTokenExpiresAt: null,
+          },
+        });
+      },
+    };
+  }
+
+  async forgotPasswordWhatsapp(email: string) {
+    return this.reset.enviarCodigo(this.repoReset(), email, 'e-mail');
+  }
+
+  async resetPasswordWhatsapp(
+    email: string,
+    codigo: string,
+    novaSenha: string,
+  ) {
+    return this.reset.redefinirSenha(
+      this.repoReset(),
+      email,
+      codigo,
+      novaSenha,
+    );
   }
 }

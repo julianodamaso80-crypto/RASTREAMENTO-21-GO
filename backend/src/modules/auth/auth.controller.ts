@@ -14,7 +14,10 @@ import { Role } from '.prisma/client';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import {
+  ForgotPasswordDto,
+  ResetPasswordWhatsappDto,
+} from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public, Roles, CurrentUser } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -59,6 +62,34 @@ export class AuthController {
     return {
       message: 'Se o email existir, você receberá instruções em breve.',
     };
+  }
+
+  @Public()
+  @Post('forgot-password-whatsapp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Envia código de 6 dígitos no WhatsApp cadastrado do usuário',
+    description:
+      'Responde igual exista ou não o e-mail (anti-enumeração). Um envio a ' +
+      'cada 2 minutos por e-mail. O código vale 15 minutos.',
+  })
+  forgotPasswordWhatsapp(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPasswordWhatsapp(dto.email);
+  }
+
+  @Public()
+  @Post('reset-password-whatsapp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Confere o código do WhatsApp e grava a senha nova',
+    description: 'Código single-use. Morre em 5 tentativas erradas.',
+  })
+  resetPasswordWhatsapp(@Body() dto: ResetPasswordWhatsappDto) {
+    return this.authService.resetPasswordWhatsapp(
+      dto.email,
+      dto.code,
+      dto.newPassword,
+    );
   }
 
   @Public()

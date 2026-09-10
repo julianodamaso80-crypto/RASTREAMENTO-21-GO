@@ -100,6 +100,35 @@ export const authApi = {
   resetPassword: async (token: string, password: string): Promise<void> => {
     await api.post('/auth/reset-password', { token, password });
   },
+  /** Pede o código de 6 dígitos no WhatsApp cadastrado do usuário. */
+  forgotPasswordWhatsapp: async (
+    email: string,
+  ): Promise<{
+    message: string;
+    sentTo: string | null;
+    canUseWhatsapp: boolean;
+  }> => {
+    const res = await api.post<
+      ApiResponse<{
+        message: string;
+        sentTo: string | null;
+        canUseWhatsapp: boolean;
+      }>
+    >('/auth/forgot-password-whatsapp', { email });
+    return res.data.data;
+  },
+  /** Confere o código e grava a senha nova. */
+  resetPasswordWhatsapp: async (
+    email: string,
+    code: string,
+    newPassword: string,
+  ): Promise<void> => {
+    await api.post('/auth/reset-password-whatsapp', {
+      email,
+      code,
+      newPassword,
+    });
+  },
 };
 
 export const vehiclesApi = {
