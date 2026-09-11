@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { Button } from '@/components/ui/button';
 import type { StockMapPoint } from '@/types/stock';
 import { badgeConexao, haQuantoTempo, textoIgnicao, textoVoltagem } from './stock-format';
@@ -67,6 +68,15 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
 export function StockMapDetail({ ponto, onClose, onValidar, onAssociar }: Props) {
   const [maisInfo, setMaisInfo] = useState(false);
   const badge = badgeConexao(ponto.conexao);
+  // O endereço do `/stock/map` só existe pra rastreador parado (o backend não
+  // geocodifica o estoque inteiro em movimento). O selecionado pede o seu, da
+  // coordenada que está na tela — mesmo hook e mesma regra do painel do veículo.
+  const { address: enderecoAoVivo, loading: buscandoEndereco } = useReverseGeocode(
+    ponto.latitude,
+    ponto.longitude,
+  );
+  const endereco = enderecoAoVivo || ponto.endereco;
+  const temPosicao = ponto.latitude !== null && ponto.longitude !== null;
 
   const streetView =
     ponto.latitude !== null && ponto.longitude !== null
@@ -102,10 +112,16 @@ export function StockMapDetail({ ponto, onClose, onValidar, onAssociar }: Props)
             <Radio className="h-3 w-3" />
             Última atualização {haQuantoTempo(ponto.lastUpdate)}
           </p>
-          {ponto.endereco && (
+          {temPosicao && (
             <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
               <MapPin className="mt-0.5 h-3 w-3 shrink-0" />
-              <span>{ponto.endereco}</span>
+              {endereco ? (
+                <span>{endereco}</span>
+              ) : (
+                <span className="italic">
+                  {buscandoEndereco ? 'Buscando endereço…' : 'Endereço indisponível'}
+                </span>
+              )}
             </p>
           )}
         </div>

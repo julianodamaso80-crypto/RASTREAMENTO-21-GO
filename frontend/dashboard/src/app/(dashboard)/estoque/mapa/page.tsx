@@ -34,6 +34,7 @@ import {
 import { StockMapDetail } from '@/components/stock/stock-map-detail';
 import { SelectionCheckbox } from '@/components/map/selection-checkbox';
 import { SelectionListPanel } from '@/components/map/selection-list-panel';
+import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
 import { corDaConexao } from '@/components/stock/stock-map-container';
 import type { StockConexao, StockMapPoint } from '@/types/stock';
 import type { StockMapRef } from '@/components/stock/stock-map-container';
@@ -229,6 +230,14 @@ export default function EstoqueMapaPage() {
     .map((id) => pontos.find((p) => p.id === id))
     .filter((p): p is StockMapPoint => p !== undefined);
   const varios = marcados.length > 1;
+
+  // Endereço de cada marcado, da coordenada atual — o do `/stock/map` só vem
+  // pra quem está parado. Com um só, quem resolve é o painel de detalhe.
+  const enderecos = useReverseGeocodeMany(
+    varios
+      ? marcados.map((p) => ({ id: p.id, latitude: p.latitude, longitude: p.longitude }))
+      : [],
+  );
   // Painel de detalhe: com um marcado é ele; com vários, só quando o operador
   // pede "detalhes" numa linha da lista.
   const selecionado = varios
@@ -355,8 +364,8 @@ export default function EstoqueMapaPage() {
                 cor: corDaConexao(p),
                 // O endereço do estoque já vem resolvido do backend junto com
                 // o ponto — nada a buscar aqui.
-                endereco: p.endereco,
-                enderecoCarregando: false,
+                endereco: enderecos.get(p.id)?.address || p.endereco,
+                enderecoCarregando: enderecos.get(p.id)?.loading ?? false,
                 temPosicao: p.latitude != null && p.longitude != null,
               }))}
               onFocar={focar}
