@@ -3,13 +3,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Prisma } from '.prisma/client';
+import type { AppointmentStatus, Prisma, ServiceType } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { filtroBusca } from '../../common/search/termo-busca';
 import {
+  MENSAGEM_EXCLUSAO_BLOQUEADA,
+  diasDoPeriodo,
+  emAberto,
   exigeLocalizacao,
   exigeMotivoManutencao,
   exigeObservacao,
+  janelasDosCards,
   numeroOs,
   periodoDoTurno,
   timingDaExecucao,
@@ -19,9 +23,74 @@ import type {
   CriarAgendamento,
   EditarAgendamento,
   FiltroAgenda,
+  FiltroGrafico,
+  FiltroLista,
+  GraficoAnalise,
+  ItemGrafico,
   MudarStatus,
   PreenchimentoVeiculo,
 } from './appointments.types';
+
+/// Ordem das barras do gráfico de status, a mesma da origem.
+const ORDEM_STATUS_GRAFICO: AppointmentStatus[] = [
+  'SCHEDULED',
+  'CANCELED',
+  'COMPLETED',
+  'POSTPONED',
+  'ANTICIPATED',
+  'FRUSTRATED_CLIENT',
+  'FRUSTRATED_TECHNICIAN',
+  'CLOSED_BY_SYSTEM',
+];
+
+const ORDEM_SERVICO_GRAFICO: ServiceType[] = [
+  'INSTALLATION',
+  'MAINTENANCE',
+  'REMOVAL',
+  'OTHER',
+];
+
+/// Campos que a lista de OS e o export leem. Um só `select` para os dois não
+/// divergirem.
+const SELECT_LISTA = {
+  id: true,
+  osNumber: true,
+  serviceType: true,
+  maintenanceReason: true,
+  conduction: true,
+  status: true,
+  technicianStatus: true,
+  scheduledStart: true,
+  scheduledEnd: true,
+  shift: true,
+  completedAt: true,
+  plate: true,
+  chassi: true,
+  imei: true,
+  brand: true,
+  model: true,
+  clientName: true,
+  cpfCnpj: true,
+  phone: true,
+  cep: true,
+  address: true,
+  complement: true,
+  lat: true,
+  lng: true,
+  value: true,
+  description: true,
+  technicianNote: true,
+  statusNote: true,
+  autoScheduled: true,
+  createdAt: true,
+  technician: { select: { id: true, name: true } },
+  createdBy: { select: { id: true, name: true } },
+  vehicle: { select: { device: { select: { model: true } } } },
+} satisfies Prisma.AppointmentSelect;
+
+export type LinhaLista = Prisma.AppointmentGetPayload<{
+  select: typeof SELECT_LISTA;
+}>;
 
 /**
  * Agenda de ordens de serviço dos técnicos.
@@ -280,18 +349,260 @@ export class AppointmentsService {
     });
   }
 
-  /// Soft delete, como todo o resto do sistema.
+  /// Soft delete, como todo o resto do sistema. Só OS em aberto: a origem
+  /// recusa excluir o que já teve desfecho.
   async remover(tenantId: string, id: string) {
     const atual = await this.prisma.appointment.findFirst({
       where: { id, tenantId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!atual) throw new NotFoundException('Agendamento não encontrado.');
+    if (!emAberto(atual.status)) {
+      throw new BadRequestException(MENSAGEM_EXCLUSAO_BLOQUEADA);
+    }
     await this.prisma.appointment.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
     return { ok: true };
+  }
+
+  /// "Duplicar agendamento" da lista de OS: mesma ficha, número de OS novo,
+  /// status de volta a agendado. Como na origem, só OS em aberto se duplica.
+  async duplicar(tenantId: string, id: string, userId?: string) {
+    const a = await this.prisma.appointment.findFirst({
+      where: { id, tenantId, deletedAt: null },
+    });
+    if (!a) throw new NotFoundException('Agendamento não encontrado.');
+    if (!emAberto(a.status)) {
+      throw new BadRequestException(
+        'Só é possível duplicar agendamentos com os status agendado, prorrogado ou adiantado.',
+      );
+    }
+
+    return this.prisma.appointment.create({
+      data: {
+        osNumber: await this.proximoNumeroOs(tenantId, new Date()),
+        serviceType: a.serviceType,
+        maintenanceReason: a.maintenanceReason,
+        conduction: a.conduction,
+        scheduledStart: a.scheduledStart,
+        scheduledEnd: a.scheduledEnd,
+        shift: a.shift,
+        technicianId: a.technicianId,
+        vehicleId: a.vehicleId,
+        plate: a.plate,
+        chassi: a.chassi,
+        imei: a.imei,
+        brand: a.brand,
+        model: a.model,
+        installLocation: a.installLocation,
+        clientName: a.clientName,
+        cpfCnpj: a.cpfCnpj,
+        phone: a.phone,
+        email: a.email,
+        cep: a.cep,
+        address: a.address,
+        complement: a.complement,
+        lat: a.lat,
+        lng: a.lng,
+        value: a.value,
+        description: a.description,
+        technicianNote: a.technicianNote,
+        createdById: userId ?? null,
+        tenantId,
+      },
+    });
+  }
+
+  /// A aba "Ordens de Serviço": cards com os filtros da origem, do agendamento
+  /// mais distante para o mais próximo (é assim que a origem ordena).
+  async lista(tenantId: string, filtro: FiltroLista): Promise<LinhaLista[]> {
+    this.validarPeriodo(filtro.from, filtro.to);
+
+    const where: Prisma.AppointmentWhereInput = { tenantId, deletedAt: null };
+    const periodo = { gte: filtro.from, lte: filtro.to };
+    const e: Prisma.AppointmentWhereInput[] = [];
+
+    if (filtro.tipoData === 'CONCLUSAO') {
+      // Concluído/executado grava `completedAt`; os demais desfechos só têm a
+      // data em que o status mudou.
+      e.push({
+        OR: [
+          { completedAt: periodo },
+          { completedAt: null, statusChangedAt: periodo },
+        ],
+      });
+    } else {
+      where.scheduledStart = periodo;
+    }
+
+    if (filtro.technicianIds?.length) {
+      where.technicianId = { in: filtro.technicianIds };
+    }
+    if (filtro.createdByIds?.length) {
+      where.createdById = { in: filtro.createdByIds };
+    }
+    if (filtro.status?.length) where.status = { in: filtro.status };
+    if (filtro.serviceType) where.serviceType = filtro.serviceType;
+
+    const busca = filtroBusca(filtro.search, {
+      texto: ['clientName', 'address'],
+      alfanumerico: ['plate', 'chassi', 'osNumber'],
+      documento: ['cpfCnpj'],
+      identificador: ['imei', 'phone'],
+    });
+    if (busca) e.push(busca);
+    if (e.length) where.AND = e;
+
+    return this.prisma.appointment.findMany({
+      where,
+      orderBy: [{ scheduledStart: 'desc' }, { osNumber: 'desc' }],
+      select: SELECT_LISTA,
+    });
+  }
+
+  /// Os três cards do topo da aba Análise. Conta só OS ainda por executar
+  /// (agendado, prorrogado, adiantado) — é o que falta a equipe fazer.
+  async analiseResumo(tenantId: string, agora = new Date()) {
+    const janelas = janelasDosCards(agora);
+    const contar = (p: { inicio: Date; fim: Date }) =>
+      this.prisma.appointment.count({
+        where: {
+          tenantId,
+          deletedAt: null,
+          status: { in: ['SCHEDULED', 'POSTPONED', 'ANTICIPATED'] },
+          scheduledStart: { gte: p.inicio, lte: p.fim },
+        },
+      });
+    const [hoje, semana, mes] = await Promise.all([
+      contar(janelas.hoje),
+      contar(janelas.semana),
+      contar(janelas.mes),
+    ]);
+    return { hoje, semana, mes };
+  }
+
+  /// Um gráfico da aba Análise. Todos contam pela data do agendamento, menos o
+  /// "por usuário", que conta pela data em que a OS foi criada.
+  async grafico(
+    tenantId: string,
+    qual: GraficoAnalise,
+    filtro: FiltroGrafico,
+  ): Promise<{ dias: number; itens: ItemGrafico[] }> {
+    const dias = this.validarPeriodo(filtro.from, filtro.to);
+    const periodo = { gte: filtro.from, lte: filtro.to };
+    const base: Prisma.AppointmentWhereInput = {
+      tenantId,
+      deletedAt: null,
+      scheduledStart: periodo,
+    };
+
+    switch (qual) {
+      case 'usuarios': {
+        const grupos = await this.prisma.appointment.groupBy({
+          by: ['createdById'],
+          where: { tenantId, deletedAt: null, createdAt: periodo },
+          _count: { _all: true },
+        });
+        const ids = grupos
+          .map((g) => g.createdById)
+          .filter((v): v is string => Boolean(v));
+        const usuarios = ids.length
+          ? await this.prisma.user.findMany({
+              where: { id: { in: ids }, tenantId },
+              select: { id: true, name: true },
+            })
+          : [];
+        const nome = new Map(usuarios.map((u) => [u.id, u.name]));
+        return {
+          dias,
+          itens: ordenar(
+            grupos.map((g) => ({
+              chave: g.createdById ?? 'sem-usuario',
+              nome: g.createdById ? (nome.get(g.createdById) ?? 'Usuário removido') : 'Sem usuário',
+              qtd: g._count._all,
+            })),
+          ),
+        };
+      }
+
+      case 'tecnicos':
+        return {
+          dias,
+          itens: await this.porTecnico({
+            ...base,
+            ...(filtro.status ? { status: filtro.status } : {}),
+          }),
+        };
+
+      case 'motivos-manutencao':
+        return {
+          dias,
+          itens: await this.porTecnico({
+            ...base,
+            serviceType: 'MAINTENANCE',
+            ...(filtro.maintenanceReason
+              ? { maintenanceReason: filtro.maintenanceReason }
+              : {}),
+          }),
+        };
+
+      case 'visitas-frustradas':
+        return {
+          dias,
+          itens: await this.porTecnico({
+            ...base,
+            status: { in: ['FRUSTRATED_CLIENT', 'FRUSTRATED_TECHNICIAN'] },
+          }),
+        };
+
+      case 'status': {
+        const grupos = await this.prisma.appointment.groupBy({
+          by: ['status'],
+          where: base,
+          _count: { _all: true },
+        });
+        const qtd = new Map(grupos.map((g) => [g.status, g._count._all]));
+        return {
+          dias,
+          itens: ORDEM_STATUS_GRAFICO.map((s) => ({
+            chave: s,
+            nome: s,
+            qtd: qtd.get(s) ?? 0,
+          })),
+        };
+      }
+
+      case 'servicos': {
+        const grupos = await this.prisma.appointment.groupBy({
+          by: ['serviceType'],
+          where: base,
+          _count: { _all: true },
+        });
+        const qtd = new Map(grupos.map((g) => [g.serviceType, g._count._all]));
+        return {
+          dias,
+          itens: ORDEM_SERVICO_GRAFICO.map((s) => ({
+            chave: s,
+            nome: s,
+            qtd: qtd.get(s) ?? 0,
+          })),
+        };
+      }
+
+      default:
+        throw new BadRequestException('Gráfico desconhecido.');
+    }
+  }
+
+  /// Usuários do tenant, para o filtro "Selecione um usuário" da lista de OS.
+  usuarios(tenantId: string) {
+    return this.prisma.user.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   /**
@@ -450,6 +761,37 @@ export class AppointmentsService {
 
   // ---------------------------------------------------------------- privados
 
+  private validarPeriodo(inicio: Date, fim: Date): number {
+    try {
+      return diasDoPeriodo(inicio, fim);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  /// Conta por técnico e troca o id pelo nome. Técnico sem OS no período não
+  /// aparece, igual à origem.
+  private async porTecnico(where: Prisma.AppointmentWhereInput): Promise<ItemGrafico[]> {
+    const grupos = await this.prisma.appointment.groupBy({
+      by: ['technicianId'],
+      where,
+      _count: { _all: true },
+    });
+    if (!grupos.length) return [];
+    const tecnicos = await this.prisma.technician.findMany({
+      where: { id: { in: grupos.map((g) => g.technicianId) } },
+      select: { id: true, name: true },
+    });
+    const nome = new Map(tecnicos.map((t) => [t.id, t.name]));
+    return ordenar(
+      grupos.map((g) => ({
+        chave: g.technicianId,
+        nome: nome.get(g.technicianId) ?? 'Técnico removido',
+        qtd: g._count._all,
+      })),
+    );
+  }
+
   private validarServico(
     tipo: CriarAgendamento['serviceType'],
     motivo: CriarAgendamento['maintenanceReason'],
@@ -539,6 +881,11 @@ export class AppointmentsService {
         !mesmoDesfecho(a.status, a.technicianStatus),
     };
   }
+}
+
+/// Maior primeiro, empate por nome — a ordem das barras da origem.
+function ordenar(itens: ItemGrafico[]): ItemGrafico[] {
+  return [...itens].sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome));
 }
 
 function isoDia(d: Date): string {

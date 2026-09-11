@@ -138,3 +138,73 @@ export function timingDaExecucao(
   }
   return 'ON_TIME';
 }
+
+/// Status em que a OS ainda está "viva": a origem só deixa excluir e duplicar
+/// nesses três (agendado, prorrogado, adiantado). OS que já teve desfecho é
+/// histórico da tratativa e fica.
+const STATUS_EM_ABERTO: AppointmentStatus[] = [
+  'SCHEDULED',
+  'POSTPONED',
+  'ANTICIPATED',
+];
+
+export function emAberto(status: AppointmentStatus): boolean {
+  return STATUS_EM_ABERTO.includes(status);
+}
+
+export const MENSAGEM_EXCLUSAO_BLOQUEADA =
+  'A exclusão só é permitida para agendamentos com os status agendado, prorrogado ou adiantado.';
+
+/// Quando a lista filtra pela data de CONCLUSÃO, a origem desabilita os status
+/// que não têm conclusão (agendado, cancelado, prorrogado, adiantado e as
+/// visitas frustradas). Sobram estes.
+export const STATUS_COM_CONCLUSAO: AppointmentStatus[] = [
+  'COMPLETED',
+  'CLOSED_BY_SYSTEM',
+  'EXECUTED',
+  'CLIENT_NO_SHOW',
+  'CANCELED_BY_CLIENT',
+];
+
+/// Teto de período da origem, tanto na lista de OS quanto nos gráficos.
+export const PERIODO_MAXIMO_DIAS = 90;
+
+/// Quantos dias o período cobre, contando os dois extremos (07 a 07 = 1 dia),
+/// como a origem escreve no título dos gráficos. Recusa período invertido ou
+/// acima do teto.
+export function diasDoPeriodo(inicio: Date, fim: Date): number {
+  if (fim < inicio) {
+    throw new Error('A data de início não pode ser posterior à data fim.');
+  }
+  const umDia = 24 * 60 * 60 * 1000;
+  const dias =
+    Math.round(
+      (new Date(fim.getFullYear(), fim.getMonth(), fim.getDate()).getTime() -
+        new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate()).getTime()) /
+        umDia,
+    ) + 1;
+  if (dias > PERIODO_MAXIMO_DIAS) {
+    throw new Error(`Selecione um período inferior a ${PERIODO_MAXIMO_DIAS} dias.`);
+  }
+  return dias;
+}
+
+/// As três janelas dos cards "Quantidade de agendados" da aba Análise:
+/// o que falta do dia de hoje, os próximos 7 dias e do 8º ao 30º dia.
+export function janelasDosCards(agora: Date): Record<'hoje' | 'semana' | 'mes', Periodo> {
+  const dia = (n: number, fimDoDia = false) =>
+    new Date(
+      agora.getFullYear(),
+      agora.getMonth(),
+      agora.getDate() + n,
+      fimDoDia ? 23 : 0,
+      fimDoDia ? 59 : 0,
+      fimDoDia ? 59 : 0,
+      fimDoDia ? 999 : 0,
+    );
+  return {
+    hoje: { inicio: agora, fim: dia(0, true) },
+    semana: { inicio: dia(1), fim: dia(7, true) },
+    mes: { inicio: dia(8), fim: dia(30, true) },
+  };
+}

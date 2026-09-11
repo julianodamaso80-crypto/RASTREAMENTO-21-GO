@@ -16,6 +16,12 @@ import type {
   AppointmentStatus,
   CriarAgendamentoPayload,
   PreenchimentoVeiculo,
+  OrdemServico,
+  FiltroOrdens,
+  GraficoAnalise,
+  ItemGrafico,
+  ResumoAnalise,
+  MaintenanceReason,
 } from '@/types/appointment';
 import type { GoogleTileSource } from '@/types/map';
 import type {
@@ -1136,4 +1142,77 @@ export const appointmentsApi = {
   remover: async (id: string): Promise<void> => {
     await api.delete(`/appointments/${id}`);
   },
+
+  duplicar: async (id: string): Promise<Appointment> => {
+    const res = await api.post<ApiResponse<Appointment>>(
+      `/appointments/${id}/duplicar`,
+    );
+    return res.data.data;
+  },
+
+  /** Aba "Ordens de Serviço". */
+  lista: async (f: FiltroOrdens): Promise<OrdemServico[]> => {
+    const res = await api.get<ApiResponse<OrdemServico[]>>('/appointments/lista', {
+      params: ordensParams(f),
+    });
+    return res.data.data;
+  },
+
+  exportar: async (f: FiltroOrdens): Promise<Blob> => {
+    const res = await api.get('/appointments/export', {
+      params: ordensParams(f),
+      responseType: 'blob',
+    });
+    return res.data as Blob;
+  },
+
+  usuarios: async (): Promise<{ id: string; name: string }[]> => {
+    const res = await api.get<ApiResponse<{ id: string; name: string }[]>>(
+      '/appointments/usuarios',
+    );
+    return res.data.data;
+  },
+
+  analiseResumo: async (): Promise<ResumoAnalise> => {
+    const res = await api.get<ApiResponse<ResumoAnalise>>(
+      '/appointments/analise/resumo',
+    );
+    return res.data.data;
+  },
+
+  grafico: async (
+    qual: GraficoAnalise,
+    f: {
+      from: string;
+      to: string;
+      status?: AppointmentStatus | '';
+      maintenanceReason?: MaintenanceReason | '';
+    },
+  ): Promise<{ dias: number; itens: ItemGrafico[] }> => {
+    const res = await api.get<ApiResponse<{ dias: number; itens: ItemGrafico[] }>>(
+      `/appointments/analise/${qual}`,
+      {
+        params: {
+          from: f.from,
+          to: f.to,
+          status: f.status || undefined,
+          maintenanceReason: f.maintenanceReason || undefined,
+        },
+      },
+    );
+    return res.data.data;
+  },
 };
+
+function ordensParams(f: FiltroOrdens) {
+  return {
+    from: f.from,
+    to: f.to,
+    tipoData: f.tipoData,
+    technicianIds: f.technicianIds?.length ? f.technicianIds.join(',') : undefined,
+    createdByIds: f.createdByIds?.length ? f.createdByIds.join(',') : undefined,
+    status: f.status?.length ? f.status.join(',') : undefined,
+    serviceType: f.serviceType || undefined,
+    search: f.search || undefined,
+  };
+}

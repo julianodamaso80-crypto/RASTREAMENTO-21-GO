@@ -65,6 +65,43 @@ export interface FiltroAgenda {
   search?: string;
 }
 
+/// Filtros da aba "Ordens de Serviço", os mesmos da origem.
+export interface FiltroLista {
+  from: Date;
+  to: Date;
+  /// Qual data o período filtra: a do agendamento ou a da conclusão.
+  tipoData: 'AGENDAMENTO' | 'CONCLUSAO';
+  technicianIds?: string[];
+  /// Usuário que criou o agendamento ("Selecione um usuário").
+  createdByIds?: string[];
+  status?: AppointmentStatus[];
+  serviceType?: ServiceType;
+  search?: string;
+}
+
+/// Os gráficos da aba "Análise". Cada um tem o próprio período.
+export type GraficoAnalise =
+  | 'usuarios'
+  | 'tecnicos'
+  | 'motivos-manutencao'
+  | 'status'
+  | 'servicos'
+  | 'visitas-frustradas';
+
+export interface FiltroGrafico {
+  from: Date;
+  to: Date;
+  status?: AppointmentStatus;
+  maintenanceReason?: MaintenanceReason;
+}
+
+/// Uma barra/fatia de gráfico: rótulo e quantidade.
+export interface ItemGrafico {
+  chave: string;
+  nome: string;
+  qtd: number;
+}
+
 /// O que o veículo devolve pra preencher o formulário sozinho.
 export interface PreenchimentoVeiculo {
   origem: 'ATIVO' | 'PENDENCIA_SGA' | 'ESPELHO_SGA';

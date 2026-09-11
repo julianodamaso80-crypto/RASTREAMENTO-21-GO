@@ -201,12 +201,12 @@ export const SERVICE_TYPE_LABEL: Record<ServiceType, string> = {
 export const MAINTENANCE_REASON_LABEL: Record<MaintenanceReason, string> = {
   WITH_REPLACEMENT: 'Manutenção com troca',
   WITHOUT_REPLACEMENT: 'Manutenção sem troca',
-  INSTALL_FAILURE: 'Falha na instalação',
-  SIGNAL_FAILURE: 'Falha de sinal',
-  WORKSHOP: 'Oficina',
-  AFTER_THEFT: 'Pós roubo',
-  LINE_OFF: 'Linha off',
-  GPS_FAILURE: 'Falha no GPS',
+  INSTALL_FAILURE: 'Manutenção falha na instalação',
+  SIGNAL_FAILURE: 'Manutenção falha de sinal',
+  WORKSHOP: 'Manutenção oficina',
+  AFTER_THEFT: 'Manutenção pós roubo',
+  LINE_OFF: 'Manutenção linha off',
+  GPS_FAILURE: 'Manutenção falha no GPS',
 };
 
 export const CONDUCTION_LABEL: Record<ServiceConduction, string> = {
@@ -230,11 +230,109 @@ export const STATUS_LABEL: Record<AppointmentStatus, string> = {
   ANTICIPATED: 'Adiantado',
   FRUSTRATED_CLIENT: 'Visita frustrada cliente',
   FRUSTRATED_TECHNICIAN: 'Visita frustrada técnico',
-  CLOSED_BY_SYSTEM: 'Fechado pelo sistema',
-  EXECUTED: 'Executado',
-  CLIENT_NO_SHOW: 'Cliente não compareceu',
-  CANCELED_BY_CLIENT: 'Cancelado pelo cliente',
+  CLOSED_BY_SYSTEM: 'Concluído pelo sistema',
+  EXECUTED: 'Auto-agendamento executado',
+  CLIENT_NO_SHOW: 'Auto-agendamento cliente não compareceu',
+  CANCELED_BY_CLIENT: 'Auto-agendamento cancelado pelo cliente',
 };
+
+/** Ordem dos status nos filtros, a mesma da origem (1..13). */
+export const STATUS_ORDEM: AppointmentStatus[] = [
+  'SCHEDULED',
+  'CANCELED',
+  'COMPLETED',
+  'POSTPONED',
+  'ANTICIPATED',
+  'FRUSTRATED_CLIENT',
+  'FRUSTRATED_TECHNICIAN',
+  'CLOSED_BY_SYSTEM',
+  'EXECUTED',
+  'CLIENT_NO_SHOW',
+  'CANCELED_BY_CLIENT',
+];
+
+/** Status em que a OS pode ser duplicada ou excluída (agendado, prorrogado, adiantado). */
+export const STATUS_EM_ABERTO: AppointmentStatus[] = [
+  'SCHEDULED',
+  'POSTPONED',
+  'ANTICIPATED',
+];
+
+/** Filtrando pela data de conclusão, só sobram estes (a origem desabilita o resto). */
+export const STATUS_COM_CONCLUSAO: AppointmentStatus[] = [
+  'COMPLETED',
+  'CLOSED_BY_SYSTEM',
+  'EXECUTED',
+  'CLIENT_NO_SHOW',
+  'CANCELED_BY_CLIENT',
+];
+
+/** Um card da aba "Ordens de Serviço". */
+export interface OrdemServico {
+  id: string;
+  osNumber: string;
+  serviceType: ServiceType;
+  maintenanceReason: MaintenanceReason | null;
+  conduction: ServiceConduction;
+  status: AppointmentStatus;
+  technicianStatus: TechnicianServiceStatus | null;
+  scheduledStart: string;
+  scheduledEnd: string;
+  shift: AppointmentShift;
+  completedAt: string | null;
+  plate: string | null;
+  chassi: string | null;
+  imei: string | null;
+  brand: string | null;
+  model: string | null;
+  clientName: string | null;
+  cpfCnpj: string | null;
+  phone: string | null;
+  cep: string | null;
+  address: string | null;
+  complement: string | null;
+  lat: number | null;
+  lng: number | null;
+  value: string | number;
+  description: string | null;
+  technicianNote: string | null;
+  statusNote: string | null;
+  autoScheduled: boolean;
+  createdAt: string;
+  technician: { id: string; name: string };
+  createdBy: { id: string; name: string } | null;
+}
+
+export interface FiltroOrdens {
+  from: string;
+  to: string;
+  tipoData: 'AGENDAMENTO' | 'CONCLUSAO';
+  technicianIds?: string[];
+  createdByIds?: string[];
+  status?: AppointmentStatus[];
+  serviceType?: ServiceType | '';
+  search?: string;
+}
+
+export type GraficoAnalise =
+  | 'usuarios'
+  | 'tecnicos'
+  | 'motivos-manutencao'
+  | 'status'
+  | 'servicos'
+  | 'visitas-frustradas';
+
+export interface ItemGrafico {
+  chave: string;
+  nome: string;
+  qtd: number;
+}
+
+export interface ResumoAnalise {
+  hoje: number;
+  semana: number;
+  mes: number;
+}
 
 export const TECHNICIAN_STATUS_LABEL: Record<TechnicianServiceStatus, string> = {
   SCHEDULED: 'Agendado',

@@ -8,20 +8,26 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import {
   Role,
   type AppointmentStatus,
+  type MaintenanceReason,
   type ServiceType,
 } from '.prisma/client';
 import { Roles, RequireRoute } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AppointmentsService } from './appointments.service';
+import { AppointmentsExportService } from './appointments-export.service';
 import type {
   CriarAgendamento,
   EditarAgendamento,
+  FiltroLista,
+  GraficoAnalise,
   MudarStatus,
 } from './appointments.types';
 
@@ -41,7 +47,10 @@ interface RemarcarBody {
 @RequireRoute('agenda')
 @Controller('appointments')
 export class AppointmentsController {
-  constructor(private service: AppointmentsService) {}
+  constructor(
+    private service: AppointmentsService,
+    private exportService: AppointmentsExportService,
+  ) {}
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
@@ -98,6 +107,71 @@ export class AppointmentsController {
     return this.service.preencherPorPlaca(req.tenantId, termo ?? '');
   }
 
+  @Get('lista')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
+  @ApiOperation({ summary: 'Aba "Ordens de Serviço": lista filtrada' })
+  lista(@Req() req: AuthenticatedRequest, @Query() q: ListaQuery) {
+    return this.service.lista(req.tenantId, filtroLista(q));
+  }
+
+  @Get('export')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
+  @ApiOperation({ summary: 'Exporta a lista de OS em XLSX (Relatório Agendamento)' })
+  async exportar(
+    @Req() req: AuthenticatedRequest,
+    @Res() res: Response,
+    @Query() q: ListaQuery,
+  ) {
+    const linhas = await this.service.lista(req.tenantId, filtroLista(q));
+    const buffer = await this.exportService.toXlsx(linhas);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="relatorio-agendamento.xlsx"',
+    );
+    res.send(buffer);
+  }
+
+  @Get('usuarios')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
+  @ApiOperation({ summary: 'Usuários do filtro "Selecione um usuário"' })
+  usuarios(@Req() req: AuthenticatedRequest) {
+    return this.service.usuarios(req.tenantId);
+  }
+
+  @Get('analise/resumo')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
+  @ApiOperation({ summary: 'Cards "Quantidade de agendados" da aba Análise' })
+  analiseResumo(@Req() req: AuthenticatedRequest) {
+    return this.service.analiseResumo(req.tenantId);
+  }
+
+  @Get('analise/:grafico')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
+  @ApiOperation({ summary: 'Um gráfico da aba Análise no período' })
+  @ApiQuery({ name: 'from', required: true, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'to', required: true, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'maintenanceReason', required: false })
+  grafico(
+    @Req() req: AuthenticatedRequest,
+    @Param('grafico') grafico: GraficoAnalise,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('status') status?: AppointmentStatus,
+    @Query('maintenanceReason') maintenanceReason?: MaintenanceReason,
+  ) {
+    return this.service.grafico(req.tenantId, grafico, {
+      from: inicioDoDia(from),
+      to: fimDoDia(to),
+      status: status || undefined,
+      maintenanceReason: maintenanceReason || undefined,
+    });
+  }
+
   @Get(':id')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
   @ApiOperation({ summary: 'Ficha do agendamento' })
@@ -150,12 +224,43 @@ export class AppointmentsController {
     return this.service.mudarStatus(req.tenantId, id, body);
   }
 
+  @Post(':id/duplicar')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Duplica a OS com número novo' })
+  duplicar(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.service.duplicar(req.tenantId, id, req.user?.id);
+  }
+
   @Delete(':id')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @ApiOperation({ summary: 'Remove o agendamento (soft delete)' })
   remover(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.service.remover(req.tenantId, id);
   }
+}
+
+interface ListaQuery {
+  from: string;
+  to: string;
+  tipoData?: string;
+  technicianIds?: string;
+  createdByIds?: string;
+  status?: string;
+  serviceType?: ServiceType;
+  search?: string;
+}
+
+function filtroLista(q: ListaQuery): FiltroLista {
+  return {
+    from: inicioDoDia(q.from),
+    to: fimDoDia(q.to),
+    tipoData: q.tipoData === 'CONCLUSAO' ? 'CONCLUSAO' : 'AGENDAMENTO',
+    technicianIds: lista(q.technicianIds),
+    createdByIds: lista(q.createdByIds),
+    status: lista(q.status) as AppointmentStatus[] | undefined,
+    serviceType: q.serviceType || undefined,
+    search: q.search || undefined,
+  };
 }
 
 function lista(v?: string): string[] | undefined {

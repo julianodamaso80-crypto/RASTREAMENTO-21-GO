@@ -32,6 +32,7 @@ import {
   type ServiceConduction,
   type ServiceType,
 } from '@/types/appointment';
+import { diaDoIso, horaDoIso } from './datas';
 
 interface Props {
   aberto: boolean;
@@ -92,10 +93,10 @@ export function AgendamentoDialog({
         serviceType: existente.serviceType,
         maintenanceReason: existente.maintenanceReason,
         conduction: existente.conduction,
-        date: existente.scheduledStart.slice(0, 10),
+        date: diaDoIso(existente.scheduledStart),
         shift: existente.shift,
-        startTime: existente.scheduledStart.slice(11, 16),
-        endTime: existente.scheduledEnd.slice(11, 16),
+        startTime: horaDoIso(existente.scheduledStart),
+        endTime: horaDoIso(existente.scheduledEnd),
         technicianId: existente.technicianId,
         vehicleId: existente.vehicleId,
         plate: existente.plate,
