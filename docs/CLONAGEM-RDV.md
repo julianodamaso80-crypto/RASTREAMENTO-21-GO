@@ -67,6 +67,65 @@ diferentes (eles claro/Bootstrap, nós navy) e o conteúdo também — deu 87% d
 diferença em telas que estão corretas. Para "ficou igual?" contra a origem,
 quem responde é a conferência campo a campo do `inventario.json`.
 
+## Ler o JavaScript deles — a parte que mais rende
+
+As regras que decidem o comportamento não aparecem em captura de tela nenhuma:
+teto de 90 dias, 10 OS por rota, 20 por PDF, excluir só OS aberta. Tudo isso
+estava no JS da plataforma. Os arquivos ficam em
+`/js/<modulo>/<Modulo>Controller.js` e `/js/<modulo>/<Modulo>Component.min.js`.
+
+**Atalho que não existe:** a RDV **não publica source map** (conferido em
+11/09/2026 nos três arquivos da agenda). Se um dia publicar, é o caminho mais
+curto — o código original sai inteiro, com os nomes de verdade.
+
+Sem source map, duas ferramentas resolvem, nesta ordem:
+
+### 1. `webcrack` — desminifica de graça (j4k0xb/webcrack, MIT)
+
+```bash
+npx webcrack@latest AgendamentosComponent.min.js -o saida/
+```
+
+Não usa LLM, não custa nada, roda em segundos. No arquivo da agenda foram
+**3.806 transformações**. O ganho medido: a regra do período estava numa linha
+de 1.200 caracteres com ternários encadeados
+
+```js
+l.isBefore(i) ? Notiflix.Notify.warning("A data de início...") : l.diff(i, "days") > 90 ? ...
+```
+
+e virou `if / else if / else` legível. **Use sempre isto antes de ler.**
+
+### 2. `humanify` — troca `D`, `H`, `K` por nome de gente (jehna/humanify, MIT)
+
+```bash
+# binário de Windows em github.com/jehna/humanify/releases (2,4 MB, sem instalar nada)
+OPENROUTER_API_KEY=<a chave que o backend já usa> \
+  ./humanify.exe openrouter saida/deobfuscated.js -m openai/gpt-4.1-mini -o legivel.js --progress
+```
+
+⚠️ **O `-m` não é opcional.** O modelo padrão do preset OpenRouter
+(`openai/gpt-oss-120b`) devolve raciocínio no lugar de JSON e o humanify aborta
+com `message.content was not a string`. Com `openai/gpt-4.1-mini` passou
+limpo.
+
+**Medido em 11/09/2026** no `TecnicosComponent.min.js` (41 KB, 47 KB depois do
+webcrack): **122 identificadores renomeados, US$ 0,012 e ~12 minutos.** O ganho:
+
+```js
+const s = function (o) { ... }                         // antes
+const formatTechnicianLabel = (count2, customLabels)   // depois
+$.get("/tecnicos/TecnicosController", evaluationDates, function (analysisData)
+```
+
+⚠️ **Nome renomeado é hipótese, não verdade.** O LLM chuta pelo uso; quem manda
+continua sendo o comportamento no arquivo. Serve para ler rápido, não para
+citar como prova.
+
+**O que não serve:** `getfrontend` (é para SPA com chunks; a RDV é jQuery com
+arquivo por módulo) e conversores de HAR em OpenAPI — o nosso `recon-rdv.mjs`
+já guarda o corpo de cada resposta, que é o que precisamos.
+
 ## O roteiro (o que deu certo na agenda, em 10 e 11/09)
 
 1. **Recon da tela na origem** — roda o script acima, uma pasta por módulo.
