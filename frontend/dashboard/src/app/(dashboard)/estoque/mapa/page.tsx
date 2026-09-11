@@ -56,7 +56,17 @@ type Filtro = 'todos' | 'ONLINE' | 'OFFLINE' | 'SEM_GPS' | 'SLEEP' | 'LIGADOS';
 export default function EstoqueMapaPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const imeiInicial = params.get('imei');
+  // Aberto pela lista do estoque com um ou mais marcados (`imeis=a,b`) ou pelo
+  // botão da linha (`imei=a`): o mapa mostra só esses, não o estoque inteiro.
+  const imeisDaUrl = useMemo(
+    () =>
+      (params.get('imeis') ?? params.get('imei') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [params],
+  );
+  const recorte = imeisDaUrl.length > 0;
 
   const [pontos, setPontos] = useState<StockMapPoint[]>([]);
   const [indisponivel, setIndisponivel] = useState(false);
@@ -96,6 +106,12 @@ export default function EstoqueMapaPage() {
     return () => clearInterval(timer);
   }, [carregar]);
 
+  const visiveis = useMemo(() => {
+    if (!recorte) return pontos;
+    const pedidos = new Set(imeisDaUrl);
+    return pontos.filter((p) => pedidos.has(p.imei));
+  }, [pontos, imeisDaUrl, recorte]);
+
   /** Troca a seleção inteira por este — o clique no corpo do card. */
   const selecionar = useCallback(
     (id: string) => {
@@ -132,19 +148,45 @@ export default function EstoqueMapaPage() {
     if (selecionadosIds.length > 0) setListaOpen(false);
   }, [selecionadosIds]);
 
-  // Abrir no mapa a partir do estoque: já entra com o equipamento focado.
+  // Abrir no mapa a partir do estoque: já entra com os pedidos marcados. Um
+  // só ganha o voo até ele; vários são enquadrados pelo efeito de baixo.
   useEffect(() => {
-    if (focouInicial.current || !imeiInicial || pontos.length === 0) return;
-    const alvo = pontos.find((p) => p.imei === imeiInicial);
-    if (!alvo) return;
+    if (focouInicial.current || !recorte || pontos.length === 0) return;
     focouInicial.current = true;
-    setSelecionadosIds([alvo.id]);
-    if (alvo.latitude != null && alvo.longitude != null) {
-      mapRef.current?.flyTo(alvo.longitude, alvo.latitude, FOCO_ZOOM, PAINEL_LARGURA);
-    } else {
-      toast.info('Esse rastreador ainda não reportou posição.');
+    if (visiveis.length === 0) {
+      toast.info('Esse rastreador não está mais no estoque.');
+      return;
     }
-  }, [imeiInicial, pontos]);
+    setSelecionadosIds(visiveis.map((p) => p.id));
+    const comPosicao = visiveis.filter(
+      (p) => p.latitude != null && p.longitude != null,
+    );
+    if (comPosicao.length === 0) {
+      toast.info(
+        visiveis.length === 1
+          ? 'Esse rastreador ainda não reportou posição.'
+          : 'Nenhum desses rastreadores reportou posição ainda.',
+      );
+    } else if (visiveis.length === 1) {
+      const alvo = comPosicao[0];
+      mapRef.current?.flyTo(alvo.longitude!, alvo.latitude!, FOCO_ZOOM, PAINEL_LARGURA);
+    }
+  }, [recorte, pontos, visiveis]);
+
+  // "Ver todo o estoque": tira os IMEIs da URL e desfaz a marcação.
+  const verTodoEstoque = useCallback(() => {
+    setSelecionadosIds([]);
+    setDetalheId(null);
+    router.replace('/estoque/mapa');
+  }, [router]);
+
+  // Saiu do recorte: enquadra o estoque inteiro depois que o mapa já recebeu
+  // todos os pontos.
+  const eraRecorte = useRef(recorte);
+  useEffect(() => {
+    if (eraRecorte.current && !recorte) mapRef.current?.fitAll();
+    eraRecorte.current = recorte;
+  }, [recorte]);
 
   // Os mesmos cinco contadores da referência.
   const contagem = useMemo(() => {
@@ -153,7 +195,7 @@ export default function EstoqueMapaPage() {
     let semGps = 0;
     let sleep = 0;
     let ligados = 0;
-    for (const p of pontos) {
+    for (const p of visiveis) {
       if (p.conexao === 'ONLINE') online++;
       else if (p.conexao === 'SLEEP') sleep++;
       else offline++;
@@ -161,11 +203,11 @@ export default function EstoqueMapaPage() {
       if (p.ignicao === true) ligados++;
     }
     return { online, offline, semGps, sleep, ligados };
-  }, [pontos]);
+  }, [visiveis]);
 
   const lista = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    return pontos.filter((p) => {
+    return visiveis.filter((p) => {
       if (filtro === 'ONLINE' && p.conexao !== 'ONLINE') return false;
       if (filtro === 'OFFLINE' && p.conexao === 'ONLINE') return false;
       if (filtro === 'SEM_GPS' && p.gpsConfiavel) return false;
@@ -179,7 +221,7 @@ export default function EstoqueMapaPage() {
         (p.endereco ?? '').toLowerCase().includes(termo)
       );
     });
-  }, [pontos, busca, filtro]);
+  }, [visiveis, busca, filtro]);
 
   const marcados = selecionadosIds
     .map((id) => pontos.find((p) => p.id === id))
@@ -225,7 +267,9 @@ export default function EstoqueMapaPage() {
       {/* Lista lateral — só aparece de lg pra cima */}
       <aside className="hidden w-[340px] shrink-0 flex-col border-r border-border/40 lg:flex">
         <SidebarContent
-          total={pontos.length}
+          total={visiveis.length}
+          recorte={recorte}
+          onVerTodoEstoque={verTodoEstoque}
           carregando={carregando}
           onBack={() => router.push('/estoque')}
           onRefresh={() => void carregar(true)}
@@ -251,7 +295,7 @@ export default function EstoqueMapaPage() {
 
         <StockMap
           ref={mapRef}
-          pontos={pontos}
+          pontos={visiveis}
           selecionadosIds={selecionadosIds}
           // Com um grupo marcado, clicar num pino centraliza nele e pronto:
           // trocar a seleção desmancharia os outros por um clique de quem só
@@ -266,13 +310,17 @@ export default function EstoqueMapaPage() {
           onClick={() => {
             // Com rastreadores marcados o mapa mostra só eles; "Ver todos"
             // precisa desfazer a marcação, senão o botão não faz nada visível.
+            if (recorte) {
+              verTodoEstoque();
+              return;
+            }
             setSelecionadosIds([]);
             setDetalheId(null);
             mapRef.current?.fitAll();
           }}
         >
           <Crosshair className="h-3.5 w-3.5" />
-          Ver todos
+          {recorte ? 'Ver todo o estoque' : 'Ver todos'}
         </Button>
 
         {/* Abaixo de lg a aside com a lista desaparece — este botão + gaveta é
@@ -343,7 +391,9 @@ export default function EstoqueMapaPage() {
         <SheetContent side="left" className="w-[85vw] max-w-sm p-0 lg:hidden">
           <SheetTitle className="sr-only">Estoque</SheetTitle>
           <SidebarContent
-            total={pontos.length}
+            total={visiveis.length}
+          recorte={recorte}
+          onVerTodoEstoque={verTodoEstoque}
             carregando={carregando}
             onBack={() => router.push('/estoque')}
             onRefresh={() => void carregar(true)}
@@ -387,6 +437,8 @@ export default function EstoqueMapaPage() {
  */
 function SidebarContent({
   total,
+  recorte,
+  onVerTodoEstoque,
   carregando,
   onBack,
   onRefresh,
@@ -401,6 +453,9 @@ function SidebarContent({
   onMarcar,
 }: {
   total: number;
+  /** Aberto com os marcados na lista do estoque: o título conta só eles. */
+  recorte: boolean;
+  onVerTodoEstoque: () => void;
   carregando: boolean;
   onBack: () => void;
   onRefresh: () => void;
@@ -435,8 +490,19 @@ function SidebarContent({
           </Button>
           <h1 className="flex items-center gap-1.5 text-sm font-bold">
             <Boxes className="h-4 w-4 text-brand-orange-500" />
-            {total} no estoque
+            {recorte
+              ? `${total} selecionado${total === 1 ? '' : 's'}`
+              : `${total} no estoque`}
           </h1>
+          {recorte && (
+            <button
+              type="button"
+              onClick={onVerTodoEstoque}
+              className="text-xs text-muted-foreground underline hover:text-foreground"
+            >
+              ver todo o estoque
+            </button>
+          )}
           <Button
             variant="ghost"
             size="sm"

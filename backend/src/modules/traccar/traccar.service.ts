@@ -228,6 +228,73 @@ export class TraccarService implements OnModuleInit {
     });
   }
 
+  /**
+   * Igual ao `sendCommand`, mas diz se o comando saiu na hora. O Traccar
+   * responde 200 quando entrega ao rastreador conectado e 202 quando o guarda
+   * na fila (`tc_commands_queue`) pra entregar quando ele voltar a falar.
+   */
+  async sendCommandNow(
+    deviceId: number,
+    type: string,
+  ): Promise<{ enviado: boolean }> {
+    return this.withRetry(async () => {
+      const { status } = await this.client.post('/commands/send', {
+        deviceId,
+        type,
+        attributes: {},
+      });
+      return { enviado: status === 200 };
+    });
+  }
+
+  /**
+   * Espera a resposta do rastreador a um comando enviado em `desde` — o texto
+   * que ele devolve (ex.: "Cut off the fuel supply: Success!"). O Traccar grava
+   * a resposta como evento `commandResult` com o texto no atributo `result` da
+   * posição. `null` se o aparelho não responder dentro do prazo.
+   */
+  async aguardarRespostaDeComando(
+    deviceId: number,
+    desde: Date,
+    prazoMs = 10_000,
+    intervaloMs = 1_500,
+  ): Promise<string | null> {
+    const limite = Date.now() + prazoMs;
+    while (Date.now() < limite) {
+      await new Promise((resolve) => setTimeout(resolve, intervaloMs));
+      try {
+        const { data: eventos } = await this.client.get<
+          { positionId?: number }[]
+        >('/reports/events', {
+          params: {
+            deviceId,
+            type: 'commandResult',
+            from: new Date(desde.getTime() - 2_000).toISOString(),
+            to: new Date(Date.now() + 60_000).toISOString(),
+          },
+          headers: { Accept: 'application/json' },
+        });
+        const positionId = eventos[eventos.length - 1]?.positionId;
+        if (!positionId) continue;
+        const { data: posicoes } = await this.client.get<TraccarPosition[]>(
+          '/positions',
+          { params: { id: positionId } },
+        );
+        const resultado = posicoes[0]?.attributes?.result;
+        if (resultado != null) return String(resultado);
+      } catch (erro) {
+        // Resposta é conforto: o comando já saiu. Falha de leitura não vira erro.
+        this.logger.warn(
+          `Não consegui ler a resposta do comando (deviceId=${deviceId}): ${
+            erro instanceof Error ? erro.message : erro
+          }`,
+        );
+        return null;
+      }
+    }
+    return null;
+  }
+
   // === Users ===
 
   async createUser(

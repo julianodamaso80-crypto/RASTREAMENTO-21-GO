@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
@@ -44,6 +45,15 @@ type ParsedRow = {
   server: string | null;
   registeredAt: Date | null;
   activatedAt: Date | null;
+};
+
+export type StockTestCommandResult = {
+  imei: string;
+  comando: 'block' | 'unblock';
+  /** false = o Traccar guardou na fila; sai quando o aparelho voltar a falar. */
+  enviado: boolean;
+  /** Texto que o rastreador devolveu, quando respondeu dentro do prazo. */
+  resposta: string | null;
 };
 
 export type ImportResult = {
@@ -174,6 +184,79 @@ export class StockService {
     );
 
     return { ...atualizado, health };
+  }
+
+  /**
+   * Bloqueio/desbloqueio de TESTE direto no rastreador do estoque, sem placa.
+   * Na RedeVeiculos o liga/desliga só existe depois do vínculo; aqui o
+   * aparelho é testado na bancada, antes de sair pra instalação.
+   *
+   * O Traccar guarda na fila o comando pra aparelho desconectado e entrega
+   * quando ele volta a falar. Por isso o bloqueio só sai pra quem está
+   * conectado AGORA: na fila, ele cortaria o carro do cliente dias depois, já
+   * instalado. Desbloqueio pode ficar na fila — liberar é sempre seguro.
+   */
+  async comandoDeTeste(
+    id: string,
+    tenantId: string,
+    op: 'block' | 'unblock',
+  ): Promise<StockTestCommandResult> {
+    const item = await this.prisma.stockItem.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      select: { id: true, imei: true, traccarDeviceId: true, associatedAt: true },
+    });
+    if (!item) throw new NotFoundException('Item de estoque não encontrado');
+    if (item.associatedAt) {
+      throw new UnprocessableEntityException(
+        `O rastreador ${item.imei} já está instalado num veículo. Bloqueie pela tela do veículo.`,
+      );
+    }
+
+    const deviceId = await this.stockTraccar.ensureDevice(item);
+    if (!deviceId) {
+      throw new ServiceUnavailableException(
+        'Servidor GPS indisponível agora. Tente de novo em instantes.',
+      );
+    }
+
+    if (op === 'block') {
+      const device = await this.traccar.getDevice(deviceId);
+      if (device?.status !== 'online') {
+        throw new UnprocessableEntityException(
+          `O rastreador ${item.imei} não está conectado agora. Ligue na energia e espere ficar ONLINE. ` +
+            'Bloqueio pra aparelho desligado fica na fila do servidor e dispararia depois, com ele já instalado num carro.',
+        );
+      }
+    }
+
+    const desde = new Date();
+    const tipo = op === 'block' ? 'engineStop' : 'engineResume';
+    const { enviado } = await this.traccar.sendCommandNow(deviceId, tipo);
+
+    if (!enviado) {
+      if (op === 'block') {
+        // Desconectou entre a checagem e o envio: o bloqueio ficou na fila.
+        // O desbloqueio logo atrás garante que ele não volte cortado.
+        await this.traccar.sendCommand(deviceId, 'engineResume');
+        this.logger.warn(
+          `Bloqueio de teste do IMEI ${item.imei} caiu na fila; desbloqueio enfileirado atrás.`,
+        );
+        throw new UnprocessableEntityException(
+          `O rastreador ${item.imei} desconectou antes do bloqueio chegar. ` +
+            'Deixei um desbloqueio na fila atrás dele, pra ele não voltar cortado. Espere ficar ONLINE e teste de novo.',
+        );
+      }
+      return { imei: item.imei, comando: op, enviado: false, resposta: null };
+    }
+
+    const resposta = await this.traccar.aguardarRespostaDeComando(
+      deviceId,
+      desde,
+    );
+    this.logger.log(
+      `Comando de teste ${tipo} no IMEI ${item.imei} (estoque): ${resposta ?? 'sem resposta do aparelho'}`,
+    );
+    return { imei: item.imei, comando: op, enviado: true, resposta };
   }
 
   /** Conectividade do estoque: cards e pontinho por linha. */

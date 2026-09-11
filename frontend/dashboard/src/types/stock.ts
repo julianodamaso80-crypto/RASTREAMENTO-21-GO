@@ -77,6 +77,16 @@ export interface StockConnectivity {
   statuses: Record<string, StockConnectivityItem>;
 }
 
+/** Resposta do bloqueio/desbloqueio de teste no estoque. */
+export interface StockTestCommandResult {
+  imei: string;
+  comando: 'block' | 'unblock';
+  /** false = ficou na fila do servidor GPS; sai quando o aparelho voltar a falar. */
+  enviado: boolean;
+  /** Texto que o rastreador devolveu, quando respondeu a tempo. */
+  resposta: string | null;
+}
+
 /** Como o rastreador está no servidor GPS agora. */
 export type StockConexao = 'ONLINE' | 'OFFLINE' | 'SLEEP' | 'NUNCA';
 

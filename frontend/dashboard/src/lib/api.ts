@@ -37,6 +37,7 @@ import type {
   StockConnectivity,
   StockValidateResult,
   StockMapResult,
+  StockTestCommandResult,
 } from '@/types/stock';
 import type { ClientAsset, AssetsSummary } from '@/types/assets';
 import type {
@@ -758,6 +759,16 @@ export const stockApi = {
   /** Estoque no mapa: última posição conhecida + telemetria de cada rastreador. */
   map: async (): Promise<StockMapResult> => {
     const res = await api.get<ApiResponse<StockMapResult>>('/stock/map');
+    return res.data.data;
+  },
+  /** Bloqueio/desbloqueio de teste no rastreador do estoque, sem placa. */
+  testCommand: async (
+    id: string,
+    comando: 'block' | 'unblock',
+  ): Promise<StockTestCommandResult> => {
+    const res = await api.post<ApiResponse<StockTestCommandResult>>(
+      `/stock/${id}/${comando}`,
+    );
     return res.data.data;
   },
 };

@@ -21,6 +21,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  Lock,
+  LockOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatDateOnlyBR } from '@/lib/utils';
@@ -43,8 +45,14 @@ import {
 import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog';
 import { AssignTechnicianDialog } from '@/components/stock/assign-technician-dialog';
 import { InstallCheckSheet } from '@/components/stock/install-check-sheet';
-import type { StockConnectivity, StockItem, StockStats } from '@/types/stock';
+import type {
+  StockConnectivity,
+  StockConnectivityItem,
+  StockItem,
+  StockStats,
+} from '@/types/stock';
 import { useBuscaDaUrl } from '@/lib/use-busca-url';
+import { haQuantoTempo } from '@/components/stock/stock-format';
 
 // Cor do badge por status (case-insensitive, com fallback neutro).
 function statusColor(status: string | null): string {
@@ -198,6 +206,49 @@ export default function EstoquePage() {
   };
 
   const selectedItems = items.filter((i) => selected.has(i.id));
+
+  // O mapa abre só com os marcados — não o estoque inteiro com um em foco.
+  const abrirSelecionadosNoMapa = () => {
+    const imeis = selectedItems.map((i) => i.imei).join(',');
+    router.push(`/estoque/mapa?imeis=${encodeURIComponent(imeis)}`);
+  };
+
+  // Liga/desliga de bancada: testa o relé antes de o rastreador ter placa.
+  // Quem decide se pode (conectado ou não) é o backend; aqui só confirma.
+  const handleTestCommand = async (item: StockItem, comando: 'block' | 'unblock') => {
+    const bloquear = comando === 'block';
+    const aviso = bloquear
+      ? `Mandar BLOQUEIO de teste pro rastreador ${item.imei}?\n\n` +
+        'O relé corta a saída. Use só com o aparelho na bancada, fora de veículo.'
+      : `Mandar DESBLOQUEIO pro rastreador ${item.imei}?`;
+    if (!confirm(aviso)) return;
+
+    const nome = bloquear ? 'Bloqueio' : 'Desbloqueio';
+    const toastId = toast.loading(`${nome} enviado, esperando o rastreador responder...`);
+    try {
+      const r = await stockApi.testCommand(item.id, comando);
+      if (!r.enviado) {
+        toast.info(
+          `${nome} na fila: o ${r.imei} está desligado e recebe o comando quando voltar a falar.`,
+          { id: toastId },
+        );
+      } else if (r.resposta) {
+        toast.success(`${nome} enviado. O rastreador respondeu: "${r.resposta}"`, {
+          id: toastId,
+        });
+      } else {
+        toast.success(
+          `${nome} enviado ao ${r.imei}. Ele não respondeu em 10 s — confira o relé.`,
+          { id: toastId },
+        );
+      }
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message || `Erro ao enviar o ${nome.toLowerCase()}`;
+      toast.error(msg, { id: toastId });
+    }
+  };
 
   const openAssign = (list: StockItem[]) => {
     setAssignItems(list);
@@ -417,7 +468,7 @@ export default function EstoquePage() {
                 <th className="px-3 py-2 font-medium">IMEI</th>
                 <th className="px-3 py-2 font-medium">ICCID</th>
                 <th className="px-3 py-2 font-medium">Linha</th>
-                <th className="px-3 py-2 font-medium">Operadora</th>
+                <th className="px-3 py-2 font-medium">Conexão</th>
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">Server</th>
                 <th className="px-3 py-2 font-medium">Técnico</th>
@@ -474,7 +525,9 @@ export default function EstoquePage() {
                   <td className="px-3 py-2 font-mono text-xs">
                     {item.line ?? '—'}
                   </td>
-                  <td className="px-3 py-2">{item.operator ?? '—'}</td>
+                  <td className="px-3 py-2">
+                    <BadgeConexao estado={conn?.statuses[item.imei]} />
+                  </td>
                   <td className="px-3 py-2">
                     {item.status ? (
                       <Badge
@@ -529,6 +582,7 @@ export default function EstoquePage() {
                           onAssociate={() => openAssociate(item)}
                           onAssign={() => openAssign([item])}
                           onCheck={() => openCheck(item)}
+                          onTestCommand={(comando) => handleTestCommand(item, comando)}
                           onMapa={() => abrirNoMapa(item)}
                           onDelete={() => handleDelete(item)}
                           onSoon={soon}
@@ -562,6 +616,10 @@ export default function EstoquePage() {
             <Button size="sm" variant="outline" onClick={handleUnassign}>
               <Ban className="h-4 w-4 mr-1" />
               Cancelar reserva
+            </Button>
+            <Button size="sm" variant="outline" onClick={abrirSelecionadosNoMapa}>
+              <MapPin className="h-4 w-4 mr-1" />
+              Abrir no mapa
             </Button>
             <Button size="sm" onClick={() => openAssign(selectedItems)}>
               <HardHat className="h-4 w-4 mr-1" />
@@ -665,7 +723,39 @@ function ConnDot({ estado }: { estado?: { conhecido: boolean; comunicando: boole
       />
     );
   }
-  return <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" title="Conectado com GPS" />;
+  // `emerald` aqui é o laranja da marca (globals.css); online é brand-green.
+  return <span className="h-2 w-2 shrink-0 rounded-full bg-brand-green-500" title="Conectado com GPS" />;
+}
+
+/**
+ * Ligado ou desligado, no mesmo formato do selo de Status: ONLINE é quem está
+ * falando com o servidor GPS agora (na tomada ou na bateria), OFFLINE o resto —
+ * inclusive o que nunca foi ligado.
+ */
+function BadgeConexao({ estado }: { estado?: StockConnectivityItem }) {
+  if (!estado) return <span className="text-xs text-muted-foreground">—</span>;
+  if (estado.comunicando) {
+    return (
+      <Badge
+        className="text-xs border bg-brand-green-500/15 text-brand-green-600 border-brand-green-500/30"
+        title={estado.gpsOk ? 'Ligado e rastreável' : 'Ligado, mas ainda sem sinal de GPS'}
+      >
+        ONLINE
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      className="text-xs border bg-red-500/15 text-red-400 border-red-500/30"
+      title={
+        estado.lastUpdate
+          ? `Desligado — falou pela última vez ${haQuantoTempo(estado.lastUpdate)}`
+          : 'Desligado — nunca falou com o servidor GPS'
+      }
+    >
+      OFFLINE
+    </Badge>
+  );
 }
 
 /** Selo das ações que ainda não existem. Fora do render pra não recriar o componente. */
@@ -686,6 +776,7 @@ function StockRowMenu({
   onAssociate,
   onAssign,
   onCheck,
+  onTestCommand,
   onMapa,
   onDelete,
   onSoon,
@@ -695,6 +786,7 @@ function StockRowMenu({
   onAssociate: () => void;
   onAssign: () => void;
   onCheck: () => void;
+  onTestCommand: (comando: 'block' | 'unblock') => void;
   onMapa: () => void;
   onDelete: () => void;
   onSoon: () => void;
@@ -714,6 +806,12 @@ function StockRowMenu({
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onCheck}>
           <SignalHigh className="h-4 w-4" /> Validar instalação
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onTestCommand('block')}>
+          <Lock className="h-4 w-4" /> Bloquear (teste)
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onTestCommand('unblock')}>
+          <LockOpen className="h-4 w-4" /> Desbloquear (teste)
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onAssociate}>
           <UserCheck className="h-4 w-4" /> Associar um cliente e ativo

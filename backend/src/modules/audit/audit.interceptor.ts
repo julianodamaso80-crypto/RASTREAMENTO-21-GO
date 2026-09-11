@@ -84,10 +84,13 @@ export class AuditInterceptor implements NestInterceptor {
     if (/\/sms-commands\b/.test(url) && req.method === 'POST') {
       return AuditAction.COMMAND_SENT;
     }
-    // Bloqueio/desbloqueio de veículo é comando remoto (engineStop/Resume
+    // Bloqueio/desbloqueio (de veículo ou de teste no estoque) é comando remoto (engineStop/Resume
     // via Traccar) — registrar como COMMAND_SENT em vez de UPDATE genérico
     // pra facilitar auditoria/relatório de ações sensíveis.
-    if (/\/vehicles\/[^/]+\/(un)?block\b/.test(url) && req.method === 'POST') {
+    if (
+      /\/(vehicles|stock)\/[^/]+\/(un)?block\b/.test(url) &&
+      req.method === 'POST'
+    ) {
       return AuditAction.COMMAND_SENT;
     }
 

@@ -127,6 +127,34 @@ export class StockController {
     );
   }
 
+  @Post(':id/block')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Bloqueio de teste no rastreador do estoque (sem placa). Só sai com o aparelho conectado.',
+  })
+  block(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.comandoDeTeste(id, req.tenantId, 'block');
+  }
+
+  @Post(':id/unblock')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Desbloqueio de teste no rastreador do estoque (sem placa). Desconectado, fica na fila.',
+  })
+  unblock(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.comandoDeTeste(id, req.tenantId, 'unblock');
+  }
+
   @Post('import')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
