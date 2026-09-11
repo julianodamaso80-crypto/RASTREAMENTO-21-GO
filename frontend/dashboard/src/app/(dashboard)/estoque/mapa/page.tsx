@@ -58,13 +58,13 @@ export default function EstoqueMapaPage() {
   const params = useSearchParams();
   // Aberto pela lista do estoque com um ou mais marcados (`imeis=a,b`) ou pelo
   // botão da linha (`imei=a`): o mapa mostra só esses, não o estoque inteiro.
-  const imeisDaUrl = useMemo(
-    () =>
-      (params.get('imeis') ?? params.get('imei') ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-    [params],
+  // Fica em estado da tela: sair do recorte não pode depender de navegação
+  // (o `router.replace` pra mesma rota não trocava a URL no build de produção).
+  const [imeisDaUrl, setImeisDaUrl] = useState<string[]>(() =>
+    (params.get('imeis') ?? params.get('imei') ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
   );
   const recorte = imeisDaUrl.length > 0;
 
@@ -173,12 +173,14 @@ export default function EstoqueMapaPage() {
     }
   }, [recorte, pontos, visiveis]);
 
-  // "Ver todo o estoque": tira os IMEIs da URL e desfaz a marcação.
+  // "Ver todo o estoque": desfaz o recorte e a marcação, e limpa a URL pra um
+  // recarregar não voltar ao recorte.
   const verTodoEstoque = useCallback(() => {
     setSelecionadosIds([]);
     setDetalheId(null);
-    router.replace('/estoque/mapa');
-  }, [router]);
+    setImeisDaUrl([]);
+    window.history.replaceState(null, '', '/estoque/mapa');
+  }, []);
 
   // Saiu do recorte: enquadra o estoque inteiro depois que o mapa já recebeu
   // todos os pontos.
@@ -494,15 +496,6 @@ function SidebarContent({
               ? `${total} selecionado${total === 1 ? '' : 's'}`
               : `${total} no estoque`}
           </h1>
-          {recorte && (
-            <button
-              type="button"
-              onClick={onVerTodoEstoque}
-              className="text-xs text-muted-foreground underline hover:text-foreground"
-            >
-              ver todo o estoque
-            </button>
-          )}
           <Button
             variant="ghost"
             size="sm"
@@ -513,6 +506,19 @@ function SidebarContent({
             <RefreshCw className={cn('h-4 w-4', carregando && 'animate-spin')} />
           </Button>
         </div>
+
+        {recorte && (
+          <p className="text-xs text-muted-foreground">
+            Mostrando só os que você marcou no estoque ·{' '}
+            <button
+              type="button"
+              onClick={onVerTodoEstoque}
+              className="underline hover:text-foreground"
+            >
+              ver todo o estoque
+            </button>
+          </p>
+        )}
 
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
