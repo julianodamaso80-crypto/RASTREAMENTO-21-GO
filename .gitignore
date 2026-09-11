@@ -63,3 +63,7 @@ mobile/credentials.json
 
 # binarios das lojas (entregues fora do git)
 mobile/store/play/builds/
+
+# Capturas de reconhecimento da plataforma de origem: material de pesquisa,
+# regenerável pelo scripts/clonagem/recon-rdv.mjs e pode conter dado de cliente.
+docs/clonagem/
