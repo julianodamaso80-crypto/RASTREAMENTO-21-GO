@@ -1,6 +1,8 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useAuth } from './auth-store';
+import type { Boleto } from './boletos';
 
 /**
  * Base URL da API. Em produção aponta pro backend real; em dev pode ser
@@ -185,4 +187,39 @@ export const AppApi = {
 
   alerts: (limit = 50) =>
     api.get<Alert[]>('/app/alerts', { params: { limit } }).then((r) => r.data),
+
+  /** Boletos em aberto de todos os veículos. Lê o espelho local do backend. */
+  boletos: () =>
+    api
+      .get<{
+        boletos: Boleto[];
+        /** true = o robô ainda não visitou este associado. Não é o mesmo que estar em dia. */
+        pendente: boolean;
+        rodape: { titulo: string; telefones: string };
+      }>('/app/boletos')
+      .then((r) => r.data),
+
+  /**
+   * Baixa o PDF do boleto para um arquivo local e devolve o caminho.
+   * Linking.openURL não serve aqui: o navegador do sistema busca a URL sem o
+   * header de autenticação e o backend recusa. downloadAsync manda o token
+   * manualmente, do mesmo jeito que o interceptor do axios faria.
+   */
+  baixarBoletoPdf: async (id: string) => {
+    const token = useAuth.getState().token;
+    const url = `${api.defaults.baseURL}/app/boletos/${id}/pdf`;
+    const destino = `${FileSystem.cacheDirectory}boleto-${id}.pdf`;
+    const resultado = await FileSystem.downloadAsync(url, destino, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (resultado.status !== 200) {
+      throw new Error(`pdf do boleto: status ${resultado.status}`);
+    }
+    return resultado.uri;
+  },
+
+  registrarPush: (expoToken: string, platform: string) =>
+    api
+      .post<{ ok: boolean }>('/app/boletos/dispositivo', { expoToken, platform })
+      .then((r) => r.data),
 };
