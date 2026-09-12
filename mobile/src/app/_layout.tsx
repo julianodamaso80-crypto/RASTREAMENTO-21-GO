@@ -2,11 +2,13 @@ import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Notifications from 'expo-notifications';
 import { useAuth } from '@/lib/auth-store';
 import { useInternalAuth } from '@/lib/internal-auth-store';
 import { resolveBootWorld } from '@/lib/session-keys';
 import { colors } from '@/lib/theme';
 import { diag } from '@/lib/diag';
+import { registrarParaPush, rotaDoAviso } from '@/lib/push';
 
 // Se algo crashar no render, o expo-router mostra uma tela de erro legível
 // em vez de uma tela branca — assim conseguimos ver a causa.
@@ -82,6 +84,18 @@ export default function RootLayout() {
     segments,
     router,
   ]);
+
+  // Push do boleto: só faz sentido pro associado logado, e nunca pode
+  // atrapalhar o boot — registrarParaPush já engole os próprios erros.
+  useEffect(() => {
+    if (!hydrated || !token || interno.token) return;
+    registrarParaPush();
+    const sub = Notifications.addNotificationResponseReceivedListener((resposta) => {
+      const rota = rotaDoAviso(resposta.notification.request.content.data);
+      if (rota) router.push(rota as never);
+    });
+    return () => sub.remove();
+  }, [hydrated, token, interno.token, router]);
 
   // SEMPRE renderiza — o app nunca fica preso em branco. A rota inicial "/"
   // (index) mostra um carregamento visível enquanto hidrata e então redireciona.

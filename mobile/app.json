@@ -2,7 +2,7 @@
   "expo": {
     "name": "21 Tracker Rastreamento",
     "slug": "r21go-cliente",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "r21go",
@@ -55,7 +55,8 @@
         {
           "faceIDPermission": "Use o Face ID para abrir o painel de trabalho da 21 GO."
         }
-      ]
+      ],
+      ["expo-notifications", { "icon": "./assets/images/icon.png", "color": "#293c82" }]
     ],
     "experiments": {
       "typedRoutes": true
