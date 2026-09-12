@@ -3,7 +3,10 @@ import { BoletosSyncService } from './boletos-sync.service';
 const SABADO = new Date('2026-09-12T12:00:00-03:00');
 const SEGUNDA = new Date('2026-09-14T09:00:00-03:00');
 
-function monta(opts: { associados?: any[]; doCrm?: any[] } = {}) {
+function monta(
+  opts: { associados?: any[]; doCrm?: any[]; boletosGuardados?: Record<string, string[]> } = {},
+) {
+  const guardados = opts.boletosGuardados ?? {};
   const prisma = {
     associate: {
       findMany: jest.fn().mockResolvedValue(opts.associados ?? []),
@@ -11,7 +14,15 @@ function monta(opts: { associados?: any[]; doCrm?: any[] } = {}) {
     },
     associateBoleto: {
       upsert: jest.fn().mockResolvedValue({}),
-      findMany: jest.fn().mockResolvedValue([]),
+      // Responde ao `where` de verdade: se ignorasse notIn/associateId, um
+      // `notIn` trocado por `in` (apagar os vivos) passaria despercebido.
+      findMany: jest.fn().mockImplementation(async (args: any) => {
+        const doAssociado = guardados[args.where.associateId] ?? [];
+        const notIn: string[] = args.where.nossoNumero?.notIn ?? [];
+        return doAssociado
+          .filter((n: string) => !notIn.includes(n))
+          .map((nossoNumero: string) => ({ nossoNumero }));
+      }),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       update: jest.fn().mockResolvedValue({}),
     },
@@ -115,5 +126,55 @@ describe('BoletosSyncService.rodada', () => {
     await s.rodada(SEGUNDA);
     expect(prisma.associate.update.mock.calls[0][0].data.boletosSincronizadosEm)
       .toBeInstanceOf(Date);
+  });
+
+  it('carimba a visita mesmo quando o associado nao tem CPF', async () => {
+    const { s, prisma, crm } = monta({
+      associados: [{ id: 'a1', tenantId: 't1', cpf: null }],
+    });
+    await s.rodada(SEGUNDA);
+    expect(crm.buscarPorCpf).not.toHaveBeenCalled();
+    expect(prisma.associate.update.mock.calls[0][0].data.boletosSincronizadosEm)
+      .toBeInstanceOf(Date);
+  });
+
+  it('so apaga o boleto que sumiu do CRM, nunca o que continua vivo', async () => {
+    const { s, prisma } = monta({
+      associados: [{ id: 'a1', tenantId: 't1', cpf: '11144477735' }],
+      boletosGuardados: { a1: ['99', '88'] },
+      doCrm: [{
+        nossoNumero: '99', placa: 'RJU0F75', mesReferente: '09/2026', valor: 250.57,
+        vencimento: '2026-09-20', status: 'disponivel', linhaDigitavel: null, linkPdf: null,
+      }],
+    });
+    await s.rodada(SEGUNDA);
+    expect(prisma.associateBoleto.deleteMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', associateId: 'a1', nossoNumero: { in: ['88'] } },
+    });
+    expect(prisma.associateBoletoPdf.deleteMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', nossoNumero: { in: ['88'] } },
+    });
+  });
+
+  it('um erro no upsert de um associado nao aborta os demais da rodada', async () => {
+    const { s, prisma, crm } = monta({
+      associados: [
+        { id: 'a1', tenantId: 't1', cpf: '11144477735' },
+        { id: 'a2', tenantId: 't1', cpf: '52998224725' },
+        { id: 'a3', tenantId: 't1', cpf: '85337897097' },
+      ],
+      doCrm: [{
+        nossoNumero: '1', placa: 'ABC1234', mesReferente: '09/2026', valor: 100,
+        vencimento: '2026-09-20', status: 'disponivel', linhaDigitavel: null, linkPdf: null,
+      }],
+    });
+    prisma.associateBoleto.upsert.mockImplementation(async (args: any) => {
+      if (args.create.associateId === 'a2') throw new Error('conexao caiu');
+      return {};
+    });
+    const r = await s.rodada(SEGUNDA);
+    expect(crm.buscarPorCpf).toHaveBeenCalledTimes(3);
+    expect(r.gravados).toBe(2);
+    expect(r.falhas).toBe(1);
   });
 });

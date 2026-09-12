@@ -16,32 +16,36 @@ export class BoletosSyncService {
   ) {}
 
   /**
-   * 8h, 12h e 17h30 de Brasília. O cron dispara todo dia; quem barra sábado,
-   * domingo e fora de hora é `dentroDaJanelaDoSga` — uma regra só, num lugar só.
+   * 8h e 12h de Brasília. Dois `@Cron` com `timeZone` explícito — nunca ler
+   * hora do processo aqui: se o container subir em UTC, uma guarda manual
+   * comparando `getHours()` local não bate com nenhuma batida e o robô para
+   * de rodar pra sempre, sem log nenhum. Quem barra sábado, domingo e fora de
+   * hora é `dentroDaJanelaDoSga` — uma regra só, num lugar só.
    */
-  @Cron('0 0,30 8,12,17 * * *', { timeZone: 'America/Sao_Paulo' })
-  async rodadaAgendada(): Promise<void> {
-    const agora = new Date();
-    const hora = agora.getHours();
-    const minuto = agora.getMinutes();
-    // 8h00, 12h00 e 17h30 — as outras batidas do cron saem fora.
-    const horaValida =
-      (hora === 8 && minuto === 0) ||
-      (hora === 12 && minuto === 0) ||
-      (hora === 17 && minuto === 30);
-    if (!horaValida) return;
-    const r = await this.rodada(agora);
+  @Cron('0 0 8,12 * * *', { timeZone: 'America/Sao_Paulo' })
+  async rodadaDasOitoEDozeHoras(): Promise<void> {
+    await this.executarRodada();
+  }
+
+  /** 17h30 de Brasília — ver nota acima. */
+  @Cron('0 30 17 * * *', { timeZone: 'America/Sao_Paulo' })
+  async rodadaDasDezessete30(): Promise<void> {
+    await this.executarRodada();
+  }
+
+  private async executarRodada(): Promise<void> {
+    const r = await this.rodada();
     this.logger.log(
-      `boletos: ${r.associados} associados, ${r.gravados} gravados, ${r.pdfs} PDFs, ${r.apagados} apagados`,
+      `boletos: ${r.associados} associados, ${r.gravados} gravados, ${r.pdfs} PDFs, ${r.apagados} apagados, ${r.falhas} falharam`,
     );
   }
 
   async rodada(agora: Date = new Date()): Promise<{
-    associados: number; gravados: number; pdfs: number; apagados: number;
+    associados: number; gravados: number; pdfs: number; apagados: number; falhas: number;
   }> {
     if (!dentroDaJanelaDoSga(agora)) {
       this.logger.log('fora da janela do SGA (seg–sex 7h–18h): rodada não executada');
-      return { associados: 0, gravados: 0, pdfs: 0, apagados: 0 };
+      return { associados: 0, gravados: 0, pdfs: 0, apagados: 0, falhas: 0 };
     }
 
     const associados = await this.prisma.associate.findMany({
@@ -52,13 +56,23 @@ export class BoletosSyncService {
     let gravados = 0;
     let pdfs = 0;
     let apagados = 0;
+    let falhas = 0;
     for (const a of associados) {
-      const r = await this.sincronizarAssociado(a);
-      gravados += r.gravados;
-      pdfs += r.pdfs;
-      apagados += r.apagados;
+      try {
+        const r = await this.sincronizarAssociado(a);
+        gravados += r.gravados;
+        pdfs += r.pdfs;
+        apagados += r.apagados;
+      } catch (erro) {
+        // Um associado com erro (conexão, deadlock) não pode travar os
+        // demais até a próxima janela, horas depois. Sem CPF no log — só id.
+        falhas += 1;
+        this.logger.warn(
+          `boletos: falhou ao sincronizar associado ${a.id}: ${erro instanceof Error ? erro.message : erro}`,
+        );
+      }
     }
-    return { associados: associados.length, gravados, pdfs, apagados };
+    return { associados: associados.length, gravados, pdfs, apagados, falhas };
   }
 
   /**
@@ -69,7 +83,15 @@ export class BoletosSyncService {
     id: string; tenantId: string; cpf: string | null;
   }): Promise<{ gravados: number; pdfs: number; apagados: number }> {
     const cpf = String(a.cpf ?? '').replace(/\D/g, '');
-    if (!cpf) return { gravados: 0, pdfs: 0, apagados: 0 };
+    if (!cpf) {
+      // Carimba mesmo sem CPF: senão este associado fica "nunca visitado"
+      // pra sempre e todo primeiro acesso da Task 7B cai numa consulta inútil.
+      await this.prisma.associate.update({
+        where: { id: a.id },
+        data: { boletosSincronizadosEm: new Date() },
+      });
+      return { gravados: 0, pdfs: 0, apagados: 0 };
+    }
 
     let gravados = 0;
     let pdfs = 0;
@@ -97,9 +119,16 @@ export class BoletosSyncService {
       if (b.linkPdf) {
         const buf = await this.crm.baixarPdf(b.linkPdf);
         if (buf) {
-          // new Uint8Array(buf): Buffer<ArrayBufferLike> não bate com o tipo
-          // Bytes do Prisma (Uint8Array<ArrayBuffer>) no @types/node atual.
-          const conteudo = new Uint8Array(buf);
+          // Vista sobre os mesmos bytes do Buffer, sem copiar os ~3,4 MB:
+          // new Uint8Array(buf) copiaria elemento a elemento. `buf.buffer` é
+          // tipado ArrayBufferLike (inclui SharedArrayBuffer) no @types/node
+          // atual, mas um Buffer nunca vem de SharedArrayBuffer aqui — daí o
+          // cast pro Uint8Array<ArrayBuffer> que o Prisma exige.
+          const conteudo = new Uint8Array(
+            buf.buffer,
+            buf.byteOffset,
+            buf.byteLength,
+          ) as Uint8Array<ArrayBuffer>;
           // Chave composta: `nosso_numero` não é único entre tenants — cada
           // cooperativa tem seu convênio bancário e a numeração pode colidir.
           await this.prisma.associateBoletoPdf.upsert({
