@@ -18,10 +18,16 @@ const LINHA_ENVENENADA = {
   tagMac: 'AA:BB:CC:DD:EE:FF',
 };
 
-function service(linhas: unknown[], sincronizadoEm: Date | null = new Date('2026-09-12T08:00:00-03:00')) {
+function service(
+  linhas: unknown[],
+  sincronizadoEm: Date | null = new Date('2026-09-12T08:00:00-03:00'),
+  boletosForaDoPrazo = 0,
+) {
   const prisma = {
     associate: {
-      findFirst: jest.fn().mockResolvedValue({ boletosSincronizadosEm: sincronizadoEm }),
+      findFirst: jest
+        .fn()
+        .mockResolvedValue({ boletosSincronizadosEm: sincronizadoEm, boletosForaDoPrazo }),
     },
     associateBoleto: { findMany: jest.fn().mockResolvedValue(linhas) },
   } as any;
@@ -70,5 +76,19 @@ describe('GET /app/boletos — contrato com o associado', () => {
   it('o rodape do Setor de Boletos vem sempre, mesmo sem boleto', async () => {
     const r = await service([]).listarDoAssociado('a1', 't1', HOJE);
     expect(r.rodape.telefones).toBe('📞 (21) 95933-5359 | (21) 98142-2100');
+  });
+
+  // Achado C3: sem isto a tela nao tem como diferenciar "esta em dia" de
+  // "tem boleto antigo que o CRM ja nao emite mais".
+  it('devolve o foraDoPrazo guardado do associado', async () => {
+    const r = await service([], new Date('2026-09-12T08:00:00-03:00'), 2).listarDoAssociado(
+      'a1', 't1', HOJE,
+    );
+    expect(r.foraDoPrazo).toBe(2);
+  });
+
+  it('sem foraDoPrazo guardado, devolve 0', async () => {
+    const r = await service([]).listarDoAssociado('a1', 't1', HOJE);
+    expect(r.foraDoPrazo).toBe(0);
   });
 });

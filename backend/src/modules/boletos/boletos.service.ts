@@ -29,11 +29,12 @@ export class BoletosService {
     boletos: BoletoDaAba[];
     pendente: boolean;
     rodape: typeof TELEFONE_SETOR_BOLETOS;
+    foraDoPrazo: number;
   }> {
     const [associado, linhas] = await Promise.all([
       this.prisma.associate.findFirst({
         where: { id: associateId, tenantId },
-        select: { boletosSincronizadosEm: true },
+        select: { boletosSincronizadosEm: true, boletosForaDoPrazo: true },
       }),
       this.prisma.associateBoleto.findMany({
         where: { tenantId, associateId, status: { notIn: ['pago', 'cancelado'] } },
@@ -64,6 +65,10 @@ export class BoletosService {
       boletos,
       pendente: !associado?.boletosSincronizadosEm,
       rodape: TELEFONE_SETOR_BOLETOS,
+      // Boleto que o CRM já não emite mais por atraso > 5 dias: sem isto,
+      // "sem boleto" não diferenciava "está em dia" de "tem pendência velha"
+      // (achado C3).
+      foraDoPrazo: associado?.boletosForaDoPrazo ?? 0,
     };
   }
 
