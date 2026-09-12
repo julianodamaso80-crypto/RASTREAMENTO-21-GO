@@ -43,18 +43,24 @@ export class BoletosService {
     ]);
 
     // Allowlist explícita: o objeto é montado campo a campo, nunca espalhado.
-    const boletos = linhas
-      .filter((l) => aindaPodePagar(l.vencimento, agora))
-      .map((l) => ({
-        id: l.id,
-        placa: l.plate ?? null,
-        mesReferente: l.mesReferente ?? null,
-        valor: l.valor != null ? Number(l.valor) : null,
-        vencimento: l.vencimento ?? null,
-        rotulo: rotuloVencimento(l.vencimento, agora),
-        linhaDigitavel: l.linhaDigitavel ?? null,
-        temPdf: (l.pdfBytes ?? 0) > 0,
-      }));
+    const linhasNoPrazo = linhas.filter((l) => aindaPodePagar(l.vencimento, agora));
+    const boletos = linhasNoPrazo.map((l) => ({
+      id: l.id,
+      placa: l.plate ?? null,
+      mesReferente: l.mesReferente ?? null,
+      valor: l.valor != null ? Number(l.valor) : null,
+      vencimento: l.vencimento ?? null,
+      rotulo: rotuloVencimento(l.vencimento, agora),
+      linhaDigitavel: l.linhaDigitavel ?? null,
+      temPdf: (l.pdfBytes ?? 0) > 0,
+    }));
+
+    // Linha que passou dos 5 dias agora, entre uma rodada do robô e outra: o
+    // espelho ainda guarda o boleto, mas ele já não pode aparecer na lista.
+    // Sem somar aqui, o associado lia "em dia" até a próxima rodada (até 56h
+    // num boleto que vence o 6º dia num sábado). Não conta duas vezes: o
+    // valor guardado só cobre linhas que o CRM já apagou do espelho.
+    const foraDoPrazoLocal = linhas.length - linhasNoPrazo.length;
 
     /**
      * Lista vazia tem DOIS significados, e confundi-los é grave: dizer "você está
@@ -68,7 +74,7 @@ export class BoletosService {
       // Boleto que o CRM já não emite mais por atraso > 5 dias: sem isto,
       // "sem boleto" não diferenciava "está em dia" de "tem pendência velha"
       // (achado C3).
-      foraDoPrazo: associado?.boletosForaDoPrazo ?? 0,
+      foraDoPrazo: (associado?.boletosForaDoPrazo ?? 0) + foraDoPrazoLocal,
     };
   }
 

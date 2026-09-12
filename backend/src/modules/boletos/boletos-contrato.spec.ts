@@ -91,4 +91,24 @@ describe('GET /app/boletos — contrato com o associado', () => {
     const r = await service([]).listarDoAssociado('a1', 't1', HOJE);
     expect(r.foraDoPrazo).toBe(0);
   });
+
+  // Achado do portão final: o espelho local só perde o boleto na próxima rodada do
+  // robô, mas o filtro de 5 dias já vale na hora. Sem somar aqui, a lista fica vazia
+  // e foraDoPrazo continua 0 — "em dia" falso por até 56h (6º dia caindo num sábado).
+  it('linha que passou dos 5 dias no espelho conta em foraDoPrazo, mesmo com 0 guardado', async () => {
+    const velho = { ...LINHA_ENVENENADA, vencimento: '2026-09-06' };
+    const r = await service([velho], new Date('2026-09-12T08:00:00-03:00'), 0).listarDoAssociado(
+      'a1', 't1', HOJE,
+    );
+    expect(r.boletos).toHaveLength(0);
+    expect(r.foraDoPrazo).toBe(1);
+  });
+
+  it('soma o guardado do CRM com o filtrado localmente, sem contar duas vezes', async () => {
+    const velho = { ...LINHA_ENVENENADA, vencimento: '2026-09-06' };
+    const r = await service([velho], new Date('2026-09-12T08:00:00-03:00'), 2).listarDoAssociado(
+      'a1', 't1', HOJE,
+    );
+    expect(r.foraDoPrazo).toBe(3);
+  });
 });
