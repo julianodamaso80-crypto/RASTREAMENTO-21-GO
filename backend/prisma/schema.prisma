@@ -598,6 +598,10 @@ model Associate {
   /// NULL = nunca passou: a aba diz "aparecem a partir de segunda", em vez de
   /// dizer que ele está em dia sem ter olhado.
   boletosSincronizadosEm DateTime? @map("boletos_sincronizados_em") @db.Timestamptz()
+  /// Quantos boletos o CRM trouxe e o robô rejeitou por atraso > 5 dias
+  /// (`foraDoPrazo` do CRM). É o que diferencia "está em dia" de "tem
+  /// pendência antiga e precisa falar com o Setor de Boletos" (achado C3).
+  boletosForaDoPrazo     Int       @default(0) @map("boletos_fora_do_prazo")
   deletedAt              DateTime? @map("deleted_at")
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")

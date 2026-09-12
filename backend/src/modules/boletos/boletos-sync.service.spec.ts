@@ -4,7 +4,14 @@ const SABADO = new Date('2026-09-12T12:00:00-03:00');
 const SEGUNDA = new Date('2026-09-14T09:00:00-03:00');
 
 function monta(
-  opts: { associados?: any[]; doCrm?: any[]; boletosGuardados?: Record<string, string[]> } = {},
+  opts: {
+    associados?: any[];
+    doCrm?: any[];
+    foraDoPrazo?: number;
+    crmFalhou?: boolean;
+    boletosGuardados?: Record<string, string[]>;
+    pdfJaGuardado?: boolean;
+  } = {},
 ) {
   const guardados = opts.boletosGuardados ?? {};
   const prisma = {
@@ -29,12 +36,17 @@ function monta(
     associateBoletoPdf: {
       upsert: jest.fn().mockResolvedValue({}),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
-      findFirst: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(opts.pdfJaGuardado ? { nossoNumero: '99' } : null),
       aggregate: jest.fn().mockResolvedValue({ _sum: { } }),
     },
   } as any;
   const crm = {
-    buscarPorCpf: jest.fn().mockResolvedValue(opts.doCrm ?? []),
+    // `null` simula CRM fora do ar (achado C1) — distinto de uma lista vazia legítima.
+    buscarPorCpf: jest
+      .fn()
+      .mockResolvedValue(
+        opts.crmFalhou ? null : { boletos: opts.doCrm ?? [], foraDoPrazo: opts.foraDoPrazo ?? 0 },
+      ),
     baixarPdf: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 x')),
   } as any;
   const push = { avisarBoletoNovo: jest.fn().mockResolvedValue(undefined) } as any;
@@ -207,5 +219,86 @@ describe('BoletosSyncService.rodada', () => {
     expect(crm.buscarPorCpf).toHaveBeenCalledTimes(3);
     expect(r.gravados).toBe(2);
     expect(r.falhas).toBe(1);
+  });
+
+  // Achado C1: CRM fora do ar não pode ser lido como "ninguém deve nada".
+  describe('CRM fora do ar (buscarPorCpf devolve null)', () => {
+    it('nao apaga boleto nenhum do associado', async () => {
+      const { s, prisma } = monta({
+        associados: [{ id: 'a1', tenantId: 't1', cpf: '11144477735' }],
+        boletosGuardados: { a1: ['99'] },
+        crmFalhou: true,
+      });
+      await s.rodada(SEGUNDA);
+      expect(prisma.associateBoleto.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.associateBoletoPdf.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('nao carimba a visita — associado continua "pendente", nao "em dia"', async () => {
+      const { s, prisma } = monta({
+        associados: [{ id: 'a1', tenantId: 't1', cpf: '11144477735' }],
+        crmFalhou: true,
+      });
+      await s.rodada(SEGUNDA);
+      expect(prisma.associate.update).not.toHaveBeenCalled();
+    });
+
+    it('conta como falha e segue pros próximos associados da rodada', async () => {
+      const { s, prisma, crm } = monta({
+        associados: [
+          { id: 'a1', tenantId: 't1', cpf: '11144477735' },
+          { id: 'a2', tenantId: 't1', cpf: '52998224725' },
+        ],
+        crmFalhou: true,
+      });
+      const r = await s.rodada(SEGUNDA);
+      expect(crm.buscarPorCpf).toHaveBeenCalledTimes(2);
+      expect(r.falhas).toBe(2);
+      expect(prisma.associate.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // Achado C3: sem isto "sem boleto" nunca diferenciava quem está em dia de
+  // quem tem pendência velha (>5 dias) que o CRM já não emite mais.
+  it('grava o foraDoPrazo do CRM no associado, mesmo sem boleto nenhum', async () => {
+    const { s, prisma } = monta({
+      associados: [{ id: 'a1', tenantId: 't1', cpf: '11144477735' }],
+      doCrm: [],
+      foraDoPrazo: 3,
+    });
+    await s.rodada(SEGUNDA);
+    expect(prisma.associate.update.mock.calls[0][0].data.boletosForaDoPrazo).toBe(3);
+  });
+
+  // Achado I3: ~400 boletos x 3,4 MB x 3 rodadas/dia estourava disco do droplet.
+  describe('PDF já guardado (achado I3)', () => {
+    it('nao baixa de novo quando ja tem o arquivo guardado', async () => {
+      const { s, prisma, crm } = monta({
+        pdfJaGuardado: true,
+        doCrm: [{
+          nossoNumero: '99', placa: 'RJU0F75', mesReferente: '09/2026', valor: 250.57,
+          vencimento: '2026-09-20', status: 'disponivel',
+          linhaDigitavel: '23793', linkPdf: 'https://hinova.test/b.pdf',
+        }],
+      });
+      const r = await s.sincronizarAssociado({ id: 'a1', tenantId: 't1', cpf: '11144477735' });
+      expect(crm.baixarPdf).not.toHaveBeenCalled();
+      expect(prisma.associateBoletoPdf.upsert).not.toHaveBeenCalled();
+      expect(r.pdfs).toBe(0);
+    });
+
+    it('baixa quando ainda nao tem o arquivo guardado', async () => {
+      const { s, crm } = monta({
+        pdfJaGuardado: false,
+        doCrm: [{
+          nossoNumero: '99', placa: 'RJU0F75', mesReferente: '09/2026', valor: 250.57,
+          vencimento: '2026-09-20', status: 'disponivel',
+          linhaDigitavel: '23793', linkPdf: 'https://hinova.test/b.pdf',
+        }],
+      });
+      const r = await s.sincronizarAssociado({ id: 'a1', tenantId: 't1', cpf: '11144477735' });
+      expect(crm.baixarPdf).toHaveBeenCalledWith('https://hinova.test/b.pdf');
+      expect(r.pdfs).toBe(1);
+    });
   });
 });

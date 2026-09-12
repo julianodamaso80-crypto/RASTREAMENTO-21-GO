@@ -96,9 +96,18 @@ export class BoletosSyncService {
       return { gravados: 0, pdfs: 0, apagados: 0 };
     }
 
+    const resultado = await this.crm.buscarPorCpf(cpf);
+    if (!resultado) {
+      // CRM fora do ar: `[]` seria indistinguível de "ninguém deve nada" e
+      // apagaria o espelho inteiro do associado (achado C1). Não mexe em
+      // nada aqui — quem chama já sabe lidar com a falha (rodada conta como
+      // falha e segue; o primeiro acesso devolve o que já tinha).
+      throw new Error('CRM indisponível ao consultar boletos');
+    }
+    const { boletos: doCrm, foraDoPrazo } = resultado;
+
     let gravados = 0;
     let pdfs = 0;
-    const doCrm = await this.crm.buscarPorCpf(cpf);
 
     for (const b of doCrm) {
       const dados = {
@@ -119,7 +128,18 @@ export class BoletosSyncService {
       });
       gravados += 1;
 
-      if (b.linkPdf && comPdf) {
+      // Só baixa se ainda não tem o arquivo guardado: ~400 boletos x 3,4 MB
+      // x 3 rodadas/dia reescrevia ~4 GB/dia à toa (achado I3). Reemissão
+      // chega com `nossoNumero` novo, então este critério continua correto
+      // sem precisar de invalidação nenhuma.
+      const jaTemPdf = b.linkPdf && comPdf
+        ? await this.prisma.associateBoletoPdf.findFirst({
+            where: { tenantId: a.tenantId, nossoNumero: b.nossoNumero },
+            select: { nossoNumero: true },
+          })
+        : null;
+
+      if (b.linkPdf && comPdf && !jaTemPdf) {
         const buf = await this.crm.baixarPdf(b.linkPdf);
         if (buf) {
           // Vista sobre os mesmos bytes do Buffer, sem copiar os ~3,4 MB:
@@ -170,9 +190,11 @@ export class BoletosSyncService {
     });
 
     // Carimbo da visita: é ele que separa "está em dia" de "ainda não olhei".
+    // boletosForaDoPrazo junto: é o que separa "está em dia" de "tem
+    // pendência velha, fale com o Setor de Boletos" (achado C3).
     await this.prisma.associate.update({
       where: { id: a.id },
-      data: { boletosSincronizadosEm: new Date() },
+      data: { boletosSincronizadosEm: new Date(), boletosForaDoPrazo: foraDoPrazo },
     });
 
     return { gravados, pdfs, apagados: apagou.count };
