@@ -14,7 +14,10 @@ export interface BoletoDoCrm {
 
 export interface ResultadoCrm {
   boletos: BoletoDoCrm[];
-  foraDoPrazo: number;
+  // null = o CRM não mandou o campo — diferente de mandar 0. Quem grava o
+  // espelho não pode rebaixar em silêncio uma contagem financeira real
+  // (achado do portão final).
+  foraDoPrazo: number | null;
 }
 
 @Injectable()
@@ -47,7 +50,10 @@ export class CrmBoletosClient {
       }
       const body = (await r.json()) as { boletos?: BoletoDoCrm[]; foraDoPrazo?: number };
       if (!Array.isArray(body.boletos)) return null;
-      return { boletos: body.boletos, foraDoPrazo: body.foraDoPrazo ?? 0 };
+      return {
+        boletos: body.boletos,
+        foraDoPrazo: typeof body.foraDoPrazo === 'number' ? body.foraDoPrazo : null,
+      };
     } catch (err) {
       this.logger.warn(`CRM indisponível: ${(err as Error).message}`);
       return null;

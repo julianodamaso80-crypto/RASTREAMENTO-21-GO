@@ -7,7 +7,7 @@ function monta(
   opts: {
     associados?: any[];
     doCrm?: any[];
-    foraDoPrazo?: number;
+    foraDoPrazo?: number | null;
     crmFalhou?: boolean;
     boletosGuardados?: Record<string, string[]>;
     pdfJaGuardado?: boolean;
@@ -45,7 +45,9 @@ function monta(
     buscarPorCpf: jest
       .fn()
       .mockResolvedValue(
-        opts.crmFalhou ? null : { boletos: opts.doCrm ?? [], foraDoPrazo: opts.foraDoPrazo ?? 0 },
+        opts.crmFalhou
+          ? null
+          : { boletos: opts.doCrm ?? [], foraDoPrazo: 'foraDoPrazo' in opts ? opts.foraDoPrazo : 0 },
       ),
     baixarPdf: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 x')),
   } as any;
@@ -268,6 +270,18 @@ describe('BoletosSyncService.rodada', () => {
     });
     await s.rodada(SEGUNDA);
     expect(prisma.associate.update.mock.calls[0][0].data.boletosForaDoPrazo).toBe(3);
+  });
+
+  // Achado do portão final: CRM respondendo 200 sem o campo foraDoPrazo (null)
+  // nao pode zerar em silencio uma contagem financeira que ja estava guardada.
+  it('CRM sem o campo foraDoPrazo nao mexe no contador guardado', async () => {
+    const { s, prisma } = monta({
+      associados: [{ id: 'a1', tenantId: 't1', cpf: '11144477735' }],
+      doCrm: [],
+      foraDoPrazo: null,
+    });
+    await s.rodada(SEGUNDA);
+    expect(prisma.associate.update.mock.calls[0][0].data).not.toHaveProperty('boletosForaDoPrazo');
   });
 
   // Achado I3: ~400 boletos x 3,4 MB x 3 rodadas/dia estourava disco do droplet.

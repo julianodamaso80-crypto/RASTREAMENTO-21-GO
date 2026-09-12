@@ -191,10 +191,15 @@ export class BoletosSyncService {
 
     // Carimbo da visita: é ele que separa "está em dia" de "ainda não olhei".
     // boletosForaDoPrazo junto: é o que separa "está em dia" de "tem
-    // pendência velha, fale com o Setor de Boletos" (achado C3).
+    // pendência velha, fale com o Setor de Boletos" (achado C3). `null` = o
+    // CRM não mandou o campo — não sobrescreve o contador guardado (achado
+    // do portão final: 0 do CRM some seria rebaixamento silencioso).
     await this.prisma.associate.update({
       where: { id: a.id },
-      data: { boletosSincronizadosEm: new Date(), boletosForaDoPrazo: foraDoPrazo },
+      data: {
+        boletosSincronizadosEm: new Date(),
+        ...(foraDoPrazo !== null ? { boletosForaDoPrazo: foraDoPrazo } : {}),
+      },
     });
 
     return { gravados, pdfs, apagados: apagou.count };

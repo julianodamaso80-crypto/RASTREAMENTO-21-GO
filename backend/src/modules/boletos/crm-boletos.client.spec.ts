@@ -70,6 +70,21 @@ describe('CrmBoletosClient.buscarPorCpf', () => {
       foraDoPrazo: 0,
     });
   });
+
+  // Achado do portão final: 200 sem o campo foraDoPrazo nao pode virar 0 —
+  // seria rebaixar em silencio uma contagem financeira que ja existia.
+  it('resposta sem o campo foraDoPrazo devolve null, distinto de zero', async () => {
+    mockFetch(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ boletos: [] }),
+      }),
+    );
+    await expect(client().buscarPorCpf('11144477735')).resolves.toEqual({
+      boletos: [],
+      foraDoPrazo: null,
+    });
+  });
 });
 
 describe('CrmBoletosClient.baixarPdf', () => {
