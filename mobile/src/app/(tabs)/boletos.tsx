@@ -15,6 +15,7 @@ import { colors, radii } from '@/lib/theme';
 export default function BoletosScreen() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [pendente, setPendente] = useState(false);
+  const [comFalha, setComFalha] = useState(false);
   const [rodape, setRodape] = useState({ titulo: '', telefones: '' });
   const [loading, setLoading] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
@@ -26,8 +27,10 @@ export default function BoletosScreen() {
         setBoletos(r.boletos);
         setPendente(r.pendente);
         setRodape(r.rodape);
+        setComFalha(false);
       })
-      .catch(() => {})
+      // Sem isso a tela mentia "em dia" quando a consulta nem rodou.
+      .catch(() => setComFalha(true))
       .finally(() => {
         setLoading(false);
         setAtualizando(false);
@@ -83,7 +86,15 @@ export default function BoletosScreen() {
             />
           }
         >
-          {boletos.length === 0 && pendente ? (
+          {boletos.length === 0 && comFalha ? (
+            <View style={styles.vazio}>
+              <Ionicons name="cloud-offline-outline" size={44} color={colors.amber} />
+              <Text style={styles.vazioTitulo}>Não deu para carregar seus boletos</Text>
+              <Text style={styles.vazioTexto}>
+                Verifique sua conexão e puxe a tela para baixo para tentar de novo.
+              </Text>
+            </View>
+          ) : boletos.length === 0 && pendente ? (
             // Nunca dizer "em dia" a quem ainda não foi conferido.
             <View style={styles.vazio}>
               <Ionicons name="time-outline" size={44} color={colors.textFaint} />
