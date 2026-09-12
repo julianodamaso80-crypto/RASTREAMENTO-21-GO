@@ -54,7 +54,9 @@ export default () => ({
   },
   expoPush: {
     url: process.env.EXPO_PUSH_URL || 'https://exp.host/--/api/v2/push/send',
-    enabled: process.env.EXPO_PUSH_ENABLED === 'true',
+    // Interruptor de emergência (achado M9): ligado por padrão, 'false'
+    // desliga o envio sem exigir configurar nada em condições normais.
+    enabled: process.env.EXPO_PUSH_ENABLED !== 'false',
   },
   server: {
     primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',

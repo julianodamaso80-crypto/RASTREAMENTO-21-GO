@@ -1,9 +1,17 @@
 import { PushService, textoDoAviso } from './push.service';
 
 describe('textoDoAviso', () => {
-  it('diz o mes, o valor e o dia — na lingua do dono do carro', () => {
+  it('diz o mes, o valor e o dia — na lingua do dono do carro (formato MM/YYYY)', () => {
     expect(
       textoDoAviso({ mesReferente: '09/2026', valor: 250.57, vencimento: '2026-09-20' }),
+    ).toBe('Seu boleto de setembro já está disponível — R$ 250,57, vence dia 20.');
+  });
+
+  // Achado I2: o CRM manda mesReferente em YYYY-MM — com o SGA fechado não dá
+  // pra provar qual formato chega em cada caminho, então os dois precisam funcionar.
+  it('diz o mes certo no formato YYYY-MM', () => {
+    expect(
+      textoDoAviso({ mesReferente: '2026-09', valor: 250.57, vencimento: '2026-09-20' }),
     ).toBe('Seu boleto de setembro já está disponível — R$ 250,57, vence dia 20.');
   });
 
@@ -18,21 +26,47 @@ describe('textoDoAviso', () => {
       textoDoAviso({ mesReferente: '09/2026', valor: 250.57, vencimento: '2026-09-XX' }),
     ).toBe('Seu boleto de setembro já está disponível — R$ 250,57.');
   });
+
+  it('mesReferente vazio nao diz "de mes nenhum"', () => {
+    expect(textoDoAviso({ mesReferente: '', valor: 250.57, vencimento: '2026-09-20' })).toBe(
+      'Seu boleto já está disponível — R$ 250,57, vence dia 20.',
+    );
+  });
+
+  it('mesReferente nulo nao diz "de mes nenhum"', () => {
+    expect(textoDoAviso({ mesReferente: null, valor: 250.57, vencimento: '2026-09-20' })).toBe(
+      'Seu boleto já está disponível — R$ 250,57, vence dia 20.',
+    );
+  });
+
+  it('mes invalido (13) nao vira "de mes[NaN]"', () => {
+    expect(
+      textoDoAviso({ mesReferente: '13/2026', valor: 250.57, vencimento: '2026-09-20' }),
+    ).toBe('Seu boleto já está disponível — R$ 250,57, vence dia 20.');
+  });
 });
 
 // Segue o padrão de crm-boletos.client.spec.ts: fetch é global, nunca entra no
 // construtor (Nest apaga `typeof fetch` pros metadados e não acha token — provado
 // na Task 5), então o mock é `jest.spyOn(global, 'fetch')`.
-function servico(tokens: any[] = [{ expoToken: 'ExponentPushToken[x]' }]) {
+function servico(
+  tokens: any[] = [{ expoToken: 'ExponentPushToken[x]' }],
+  opts: { enabled?: boolean } = {},
+) {
   const prisma = {
     associatePushDevice: {
       findMany: jest.fn().mockResolvedValue(tokens),
       upsert: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     associateBoleto: { update: jest.fn().mockResolvedValue({}) },
   } as any;
   const config = {
-    get: (k: string) => ({ 'expoPush.url': 'https://exp.test/send' } as any)[k],
+    get: (k: string) =>
+      ({
+        'expoPush.url': 'https://exp.test/send',
+        'expoPush.enabled': opts.enabled ?? true,
+      } as any)[k],
   } as any;
   return { s: new PushService(prisma, config), prisma };
 }
@@ -50,7 +84,12 @@ const BOLETO = { mesReferente: '09/2026', valor: 250.57, vencimento: '2026-09-20
 describe('PushService.avisarBoletoNovo', () => {
   it('envia e carimba avisadoEm no mesmo passo', async () => {
     const { s, prisma } = servico();
-    const f = mockFetch(jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+    const f = mockFetch(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ status: 'ok', id: 'ticket-1' }] }),
+      }),
+    );
 
     await s.avisarBoletoNovo('b1', 'a1', 't1', BOLETO);
 
@@ -82,6 +121,56 @@ describe('PushService.avisarBoletoNovo', () => {
 
     await s.avisarBoletoNovo('b1', 'a1', 't1', BOLETO);
 
+    expect(prisma.associateBoleto.update).not.toHaveBeenCalled();
+  });
+
+  // Achado I5: a Expo responde HTTP 200 mesmo quando o ticket individual é
+  // erro — quem só olha `r.ok` carimba `avisadoEm` e nunca mais avisa esse
+  // boleto, mesmo o push nunca tendo chegado.
+  it('Expo 200 mas nenhum ticket com sucesso: NAO carimba', async () => {
+    const { s, prisma } = servico();
+    mockFetch(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [{ status: 'error', details: { error: 'MessageTooBig' } }],
+        }),
+      }),
+    );
+
+    await s.avisarBoletoNovo('b1', 'a1', 't1', BOLETO);
+
+    expect(prisma.associateBoleto.update).not.toHaveBeenCalled();
+  });
+
+  it('Expo 200 com ticket DeviceNotRegistered: apaga aquele token e NAO carimba', async () => {
+    const { s, prisma } = servico([{ expoToken: 'ExponentPushToken[morto]' }]);
+    mockFetch(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [{ status: 'error', details: { error: 'DeviceNotRegistered' } }],
+        }),
+      }),
+    );
+
+    await s.avisarBoletoNovo('b1', 'a1', 't1', BOLETO);
+
+    expect(prisma.associatePushDevice.deleteMany).toHaveBeenCalledWith({
+      where: { expoToken: 'ExponentPushToken[morto]' },
+    });
+    expect(prisma.associateBoleto.update).not.toHaveBeenCalled();
+  });
+
+  // Achado M9: expoPush.enabled existia na config e ninguém lia — vira
+  // interruptor de emergência de verdade.
+  it('expoPush.enabled=false: nao manda push nenhum e nao carimba', async () => {
+    const { s, prisma } = servico([{ expoToken: 'ExponentPushToken[x]' }], { enabled: false });
+    const f = mockFetch(jest.fn());
+
+    await s.avisarBoletoNovo('b1', 'a1', 't1', BOLETO);
+
+    expect(f).not.toHaveBeenCalled();
     expect(prisma.associateBoleto.update).not.toHaveBeenCalled();
   });
 });
