@@ -247,6 +247,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get associateBoletoPdf() {
     return this.base.associateBoletoPdf;
   }
+  get associatePushDevice() {
+    return this.base.associatePushDevice;
+  }
 
   // Raw queries — sempre pelo base (extension não afeta raw)
   $queryRaw<T = unknown>(
