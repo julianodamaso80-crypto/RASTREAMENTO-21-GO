@@ -46,6 +46,16 @@ export default () => ({
     // installation_pendings, que é descartável — desligar não protege nada.
     pendingsSyncEnabled: process.env.INSTALLATION_PENDINGS_SYNC_ENABLED || 'true',
   },
+  crm: {
+    // O CRM é a fonte da verdade financeira. Sem estas duas, a aba Boletos
+    // simplesmente não carrega nada novo — e não quebra nada do resto.
+    baseUrl: process.env.CRM_API_URL,
+    token: process.env.CRM_INTEGRACAO_TOKEN,
+  },
+  expoPush: {
+    url: process.env.EXPO_PUSH_URL || 'https://exp.host/--/api/v2/push/send',
+    enabled: process.env.EXPO_PUSH_ENABLED === 'true',
+  },
   server: {
     primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',
     secondaryIp: process.env.SERVER_SECONDARY_IP || '0.0.0.0',
