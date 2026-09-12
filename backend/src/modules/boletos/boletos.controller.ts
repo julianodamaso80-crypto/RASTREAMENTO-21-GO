@@ -8,6 +8,7 @@ import { BoletosService } from './boletos.service';
 import { PushService } from './push.service';
 import { dentroDaJanelaDoSga } from './boletos.regras';
 import { BoletosSyncService } from './boletos-sync.service';
+import { RegistrarDispositivoDto } from './dto/registrar-dispositivo.dto';
 
 @ApiTags('App - Boletos do Associado')
 @ApiBearerAuth()
@@ -75,7 +76,7 @@ export class BoletosController {
   async registrarDispositivo(
     @CurrentAssociate('id') associateId: string,
     @CurrentAssociate('tenantId') tenantId: string,
-    @Body() body: { expoToken: string; platform: string },
+    @Body() body: RegistrarDispositivoDto,
   ) {
     await this.push.registrarAparelho(associateId, tenantId, body.expoToken, body.platform);
     return { ok: true };
