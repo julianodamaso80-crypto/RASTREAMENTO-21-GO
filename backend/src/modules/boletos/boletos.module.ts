@@ -5,6 +5,7 @@ import { BoletosController } from './boletos.controller';
 import { BoletosService } from './boletos.service';
 import { CrmBoletosClient } from './crm-boletos.client';
 import { PushService } from './push.service';
+import { BoletosSyncService } from './boletos-sync.service';
 import { AssociateJwtGuard } from '../app/guards/associate-jwt.guard';
 
 @Module({
@@ -17,7 +18,7 @@ import { AssociateJwtGuard } from '../app/guards/associate-jwt.guard';
     }),
   ],
   controllers: [BoletosController],
-  providers: [BoletosService, CrmBoletosClient, PushService, AssociateJwtGuard],
+  providers: [BoletosService, CrmBoletosClient, PushService, BoletosSyncService, AssociateJwtGuard],
   exports: [BoletosService, CrmBoletosClient, PushService],
 })
 export class BoletosModule {}
