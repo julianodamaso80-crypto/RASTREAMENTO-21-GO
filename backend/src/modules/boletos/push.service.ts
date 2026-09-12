@@ -19,7 +19,8 @@ export function textoDoAviso(b: {
   if (b.valor == null) return `Seu boleto${deQualMes} já está disponível.`;
   const valor = b.valor.toFixed(2).replace('.', ',');
   const dia = String(b.vencimento ?? '').slice(8, 10);
-  const quando = dia ? `, vence dia ${Number(dia)}` : '';
+  // integrador já devolveu vencimento sujo (ex.: "2026-09-XX") — só usa se for dia de verdade
+  const quando = /^\d{2}$/.test(dia) ? `, vence dia ${Number(dia)}` : '';
   return `Seu boleto${deQualMes} já está disponível — R$ ${valor}${quando}.`;
 }
 
@@ -76,12 +77,17 @@ export class PushService {
     }));
 
     try {
-      await fetch(url, {
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mensagens),
         signal: AbortSignal.timeout(15_000),
       });
+      if (!r.ok) {
+        // Expo recusou (payload malformado, token inválido, limite): não carimba, o robô tenta de novo
+        this.logger.warn(`Expo respondeu ${r.status} ao enviar push`);
+        return;
+      }
     } catch (err) {
       this.logger.warn(`push não saiu: ${(err as Error).message}`);
       return;

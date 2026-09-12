@@ -12,6 +12,12 @@ describe('textoDoAviso', () => {
       textoDoAviso({ mesReferente: '09/2026', valor: null, vencimento: '2026-09-20' }),
     ).toBe('Seu boleto de setembro já está disponível.');
   });
+
+  it('vencimento sujo do integrador nao vira "dia NaN"', () => {
+    expect(
+      textoDoAviso({ mesReferente: '09/2026', valor: 250.57, vencimento: '2026-09-XX' }),
+    ).toBe('Seu boleto de setembro já está disponível — R$ 250,57.');
+  });
 });
 
 // Segue o padrão de crm-boletos.client.spec.ts: fetch é global, nunca entra no
@@ -64,6 +70,15 @@ describe('PushService.avisarBoletoNovo', () => {
   it('falha no envio NAO carimba avisadoEm — senao o associado nunca recebe', async () => {
     const { s, prisma } = servico();
     mockFetch(jest.fn().mockRejectedValue(new Error('rede caiu')));
+
+    await s.avisarBoletoNovo('b1', 'a1', 't1', BOLETO);
+
+    expect(prisma.associateBoleto.update).not.toHaveBeenCalled();
+  });
+
+  it('Expo respondendo com erro HTTP tambem NAO carimba — senao nunca mais avisa', async () => {
+    const { s, prisma } = servico();
+    mockFetch(jest.fn().mockResolvedValue({ ok: false, status: 400 }));
 
     await s.avisarBoletoNovo('b1', 'a1', 't1', BOLETO);
 
