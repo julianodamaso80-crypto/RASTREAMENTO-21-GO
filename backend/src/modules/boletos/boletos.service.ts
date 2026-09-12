@@ -67,6 +67,18 @@ export class BoletosService {
     };
   }
 
+  /** Só o que a carga precisa. Não devolve nada além disto. */
+  async dadosParaSincronizar(
+    associateId: string,
+    tenantId: string,
+  ): Promise<{ id: string; tenantId: string; cpf: string | null } | null> {
+    const a = await this.prisma.associate.findFirst({
+      where: { id: associateId, tenantId, deletedAt: null },
+      select: { id: true, tenantId: true, cpf: true },
+    });
+    return a ?? null;
+  }
+
   /** O PDF guardado. Confere dono antes de entregar: id sozinho nunca basta. */
   async pdfDoBoleto(id: string, associateId: string, tenantId: string): Promise<Buffer | null> {
     const boleto = await this.prisma.associateBoleto.findFirst({

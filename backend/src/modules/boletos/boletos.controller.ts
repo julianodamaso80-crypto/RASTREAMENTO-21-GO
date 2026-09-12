@@ -6,6 +6,8 @@ import { AssociateJwtGuard } from '../app/guards/associate-jwt.guard';
 import { CurrentAssociate } from '../app/decorators/current-associate.decorator';
 import { BoletosService } from './boletos.service';
 import { PushService } from './push.service';
+import { dentroDaJanelaDoSga } from './boletos.regras';
+import { BoletosSyncService } from './boletos-sync.service';
 
 @ApiTags('App - Boletos do Associado')
 @ApiBearerAuth()
@@ -16,6 +18,7 @@ export class BoletosController {
   constructor(
     private readonly service: BoletosService,
     private readonly push: PushService,
+    private readonly sync: BoletosSyncService,
   ) {}
 
   @Get()
@@ -24,7 +27,17 @@ export class BoletosController {
     @CurrentAssociate('id') associateId: string,
     @CurrentAssociate('tenantId') tenantId: string,
   ) {
-    return this.service.listarDoAssociado(associateId, tenantId);
+    const primeira = await this.service.listarDoAssociado(associateId, tenantId);
+    // Nunca visitado E o SGA está aberto: carrega agora, em vez de mandar o
+    // associado esperar até segunda por um boleto que dá para buscar já.
+    if (primeira.pendente && dentroDaJanelaDoSga(new Date())) {
+      const a = await this.service.dadosParaSincronizar(associateId, tenantId);
+      if (a) {
+        await this.sync.sincronizarAssociado(a);
+        return this.service.listarDoAssociado(associateId, tenantId);
+      }
+    }
+    return primeira;
   }
 
   @Get(':id/pdf')
