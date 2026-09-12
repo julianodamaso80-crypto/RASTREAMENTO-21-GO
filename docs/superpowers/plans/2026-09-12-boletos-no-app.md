@@ -1103,10 +1103,13 @@ import { BoletosModule } from './modules/boletos/boletos.module';
     BoletosModule,
 ```
 
-- [ ] **Step 7: Compilar e rodar a suíte do módulo**
+- [ ] **Step 7: Compilar, rodar a suíte do módulo E PROVAR O BOOT**
 
-Run: `npx tsc --noEmit -p tsconfig.json && npx jest src/modules/boletos`
-Expected: zero erro de tipo, todos os testes verdes
+Run: `npx tsc --noEmit -p tsconfig.json && npx jest src/modules/boletos src/app-boot.spec.ts`
+Expected: zero erro de tipo, todos os testes verdes — **incluindo `app-boot.spec.ts`**, que monta
+o `AppModule` inteiro. Este é o teste que pega provider que o Nest não consegue injetar: `tsc` e
+os testes de unidade passam e mesmo assim o backend morre no boot. Foi assim que a revisão da
+Task 5 pegou o `fetch` no construtor.
 
 - [ ] **Step 8: Commit**
 
@@ -1283,18 +1286,29 @@ export class BoletosSyncService {
    * 8h, 12h e 17h30 de Brasília. O cron dispara todo dia; quem barra sábado,
    * domingo e fora de hora é `dentroDaJanelaDoSga` — uma regra só, num lugar só.
    */
-  @Cron('0 0,30 8,12,17 * * *', { timeZone: 'America/Sao_Paulo' })
-  async rodadaAgendada(): Promise<void> {
-    const agora = new Date();
-    const hora = agora.getHours();
-    const minuto = agora.getMinutes();
-    // 8h00, 12h00 e 17h30 — as outras batidas do cron saem fora.
-    const horaValida =
-      (hora === 8 && minuto === 0) ||
-      (hora === 12 && minuto === 0) ||
-      (hora === 17 && minuto === 30);
-    if (!horaValida) return;
-    const r = await this.rodada(agora);
+  /**
+   * Dois crons em vez de um com filtro de hora: ler `getHours()` pegaria o fuso do
+   * PROCESSO, e num container em UTC nenhuma batida casaria — o robô pararia de
+   * rodar em silêncio, para sempre. O `timeZone` do decorador não tem esse problema.
+   */
+  @Cron('0 0 8,12 * * *', { timeZone: 'America/Sao_Paulo' })
+  async rodadaDasOitoEDozeHoras(): Promise<void> {
+    await this.rodadaAgendada();
+  }
+
+  @Cron('0 30 17 * * *', { timeZone: 'America/Sao_Paulo' })
+  async rodadaDasDezessete30(): Promise<void> {
+    await this.rodadaAgendada();
+  }
+
+  /**
+   * ⚠️ Dois MÉTODOS, não dois decoradores no mesmo método: `@Cron` grava metadado
+   * no descritor, e empilhar dois na mesma função faz o segundo sobrescrever o
+   * primeiro — um dos horários sumiria em silêncio (conferido no fonte do
+   * @nestjs/schedule 6.1.1).
+   */
+  private async rodadaAgendada(): Promise<void> {
+    const r = await this.rodada(new Date());
     this.logger.log(
       `boletos: ${r.associados} associados, ${r.gravados} gravados, ${r.pdfs} PDFs, ${r.apagados} apagados`,
     );
@@ -1542,8 +1556,9 @@ export function textoDoAviso(b: {
   const deQualMes = mes ? ` de ${mes}` : '';
   if (b.valor == null) return `Seu boleto${deQualMes} já está disponível.`;
   const valor = b.valor.toFixed(2).replace('.', ',');
+  // Vencimento malformado do integrador não pode virar "vence dia NaN" na tela.
   const dia = String(b.vencimento ?? '').slice(8, 10);
-  const quando = dia ? `, vence dia ${Number(dia)}` : '';
+  const quando = /^\d{2}$/.test(dia) ? `, vence dia ${Number(dia)}` : '';
   return `Seu boleto${deQualMes} já está disponível — R$ ${valor}${quando}.`;
 }
 
@@ -1551,10 +1566,15 @@ export function textoDoAviso(b: {
 export class PushService {
   private readonly logger = new Logger(PushService.name);
 
+  /**
+   * ⚠️ `fetch` NÃO entra no construtor. O Nest apaga `typeof fetch` para `Function`
+   * nos metadados e não acha token para injetar — o backend morre no boot com
+   * "can't resolve dependencies". Provado na Task 5. Os testes trocam o `fetch`
+   * global com `jest.spyOn(global, 'fetch')`.
+   */
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
-    private readonly enviar: typeof fetch = fetch,
   ) {}
 
   async registrarAparelho(
@@ -1594,13 +1614,22 @@ export class PushService {
       data: { rota: '/boletos' },
     }));
 
+    /**
+     * ⚠️ `fetch` só rejeita em falha de REDE. Um 400, 429 ou 5xx do Expo resolve
+     * normalmente — e carimbar em cima disso queimaria o aviso para sempre, já que
+     * `avisadoEm` é trava permanente. Quem decide é `r.ok`.
+     */
     try {
-      await this.enviar(url, {
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mensagens),
         signal: AbortSignal.timeout(15_000),
       });
+      if (!r.ok) {
+        this.logger.warn(`push recusado pelo Expo: ${r.status}`);
+        return;
+      }
     } catch (err) {
       this.logger.warn(`push não saiu: ${(err as Error).message}`);
       return;
@@ -1613,6 +1642,21 @@ export class PushService {
   }
 }
 ```
+
+- [ ] **Step 3B: Expor o model no PrismaService**
+
+O `PrismaService` deste projeto expõe um getter por model, e `prisma-service-expoe-models.spec.ts`
+falha enquanto faltar algum. A Task 3 acrescentou três models ao schema; a Task 6 já expôs
+`associateBoleto` e `associateBoletoPdf`. Falta o desta tarefa:
+
+```ts
+  get associatePushDevice() {
+    return this.client.associatePushDevice;
+  }
+```
+
+Siga exatamente o formato dos getters vizinhos no arquivo. Depois rode
+`npx jest src/modules/prisma` e confirme **verde** — é o teste que ficou vermelho desde a Task 3.
 
 - [ ] **Step 4: Acrescentar a rota de registro do aparelho**
 
@@ -1747,7 +1791,9 @@ import { BoletosSyncService } from './boletos-sync.service';
     if (primeira.pendente && dentroDaJanelaDoSga(new Date())) {
       const a = await this.service.dadosParaSincronizar(associateId, tenantId);
       if (a) {
-        await this.sync.sincronizarAssociado(a);
+        // Sem PDF: baixar 3,4 MB por boleto aqui seguraria a tela do celular
+        // por minutos. O robô agendado busca o arquivo na passada seguinte.
+        await this.sync.sincronizarAssociado(a, { comPdf: false });
         return this.service.listarDoAssociado(associateId, tenantId);
       }
     }
