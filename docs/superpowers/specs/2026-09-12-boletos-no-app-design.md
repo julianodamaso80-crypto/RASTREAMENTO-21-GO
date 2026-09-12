@@ -125,10 +125,19 @@ chamada inteira por causa disso.
 | `plate` | text | escrita no cartão |
 | `mes_referente`, `valor`, `vencimento`, `status` | | espelho do que o CRM julgou |
 | `linha_digitavel` | text | null enquanto o SGA não tiver respondido |
-| `pdf_path` | text | caminho do arquivo guardado; null se ainda não baixou |
-| `pdf_bytes` | int | para medir o armazenamento a cada passada |
+| `pdf_bytes` | int | tamanho do arquivo guardado; null se ainda não baixou |
 | `avisado_em` | timestamptz | trava do push: uma vez por boleto, para sempre |
 | `atualizado_em` | timestamptz | |
+
+**Onde o PDF fica guardado: no Postgres, não em arquivo.** Medido em 12/09 — o serviço
+`backend-rastreamento` **não tem nenhum volume montado** (`Mounts: null`), então arquivo escrito
+dentro do container morre no próximo deploy. O Postgres, ao contrário, grava num bind mount
+persistente (`/etc/easypanel/projects/rastreamento-21-go/postgres-rastreamento/data`). O PDF vai
+como `bytea` numa tabela à parte, `associate_boleto_pdfs` (`nosso_numero`, `conteudo`,
+`baixado_em`), separada da tabela principal para não pesar as consultas da lista e para apagar
+sem tocar no resto. Custo: ~850 MB sobre os 7,1 GB do banco hoje. A alternativa — montar volume
+no serviço — exigiria mexer na configuração de build do EasyPanel, que é exatamente o risco que
+a regra 0 manda não correr sem necessidade.
 
 **Robô (`@nestjs/schedule`), 8h / 12h / 17h30, seg–sex**, com guarda de janela própria (se o
 SGA recusar por horário, registra e sai — não fica martelando como o CRM está fazendo):
@@ -136,15 +145,15 @@ SGA recusar por horário, registra e sai — não fica martelando como o CRM est
 1. lista os associados com `last_login_at` não nulo (207 hoje);
 2. para cada um, pergunta ao CRM;
 3. grava/atualiza as linhas por `nosso_numero`;
-4. baixa o PDF de quem está `disponivel` e ainda não tem arquivo;
-5. **apaga arquivo e linha** de boleto pago ou com mais de 5 dias do vencimento;
-6. loga quantos arquivos e quantos MB estão guardados.
+4. baixa o PDF de quem está `disponivel` e ainda não tem o arquivo guardado;
+5. **apaga o PDF e a linha** de boleto pago ou com mais de 5 dias do vencimento;
+6. loga quantos PDFs e quantos MB estão guardados.
 
 **Endpoints do app** (guard do associado, já existente):
 
 - `GET /app/boletos` — lê **só** do espelho local. Devolve os boletos em aberto de todos os
   veículos do associado, ordenados por vencimento. Nunca chama SGA nem CRM na hora.
-- `GET /app/boletos/:id/pdf` — serve o arquivo guardado, conferindo que o boleto é do
+- `GET /app/boletos/:id/pdf` — devolve o PDF guardado no banco, conferindo que o boleto é do
   associado do token.
 - `POST /app/devices` — registra o token de push do aparelho.
 
@@ -185,6 +194,7 @@ regra 0 do projeto, com teste de contrato "envenenado" como nos outros endpoints
 - `tenant_id` em toda query, inclusive `findFirst`.
 - O segredo do CRM mora em env (`CRM_INTEGRACAO_TOKEN`), nunca em código nem em log.
 - O PDF é servido pelo backend conferindo dono — nunca por link público adivinhável.
+- O PDF sai por `@Res()` direto, fora do interceptor que embrulha as respostas em `{ data }`.
 - Nada de valor, CPF ou linha digitável em log.
 
 ## Testes e critério de aceite
@@ -207,7 +217,8 @@ regra 0 do projeto, com teste de contrato "envenenado" como nos outros endpoints
   lento, mesmo resultado. **Confirmar na segunda-feira, dentro da janela.**
 - ⚠️ **A janela do SGA.** Vale levar à Hinova a medição acima: a liberação 00h–23h não saiu.
   Enquanto não sair, o robô só trabalha seg–sex 7h–18h — o desenho já assume isso.
-- ⚠️ **Disco.** ~850 MB girando, medidos a cada passada. Se passar de 3 GB, alarme.
+- ⚠️ **Tamanho do banco.** ~850 MB de PDF sobre os 7,1 GB de hoje, girando, medidos a cada
+  passada. Se passar de 3 GB, alarme.
 - **Dependência do CRM.** Se o CRM cair, a aba mostra o que está guardado, mas para de
   atualizar.
 - **As lojas.** A aba só existe para quem atualizar o app; a Apple revisa o build (1–2 dias) e
