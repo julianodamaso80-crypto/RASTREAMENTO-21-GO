@@ -594,6 +594,10 @@ model Associate {
   /// Quando o número foi confirmado por código. Null = não verificado.
   /// Telefone vindo do SGA NÃO conta como verificado — ninguém provou que recebe.
   phoneVerifiedAt    DateTime? @map("phone_verified_at")
+  /// Quando o robô de boletos passou por este associado pela última vez.
+  /// NULL = nunca passou: a aba diz "aparecem a partir de segunda", em vez de
+  /// dizer que ele está em dia sem ter olhado.
+  boletosSincronizadosEm DateTime? @map("boletos_sincronizados_em") @db.Timestamptz()
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -1349,4 +1353,51 @@ model Appointment {
   @@index([tenantId, status])
   @@index([tenantId, plate])
   @@map("appointments")
+}
+
+/// Boleto do associado, espelhado do CRM. Descartável: some quando pago ou
+/// quando passa dos 5 dias de atraso — a fonte da verdade é o CRM.
+model AssociateBoleto {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  associateId    String    @map("associate_id") @db.Uuid
+  nossoNumero    String    @map("nosso_numero")
+  plate          String?
+  mesReferente   String?   @map("mes_referente")
+  valor          Decimal?  @db.Decimal(12, 2)
+  vencimento     String?
+  status         String
+  linhaDigitavel String?   @map("linha_digitavel")
+  pdfBytes       Int?      @map("pdf_bytes")
+  /// Trava do push: uma vez por boleto, para sempre.
+  avisadoEm      DateTime? @map("avisado_em") @db.Timestamptz()
+  atualizadoEm   DateTime  @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz()
+  criadoEm       DateTime  @default(now()) @map("criado_em") @db.Timestamptz()
+
+  @@unique([tenantId, nossoNumero])
+  @@index([associateId, vencimento])
+  @@map("associate_boletos")
+}
+
+/// O PDF em si. Tabela à parte porque são ~3,4 MB por boleto.
+model AssociateBoletoPdf {
+  nossoNumero String   @id @map("nosso_numero")
+  tenantId    String   @map("tenant_id") @db.Uuid
+  conteudo    Bytes
+  baixadoEm   DateTime @default(now()) @map("baixado_em") @db.Timestamptz()
+
+  @@map("associate_boleto_pdfs")
+}
+
+/// Aparelho do associado que recebe push. Uma linha por aparelho.
+model AssociatePushDevice {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  associateId  String   @map("associate_id") @db.Uuid
+  expoToken    String   @unique @map("expo_token")
+  platform     String
+  atualizadoEm DateTime @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz()
+
+  @@index([associateId])
+  @@map("associate_push_devices")
 }
