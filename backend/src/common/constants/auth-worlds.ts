@@ -56,6 +56,7 @@ export const INTERNAL_CONTROLLERS: readonly string[] = [
 export const ASSOCIATE_CONTROLLERS: readonly string[] = [
   'app/app-data.controller.ts',
   'app/associate-auth.controller.ts',
+  'boletos/boletos.controller.ts',
 ];
 
 /** PWA do técnico de campo. Token `type: 'technician'`. */
@@ -202,6 +203,7 @@ export const LEAK_PROBES: readonly LeakProbe[] = [
   // App do cliente final.
   { world: 'associate', controller: 'app/app-data.controller.ts', path: '/app/vehicles' },
   { world: 'associate', controller: 'app/associate-auth.controller.ts', path: '/app/auth/me' },
+  { world: 'associate', controller: 'boletos/boletos.controller.ts', path: '/app/boletos' },
 
   // PWA do técnico de campo.
   { world: 'technician', controller: 'tech/tech-field.controller.ts', path: '/tech/assignments' },
