@@ -1289,7 +1289,10 @@ export class BoletosSyncService {
     const hora = agora.getHours();
     const minuto = agora.getMinutes();
     // 8h00, 12h00 e 17h30 — as outras batidas do cron saem fora.
-    const horaValida = (hora === 8 && minuto === 0) || (hora === 12 && minuto === 0) || (hora === 17 && minuto === 30);
+    const horaValida =
+      (hora === 8 && minuto === 0) ||
+      (hora === 12 && minuto === 0) ||
+      (hora === 17 && minuto === 30);
     if (!horaValida) return;
     const r = await this.rodada(agora);
     this.logger.log(
@@ -1313,74 +1316,95 @@ export class BoletosSyncService {
     let gravados = 0;
     let pdfs = 0;
     let apagados = 0;
-
     for (const a of associados) {
-      const cpf = String(a.cpf ?? '').replace(/\D/g, '');
-      if (!cpf) continue;
-      const doCrm = await this.crm.buscarPorCpf(cpf);
+      const r = await this.sincronizarAssociado(a);
+      gravados += r.gravados;
+      pdfs += r.pdfs;
+      apagados += r.apagados;
+    }
+    return { associados: associados.length, gravados, pdfs, apagados };
+  }
 
-      for (const b of doCrm) {
-        const dados = {
-          tenantId: a.tenantId,
-          associateId: a.id,
-          nossoNumero: b.nossoNumero,
-          plate: b.placa,
-          mesReferente: b.mesReferente,
-          valor: b.valor,
-          vencimento: b.vencimento,
-          status: b.status,
-          linhaDigitavel: b.linhaDigitavel,
-        };
-        const linha = await this.prisma.associateBoleto.upsert({
-          where: { tenantId_nossoNumero: { tenantId: a.tenantId, nossoNumero: b.nossoNumero } },
-          create: dados,
-          update: dados,
-        });
-        gravados += 1;
+  /**
+   * A carga de UM associado. O robô usa em laço; o primeiro acesso (Task 7B) usa
+   * sozinha, para quem instalou o app agora não esperar a próxima batida do cron.
+   */
+  async sincronizarAssociado(a: {
+    id: string; tenantId: string; cpf: string | null;
+  }): Promise<{ gravados: number; pdfs: number; apagados: number }> {
+    const cpf = String(a.cpf ?? '').replace(/\D/g, '');
+    if (!cpf) return { gravados: 0, pdfs: 0, apagados: 0 };
 
-        if (b.linkPdf) {
-          const buf = await this.crm.baixarPdf(b.linkPdf);
-          if (buf) {
-            await this.prisma.associateBoletoPdf.upsert({
-              where: { nossoNumero: b.nossoNumero },
-              create: { nossoNumero: b.nossoNumero, tenantId: a.tenantId, conteudo: buf },
-              update: { conteudo: buf, baixadoEm: new Date() },
-            });
-            await this.prisma.associateBoleto.update({
-              where: { id: linha.id },
-              data: { pdfBytes: buf.length },
-            });
-            pdfs += 1;
-          }
-        }
+    let gravados = 0;
+    let pdfs = 0;
+    const doCrm = await this.crm.buscarPorCpf(cpf);
 
-        // Trava do push: uma vez por boleto, para sempre. Quem manda é a coluna.
-        if (!linha.avisadoEm) {
-          await this.push.avisarBoletoNovo(linha.id, a.id, a.tenantId, b);
+    for (const b of doCrm) {
+      const dados = {
+        tenantId: a.tenantId,
+        associateId: a.id,
+        nossoNumero: b.nossoNumero,
+        plate: b.placa,
+        mesReferente: b.mesReferente,
+        valor: b.valor,
+        vencimento: b.vencimento,
+        status: b.status,
+        linhaDigitavel: b.linhaDigitavel,
+      };
+      const linha = await this.prisma.associateBoleto.upsert({
+        where: { tenantId_nossoNumero: { tenantId: a.tenantId, nossoNumero: b.nossoNumero } },
+        create: dados,
+        update: dados,
+      });
+      gravados += 1;
+
+      if (b.linkPdf) {
+        const buf = await this.crm.baixarPdf(b.linkPdf);
+        if (buf) {
+          // Chave composta: `nosso_numero` não é único entre tenants — cada
+          // cooperativa tem seu convênio bancário e a numeração pode colidir.
+          await this.prisma.associateBoletoPdf.upsert({
+            where: {
+              tenantId_nossoNumero: { tenantId: a.tenantId, nossoNumero: b.nossoNumero },
+            },
+            create: { nossoNumero: b.nossoNumero, tenantId: a.tenantId, conteudo: buf },
+            update: { conteudo: buf, baixadoEm: new Date() },
+          });
+          await this.prisma.associateBoleto.update({
+            where: { id: linha.id },
+            data: { pdfBytes: buf.length },
+          });
+          pdfs += 1;
         }
       }
 
-      // Some do CRM = pagou ou passou dos 5 dias. Sai daqui também.
-      const vivos = doCrm.map((b) => b.nossoNumero);
-      const mortos = await this.prisma.associateBoleto.findMany({
-        where: { tenantId: a.tenantId, associateId: a.id, nossoNumero: { notIn: vivos } },
-        select: { nossoNumero: true },
-      });
-      const numeros = mortos.map((m) => m.nossoNumero);
-      await this.prisma.associateBoletoPdf.deleteMany({ where: { nossoNumero: { in: numeros } } });
-      const apagou = await this.prisma.associateBoleto.deleteMany({
-        where: { tenantId: a.tenantId, associateId: a.id, nossoNumero: { in: numeros } },
-      });
-      apagados += apagou.count;
-
-      // Carimbo da visita: é ele que separa "está em dia" de "ainda não olhei".
-      await this.prisma.associate.update({
-        where: { id: a.id },
-        data: { boletosSincronizadosEm: new Date() },
-      });
+      // Trava do push: uma vez por boleto, para sempre. Quem manda é a coluna.
+      if (!linha.avisadoEm) {
+        await this.push.avisarBoletoNovo(linha.id, a.id, a.tenantId, b);
+      }
     }
 
-    return { associados: associados.length, gravados, pdfs, apagados };
+    // Sumiu da lista do CRM = pagou ou passou dos 5 dias. Sai daqui também.
+    const vivos = doCrm.map((b) => b.nossoNumero);
+    const mortos = await this.prisma.associateBoleto.findMany({
+      where: { tenantId: a.tenantId, associateId: a.id, nossoNumero: { notIn: vivos } },
+      select: { nossoNumero: true },
+    });
+    const numeros = mortos.map((m) => m.nossoNumero);
+    await this.prisma.associateBoletoPdf.deleteMany({
+      where: { tenantId: a.tenantId, nossoNumero: { in: numeros } },
+    });
+    const apagou = await this.prisma.associateBoleto.deleteMany({
+      where: { tenantId: a.tenantId, associateId: a.id, nossoNumero: { in: numeros } },
+    });
+
+    // Carimbo da visita: é ele que separa "está em dia" de "ainda não olhei".
+    await this.prisma.associate.update({
+      where: { id: a.id },
+      data: { boletosSincronizadosEm: new Date() },
+    });
+
+    return { gravados, pdfs, apagados: apagou.count };
   }
 }
 ```
@@ -1629,159 +1653,88 @@ git commit -m "feat(boletos): push do boleto disponivel, uma vez por boleto"
 
 ### Task 7B: Rastreamento — primeiro acesso de quem o robô ainda não visitou
 
-> Executar **depois** da Task 7 e da Task 8. Fecha o caso do spec: "quem nunca abriu o app não tem boleto guardado".
+> Executar **depois** da Task 7. Fecha o caso do spec: "quem nunca abriu o app não tem boleto
+> guardado". A carga de um associado só (`sincronizarAssociado`) já existe desde a Task 7 —
+> aqui ela é ligada ao primeiro acesso.
 
 **Files:**
-- Modify: `backend/src/modules/boletos/boletos-sync.service.ts`
 - Modify: `backend/src/modules/boletos/boletos.controller.ts`
-- Modify: `backend/src/modules/boletos/boletos-sync.service.spec.ts`
+- Modify: `backend/src/modules/boletos/boletos.service.ts`
+- Test: `backend/src/modules/boletos/boletos-primeiro-acesso.spec.ts`
 
 **Interfaces:**
-- Produces: `BoletosSyncService.sincronizarAssociado(a: { id: string; tenantId: string; cpf: string | null }): Promise<{ gravados: number; pdfs: number; apagados: number }>`
+- Consumes: `BoletosSyncService.sincronizarAssociado` (Task 7); `dentroDaJanelaDoSga` (Task 4)
+- Produces: `BoletosService.dadosParaSincronizar(associateId: string, tenantId: string): Promise<{ id: string; tenantId: string; cpf: string | null } | null>`
 
 - [ ] **Step 1: Escrever o teste que falha**
 
 ```ts
-// acrescentar ao fim de backend/src/modules/boletos/boletos-sync.service.spec.ts
-describe('BoletosSyncService.sincronizarAssociado — a carga de um só', () => {
-  it('grava o boleto daquele associado sem varrer a base inteira', async () => {
-    const { s, prisma, crm } = monta({
-      doCrm: [{
-        nossoNumero: '99', placa: 'RJU0F75', mesReferente: '09/2026', valor: 250.57,
-        vencimento: '2026-09-20', status: 'disponivel', linhaDigitavel: '23793', linkPdf: null,
-      }],
-    });
-    const r = await s.sincronizarAssociado({ id: 'a1', tenantId: 't1', cpf: '11144477735' });
-    expect(crm.buscarPorCpf).toHaveBeenCalledWith('11144477735');
-    expect(prisma.associate.findMany).not.toHaveBeenCalled();
-    expect(r.gravados).toBe(1);
+// backend/src/modules/boletos/boletos-primeiro-acesso.spec.ts
+import { BoletosController } from './boletos.controller';
+
+const SEGUNDA_9H = new Date('2026-09-14T09:00:00-03:00');
+const SABADO_MEIO_DIA = new Date('2026-09-12T12:00:00-03:00');
+
+function monta(pendente: boolean) {
+  const service = {
+    listarDoAssociado: jest.fn().mockResolvedValue({ boletos: [], pendente, rodape: {} }),
+    dadosParaSincronizar: jest
+      .fn()
+      .mockResolvedValue({ id: 'a1', tenantId: 't1', cpf: '11144477735' }),
+  } as any;
+  const sync = { sincronizarAssociado: jest.fn().mockResolvedValue({}) } as any;
+  const push = {} as any;
+  return { c: new BoletosController(service, push, sync), service, sync };
+}
+
+describe('GET /app/boletos — primeiro acesso', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('nunca visitado E SGA aberto: carrega na hora e devolve a lista recarregada', async () => {
+    jest.useFakeTimers().setSystemTime(SEGUNDA_9H);
+    const { c, service, sync } = monta(true);
+    await c.listar('a1', 't1');
+    expect(sync.sincronizarAssociado).toHaveBeenCalledTimes(1);
+    expect(service.listarDoAssociado).toHaveBeenCalledTimes(2);
   });
 
-  it('associado sem CPF nao vira chamada ao CRM', async () => {
-    const { s, crm } = monta();
-    const r = await s.sincronizarAssociado({ id: 'a1', tenantId: 't1', cpf: null });
-    expect(crm.buscarPorCpf).not.toHaveBeenCalled();
-    expect(r.gravados).toBe(0);
+  it('nunca visitado mas SGA fechado (sabado): NAO tenta carregar', async () => {
+    jest.useFakeTimers().setSystemTime(SABADO_MEIO_DIA);
+    const { c, sync } = monta(true);
+    await c.listar('a1', 't1');
+    expect(sync.sincronizarAssociado).not.toHaveBeenCalled();
+  });
+
+  it('ja visitado: nao carrega de novo, mesmo dentro da janela', async () => {
+    jest.useFakeTimers().setSystemTime(SEGUNDA_9H);
+    const { c, sync, service } = monta(false);
+    await c.listar('a1', 't1');
+    expect(sync.sincronizarAssociado).not.toHaveBeenCalled();
+    expect(service.listarDoAssociado).toHaveBeenCalledTimes(1);
   });
 });
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `npx jest src/modules/boletos/boletos-sync.service.spec.ts`
-Expected: FAIL — `s.sincronizarAssociado is not a function`
+Run: `npx jest src/modules/boletos/boletos-primeiro-acesso.spec.ts`
+Expected: FAIL — o controller ainda tem 2 parâmetros no constructor e não chama o sync
 
-- [ ] **Step 3: Extrair o corpo do laço para um método público**
+- [ ] **Step 3: Ligar no controller**
 
-Em `boletos-sync.service.ts`, mover tudo o que hoje está **dentro** do `for (const a of associados)` para um método novo, e deixar o laço só chamando:
-
-```ts
-  async rodada(agora: Date = new Date()): Promise<{
-    associados: number; gravados: number; pdfs: number; apagados: number;
-  }> {
-    if (!dentroDaJanelaDoSga(agora)) {
-      this.logger.log('fora da janela do SGA (seg–sex 7h–18h): rodada não executada');
-      return { associados: 0, gravados: 0, pdfs: 0, apagados: 0 };
-    }
-
-    const associados = await this.prisma.associate.findMany({
-      where: { deletedAt: null, lastLoginAt: { not: null } },
-      select: { id: true, tenantId: true, cpf: true },
-    });
-
-    let gravados = 0;
-    let pdfs = 0;
-    let apagados = 0;
-    for (const a of associados) {
-      const r = await this.sincronizarAssociado(a);
-      gravados += r.gravados;
-      pdfs += r.pdfs;
-      apagados += r.apagados;
-    }
-    return { associados: associados.length, gravados, pdfs, apagados };
-  }
-
-  /**
-   * A carga de UM associado. O robô usa em laço; o primeiro acesso usa sozinha,
-   * para quem instalou o app agora não esperar até a próxima batida do cron.
-   */
-  async sincronizarAssociado(a: {
-    id: string; tenantId: string; cpf: string | null;
-  }): Promise<{ gravados: number; pdfs: number; apagados: number }> {
-    const cpf = String(a.cpf ?? '').replace(/\D/g, '');
-    if (!cpf) return { gravados: 0, pdfs: 0, apagados: 0 };
-
-    let gravados = 0;
-    let pdfs = 0;
-    const doCrm = await this.crm.buscarPorCpf(cpf);
-
-    for (const b of doCrm) {
-      const dados = {
-        tenantId: a.tenantId,
-        associateId: a.id,
-        nossoNumero: b.nossoNumero,
-        plate: b.placa,
-        mesReferente: b.mesReferente,
-        valor: b.valor,
-        vencimento: b.vencimento,
-        status: b.status,
-        linhaDigitavel: b.linhaDigitavel,
-      };
-      const linha = await this.prisma.associateBoleto.upsert({
-        where: { tenantId_nossoNumero: { tenantId: a.tenantId, nossoNumero: b.nossoNumero } },
-        create: dados,
-        update: dados,
-      });
-      gravados += 1;
-
-      if (b.linkPdf) {
-        const buf = await this.crm.baixarPdf(b.linkPdf);
-        if (buf) {
-          await this.prisma.associateBoletoPdf.upsert({
-            where: { nossoNumero: b.nossoNumero },
-            create: { nossoNumero: b.nossoNumero, tenantId: a.tenantId, conteudo: buf },
-            update: { conteudo: buf, baixadoEm: new Date() },
-          });
-          await this.prisma.associateBoleto.update({
-            where: { id: linha.id },
-            data: { pdfBytes: buf.length },
-          });
-          pdfs += 1;
-        }
-      }
-
-      if (!linha.avisadoEm) {
-        await this.push.avisarBoletoNovo(linha.id, a.id, a.tenantId, b);
-      }
-    }
-
-    // Sumiu da lista do CRM = pagou ou passou dos 5 dias. Sai daqui também.
-    const vivos = doCrm.map((b) => b.nossoNumero);
-    const mortos = await this.prisma.associateBoleto.findMany({
-      where: { tenantId: a.tenantId, associateId: a.id, nossoNumero: { notIn: vivos } },
-      select: { nossoNumero: true },
-    });
-    const numeros = mortos.map((m) => m.nossoNumero);
-    await this.prisma.associateBoletoPdf.deleteMany({ where: { nossoNumero: { in: numeros } } });
-    const apagou = await this.prisma.associateBoleto.deleteMany({
-      where: { tenantId: a.tenantId, associateId: a.id, nossoNumero: { in: numeros } },
-    });
-
-    // Carimbo da visita: é ele que separa "está em dia" de "ainda não olhei".
-    await this.prisma.associate.update({
-      where: { id: a.id },
-      data: { boletosSincronizadosEm: new Date() },
-    });
-
-    return { gravados, pdfs, apagados: apagou.count };
-  }
-```
-
-- [ ] **Step 4: Ligar no primeiro acesso**
-
-Em `boletos.controller.ts`, no método `listar`:
+Em `boletos.controller.ts`, acrescentar os imports, o terceiro parâmetro do constructor e a
+lógica no `listar`:
 
 ```ts
+import { dentroDaJanelaDoSga } from './boletos.regras';
+import { BoletosSyncService } from './boletos-sync.service';
+
+  constructor(
+    private readonly service: BoletosService,
+    private readonly push: PushService,
+    private readonly sync: BoletosSyncService,
+  ) {}
+
   @Get()
   @ApiOperation({ summary: 'Boletos em aberto de todos os veículos do associado' })
   async listar(
@@ -1789,8 +1742,8 @@ Em `boletos.controller.ts`, no método `listar`:
     @CurrentAssociate('tenantId') tenantId: string,
   ) {
     const primeira = await this.service.listarDoAssociado(associateId, tenantId);
-    // Nunca visitado E o SGA está aberto: carrega agora, em vez de mandar
-    // o associado esperar até segunda por um boleto que dá para buscar já.
+    // Nunca visitado E o SGA está aberto: carrega agora, em vez de mandar o
+    // associado esperar até segunda por um boleto que dá para buscar já.
     if (primeira.pendente && dentroDaJanelaDoSga(new Date())) {
       const a = await this.service.dadosParaSincronizar(associateId, tenantId);
       if (a) {
@@ -1802,7 +1755,7 @@ Em `boletos.controller.ts`, no método `listar`:
   }
 ```
 
-E no `boletos.service.ts`, o método que o controller usa:
+E em `boletos.service.ts`:
 
 ```ts
   /** Só o que a carga precisa. Não devolve nada além disto. */
@@ -1818,31 +1771,18 @@ E no `boletos.service.ts`, o método que o controller usa:
   }
 ```
 
-O constructor do controller passa a receber os dois, e o import da janela entra no topo:
-
-```ts
-import { dentroDaJanelaDoSga } from './boletos.regras';
-import { BoletosSyncService } from './boletos-sync.service';
-// constructor(
-//   private readonly service: BoletosService,
-//   private readonly push: PushService,
-//   private readonly sync: BoletosSyncService,
-// ) {}
-```
-
-- [ ] **Step 5: Rodar e ver passar**
+- [ ] **Step 4: Rodar e ver passar**
 
 Run: `npx jest src/modules/boletos && npx tsc --noEmit -p tsconfig.json`
 Expected: PASS em tudo, zero erro de tipo
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
-```bash
-git add backend/src/modules/boletos/boletos-sync.service.ts backend/src/modules/boletos/boletos-sync.service.spec.ts backend/src/modules/boletos/boletos.controller.ts backend/src/modules/boletos/boletos.service.ts
-git commit -m "feat(boletos): primeiro acesso carrega na hora quando o SGA esta aberto"
-```
+Comitar os três arquivos, um a um, com a mensagem:
+`feat(boletos): primeiro acesso carrega na hora quando o SGA esta aberto`
 
 ---
+
 
 ### Task 9: App — regras da tela (puro)
 
@@ -2420,6 +2360,45 @@ Expected: `CREATE TABLE` / `CREATE INDEX` sem erro. A DDL é toda `IF NOT EXISTS
 - [ ] **Step 3: Pôr as variáveis novas no serviço**
 
 No EasyPanel, no serviço `backend-rastreamento`: `CRM_API_URL`, `CRM_INTEGRACAO_TOKEN`, `EXPO_PUSH_ENABLED=true`. No CRM (`social-21go_crm-21go`): `INTEGRACAO_TOKEN` com **o mesmo valor**. Gere o segredo com `openssl rand -hex 32` e **nunca** o escreva em commit, log ou nota.
+
+- [ ] **Step 3B: Deploy do CRM (a rota de integração vive lá)**
+
+> ⚠️ O CRM da 21Go roda em **Lightsail próprio** — `56.126.48.234`, usuário `ubuntu`, código em
+> `/opt/crm21go` — e **não** no droplet da DigitalOcean. No droplet existe um container
+> `social-21go_crm-21go` do mesmo código ainda rodando cron (é dele que saem as recusas do SGA
+> medidas em 12/09). **Antes de deployar, descubra qual dos dois atende o `CRM_API_URL` que você
+> vai configurar** — o backend do rastreamento precisa apontar para a instância que realmente
+> serve a rota nova.
+
+O procedimento é o documentado no `CLAUDE.md` do CRM, e duas flags não são opcionais:
+
+```bash
+ssh -i ~/.ssh/claude_21go ubuntu@56.126.48.234
+cd /opt/crm21go && git fetch origin main && git reset --hard origin/main
+sudo docker build --cpuset-cpus="0,1" -t crm21go:latest .
+sudo docker rm -f crm
+sudo docker run -d --name crm --restart unless-stopped \
+  -e TZ=America/Sao_Paulo \
+  --env-file /opt/crm21go/.env.producao -e PORT=3333 -e NODE_ENV=production \
+  -p 127.0.0.1:3333:3333 crm21go:latest
+```
+
+- **`--cpuset-cpus="0,1"`**: sem ele o build toma os 4 vCPUs, as rotas vão de 85 ms a 12 s e o
+  Caddy responde 502 aos consultores. Medido em 13/08/2026: 26 builds = 774 respostas 502.
+- **`TZ=America/Sao_Paulo`**: sem ele o container roda em UTC e, das 21h à meia-noite, o boleto
+  ganha um dia de atraso que não existe. Conferir com `docker exec crm date` — tem que terminar
+  em `-03`.
+
+Verificação obrigatória depois, sem presumir:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://<host-do-crm>/api/health
+curl -s -H "Authorization: Bearer $INTEGRACAO_TOKEN" \
+  "https://<host-do-crm>/api/integracao/boletos?cpf=<cpf de teste>" | head -c 300
+curl -s -o /dev/null -w "%{http_code}\n" "https://<host-do-crm>/api/integracao/boletos?cpf=00000000000"
+```
+Expected: health 200; a consulta com segredo devolve `{"boletos":[...]}`; **sem** o header,
+`401`. A terceira chamada é a que prova que a porta não ficou aberta.
 
 - [ ] **Step 4: Buildar e publicar o backend**
 
