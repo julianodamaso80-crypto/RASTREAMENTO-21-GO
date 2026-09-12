@@ -17,32 +17,58 @@ afterEach(() => {
 });
 
 describe('CrmBoletosClient.buscarPorCpf', () => {
-  it('manda o segredo no header e devolve a lista', async () => {
+  it('manda o CPF no header x-cpf (nao mais querystring) e devolve boletos + foraDoPrazo', async () => {
     const f = mockFetch(
       jest.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ boletos: [{ nossoNumero: '1', status: 'disponivel' }] }),
+        json: async () => ({
+          boletos: [{ nossoNumero: '1', status: 'disponivel' }],
+          foraDoPrazo: 2,
+        }),
       }),
     );
     const r = await client().buscarPorCpf('11144477735');
-    expect(f.mock.calls[0][0]).toContain('cpf=11144477735');
+    expect(f.mock.calls[0][0]).not.toContain('cpf=');
     expect((f.mock.calls[0][1] as any).headers.Authorization).toBe('Bearer segredo');
-    expect(r).toHaveLength(1);
+    expect((f.mock.calls[0][1] as any).headers['x-cpf']).toBe('11144477735');
+    expect(r?.boletos).toHaveLength(1);
+    expect(r?.foraDoPrazo).toBe(2);
   });
 
-  it('CRM fora do ar devolve lista vazia, nunca explode', async () => {
+  // CRM fora do ar (achado C1): `null` é o único jeito de dizer "não sei" pro
+  // robô, que trata `[]` como "não deve nada" e apagaria o espelho inteiro.
+  it('CRM fora do ar devolve null, nunca [] — nunca explode', async () => {
     mockFetch(jest.fn().mockRejectedValue(new Error('ECONNREFUSED')));
-    await expect(client().buscarPorCpf('11144477735')).resolves.toEqual([]);
+    await expect(client().buscarPorCpf('11144477735')).resolves.toBeNull();
   });
 
-  it('CRM respondendo 500 devolve lista vazia', async () => {
+  it('CRM respondendo 500 devolve null', async () => {
     mockFetch(jest.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) }));
-    await expect(client().buscarPorCpf('11144477735')).resolves.toEqual([]);
+    await expect(client().buscarPorCpf('11144477735')).resolves.toBeNull();
   });
 
-  it('JSON valido sem a chave boletos devolve lista vazia', async () => {
+  it('JSON fora do contrato (sem a chave boletos) devolve null', async () => {
     mockFetch(jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
-    await expect(client().buscarPorCpf('11144477735')).resolves.toEqual([]);
+    await expect(client().buscarPorCpf('11144477735')).resolves.toBeNull();
+  });
+
+  it('sem CRM_API_URL/CRM_INTEGRACAO_TOKEN configurados devolve null, nao []', async () => {
+    const config = { get: () => undefined } as any;
+    await expect(new (require('./crm-boletos.client').CrmBoletosClient)(config).buscarPorCpf('1'))
+      .resolves.toBeNull();
+  });
+
+  it('legitimamente sem boleto nenhum devolve boletos: [] (nao null)', async () => {
+    mockFetch(
+      jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ boletos: [], foraDoPrazo: 0 }),
+      }),
+    );
+    await expect(client().buscarPorCpf('11144477735')).resolves.toEqual({
+      boletos: [],
+      foraDoPrazo: 0,
+    });
   });
 });
 

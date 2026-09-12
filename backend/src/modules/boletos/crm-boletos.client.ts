@@ -12,31 +12,45 @@ export interface BoletoDoCrm {
   linkPdf: string | null;
 }
 
+export interface ResultadoCrm {
+  boletos: BoletoDoCrm[];
+  foraDoPrazo: number;
+}
+
 @Injectable()
 export class CrmBoletosClient {
   private readonly logger = new Logger(CrmBoletosClient.name);
 
   constructor(private readonly config: ConfigService) {}
 
-  /** Lista do CRM. Qualquer falha vira lista vazia: a aba mostra o que já tem guardado. */
-  async buscarPorCpf(cpf: string): Promise<BoletoDoCrm[]> {
+  /**
+   * Lista do CRM. `null` = não deu para confirmar nada (env faltando, HTTP
+   * não-2xx, erro de rede, resposta fora do contrato) — DIFERENTE de uma
+   * lista vazia legítima (associado em dia). Confundir os dois faz o robô
+   * apagar o espelho de quem deve, achado C1 da revisão final: quem chama
+   * decide o que fazer com `null`, mas nunca é "apagar tudo".
+   */
+  async buscarPorCpf(cpf: string): Promise<ResultadoCrm | null> {
     const base = this.config.get<string>('crm.baseUrl');
     const token = this.config.get<string>('crm.token');
-    if (!base || !token) return [];
+    if (!base || !token) return null;
     try {
-      const r = await fetch(`${base}/integracao/boletos?cpf=${encodeURIComponent(cpf)}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // CPF vai no header x-cpf, não mais na querystring — o CRM mudou de
+      // contrato e loga req.url; CPF em claro no log era o achado 3 de lá.
+      const r = await fetch(`${base}/integracao/boletos`, {
+        headers: { Authorization: `Bearer ${token}`, 'x-cpf': cpf },
         signal: AbortSignal.timeout(30_000),
       });
       if (!r.ok) {
         this.logger.warn(`CRM respondeu ${r.status} ao listar boletos`);
-        return [];
+        return null;
       }
-      const body = (await r.json()) as { boletos?: BoletoDoCrm[] };
-      return body.boletos ?? [];
+      const body = (await r.json()) as { boletos?: BoletoDoCrm[]; foraDoPrazo?: number };
+      if (!Array.isArray(body.boletos)) return null;
+      return { boletos: body.boletos, foraDoPrazo: body.foraDoPrazo ?? 0 };
     } catch (err) {
       this.logger.warn(`CRM indisponível: ${(err as Error).message}`);
-      return [];
+      return null;
     }
   }
 
