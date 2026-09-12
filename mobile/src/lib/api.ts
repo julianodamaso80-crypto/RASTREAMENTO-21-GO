@@ -196,6 +196,8 @@ export const AppApi = {
         /** true = o robô ainda não visitou este associado. Não é o mesmo que estar em dia. */
         pendente: boolean;
         rodape: { titulo: string; telefones: string };
+        /** Boletos que o CRM já não emite mais por atraso > 5 dias (achado C3). */
+        foraDoPrazo: number;
       }>('/app/boletos')
       .then((r) => r.data),
 

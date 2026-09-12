@@ -9,14 +9,22 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
 import { AppApi } from '@/lib/api';
-import { Boleto, estaVencido, tituloDoBoleto, valorEmReais } from '@/lib/boletos';
+import {
+  Boleto, estadoDaLista, estaVencido, RODAPE_SETOR_BOLETOS, tituloDoBoleto, valorEmReais,
+} from '@/lib/boletos';
 import { colors, radii } from '@/lib/theme';
 
 export default function BoletosScreen() {
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [pendente, setPendente] = useState(false);
   const [comFalha, setComFalha] = useState(false);
-  const [rodape, setRodape] = useState({ titulo: '', telefones: '' });
+  const [foraDoPrazo, setForaDoPrazo] = useState(0);
+  // Constante local (achado M2): quando a consulta falha, a resposta nunca
+  // chega — sem isto o rodapé com o telefone do Setor de Boletos sumia
+  // justo quando o associado mais precisava dele.
+  const [rodape, setRodape] = useState<{ titulo: string; telefones: string }>(
+    RODAPE_SETOR_BOLETOS,
+  );
   const [loading, setLoading] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
   const [baixandoId, setBaixandoId] = useState<string | null>(null);
@@ -26,7 +34,8 @@ export default function BoletosScreen() {
       .then((r) => {
         setBoletos(r.boletos);
         setPendente(r.pendente);
-        setRodape(r.rodape);
+        setForaDoPrazo(r.foraDoPrazo);
+        setRodape(r.rodape ?? RODAPE_SETOR_BOLETOS);
         setComFalha(false);
       })
       // Sem isso a tela mentia "em dia" quando a consulta nem rodou.
@@ -42,6 +51,8 @@ export default function BoletosScreen() {
       carregar();
     }, [carregar]),
   );
+
+  const estado = estadoDaLista({ comFalha, pendente, foraDoPrazo });
 
   async function copiar(boleto: Boleto) {
     if (!boleto.linhaDigitavel) return;
@@ -86,7 +97,7 @@ export default function BoletosScreen() {
             />
           }
         >
-          {boletos.length === 0 && comFalha ? (
+          {boletos.length > 0 ? null : estado === 'falha' ? (
             <View style={styles.vazio}>
               <Ionicons name="cloud-offline-outline" size={44} color={colors.amber} />
               <Text style={styles.vazioTitulo}>Não deu para carregar seus boletos</Text>
@@ -94,7 +105,7 @@ export default function BoletosScreen() {
                 Verifique sua conexão e puxe a tela para baixo para tentar de novo.
               </Text>
             </View>
-          ) : boletos.length === 0 && pendente ? (
+          ) : estado === 'pendente' ? (
             // Nunca dizer "em dia" a quem ainda não foi conferido.
             <View style={styles.vazio}>
               <Ionicons name="time-outline" size={44} color={colors.textFaint} />
@@ -103,13 +114,26 @@ export default function BoletosScreen() {
                 Eles aparecem aqui a partir da próxima segunda-feira.
               </Text>
             </View>
-          ) : boletos.length === 0 ? (
+          ) : estado === 'foraDoPrazo' ? (
+            // Achado C3: some da lista (o CRM já não emite mais), mas não pode
+            // virar "você está em dia" — é pendência antiga, não quitada.
+            <View style={styles.vazio}>
+              <Ionicons name="alert-circle" size={44} color={colors.red} />
+              <Text style={styles.vazioTitulo}>Você tem pendência de boleto antigo</Text>
+              <Text style={styles.vazioTexto}>
+                Fale com o nosso Setor de Boletos para regularizar:
+              </Text>
+              <Text style={styles.vazioTelefones}>{rodape.telefones}</Text>
+            </View>
+          ) : (
             <View style={styles.vazio}>
               <Ionicons name="checkmark-circle" size={44} color={colors.navy} />
               <Text style={styles.vazioTitulo}>Você está em dia</Text>
               <Text style={styles.vazioTexto}>Nenhum boleto em aberto.</Text>
             </View>
-          ) : (
+          )}
+
+          {boletos.length > 0 && (
             boletos.map((b) => {
               const vencido = estaVencido(b.rotulo);
               const baixando = baixandoId === b.id;
@@ -195,6 +219,7 @@ const styles = StyleSheet.create({
   vazio: { alignItems: 'center', paddingVertical: 48, gap: 6 },
   vazioTitulo: { fontSize: 17, fontWeight: '700', color: colors.navy },
   vazioTexto: { fontSize: 14, color: colors.textFaint },
+  vazioTelefones: { fontSize: 15, fontWeight: '700', color: colors.navy, marginTop: 4 },
   rodape: { marginTop: 24, paddingHorizontal: 4, gap: 4 },
   rodapeTitulo: { fontSize: 13, color: colors.textFaint, textAlign: 'center' },
   rodapeTelefones: {
