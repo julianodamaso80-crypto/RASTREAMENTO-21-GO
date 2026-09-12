@@ -16,17 +16,20 @@ CREATE TABLE IF NOT EXISTS "associate_boletos" (
   "criado_em"       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "associate_boletos_tenant_numero_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "associate_boletos_tenant_id_nosso_numero_key"
   ON "associate_boletos" ("tenant_id", "nosso_numero");
-CREATE INDEX IF NOT EXISTS "associate_boletos_associate_idx"
+CREATE INDEX IF NOT EXISTS "associate_boletos_associate_id_vencimento_idx"
   ON "associate_boletos" ("associate_id", "vencimento");
 
 -- O PDF mora em tabela à parte: 3,4 MB por linha não pode pesar a consulta da lista.
+-- PK composta por tenant: nosso_numero é único por convênio bancário do tenant,
+-- não globalmente — sem isso um tenant sobrescreveria o PDF de outro no upsert.
 CREATE TABLE IF NOT EXISTS "associate_boleto_pdfs" (
-  "nosso_numero" TEXT PRIMARY KEY,
   "tenant_id"    UUID NOT NULL,
+  "nosso_numero" TEXT NOT NULL,
   "conteudo"     BYTEA NOT NULL,
-  "baixado_em"   TIMESTAMPTZ NOT NULL DEFAULT now()
+  "baixado_em"   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY ("tenant_id", "nosso_numero")
 );
 
 -- Aparelho que recebe push. Uma linha por aparelho, não por pessoa.
@@ -39,9 +42,9 @@ CREATE TABLE IF NOT EXISTS "associate_push_devices" (
   "atualizado_em" TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "associate_push_devices_token_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "associate_push_devices_expo_token_key"
   ON "associate_push_devices" ("expo_token");
-CREATE INDEX IF NOT EXISTS "associate_push_devices_associate_idx"
+CREATE INDEX IF NOT EXISTS "associate_push_devices_associate_id_idx"
   ON "associate_push_devices" ("associate_id");
 
 -- Sem isto, "lista vazia" é ambíguo: não dá para saber se o associado está em dia
