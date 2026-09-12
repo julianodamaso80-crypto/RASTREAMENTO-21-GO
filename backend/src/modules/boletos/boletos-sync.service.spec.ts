@@ -156,6 +156,37 @@ describe('BoletosSyncService.rodada', () => {
     });
   });
 
+  it('com { comPdf: false } grava o boleto mas nao baixa o PDF', async () => {
+    const { s, prisma, crm } = monta({
+      doCrm: [{
+        nossoNumero: '99', placa: 'RJU0F75', mesReferente: '09/2026', valor: 250.57,
+        vencimento: '2026-09-20', status: 'disponivel',
+        linhaDigitavel: '23793', linkPdf: 'https://hinova.test/b.pdf',
+      }],
+    });
+    const r = await s.sincronizarAssociado(
+      { id: 'a1', tenantId: 't1', cpf: '11144477735' },
+      { comPdf: false },
+    );
+    expect(prisma.associateBoleto.upsert).toHaveBeenCalledTimes(1);
+    expect(crm.baixarPdf).not.toHaveBeenCalled();
+    expect(prisma.associateBoletoPdf.upsert).not.toHaveBeenCalled();
+    expect(r.pdfs).toBe(0);
+  });
+
+  it('sem opcoes (padrao do robo) continua baixando o PDF', async () => {
+    const { s, crm } = monta({
+      doCrm: [{
+        nossoNumero: '99', placa: 'RJU0F75', mesReferente: '09/2026', valor: 250.57,
+        vencimento: '2026-09-20', status: 'disponivel',
+        linhaDigitavel: '23793', linkPdf: 'https://hinova.test/b.pdf',
+      }],
+    });
+    const r = await s.sincronizarAssociado({ id: 'a1', tenantId: 't1', cpf: '11144477735' });
+    expect(crm.baixarPdf).toHaveBeenCalledWith('https://hinova.test/b.pdf');
+    expect(r.pdfs).toBe(1);
+  });
+
   it('um erro no upsert de um associado nao aborta os demais da rodada', async () => {
     const { s, prisma, crm } = monta({
       associados: [

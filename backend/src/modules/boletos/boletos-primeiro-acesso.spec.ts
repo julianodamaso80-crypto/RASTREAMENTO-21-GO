@@ -23,7 +23,22 @@ describe('GET /app/boletos — primeiro acesso', () => {
     const { c, service, sync } = monta(true);
     await c.listar('a1', 't1');
     expect(sync.sincronizarAssociado).toHaveBeenCalledTimes(1);
+    // Sem PDF no caminho síncrono: baixar em série no meio da requisição HTTP
+    // é o que estoura o timeout do celular (achado 1 da revisão).
+    expect(sync.sincronizarAssociado).toHaveBeenCalledWith(
+      { id: 'a1', tenantId: 't1', cpf: '11144477735' },
+      { comPdf: false },
+    );
     expect(service.listarDoAssociado).toHaveBeenCalledTimes(2);
+  });
+
+  it('sincronizar falha: nao estoura 500 pro associado, devolve o que ja tinha', async () => {
+    jest.useFakeTimers().setSystemTime(SEGUNDA_9H);
+    const { c, sync, service } = monta(true);
+    sync.sincronizarAssociado.mockRejectedValue(new Error('CRM fora do ar'));
+    const r = await c.listar('a1', 't1');
+    expect(r).toEqual({ boletos: [], pendente: true, rodape: {} });
+    expect(service.listarDoAssociado).toHaveBeenCalledTimes(1);
   });
 
   it('nunca visitado mas SGA fechado (sabado): NAO tenta carregar', async () => {

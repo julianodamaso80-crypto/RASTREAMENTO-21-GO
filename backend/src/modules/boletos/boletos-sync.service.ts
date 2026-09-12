@@ -76,12 +76,15 @@ export class BoletosSyncService {
   }
 
   /**
-   * A carga de UM associado. O robô usa em laço; o primeiro acesso (Task 7B) usa
-   * sozinha, para quem instalou o app agora não esperar a próxima batida do cron.
+   * A carga de UM associado. O robô usa em laço, com PDF; o primeiro acesso
+   * (Task 7B) usa sozinha e sem PDF — baixar ~3,4 MB por boleto em série
+   * dentro da requisição HTTP é o que estourava o timeout do celular.
    */
-  async sincronizarAssociado(a: {
-    id: string; tenantId: string; cpf: string | null;
-  }): Promise<{ gravados: number; pdfs: number; apagados: number }> {
+  async sincronizarAssociado(
+    a: { id: string; tenantId: string; cpf: string | null },
+    opts: { comPdf?: boolean } = {},
+  ): Promise<{ gravados: number; pdfs: number; apagados: number }> {
+    const comPdf = opts.comPdf ?? true;
     const cpf = String(a.cpf ?? '').replace(/\D/g, '');
     if (!cpf) {
       // Carimba mesmo sem CPF: senão este associado fica "nunca visitado"
@@ -116,7 +119,7 @@ export class BoletosSyncService {
       });
       gravados += 1;
 
-      if (b.linkPdf) {
+      if (b.linkPdf && comPdf) {
         const buf = await this.crm.baixarPdf(b.linkPdf);
         if (buf) {
           // Vista sobre os mesmos bytes do Buffer, sem copiar os ~3,4 MB:

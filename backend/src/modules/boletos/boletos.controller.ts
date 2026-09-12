@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, NotFoundException, Param, Post, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators';
@@ -15,6 +15,8 @@ import { BoletosSyncService } from './boletos-sync.service';
 @UseGuards(AssociateJwtGuard)
 @Controller('app/boletos')
 export class BoletosController {
+  private readonly logger = new Logger(BoletosController.name);
+
   constructor(
     private readonly service: BoletosService,
     private readonly push: PushService,
@@ -33,8 +35,19 @@ export class BoletosController {
     if (primeira.pendente && dentroDaJanelaDoSga(new Date())) {
       const a = await this.service.dadosParaSincronizar(associateId, tenantId);
       if (a) {
-        await this.sync.sincronizarAssociado(a);
-        return this.service.listarDoAssociado(associateId, tenantId);
+        try {
+          // Sem PDF aqui: baixar em série dentro da requisição HTTP pode
+          // passar de 6 min com vários veículos, e o celular corta antes.
+          // O robô agendado completa o PDF na próxima passada.
+          await this.sync.sincronizarAssociado(a, { comPdf: false });
+          return this.service.listarDoAssociado(associateId, tenantId);
+        } catch (erro) {
+          // Falha na carga não pode virar 500 na tela do associado — devolve
+          // o que já tinha lido. Sem CPF no log, só id.
+          this.logger.warn(
+            `boletos: falhou ao carregar no primeiro acesso do associado ${associateId}: ${erro instanceof Error ? erro.message : erro}`,
+          );
+        }
       }
     }
     return primeira;
