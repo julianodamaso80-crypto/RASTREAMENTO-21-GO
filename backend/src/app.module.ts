@@ -39,6 +39,7 @@ import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { ScoringModule } from './modules/scoring/scoring.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
 import { AppAssociateModule } from './modules/app/app-associate.module';
+import { BoletosModule } from './modules/boletos/boletos.module';
 import { LegalModule } from './modules/legal/legal.module';
 import { UsersModule } from './modules/users/users.module';
 import { MapModule } from './modules/map/map.module';
@@ -123,6 +124,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     ScoringModule,
     AssistantModule,
     AppAssociateModule,
+    BoletosModule,
     LegalModule,
     UsersModule,
     MapModule,

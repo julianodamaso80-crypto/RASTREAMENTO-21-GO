@@ -238,6 +238,15 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get geoAddress() {
     return this.base.geoAddress;
   }
+  // Boleto espelhado do CRM, sem soft delete — some quando pago/vencido,
+  // a fonte da verdade é o CRM (getter faltou desde que o model nasceu, ver
+  // prisma-service-expoe-models.spec.ts).
+  get associateBoleto() {
+    return this.base.associateBoleto;
+  }
+  get associateBoletoPdf() {
+    return this.base.associateBoletoPdf;
+  }
 
   // Raw queries — sempre pelo base (extension não afeta raw)
   $queryRaw<T = unknown>(
