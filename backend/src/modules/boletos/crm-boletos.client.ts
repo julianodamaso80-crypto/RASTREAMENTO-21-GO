@@ -16,10 +16,7 @@ export interface BoletoDoCrm {
 export class CrmBoletosClient {
   private readonly logger = new Logger(CrmBoletosClient.name);
 
-  constructor(
-    private readonly config: ConfigService,
-    private readonly buscar: typeof fetch = fetch,
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
   /** Lista do CRM. Qualquer falha vira lista vazia: a aba mostra o que já tem guardado. */
   async buscarPorCpf(cpf: string): Promise<BoletoDoCrm[]> {
@@ -27,7 +24,7 @@ export class CrmBoletosClient {
     const token = this.config.get<string>('crm.token');
     if (!base || !token) return [];
     try {
-      const r = await this.buscar(`${base}/integracao/boletos?cpf=${encodeURIComponent(cpf)}`, {
+      const r = await fetch(`${base}/integracao/boletos?cpf=${encodeURIComponent(cpf)}`, {
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(30_000),
       });
@@ -49,7 +46,8 @@ export class CrmBoletosClient {
    */
   async baixarPdf(url: string): Promise<Buffer | null> {
     try {
-      const r = await this.buscar(url, { signal: AbortSignal.timeout(60_000) });
+      // ~3,4 MB por boleto a 400 kbps ≈ 68s; 60s cortava o cenário ruim que precisa cobrir.
+      const r = await fetch(url, { signal: AbortSignal.timeout(120_000) });
       if (!r.ok) return null;
       const buf = Buffer.from(await r.arrayBuffer());
       return buf.subarray(0, 4).toString() === '%PDF' ? buf : null;
