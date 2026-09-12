@@ -78,7 +78,7 @@ SGA, e a regra financeira vive num lugar só (o CRM).**
                                         ▼  GET /api/integracao/boletos?cpf=…   [segredo no header]
                               backend do rastreamento
                                         │  robô 8h / 12h / 17h30: guarda linha digitável + PDF
-                                        │  tabela associate_boletos + arquivos em disco
+                                        │  tabela associate_boletos + PDF no Postgres
                                         ▼  GET /app/boletos          [JWT do associado]
                                    app 21 Tracker
                                    (lê só o que está guardado — funciona sábado e 23h)
