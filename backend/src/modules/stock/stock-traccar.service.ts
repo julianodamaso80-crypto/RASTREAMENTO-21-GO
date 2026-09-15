@@ -32,6 +32,11 @@ import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
  * O device nasce com o IMEI como nome; ao ser vinculado, o `associate()`
  * renomeia pra placa.
  */
+/** Chaves de filtro do Traccar aceitas como atributo de device. */
+const CHAVE_SKIP_ENABLE = 'filter.skipAttributes.enable';
+const CHAVE_SKIP_LISTA = 'filter.skipAttributes';
+const ATRIBUTO_IGNICAO = 'ignition';
+
 @Injectable()
 export class StockTraccarService {
   private readonly logger = new Logger(StockTraccarService.name);
@@ -78,6 +83,65 @@ export class StockTraccarService {
         }`,
       );
       return null;
+    }
+  }
+
+  /**
+   * Faz a mudança de ignição deste rastreador chegar NA HORA.
+   *
+   * O Traccar roda com `filter.distance=10` e `filter.skipLimit=600`: veículo
+   * parado tem toda posição descartada e só grava uma a cada ~12 min (medido em
+   * produção em 15/09/2026). No teste de liga e desliga o carro está parado, e
+   * é justamente a posição com a ignição nova que o filtro joga fora — o
+   * técnico corta a energia e a tela continua dizendo "Ligada".
+   *
+   * `filter.skipAttributes` faz a posição escapar dos filtros condicionais
+   * quando ela carrega o atributo listado, e vale **por device**
+   * (`AttributeUtil.lookup(..., deviceId)` no FilterHandler). Ligado só em
+   * estoque e reserva de técnico: o gt06 manda `ignition` em toda posição,
+   * então no parque inteiro isso equivaleria a desligar o filtro de distância.
+   */
+  async responderIgnicaoNaHora(imei: string): Promise<boolean> {
+    return this.ajustarFiltro(imei, true);
+  }
+
+  /** Equipamento instalado volta a ser filtrado como o resto do parque. */
+  async voltarAoFiltroNormal(imei: string): Promise<boolean> {
+    return this.ajustarFiltro(imei, false);
+  }
+
+  private async ajustarFiltro(imei: string, ligar: boolean): Promise<boolean> {
+    try {
+      const device = await this.traccar.getDeviceByUniqueId(imei);
+      if (!device?.id) return false;
+
+      const attrs = { ...(device.attributes ?? {}) };
+      const jaEstaComo =
+        attrs[CHAVE_SKIP_ENABLE] === true &&
+        attrs[CHAVE_SKIP_LISTA] === ATRIBUTO_IGNICAO;
+      if (jaEstaComo === ligar) return false;
+
+      if (ligar) {
+        attrs[CHAVE_SKIP_ENABLE] = true;
+        attrs[CHAVE_SKIP_LISTA] = ATRIBUTO_IGNICAO;
+      } else {
+        delete attrs[CHAVE_SKIP_ENABLE];
+        delete attrs[CHAVE_SKIP_LISTA];
+      }
+
+      // PUT do Traccar exige o device inteiro — corpo parcial devolve 400.
+      await this.traccar.updateDevice(device.id, {
+        ...device,
+        attributes: attrs,
+      });
+      return true;
+    } catch (erro) {
+      this.logger.warn(
+        `Não consegui ${ligar ? 'ligar' : 'desligar'} a resposta imediata de ignição do IMEI ${imei}: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+      return false;
     }
   }
 

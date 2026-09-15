@@ -64,6 +64,34 @@ export type ImportResult = {
 };
 
 // Normaliza cabeçalho: remove acentos, espaços extras e caixa alta, pra casar variações.
+/** Saúde vazia com o aviso de que o servidor GPS não respondeu por este IMEI. */
+function indisponivel(imei: string): DeviceHealth {
+  return {
+    imei,
+    encontradoNoGps: false,
+    jaReportou: false,
+    comunicando: false,
+    lastUpdate: null,
+    gps: {
+      ok: false,
+      fixTime: null,
+      idadeSegundos: null,
+      satellites: null,
+      latitude: null,
+      longitude: null,
+      address: null,
+    },
+    energia: { volts: null, sistema: null, faixa: 'ausente', bateriaInterna: null },
+    ignicao: { reportada: false, ligada: null },
+    velocidade: null,
+    direcao: null,
+    distanceM: null,
+    checkOk: false,
+    motivos: ['servidor GPS indisponível — tente de novo em instantes'],
+    indisponivel: true,
+  };
+}
+
 function normalizeHeader(raw: string): string {
   return raw
     .normalize('NFD')
@@ -128,12 +156,66 @@ export class StockService {
     if (!item) throw new NotFoundException('Item de estoque não encontrado');
 
     await this.stockTraccar.ensureDevice(item);
+    // Teste de liga e desliga com o carro parado: sem isto o filtro de
+    // distância do Traccar descarta a posição que traz a ignição nova e a tela
+    // fica até 12 min mostrando a chave errada.
+    await this.stockTraccar.responderIgnicaoNaHora(item.imei);
 
     return this.deviceHealth.diagnose(item.imei, {
       refLat,
       refLng,
       ensureDevice: true,
     });
+  }
+
+  /**
+   * Conferência em pacote: vários equipamentos no mesmo pedido.
+   *
+   * Existe porque o teste de campo acontece com vários técnicos ao mesmo tempo,
+   * cada um girando a chave do seu veículo. Uma requisição por equipamento a
+   * cada 10 s não se sustenta — 20 abertos dariam 120 chamadas por minuto.
+   *
+   * Equipamento que o servidor GPS não conseguiu responder entra no resultado
+   * marcado como indisponível: o pacote não cai por causa de um.
+   */
+  async signalBatch(
+    ids: string[],
+    tenantId: string,
+  ): Promise<Array<{ id: string; imei: string; health: DeviceHealth }>> {
+    if (ids.length === 0) return [];
+
+    const itens = await this.prisma.stockItem.findMany({
+      where: { id: { in: ids }, tenantId, deletedAt: null },
+      select: { id: true, imei: true, traccarDeviceId: true },
+    });
+
+    const saidas: Array<{ id: string; imei: string; health: DeviceHealth }> = [];
+    for (let i = 0; i < itens.length; i += 5) {
+      const lote = itens.slice(i, i + 5);
+      const parciais = await Promise.all(
+        lote.map(async (item) => {
+          try {
+            await this.stockTraccar.ensureDevice(item);
+            await this.stockTraccar.responderIgnicaoNaHora(item.imei);
+            const health = await this.deviceHealth.diagnose(item.imei, {
+              ensureDevice: true,
+            });
+            return { id: item.id, imei: item.imei, health };
+          } catch {
+            return {
+              id: item.id,
+              imei: item.imei,
+              health: indisponivel(item.imei),
+            };
+          }
+        }),
+      );
+      saidas.push(...parciais);
+    }
+
+    // Devolve na ordem em que a tela pediu — é a ordem dos cards.
+    const porId = new Map(saidas.map((s) => [s.id, s]));
+    return ids.map((id) => porId.get(id)).filter((s) => s !== undefined);
   }
 
   /**
@@ -218,6 +300,11 @@ export class StockService {
         'Servidor GPS indisponível agora. Tente de novo em instantes.',
       );
     }
+
+    // O teste é justamente ver a chave cair quando a energia é cortada. Sem
+    // isto, a posição que traz a ignição nova morre no filtro de distância
+    // (bancada = aparelho parado) e a tela continua dizendo "Ligada".
+    await this.stockTraccar.responderIgnicaoNaHora(item.imei);
 
     if (op === 'block') {
       const device = await this.traccar.getDevice(deviceId);
@@ -816,6 +903,9 @@ export class StockService {
       if (traccarDevice?.id) {
         traccarDeviceId = traccarDevice.id;
         traccarLastUpdate = traccarDevice.lastUpdate ?? null;
+        // Instalado: volta pro filtro do parque. O modo de ignição imediata é
+        // da bancada e do campo, não de 30 mil veículos gravando tudo.
+        await this.stockTraccar.voltarAoFiltroNormal(item.imei);
         await this.prisma.$transaction([
           this.prisma.vehicle.update({
             where: { id: result.vehicle.id },
@@ -1055,10 +1145,29 @@ export class StockService {
       });
     }
 
+    // Equipamento que saiu com técnico vai ser testado em campo: deixa a
+    // ignição responder na hora antes de alguém girar a chave. Em segundo
+    // plano — a reserva não espera o Traccar.
+    const imeisReservados = items
+      .filter((i) => okIds.includes(i.id))
+      .map((i) => i.imei);
+    void this.ligarRespostaImediata(imeisReservados);
+
     this.logger.log(
       `Reserva: ${okIds.length} equipamento(s) pro técnico ${technician.name} (${skipped.length} ignorados)`,
     );
     return { ok: okIds.length, skipped };
+  }
+
+  /** Liga o modo de ignição imediata numa lista de IMEIs, de 5 em 5. */
+  private async ligarRespostaImediata(imeis: string[]): Promise<void> {
+    for (let i = 0; i < imeis.length; i += 5) {
+      await Promise.all(
+        imeis
+          .slice(i, i + 5)
+          .map((imei) => this.stockTraccar.responderIgnicaoNaHora(imei)),
+      );
+    }
   }
 
   /** Devolve equipamentos ao estoque livre (cancela a reserva). */

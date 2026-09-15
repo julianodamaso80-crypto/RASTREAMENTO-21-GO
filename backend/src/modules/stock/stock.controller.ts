@@ -27,6 +27,7 @@ import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
 import { AssignStockDto } from './dto/assign-stock.dto';
 import { ValidateStockDto } from './dto/validate-stock.dto';
+import { SignalBatchDto } from './dto/signal-batch.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -105,6 +106,20 @@ export class StockController {
       Number.isFinite(refLat as number) ? refLat : undefined,
       Number.isFinite(refLng as number) ? refLng : undefined,
     );
+  }
+
+  @Post('signal-batch')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Conferência em pacote: a mesma telemetria ao vivo de vários equipamentos de uma vez',
+  })
+  signalBatch(
+    @Body() dto: SignalBatchDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.signalBatch(dto.stockItemIds, req.tenantId);
   }
 
   @Post(':id/validate')
