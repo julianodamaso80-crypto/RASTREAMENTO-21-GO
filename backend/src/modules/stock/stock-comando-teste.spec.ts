@@ -43,6 +43,9 @@ function servico(opcoes: {
   };
   const stockTraccar = {
     ensureDevice: jest.fn().mockResolvedValue(DEVICE_ID),
+    // Liga/desliga na bancada: sem isto a ignição nova morre no filtro de
+    // distância do Traccar e a tela não mostra a chave caindo.
+    responderIgnicaoNaHora: jest.fn().mockResolvedValue(true),
   };
 
   const s = new StockService(
