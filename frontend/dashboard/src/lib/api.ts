@@ -28,6 +28,7 @@ import type {
   StockConnectivity,
   StockValidateResult,
   StockMapResult,
+  StockBatchSignal,
 } from '@/types/stock';
 import type { ClientAsset, AssetsSummary } from '@/types/assets';
 import type {
@@ -728,6 +729,14 @@ export const stockApi = {
   /** Conferência de instalação ao vivo: GPS, satélites, voltagem e ignição. */
   signal: async (id: string): Promise<DeviceHealth> => {
     const res = await api.get<ApiResponse<DeviceHealth>>(`/stock/${id}/signal`);
+    return res.data.data;
+  },
+  /** A mesma conferência, de vários equipamentos numa pergunta só. */
+  signalBatch: async (stockItemIds: string[]): Promise<StockBatchSignal[]> => {
+    const res = await api.post<ApiResponse<StockBatchSignal[]>>(
+      '/stock/signal-batch',
+      { stockItemIds },
+    );
     return res.data.data;
   },
   /** Carimba a conferência (aprovada ou reprovada) com o retrato do momento. */

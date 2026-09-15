@@ -117,6 +117,13 @@ export interface StockMapResult {
   pontos: StockMapPoint[];
 }
 
+/** Um equipamento dentro da conferência em pacote. */
+export interface StockBatchSignal {
+  id: string;
+  imei: string;
+  health: DeviceHealth;
+}
+
 export interface StockValidateResult {
   id: string;
   validatedAt: string;

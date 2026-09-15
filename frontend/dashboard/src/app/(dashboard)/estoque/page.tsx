@@ -43,6 +43,7 @@ import {
 import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog';
 import { AssignTechnicianDialog } from '@/components/stock/assign-technician-dialog';
 import { InstallCheckSheet } from '@/components/stock/install-check-sheet';
+import { InstallCheckBatchSheet } from '@/components/stock/install-check-batch-sheet';
 import type { StockConnectivity, StockItem, StockStats } from '@/types/stock';
 import { useBuscaDaUrl } from '@/lib/use-busca-url';
 
@@ -84,6 +85,9 @@ export default function EstoquePage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [checkItem, setCheckItem] = useState<StockItem | null>(null);
   const [checkOpen, setCheckOpen] = useState(false);
+  // Conferência em pacote: vários técnicos girando a chave ao mesmo tempo.
+  const [batchItems, setBatchItems] = useState<StockItem[]>([]);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [conn, setConn] = useState<StockConnectivity | null>(null);
   const [totalFiltrado, setTotalFiltrado] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -563,6 +567,17 @@ export default function EstoquePage() {
               <Ban className="h-4 w-4 mr-1" />
               Cancelar reserva
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setBatchItems(selectedItems);
+                setBatchOpen(true);
+              }}
+            >
+              <SignalHigh className="h-4 w-4 mr-1" />
+              Testar instalação
+            </Button>
             <Button size="sm" onClick={() => openAssign(selectedItems)}>
               <HardHat className="h-4 w-4 mr-1" />
               Enviar pro técnico
@@ -590,6 +605,13 @@ export default function EstoquePage() {
         open={checkOpen}
         onOpenChange={setCheckOpen}
         onValidated={() => Promise.all([loadStock(), loadConnectivity()])}
+      />
+
+      <InstallCheckBatchSheet
+        items={batchItems}
+        open={batchOpen}
+        onOpenChange={setBatchOpen}
+        onValidated={() => void loadConnectivity()}
       />
     </div>
   );
