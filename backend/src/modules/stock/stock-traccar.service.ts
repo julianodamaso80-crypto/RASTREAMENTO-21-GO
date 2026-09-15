@@ -35,7 +35,14 @@ import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 /** Chaves de filtro do Traccar aceitas como atributo de device. */
 const CHAVE_SKIP_ENABLE = 'filter.skipAttributes.enable';
 const CHAVE_SKIP_LISTA = 'filter.skipAttributes';
+const CHAVE_SKIP_LIMITE = 'filter.skipLimit';
 const ATRIBUTO_IGNICAO = 'ignition';
+/**
+ * Segundos entre posições garantidas enquanto o equipamento está em
+ * conferência. O `skipAttributes` só salva a posição que CARREGA `ignition`;
+ * o heartbeat que não traz o campo continuaria esperando os 600 s do servidor.
+ */
+const SKIP_LIMITE_CONFERENCIA = 30;
 
 @Injectable()
 export class StockTraccarService {
@@ -118,15 +125,18 @@ export class StockTraccarService {
       const attrs = { ...(device.attributes ?? {}) };
       const jaEstaComo =
         attrs[CHAVE_SKIP_ENABLE] === true &&
-        attrs[CHAVE_SKIP_LISTA] === ATRIBUTO_IGNICAO;
+        attrs[CHAVE_SKIP_LISTA] === ATRIBUTO_IGNICAO &&
+        attrs[CHAVE_SKIP_LIMITE] === SKIP_LIMITE_CONFERENCIA;
       if (jaEstaComo === ligar) return false;
 
       if (ligar) {
         attrs[CHAVE_SKIP_ENABLE] = true;
         attrs[CHAVE_SKIP_LISTA] = ATRIBUTO_IGNICAO;
+        attrs[CHAVE_SKIP_LIMITE] = SKIP_LIMITE_CONFERENCIA;
       } else {
         delete attrs[CHAVE_SKIP_ENABLE];
         delete attrs[CHAVE_SKIP_LISTA];
+        delete attrs[CHAVE_SKIP_LIMITE];
       }
 
       // PUT do Traccar exige o device inteiro — corpo parcial devolve 400.

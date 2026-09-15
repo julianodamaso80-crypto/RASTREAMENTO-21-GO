@@ -66,6 +66,15 @@ describe('StockTraccarService.responderIgnicaoNaHora', () => {
     expect(payload.attributes['filter.skipAttributes']).toContain('ignition');
   });
 
+  it('encurta o skipLimit: heartbeat sem o campo ignition não pode segurar a tela 10 min', async () => {
+    const { s, traccar } = servico();
+
+    await s.responderIgnicaoNaHora('860123456789012');
+
+    const [, payload] = traccar.updateDevice.mock.calls[0];
+    expect(payload.attributes['filter.skipLimit']).toBe(30);
+  });
+
   it('manda o device inteiro no PUT — corpo parcial o Traccar recusa com 400', async () => {
     const { s, traccar } = servico();
 
@@ -82,6 +91,7 @@ describe('StockTraccarService.responderIgnicaoNaHora', () => {
       attributes: {
         'filter.skipAttributes.enable': true,
         'filter.skipAttributes': 'ignition',
+        'filter.skipLimit': 30,
       },
     });
 
@@ -136,6 +146,7 @@ describe('StockTraccarService.voltarAoFiltroNormal', () => {
       attributes: {
         'filter.skipAttributes.enable': true,
         'filter.skipAttributes': 'ignition',
+        'filter.skipLimit': 30,
         speedLimit: 90,
       },
     });
@@ -145,6 +156,8 @@ describe('StockTraccarService.voltarAoFiltroNormal', () => {
     const [, payload] = traccar.updateDevice.mock.calls[0];
     expect(payload.attributes['filter.skipAttributes.enable']).toBeUndefined();
     expect(payload.attributes['filter.skipAttributes']).toBeUndefined();
+    // O skipLimit volta pro do servidor (600 s) ao sair da conferência.
+    expect(payload.attributes['filter.skipLimit']).toBeUndefined();
     expect(payload.attributes.speedLimit).toBe(90);
   });
 
