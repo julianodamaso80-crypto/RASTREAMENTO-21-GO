@@ -105,14 +105,17 @@ export default function EstoquePage() {
 
   const loadStock = useCallback(async () => {
     try {
-      const params: Record<string, string | number> = { perPage: 100 };
+      // Estoque inteiro: com 100 por vez a importação das TAGs (mais novas)
+      // ocupava a tela toda e os rastreadores sumiam do "Todos".
+      const params: Record<string, string | number> = { perPage: 5000 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
       if (assignmentFilter) params.assignment = assignmentFilter;
       if (conexaoFilter) params.conexao = conexaoFilter;
       if (tipoFilter) params.tipo = tipoFilter;
       const res = await stockApi.getAll(params);
-      setItems(res.data);
+      // Rastreador primeiro, TAG depois; dentro de cada um, a ordem da API.
+      setItems([...res.data].sort((a, b) => Number(a.kind === 'TAG') - Number(b.kind === 'TAG')));
       setTotalFiltrado(res.meta?.total ?? res.data.length);
       setSelected(new Set()); // recarregou a lista, seleção antiga não vale mais
     } catch {
@@ -540,6 +543,15 @@ export default function EstoquePage() {
                         <ConnDot estado={conn?.statuses[item.imei]} />
                       )}
                       <span className="font-mono text-xs">{item.imei}</span>
+                      {item.kind === 'TAG' ? (
+                        <Badge className="text-[10px] border bg-violet-500/15 text-violet-500 border-violet-500/30">
+                          TAG
+                        </Badge>
+                      ) : (
+                        <Badge className="text-[10px] border bg-brand-orange-500/15 text-brand-orange-600 border-brand-orange-500/30">
+                          Rastreador
+                        </Badge>
+                      )}
                     </div>
                     {item.validatedAt && (
                       <span
