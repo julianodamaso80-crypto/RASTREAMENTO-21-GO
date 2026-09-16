@@ -15,6 +15,7 @@ import { Role } from '.prisma/client';
 import { RequireRoute, Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ClientsService } from './clients.service';
+import { podeVerTag } from './clients-tags';
 import { AssociateAuthService } from '../app/associate-auth.service';
 import {
   SetAppAccessDto,
@@ -24,6 +25,7 @@ import {
 
 interface AuthenticatedRequest {
   tenantId: string;
+  user: { role: Role };
 }
 
 @ApiTags('Clientes Ativos')
@@ -50,6 +52,9 @@ export class ClientsController {
       search,
       page: page ? Number(page) : undefined,
       perPage: perPage ? Number(perPage) : undefined,
+      // TAG é segredo interno: só o time vê. CLIENT nem chega aqui (não tem a
+      // rota 'clientes'), mas o gate por papel é a barreira que não depende disso.
+      verTags: podeVerTag(req.user?.role),
     });
   }
 

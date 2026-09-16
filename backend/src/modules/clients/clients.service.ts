@@ -4,6 +4,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assessComms } from './asset-comms';
 import { BLE_DEVICE_MODELS } from '../../common/constants/ble-models';
 import { filtroBusca } from '../../common/search/termo-busca';
+import {
+  ativoSoTag,
+  casaBusca,
+  fatiaCombinada,
+  resumoTag,
+  ultimasPosicoes,
+  vinculosVisiveis,
+} from './clients-tags';
 
 /** Situação financeira do ativo no SGA. */
 export type FinancialStatus = 'ADIMPLENTE' | 'INADIMPLENTE';
@@ -12,6 +20,12 @@ export interface FindAssetsParams {
   search?: string;
   page?: number;
   perPage?: number;
+  /**
+   * O time interno vê as TAGs (selo no card do rastreador e cards de quem só
+   * tem TAG). CLIENT e o app do associado NUNCA — a TAG é segredo interno. O
+   * controller passa isto pelo papel do usuário.
+   */
+  verTags?: boolean;
 }
 
 /**
@@ -76,27 +90,107 @@ export class ClientsService {
       where.id = '00000000-0000-0000-0000-000000000000';
     }
 
-    const [total, vehicles] = await Promise.all([
-      this.prisma.vehicle.count({ where }),
-      this.prisma.vehicle.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * perPage,
-        take: perPage,
-        include: {
-          associate: true,
-          device: { include: { installedByTechnician: true } },
-        },
-      }),
-    ]);
+    // Sem TAG (CLIENT e app do associado): exatamente o comportamento antigo.
+    if (!params.verTags) {
+      const [total, vehicles] = await Promise.all([
+        this.prisma.vehicle.count({ where }),
+        this.prisma.vehicle.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * perPage,
+          take: perPage,
+          include: {
+            associate: true,
+            device: { include: { installedByTechnician: true } },
+          },
+        }),
+      ]);
+      const lastFix = await this.lastFixTimes(tenantId, vehicles.map((v) => v.id));
+      return {
+        data: vehicles.map((v) => this.toAsset(v, lastFix.get(v.id) ?? null)),
+        meta: { total, page, perPage },
+      };
+    }
 
-    const lastFixByVehicle = await this.lastFixTimes(
+    // Time interno: veículos (rastreador) primeiro, depois quem só tem TAG,
+    // numa paginação só. O selo de TAG entra nos veículos com TAG na placa.
+    const soTag = (await vinculosVisiveis(this.prisma, tenantId))
+      .filter((x) =>
+        casaBusca(
+          {
+            plate: x.sga?.plate ?? x.vinculo.plate,
+            chassi: x.vinculo.chassi,
+            associateName: x.sga?.associateName ?? x.vinculo.associateName,
+            associateCpf: x.sga?.cpf ?? x.vinculo.associateCpf,
+            serialNumber: x.vinculo.serialNumber,
+          },
+          params.search,
+        ),
+      );
+
+    // Quem já tem rastreador nosso não vira card de "só TAG": ganha só o selo.
+    const placasComVeiculo = new Set(
+      (
+        await this.prisma.vehicle.findMany({
+          where: { tenantId, deletedAt: null, plate: { in: soTag.map((x) => x.vinculo.plate) } },
+          select: { plate: true },
+        })
+      ).map((v) => v.plate),
+    );
+    const apenasTag = soTag.filter((x) => !placasComVeiculo.has(x.vinculo.plate));
+
+    const totalVeiculos = await this.prisma.vehicle.count({ where });
+    const total = totalVeiculos + apenasTag.length;
+    const { skipVeiculos, takeVeiculos, inicioTag, fimTag } = fatiaCombinada(
+      totalVeiculos,
+      apenasTag.length,
+      page,
+      perPage,
+    );
+
+    const vehicles =
+      takeVeiculos > 0
+        ? await this.prisma.vehicle.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            skip: skipVeiculos,
+            take: takeVeiculos,
+            include: {
+              associate: true,
+              device: { include: { installedByTechnician: true } },
+            },
+          })
+        : [];
+    const lastFix = await this.lastFixTimes(tenantId, vehicles.map((v) => v.id));
+
+    const tagPorPlaca = new Map(soTag.map((x) => [x.vinculo.plate, x]));
+    const posVeiculo = await ultimasPosicoes(
+      this.prisma,
       tenantId,
-      vehicles.map((v) => v.id),
+      vehicles
+        .map((v) => tagPorPlaca.get(v.plate)?.vinculo.serialNumber)
+        .filter((s): s is string => !!s),
+    );
+    const dataVeiculos = vehicles.map((v) => {
+      const asset = this.toAsset(v, lastFix.get(v.id) ?? null);
+      const x = tagPorPlaca.get(v.plate);
+      return x
+        ? { ...asset, tag: resumoTag(x.vinculo, posVeiculo.get(x.vinculo.serialNumber)) }
+        : asset;
+    });
+
+    const pagina = apenasTag.slice(inicioTag, fimTag);
+    const posTag = await ultimasPosicoes(
+      this.prisma,
+      tenantId,
+      pagina.map((x) => x.vinculo.serialNumber),
+    );
+    const dataTags = pagina.map((x) =>
+      ativoSoTag(x, posTag.get(x.vinculo.serialNumber)),
     );
 
     return {
-      data: vehicles.map((v) => this.toAsset(v, lastFixByVehicle.get(v.id) ?? null)),
+      data: [...dataVeiculos, ...dataTags],
       meta: { total, page, perPage },
     };
   }

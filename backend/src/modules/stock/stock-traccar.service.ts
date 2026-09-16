@@ -165,6 +165,8 @@ export class StockTraccarService {
         deletedAt: null,
         associatedAt: null,
         traccarDeviceId: null,
+        // TAG não é cadastrada no servidor GPS.
+        kind: 'RASTREADOR',
       },
       select: { id: true, imei: true, traccarDeviceId: true },
       take: limite,
@@ -253,7 +255,12 @@ export class StockTraccarService {
    */
   async connectivity(tenantId: string): Promise<StockConnectivity> {
     const itens = await this.prisma.stockItem.findMany({
-      where: { tenantId, deletedAt: null, associatedAt: null },
+      where: {
+        tenantId,
+        deletedAt: null,
+        associatedAt: null,
+        kind: 'RASTREADOR',
+      },
       select: { imei: true },
     });
 
@@ -352,7 +359,12 @@ export class StockTraccarService {
    */
   async mapPoints(tenantId: string): Promise<StockMapResult> {
     const itens = await this.prisma.stockItem.findMany({
-      where: { tenantId, deletedAt: null, associatedAt: null },
+      where: {
+        tenantId,
+        deletedAt: null,
+        associatedAt: null,
+        kind: 'RASTREADOR',
+      },
       select: {
         id: true,
         imei: true,

@@ -202,7 +202,13 @@ export class StockController {
   ) {
     const liberadorAdmin =
       req.user.role === Role.SUPER_ADMIN || req.user.role === Role.ADMIN;
-    return this.stockService.associate(id, req.tenantId, dto, liberadorAdmin);
+    return this.stockService.associate(
+      id,
+      req.tenantId,
+      dto,
+      liberadorAdmin,
+      req.user.id,
+    );
   }
 
   @Post('assign')

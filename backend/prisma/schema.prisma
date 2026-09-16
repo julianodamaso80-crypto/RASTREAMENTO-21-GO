@@ -221,6 +221,7 @@ model Tenant {
   rdvTags              RdvTag[]
   tagKeys              TagKey[]
   tagPositions         TagPosition[]
+  tagLinks             TagLink[]
   installationRoutes   InstallationRoute[]
 
   appointments Appointment[]
@@ -931,6 +932,9 @@ model StockItem {
   validationOk         Boolean?    @map("validation_ok")
   validationNotes      String?     @map("validation_notes")
   validationSnapshot   Json?       @map("validation_snapshot")
+  /// RASTREADOR (fala com o Traccar) ou TAG (K-Tag, rede Find My). Todo caminho
+  /// que envolve servidor GPS filtra RASTREADOR.
+  kind         String    @default("RASTREADOR")
   deletedAt    DateTime? @map("deleted_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
@@ -938,6 +942,7 @@ model StockItem {
   @@unique([tenantId, imei])
   @@index([tenantId, status])
   @@index([tenantId, assignedTechnicianId])
+  @@index([tenantId, kind])
   @@map("stock_items")
 }
 
@@ -1179,6 +1184,42 @@ model TagPosition {
   @@index([tenantId, plate, seenAt(sort: Desc)])
   @@index([tenantId, seenAt(sort: Desc)])
   @@map("tag_positions")
+}
+
+/// Vínculo de uma TAG com um veículo do SGA — spec 2026-09-16.
+///
+/// Não é `Device` (vehicle_id é único e desvincularia o rastreador) nem cria
+/// `Vehicle`/`Associate` (TAG é segredo interno; nada disso pode chegar ao app).
+/// Só uma linha viva por TAG: índice único parcial na migration.
+model TagLink {
+  id String @id @default(uuid()) @db.Uuid
+
+  serialNumber      String  @map("serial_number")
+  plate             String
+  chassi            String?
+  hinovaVehicleCode String? @map("hinova_vehicle_code")
+  associateName     String? @map("associate_name")
+  associateCpf      String? @map("associate_cpf")
+
+  /// REDE (conferido na RedeVeiculos) · ESTOQUE (vinculado pelo painel).
+  origin  String
+  /// CONFIRMADA · DIVERGENTE · AGUARDANDO_PROVA · INATIVO — ver portao-localizacao.ts.
+  verdict String
+  /// Provas usadas no veredito (fonte, diferença de tempo, distância).
+  evidence  Json?
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  createdById String?   @map("created_by_id") @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([tenantId, verdict])
+  @@index([tenantId, plate])
+  @@index([tenantId, chassi])
+  @@map("tag_links")
 }
 
 // ============================================================================

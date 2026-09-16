@@ -227,6 +227,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get tagPosition() {
     return this.base.tagPosition;
   }
+  // Vínculo TAG → veículo. Soft delete feito à mão (índice único parcial).
+  get tagLink() {
+    return this.base.tagLink;
+  }
   get installationRoute() {
     return this.base.installationRoute;
   }

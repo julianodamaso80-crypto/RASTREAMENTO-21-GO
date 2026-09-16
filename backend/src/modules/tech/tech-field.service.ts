@@ -168,6 +168,13 @@ export class TechFieldService {
       installLocation: dto.installLocation,
     });
 
+    // O técnico só reserva rastreador (assign filtra kind RASTREADOR), então o
+    // vínculo sempre volta com device. Este if estreita o tipo e é uma rede de
+    // segurança: TAG nunca chega aqui.
+    if (!('deviceId' in resultado)) {
+      return resultado;
+    }
+
     // Carimbo de auditoria: com que posição e a que distância a instalação foi
     // aceita. Best-effort — não desfaz um vínculo já concluído.
     try {

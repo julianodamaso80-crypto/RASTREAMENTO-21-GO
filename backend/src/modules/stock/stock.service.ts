@@ -149,8 +149,9 @@ export class StockService {
     refLat?: number,
     refLng?: number,
   ): Promise<DeviceHealth> {
+    // TAG não fala com o servidor GPS: só rastreador chega aqui.
     const item = await this.prisma.stockItem.findFirst({
-      where: { id, tenantId, deletedAt: null },
+      where: { id, tenantId, deletedAt: null, kind: 'RASTREADOR' },
       select: { id: true, imei: true, traccarDeviceId: true },
     });
     if (!item) throw new NotFoundException('Item de estoque não encontrado');
@@ -185,7 +186,7 @@ export class StockService {
     if (ids.length === 0) return [];
 
     const itens = await this.prisma.stockItem.findMany({
-      where: { id: { in: ids }, tenantId, deletedAt: null },
+      where: { id: { in: ids }, tenantId, deletedAt: null, kind: 'RASTREADOR' },
       select: { id: true, imei: true, traccarDeviceId: true },
     });
 
@@ -231,8 +232,9 @@ export class StockService {
     userId: string,
     userName: string,
   ) {
+    // TAG não fala com o servidor GPS: só rastreador chega aqui.
     const item = await this.prisma.stockItem.findFirst({
-      where: { id, tenantId, deletedAt: null },
+      where: { id, tenantId, deletedAt: null, kind: 'RASTREADOR' },
       select: { id: true, imei: true, traccarDeviceId: true },
     });
     if (!item) throw new NotFoundException('Item de estoque não encontrado');
@@ -284,7 +286,7 @@ export class StockService {
     op: 'block' | 'unblock',
   ): Promise<StockTestCommandResult> {
     const item = await this.prisma.stockItem.findFirst({
-      where: { id, tenantId, deletedAt: null },
+      where: { id, tenantId, deletedAt: null, kind: 'RASTREADOR' },
       select: { id: true, imei: true, traccarDeviceId: true, associatedAt: true },
     });
     if (!item) throw new NotFoundException('Item de estoque não encontrado');
@@ -357,14 +359,23 @@ export class StockService {
   }
 
   async findAll(tenantId: string, filters: FilterStockDto) {
-    const { page, perPage, search, status, operator, assignment, conexao } =
-      filters;
+    const {
+      page,
+      perPage,
+      search,
+      status,
+      operator,
+      assignment,
+      conexao,
+      tipo,
+    } = filters;
     // associatedAt: null → só rastreadores disponíveis (associados saíram do estoque).
     const where: Record<string, unknown> = {
       tenantId,
       deletedAt: null,
       associatedAt: null,
     };
+    if (tipo) where.kind = tipo;
 
     // Filtro por estado no servidor GPS. Precisa entrar no `where` (e não sair
     // filtrando no navegador) porque a lista é paginada: com 1.000 itens, os
@@ -382,6 +393,8 @@ export class StockService {
         };
       }
 
+      // Online/offline/sem GPS é estado no servidor GPS: TAG não entra.
+      where.kind = 'RASTREADOR';
       if (conexao === 'online') where.imei = { in: vivos.comunicando };
       else if (conexao === 'offline') where.imei = { notIn: vivos.comunicando };
       else where.imei = { in: vivos.semGps };
@@ -431,7 +444,7 @@ export class StockService {
    */
   async stats(tenantId: string) {
     const disponivel = { tenantId, deletedAt: null, associatedAt: null };
-    const [total, installed, byStatusRaw] = await Promise.all([
+    const [total, installed, byStatusRaw, byKindRaw] = await Promise.all([
       this.prisma.stockItem.count({ where: disponivel }),
       this.prisma.stockItem.count({
         where: { tenantId, deletedAt: null, associatedAt: { not: null } },
@@ -441,14 +454,29 @@ export class StockService {
         where: disponivel,
         _count: { _all: true },
       }),
+      this.prisma.stockItem.groupBy({
+        by: ['kind'],
+        where: disponivel,
+        _count: { _all: true },
+      }),
     ]);
+    const porTipo = (k: string) =>
+      (byKindRaw as Array<{ kind: string; _count: { _all: number } }>).find(
+        (r) => r.kind === k,
+      )?._count._all ?? 0;
     const byStatus = byStatusRaw.map(
       (r: { status: string | null; _count: { _all: number } }) => ({
         status: r.status ?? 'SEM STATUS',
         count: r._count._all,
       }),
     );
-    return { total, installed, byStatus };
+    return {
+      total,
+      installed,
+      byStatus,
+      rastreadores: porTipo('RASTREADOR'),
+      tags: porTipo('TAG'),
+    };
   }
 
   async remove(id: string, tenantId: string) {
@@ -581,6 +609,91 @@ export class StockService {
     return null;
   }
 
+  /**
+   * "Associar (SGA)" de uma TAG. Mesmas regras de consulta e de situação do
+   * rastreador — mas o vínculo vai para `tag_links`, nunca para Device (o
+   * `vehicle_id` é único e desvincularia o rastreador do carro) nem para
+   * Vehicle/Associate (TAG é segredo interno; nada disso pode chegar ao app do
+   * associado). Não toca o Traccar e não baixa pendência de rastreador.
+   */
+  private async associateTag(
+    item: { id: string; imei: string },
+    tenantId: string,
+    dto: AssociateStockDto,
+    liberadorAdmin: boolean,
+    userId?: string,
+  ) {
+    const lookup = await this.lookupSga(tenantId, dto.placa);
+    if (!lookup.encontrado) {
+      throw new UnprocessableEntityException(
+        lookup.motivo || 'Placa não encontrada no SGA.',
+      );
+    }
+    const bloqueio = StockService.motivoDeBloqueio(lookup, dto.placa);
+    if (bloqueio) {
+      if (!dto.allowInactive) {
+        throw new UnprocessableEntityException(
+          `${bloqueio} — vínculo bloqueado. ` +
+            'Só um administrador pode liberar assim mesmo.',
+        );
+      }
+      if (!liberadorAdmin) {
+        throw new ForbiddenException(
+          `${bloqueio}. Somente um administrador pode liberar assim mesmo.`,
+        );
+      }
+    }
+
+    const jaVinculada = await this.prisma.tagLink.findFirst({
+      where: { tenantId, serialNumber: item.imei, deletedAt: null },
+      select: { id: true, plate: true },
+    });
+    if (jaVinculada) {
+      throw new UnprocessableEntityException(
+        `A TAG ${item.imei} já está vinculada à placa ${jaVinculada.plate}.`,
+      );
+    }
+
+    const placa = (lookup.veiculo.placa || dto.placa)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.tagLink.create({
+        data: {
+          tenantId,
+          serialNumber: item.imei,
+          plate: placa,
+          chassi: lookup.veiculo.chassi ?? null,
+          hinovaVehicleCode: lookup.veiculo.codigoVeiculo ?? null,
+          associateName: lookup.cliente.nome ?? null,
+          associateCpf: lookup.cliente.cpf?.replace(/\D/g, '') ?? null,
+          origin: 'ESTOQUE',
+          verdict: 'AGUARDANDO_PROVA',
+          evidence: {
+            placaDigitada: dto.placa,
+            tecnico: dto.technicianName?.trim() ?? null,
+            localInstalacao: dto.installLocation?.trim() ?? null,
+            situacaoSga: lookup.situacao.descricao ?? null,
+            liberadoPorAdmin: Boolean(bloqueio),
+          },
+          createdById: userId ?? null,
+        },
+      });
+      await tx.stockItem.update({
+        where: { id: item.id },
+        data: {
+          associatedAt: new Date(),
+          assignedTechnicianId: null,
+          assignedAt: null,
+        },
+      });
+    });
+
+    this.logger.log(`TAG ${item.imei} vinculada à placa ${placa} pelo estoque.`);
+    return { tag: true, placa, associado: lookup.cliente.nome ?? null };
+  }
+
   async associate(
     id: string,
     tenantId: string,
@@ -591,6 +704,8 @@ export class StockService {
      * sem este argumento, então nunca libera.
      */
     liberadorAdmin = false,
+    /** Quem vinculou — fica registrado no vínculo da TAG. */
+    userId?: string,
   ) {
     const item = await this.prisma.stockItem.findFirst({
       where: { id, tenantId, deletedAt: null, associatedAt: null },
@@ -599,6 +714,9 @@ export class StockService {
       throw new NotFoundException(
         'Item de estoque não encontrado ou já associado.',
       );
+    }
+    if (item.kind === 'TAG') {
+      return this.associateTag(item, tenantId, dto, liberadorAdmin, userId);
     }
 
     // Fonte da verdade: o servidor rebusca no SGA (não confia no que veio da tela).
@@ -1097,8 +1215,15 @@ export class StockService {
       );
     }
 
+    // TAG não vai para o login do técnico: o PWA de campo confere instalação
+    // pelo servidor GPS, que a TAG não tem. Volta como "não encontrado".
     const items = await this.prisma.stockItem.findMany({
-      where: { id: { in: stockItemIds }, tenantId, deletedAt: null },
+      where: {
+        id: { in: stockItemIds },
+        tenantId,
+        deletedAt: null,
+        kind: 'RASTREADOR',
+      },
       select: {
         id: true,
         imei: true,
