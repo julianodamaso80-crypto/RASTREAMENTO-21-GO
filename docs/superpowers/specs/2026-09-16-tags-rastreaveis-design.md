@@ -52,6 +52,50 @@ conferido por SQL.
 backup DO de 10/09. Exige subir um clone de produção, que liga crons de boleto,
 WhatsApp e SGA. Por isso não é o primeiro caminho.
 
+### 3.1 Causa resolvida em 16/09/2026 (substitui a hipótese acima)
+
+- **DOC-OFICIAL + medido:** desde ~11/09 a borda da Apple devolve 503 a qualquer
+  requisição GSA com `X-MMe-Client-Info` citando `com.apple.dt.Xcode` (FindMy.py
+  #268/#269, PR #271). Medido do droplet: Xcode → 503 (190 B), akd → 401. Corrigido
+  na **findmy 0.10.2**; imagem `localhost:5000/r21go-ktag-worker:findmy-0.10.2` nos
+  dois coletores.
+- **Medido:** o reboot reprovisionou o anisette → token recusado (401) → 2FA.
+  Identidade agora em volume `anisette-config`, restart provado sem mudar a máquina.
+- Login novo com 2FA feito. Ciclo real às 12h26 BRT gravou 3.268 pontos de 470 TAGs.
+  Crons religados. Os passos 1, 2 e 4 acima estão **concluídos**; o passo 3 entra no
+  plano. Falta levar `IMAGEM=…findmy-0.10.2` para `scripts/coleta-tags/rodar.sh` no repo.
+
+### 3.2 Guardião diário da coleta
+
+Script `scripts/coleta-tags/guardiao.sh` no droplet, cron **todo dia às 07h00 BRT
+(10:00 UTC)**. Roda no servidor, independente de qualquer computador ligado.
+
+| Checagem | Falha quando |
+|---|---|
+| Posição recente | Nenhuma linha em `tag_positions` com `received_at` nas últimas 2 h |
+| Coleta viva | `/root/findmy-sessao/PARADO` existe, ou o último ciclo no log tem `ERRO` / 0 avistamentos, ou o último `inicio` tem mais de 2 h |
+| MonitoraBem | Último ciclo do motor com `ERRO` ou mais de 2 h |
+| Identidade do anisette | md5 de `adi.pb` diferente do guardado em 16/09 (`fc9e5a34…`), ou container `anisette` fora do ar |
+| Borda da Apple | POST sem conta com cliente `akd` responde 503 (a Apple mudou de novo) |
+| DigitalOcean | Disco ou memória ≥ 70% |
+
+**Aviso:** só em caso de falha, **nunca manda mensagem quando está tudo certo**.
+WhatsApp pela instância Evolution `site4824` (`evolution.sinistro21go.site`, fora do
+droplet) para o dono, **5521992208062**, autorizado por ele em 16/09. Uma mensagem
+por execução, com a lista do que falhou e o que fazer. A chave da instância fica
+só em `/root/guardiao/guardiao.env` (permissão 600), nunca no repo.
+
+**Se o envio pelo Evolution falhar:** registra no log `/var/log/guardiao-tags.log`
+e sai com erro (sem e-mail alternativo nesta versão).
+
+**Limite conhecido:** se o próprio droplet cair, o guardião não roda. Hoje isso já
+é coberto pelos alertas de monitoramento da DigitalOcean (disco/memória), não por
+este script.
+
+**Teste de aceite:** simular cada falha (ex.: apontar a checagem de identidade para
+um md5 errado) e confirmar que o aviso chega; rodar com tudo certo e confirmar que
+**nada** é enviado.
+
 ## 4. Limites da DigitalOcean
 
 Antes de cada etapa pesada (carga da Rede, migration, build), medir disco e memória
