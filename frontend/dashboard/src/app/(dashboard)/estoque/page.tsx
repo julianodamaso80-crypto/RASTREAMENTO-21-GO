@@ -657,9 +657,9 @@ export default function EstoquePage() {
         </div>
       )}
 
-      {items.length >= 100 && (
+      {items.length < totalFiltrado && (
         <p className="text-xs text-muted-foreground text-center">
-          Mostrando os primeiros 100 itens. Use a busca para refinar.
+          Mostrando {items.length} de {totalFiltrado} itens. Use a busca para refinar.
         </p>
       )}
 
