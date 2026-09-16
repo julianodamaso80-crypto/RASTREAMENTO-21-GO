@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
+  Bluetooth,
   Boxes,
   Crosshair,
   Gauge,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   Satellite,
   Search,
+  Target,
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -199,19 +201,28 @@ export default function EstoqueMapaPage() {
     let semGps = 0;
     let sleep = 0;
     let ligados = 0;
+    let tags = 0;
     for (const p of visiveis) {
+      // TAG não fala com o servidor GPS: contá-la como "desconectado" e "sem
+      // GPS" inventaria defeito onde não há equipamento de GPS nenhum.
+      if (p.tipo === 'TAG') {
+        tags++;
+        continue;
+      }
       if (p.conexao === 'ONLINE') online++;
       else if (p.conexao === 'SLEEP') sleep++;
       else offline++;
       if (!p.gpsConfiavel) semGps++;
       if (p.ignicao === true) ligados++;
     }
-    return { online, offline, semGps, sleep, ligados };
+    return { online, offline, semGps, sleep, ligados, tags };
   }, [visiveis]);
 
   const lista = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return visiveis.filter((p) => {
+      // Filtro de estado no servidor GPS não se aplica a TAG.
+      if (filtro !== null && p.tipo === 'TAG') return false;
       if (filtro === 'ONLINE' && p.conexao !== 'ONLINE') return false;
       if (filtro === 'OFFLINE' && p.conexao === 'ONLINE') return false;
       if (filtro === 'SEM_GPS' && p.gpsConfiavel) return false;
@@ -658,7 +669,13 @@ function CardEstoque({
   onClick: () => void;
   onMarcar: () => void;
 }) {
-  const badge = badgeConexao(ponto.conexao);
+  // TAG não tem conexão com o servidor GPS nem telemetria: mostrar "SEM SINAL",
+  // "Voltagem 0.00v" e "Satélites —" nela seria dizer que algo falhou, quando
+  // não existe. O que responde por ela é a idade do último avistamento.
+  const ehTag = ponto.tipo === 'TAG';
+  const badge = ehTag
+    ? { ponto: 'bg-violet-400', fundo: 'bg-violet-500/15', texto: 'text-violet-300', rotulo: 'TAG' }
+    : badgeConexao(ponto.conexao);
   return (
     <div
       className={cn(
@@ -694,7 +711,11 @@ function CardEstoque({
       </div>
 
       <p className="mt-0.5 text-[11px] text-muted-foreground">
-        Última atualização {haQuantoTempo(ponto.lastUpdate)}
+        {ehTag
+          ? ponto.fixTime
+            ? `vista ${haQuantoTempo(ponto.fixTime)}`
+            : 'nunca foi vista pela rede'
+          : `Última atualização ${haQuantoTempo(ponto.lastUpdate)}`}
       </p>
 
       {ponto.endereco && (
@@ -704,6 +725,20 @@ function CardEstoque({
         </p>
       )}
 
+      {ehTag ? (
+        <div className="mt-1.5 grid grid-cols-2 gap-1 border-t pt-1.5 text-center">
+          <Mini
+            icone={Bluetooth}
+            rotulo="Rede"
+            valor="Find My"
+          />
+          <Mini
+            icone={Target}
+            rotulo="Precisão"
+            valor={ponto.precisaoM ? `${Math.round(ponto.precisaoM)} m` : '—'}
+          />
+        </div>
+      ) : (
       <div className="mt-1.5 grid grid-cols-4 gap-1 border-t pt-1.5 text-center">
         <Mini
           icone={KeyRound}
@@ -724,6 +759,7 @@ function CardEstoque({
           valor={ponto.satelites === null ? '—' : String(ponto.satelites)}
         />
       </div>
+      )}
       </button>
     </div>
   );
