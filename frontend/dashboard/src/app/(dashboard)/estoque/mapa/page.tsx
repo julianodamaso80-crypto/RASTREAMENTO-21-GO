@@ -221,8 +221,9 @@ export default function EstoqueMapaPage() {
   const lista = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return visiveis.filter((p) => {
-      // Filtro de estado no servidor GPS não se aplica a TAG.
-      if (filtro !== null && p.tipo === 'TAG') return false;
+      // Filtro de estado no servidor GPS não se aplica a TAG — mas em "todos"
+      // ela precisa aparecer, senão some da lista lateral do mapa.
+      if (p.tipo === 'TAG' && filtro !== 'todos') return false;
       if (filtro === 'ONLINE' && p.conexao !== 'ONLINE') return false;
       if (filtro === 'OFFLINE' && p.conexao === 'ONLINE') return false;
       if (filtro === 'SEM_GPS' && p.gpsConfiavel) return false;
@@ -612,7 +613,7 @@ function SidebarContent({
           </div>
         ) : lista.length === 0 ? (
           <p className="px-3 py-16 text-center text-xs text-muted-foreground">
-            Nenhum rastreador com esse filtro.
+            Nenhum equipamento com esse filtro.
           </p>
         ) : (
           lista.map((p) => (
