@@ -13,9 +13,10 @@ import {
   Clock,
   HelpCircle,
   PackageOpen,
+  Tag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn, formatCpfCnpj, maskCPF } from '@/lib/utils';
+import { cn, formatCpfCnpj, formatRelativeTime, maskCPF } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
 import { canSeeInstallLocation } from '@/lib/manageable-routes';
 import type { ClientAsset, CommsState } from '@/types/assets';
@@ -85,10 +86,13 @@ export function AssetCard({
                 <>
                   <span className="font-sans">IMEI</span> {asset.device.imei}
                 </>
+              ) : asset.soTag ? (
+                <span className="font-sans">Sem rastreador — só TAG</span>
               ) : (
                 'sem rastreador'
               )}
             </p>
+            {asset.tag && <SeloTag tag={asset.tag} />}
           </div>
         </div>
         <AssetActionsMenu
@@ -184,7 +188,38 @@ export function AssetCard({
  * diferentes: o chip pode estar vivo com o GPS morto, e é justamente esse o
  * caso que não pode passar despercebido.
  */
+/**
+ * Selo da TAG — recurso interno e oculto do associado (este card nunca chega ao
+ * app do cliente). Posição sempre passado: a TAG só é vista quando um iPhone
+ * passa perto, então a idade fica à vista e nunca se diz "agora".
+ */
+function SeloTag({ tag }: { tag: NonNullable<ClientAsset['tag']> }) {
+  const visto = tag.lastSeenAt ? formatRelativeTime(tag.lastSeenAt) : 'sem posição ainda';
+  const divergente = tag.verdict === 'DIVERGENTE';
+  return (
+    <span
+      className={cn(
+        'mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]',
+        divergente
+          ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+          : 'border-violet-500/40 bg-violet-500/10 text-violet-300',
+      )}
+      title={
+        divergente
+          ? 'TAG longe do rastreador no mesmo horário — conferir'
+          : 'TAG antifurto (rede Find My)'
+      }
+    >
+      <Tag className="h-3 w-3" />
+      TAG · {divergente ? 'conferir' : visto}
+    </span>
+  );
+}
+
 function Comunicacao({ asset }: { asset: ClientAsset }) {
+  // Quem só tem TAG não tem rastreador: a régua de comunicação GPS não se
+  // aplica. A posição da TAG aparece no selo do topo.
+  if (asset.soTag) return null;
   const { state } = asset.comms;
   const gpsAlerta = state === 'GPS_CONGELADO';
   const mudo = state === 'MUDO' || state === 'NUNCA';

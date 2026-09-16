@@ -19,6 +19,8 @@ export interface StockItem {
   validatedByName: string | null;
   validationOk: boolean | null;
   validationNotes: string | null;
+  /** RASTREADOR (fala com o servidor GPS) ou TAG (K-Tag, rede Find My). */
+  kind: 'RASTREADOR' | 'TAG';
   createdAt: string;
   updatedAt: string;
 }
@@ -159,6 +161,9 @@ export interface StockImportResult {
 export interface StockStats {
   total: number;
   byStatus: Array<{ status: string; count: number }>;
+  /** Contagem por tipo, para os cartões do topo. */
+  rastreadores: number;
+  tags: number;
 }
 
 /** Resultado da consulta de placa ao vivo no SGA (fluxo Associar). */

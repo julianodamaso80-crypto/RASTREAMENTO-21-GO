@@ -23,7 +23,9 @@ import type { StockItem, HinovaLookup } from '@/types/stock';
  * inteiro) deixa o mapa do estoque reusar este fluxo sem inventar um objeto
  * falso só pra satisfazer o tipo.
  */
-type ItemAssociavel = Pick<StockItem, 'id' | 'imei' | 'line'>;
+type ItemAssociavel = Pick<StockItem, 'id' | 'imei' | 'line'> & {
+  kind?: StockItem['kind'];
+};
 
 type Props = {
   item: ItemAssociavel | null;
@@ -50,6 +52,7 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
   const [submitting, setSubmitting] = useState(false);
   const [liberarInativo, setLiberarInativo] = useState(false);
 
+  const ehTag = item?.kind === 'TAG';
   const { user } = useAuth();
   // Liberar instalação de associado inativo é decisão de administrador. O
   // backend recusa de qualquer outra origem — aqui é só a tela acompanhando.
@@ -122,10 +125,10 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
   const inativoLiberado = inativo && podeLiberarInativo && liberarInativo;
   const situacaoOk = !!lookup?.encontrado && (!inativo || inativoLiberado);
 
+  // TAG não é instalada por técnico como rastreador: basta a situação do SGA.
   const canActivate =
     situacaoOk &&
-    technicianName.trim().length > 0 &&
-    installLocation.trim().length > 0 &&
+    (ehTag || (technicianName.trim().length > 0 && installLocation.trim().length > 0)) &&
     !submitting;
 
   const handleActivate = async () => {
@@ -135,13 +138,16 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
     try {
       await stockApi.associate(item.id, {
         placa: placa.toUpperCase().replace(/[^A-Z0-9]/g, ''),
-        technicianName: technicianName.trim(),
-        installLocation: installLocation.trim(),
+        technicianName: technicianName.trim() || (ehTag ? 'TAG (interno)' : ''),
+        installLocation: installLocation.trim() || (ehTag ? '—' : ''),
         ...(inativoLiberado ? { allowInactive: true } : {}),
       });
-      toast.success('Cliente ativado! Rastreador vinculado e movido para Clientes Ativos.', {
-        id: toastId,
-      });
+      toast.success(
+        ehTag
+          ? 'TAG vinculada ao cliente. Aparece em Clientes Ativos assim que a localização confirmar.'
+          : 'Cliente ativado! Rastreador vinculado e movido para Clientes Ativos.',
+        { id: toastId },
+      );
       reset();
       onAssociated();
       onOpenChange(false);
@@ -160,14 +166,14 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
         <DialogHeader>
           <DialogTitle className="text-lg flex items-center gap-2">
             <UserCheck className="h-5 w-5 text-brand-orange-500" />
-            Associar cliente e ativo
+            {ehTag ? 'Vincular TAG a um cliente' : 'Associar cliente e ativo'}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           {item && (
             <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs">
-              <span className="text-muted-foreground">Rastreador:</span>{' '}
+              <span className="text-muted-foreground">{ehTag ? 'TAG:' : 'Rastreador:'}</span>{' '}
               <span className="font-mono">{item.imei}</span>
               {item.line ? <span className="text-muted-foreground"> • linha {item.line}</span> : null}
             </div>
@@ -255,8 +261,8 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
             </div>
           )}
 
-          {/* Dados da instalação — obrigatórios */}
-          {situacaoOk && (
+          {/* Dados da instalação — obrigatórios (rastreador). TAG não instala. */}
+          {situacaoOk && !ehTag && (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="assoc-tec" required>Técnico que instalou</Label>
@@ -284,7 +290,7 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
           <Button variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
           <Button onClick={handleActivate} disabled={!canActivate}>
             {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <UserCheck className="h-4 w-4 mr-1" />}
-            Ativar cliente
+            {ehTag ? 'Vincular TAG' : 'Ativar cliente'}
           </Button>
         </DialogFooter>
       </DialogContent>

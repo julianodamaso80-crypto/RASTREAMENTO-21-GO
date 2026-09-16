@@ -86,6 +86,9 @@ export default function EstoquePage() {
   const [conexaoFilter, setConexaoFilter] = useState<
     '' | 'online' | 'offline' | 'sem-gps'
   >('');
+  // Rastreador ou TAG. TAG não fala com o servidor GPS, então online/offline
+  // não se aplica a ela.
+  const [tipoFilter, setTipoFilter] = useState<'' | 'RASTREADOR' | 'TAG'>('');
   const [associItem, setAssociItem] = useState<StockItem | null>(null);
   const [associOpen, setAssociOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -107,6 +110,7 @@ export default function EstoquePage() {
       if (statusFilter) params.status = statusFilter;
       if (assignmentFilter) params.assignment = assignmentFilter;
       if (conexaoFilter) params.conexao = conexaoFilter;
+      if (tipoFilter) params.tipo = tipoFilter;
       const res = await stockApi.getAll(params);
       setItems(res.data);
       setTotalFiltrado(res.meta?.total ?? res.data.length);
@@ -116,7 +120,7 @@ export default function EstoquePage() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, assignmentFilter, conexaoFilter]);
+  }, [search, statusFilter, assignmentFilter, conexaoFilter, tipoFilter]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -298,7 +302,7 @@ export default function EstoquePage() {
             Estoque
           </h1>
           <p className="text-sm text-muted-foreground">
-            Rastreadores disponíveis — associe a um cliente do SGA ou importe a planilha
+            Rastreadores e TAGs disponíveis — associe a um cliente do SGA ou importe a planilha
           </p>
         </div>
         <input
@@ -322,15 +326,46 @@ export default function EstoquePage() {
         </Button>
       </div>
 
+      {/* Rastreadores x TAGs — a TAG entra na mesma lista (pedido do dono).
+          Clicar filtra; TAG não tem conexão GPS, então selecioná-la some com os
+          cartões de online/offline. */}
+      {stats && (stats.tags > 0 || stats.rastreadores > 0) && (
+        <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
+          <AbaConexao
+            ativa={tipoFilter === ''}
+            onClick={() => setTipoFilter('')}
+            rotulo="Todos"
+            valor={stats.rastreadores + stats.tags}
+          />
+          <AbaConexao
+            ativa={tipoFilter === 'RASTREADOR'}
+            onClick={() => {
+              setTipoFilter((t) => (t === 'RASTREADOR' ? '' : 'RASTREADOR'));
+            }}
+            rotulo="Rastreadores"
+            valor={stats.rastreadores}
+          />
+          <AbaConexao
+            ativa={tipoFilter === 'TAG'}
+            onClick={() => {
+              setConexaoFilter('');
+              setTipoFilter((t) => (t === 'TAG' ? '' : 'TAG'));
+            }}
+            rotulo="TAGs"
+            valor={stats.tags}
+          />
+        </div>
+      )}
+
       {/* Conectividade no servidor GPS — no celular vira faixa com rolagem
           horizontal e chips compactos: informação de relance sem empurrar a
           tabela pra fora da tela. Do md pra cima, tamanho normal de sempre. */}
-      {conn && !conn.indisponivel && (
+      {conn && !conn.indisponivel && tipoFilter !== 'TAG' && (
         <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
           <AbaConexao
             ativa={conexaoFilter === ''}
             onClick={() => setConexaoFilter('')}
-            rotulo="Todos"
+            rotulo="Rastreadores"
             valor={conn.total}
           />
           <AbaConexao
@@ -502,7 +537,14 @@ export default function EstoquePage() {
                   )}
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <ConnDot estado={conn?.statuses[item.imei]} />
+                      {item.kind === 'TAG' ? (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full bg-violet-400"
+                          title="TAG (rede Find My) — sem conexão GPS"
+                        />
+                      ) : (
+                        <ConnDot estado={conn?.statuses[item.imei]} />
+                      )}
                       <span className="font-mono text-xs">{item.imei}</span>
                     </div>
                     {item.validatedAt && (
@@ -530,7 +572,13 @@ export default function EstoquePage() {
                     {item.line ?? '—'}
                   </td>
                   <td className="px-3 py-2">
-                    <BadgeConexao estado={conn?.statuses[item.imei]} />
+                    {item.kind === 'TAG' ? (
+                      <Badge className="text-xs border bg-violet-500/15 text-violet-300 border-violet-500/30">
+                        TAG
+                      </Badge>
+                    ) : (
+                      <BadgeConexao estado={conn?.statuses[item.imei]} />
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {item.status ? (
@@ -562,15 +610,17 @@ export default function EstoquePage() {
                   {canManage && (
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => abrirNoMapa(item)}
-                        >
-                          <MapPin className="h-3.5 w-3.5 mr-1" />
-                          Abrir no mapa
-                        </Button>
+                        {item.kind !== 'TAG' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={() => abrirNoMapa(item)}
+                          >
+                            <MapPin className="h-3.5 w-3.5 mr-1" />
+                            Abrir no mapa
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
@@ -823,18 +873,22 @@ function StockRowMenu({
         }
       />
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuItem onClick={onMapa}>
-          <MapPin className="h-4 w-4" /> Abrir no mapa
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onCheck}>
-          <SignalHigh className="h-4 w-4" /> Validar instalação
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onTestCommand('block')}>
-          <Lock className="h-4 w-4" /> Bloquear (teste)
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onTestCommand('unblock')}>
-          <LockOpen className="h-4 w-4" /> Desbloquear (teste)
-        </DropdownMenuItem>
+        {item.kind !== 'TAG' && (
+          <>
+            <DropdownMenuItem onClick={onMapa}>
+              <MapPin className="h-4 w-4" /> Abrir no mapa
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onCheck}>
+              <SignalHigh className="h-4 w-4" /> Validar instalação
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onTestCommand('block')}>
+              <Lock className="h-4 w-4" /> Bloquear (teste)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onTestCommand('unblock')}>
+              <LockOpen className="h-4 w-4" /> Desbloquear (teste)
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuItem onClick={onAssociate}>
           <UserCheck className="h-4 w-4" /> Associar um cliente e ativo
         </DropdownMenuItem>
