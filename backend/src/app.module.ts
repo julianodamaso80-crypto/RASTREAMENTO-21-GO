@@ -85,7 +85,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
         },
       },
     }),
-    // 100 req/min por tenant (operador) ou IP (rotas públicas).
+    // 100 req/min por IP (rotas públicas); logado tem cota própria por usuário.
     // Custom guard em `TenantThrottlerGuard` distingue os dois.
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     ScheduleModule.forRoot(),
