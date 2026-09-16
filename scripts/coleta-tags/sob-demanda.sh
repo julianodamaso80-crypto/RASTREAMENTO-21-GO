@@ -38,8 +38,12 @@ psql -F'|' -c "
    ORDER BY r.requested_at
    LIMIT $TETO;" > "$PASTA/pedidos.csv" 2>>"$LOG"
 
-quantos=$(grep -c . "$PASTA/pedidos.csv" 2>/dev/null || echo 0)
-[ "$quantos" -eq 0 ] && exit 0
+# `grep -c` sai com status 1 quando não acha nada; sem o `|| true` o `set -uo`
+# não derruba, mas o `|| echo 0` antigo grudava um segundo "0" na variável e o
+# teste numérico quebrava — o script seguia em claro toda vez.
+quantos=$(grep -c . "$PASTA/pedidos.csv" 2>/dev/null || true)
+quantos=${quantos:-0}
+[ "$quantos" -eq 0 ] 2>/dev/null && exit 0
 registrar "$quantos pedido(s)"
 
 # 2. O coletar.py espera `numero|chave|placa`. A placa é vazia aqui.
@@ -78,7 +82,7 @@ if [ -s "$PASTA/posicoes-sob-demanda.csv" ]; then
         FROM p, t
       ON CONFLICT (tenant_id, serial_number, seen_at) DO NOTHING
       RETURNING serial_number)
-    SELECT count(*) FROM ins;" | tr -d ' ')
+    SELECT count(*) FROM ins;" | tail -1 | tr -d ' ')
   docker exec "$cid" rm -f /tmp/pos.csv
 fi
 

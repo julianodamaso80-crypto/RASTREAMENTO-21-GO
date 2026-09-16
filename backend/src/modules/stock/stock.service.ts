@@ -527,6 +527,9 @@ export class StockService {
     if (!estado.pode) {
       throw new HttpException(
         {
+          // `error` explícito: sem ele o filtro global rotula qualquer
+          // HttpException com corpo de objeto como "Internal Server Error".
+          error: 'Too Many Requests',
           message: `Espere ${estado.segundosRestantes}s para atualizar esta TAG de novo.`,
           disponivelEm: estado.disponivelEm.toISOString(),
           segundosRestantes: estado.segundosRestantes,
