@@ -326,84 +326,78 @@ export default function EstoquePage() {
         </Button>
       </div>
 
-      {/* Rastreadores x TAGs — a TAG entra na mesma lista (pedido do dono).
-          Clicar filtra; TAG não tem conexão GPS, então selecioná-la some com os
-          cartões de online/offline. */}
-      {stats && (stats.tags > 0 || stats.rastreadores > 0) && (
-        <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
-          <AbaConexao
-            ativa={tipoFilter === ''}
-            onClick={() => setTipoFilter('')}
-            rotulo="Todos"
-            valor={stats.rastreadores + stats.tags}
-          />
-          <AbaConexao
-            ativa={tipoFilter === 'RASTREADOR'}
-            onClick={() => {
-              setTipoFilter((t) => (t === 'RASTREADOR' ? '' : 'RASTREADOR'));
-            }}
-            rotulo="Rastreadores"
-            valor={stats.rastreadores}
-          />
-          <AbaConexao
-            ativa={tipoFilter === 'TAG'}
-            onClick={() => {
-              setConexaoFilter('');
-              setTipoFilter((t) => (t === 'TAG' ? '' : 'TAG'));
-            }}
-            rotulo="TAGs"
-            valor={stats.tags}
-          />
-        </div>
-      )}
-
-      {/* Conectividade no servidor GPS — no celular vira faixa com rolagem
-          horizontal e chips compactos: informação de relance sem empurrar a
-          tabela pra fora da tela. Do md pra cima, tamanho normal de sempre. */}
-      {conn && !conn.indisponivel && tipoFilter !== 'TAG' && (
-        <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
-          <AbaConexao
-            ativa={conexaoFilter === ''}
-            onClick={() => setConexaoFilter('')}
-            rotulo="Rastreadores"
-            valor={conn.total}
-          />
-          <AbaConexao
-            ativa={conexaoFilter === 'online'}
-            onClick={() =>
-              setConexaoFilter(conexaoFilter === 'online' ? '' : 'online')
-            }
-            rotulo="Online"
-            valor={conn.conectados}
-            cor="emerald"
-          />
-          <AbaConexao
-            ativa={conexaoFilter === 'offline'}
-            onClick={() =>
-              setConexaoFilter(conexaoFilter === 'offline' ? '' : 'offline')
-            }
-            rotulo="Offline"
-            valor={conn.desconectados}
-            cor="red"
-          />
-          <AbaConexao
-            ativa={conexaoFilter === 'sem-gps'}
-            onClick={() =>
-              setConexaoFilter(conexaoFilter === 'sem-gps' ? '' : 'sem-gps')
-            }
-            rotulo="Sem sinal GPS"
-            valor={conn.semGps}
-            cor="amber"
-          />
-          {conn.semCadastro > 0 && (
-            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
-              <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
-              <span className="text-[10px] text-muted-foreground md:text-xs">Entrando no servidor GPS</span>
-              <span className="text-sm font-bold md:text-lg">{conn.semCadastro}</span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Uma faixa só: Todos · Rastreadores · TAGs · Online · Offline · Sem GPS.
+          Rastreador e TAG dividem a mesma lista (pedido do dono), e os cartões
+          de conexão valem só para rastreador — TAG não fala com o servidor GPS,
+          então selecionar TAGs esconde os três. No celular a faixa rola. */}
+      <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
+        <AbaConexao
+          ativa={tipoFilter === '' && conexaoFilter === ''}
+          onClick={() => {
+            setTipoFilter('');
+            setConexaoFilter('');
+          }}
+          rotulo="Todos"
+          valor={stats ? stats.rastreadores + stats.tags : (conn?.total ?? 0)}
+        />
+        <AbaConexao
+          ativa={tipoFilter === 'RASTREADOR'}
+          onClick={() =>
+            setTipoFilter((t) => (t === 'RASTREADOR' ? '' : 'RASTREADOR'))
+          }
+          rotulo="Rastreadores"
+          valor={stats?.rastreadores ?? conn?.total ?? 0}
+        />
+        <AbaConexao
+          ativa={tipoFilter === 'TAG'}
+          onClick={() => {
+            // TAG não tem estado no servidor GPS: o filtro de conexão sai junto.
+            setConexaoFilter('');
+            setTipoFilter((t) => (t === 'TAG' ? '' : 'TAG'));
+          }}
+          rotulo="TAGs"
+          valor={stats?.tags ?? 0}
+          cor="violet"
+        />
+        {conn && !conn.indisponivel && tipoFilter !== 'TAG' && (
+          <>
+            <AbaConexao
+              ativa={conexaoFilter === 'online'}
+              onClick={() =>
+                setConexaoFilter(conexaoFilter === 'online' ? '' : 'online')
+              }
+              rotulo="Online"
+              valor={conn.conectados}
+              cor="emerald"
+            />
+            <AbaConexao
+              ativa={conexaoFilter === 'offline'}
+              onClick={() =>
+                setConexaoFilter(conexaoFilter === 'offline' ? '' : 'offline')
+              }
+              rotulo="Offline"
+              valor={conn.desconectados}
+              cor="red"
+            />
+            <AbaConexao
+              ativa={conexaoFilter === 'sem-gps'}
+              onClick={() =>
+                setConexaoFilter(conexaoFilter === 'sem-gps' ? '' : 'sem-gps')
+              }
+              rotulo="Sem sinal GPS"
+              valor={conn.semGps}
+              cor="amber"
+            />
+            {conn.semCadastro > 0 && (
+              <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
+                <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
+                <span className="text-[10px] text-muted-foreground md:text-xs">Entrando no servidor GPS</span>
+                <span className="text-sm font-bold md:text-lg">{conn.semCadastro}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {conexaoFilter !== '' && (
         <p className="shrink-0 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -744,7 +738,7 @@ function AbaConexao({
   onClick: () => void;
   rotulo: string;
   valor: number;
-  cor?: 'emerald' | 'red' | 'amber';
+  cor?: 'emerald' | 'red' | 'amber' | 'violet';
 }) {
   // `emerald` no tema é alias do laranja da marca (ver globals.css). Online
   // precisa ler como online, então usa o verde oficial: brand-green.
@@ -752,6 +746,8 @@ function AbaConexao({
     emerald: { borda: 'border-brand-green-500/40', fundo: 'bg-brand-green-500/10', ponto: 'bg-brand-green-500', texto: 'text-brand-green-600' },
     red: { borda: 'border-red-500/30', fundo: 'bg-red-500/10', ponto: 'bg-red-400', texto: 'text-red-400' },
     amber: { borda: 'border-amber-500/30', fundo: 'bg-amber-500/10', ponto: 'bg-amber-400', texto: 'text-amber-400' },
+    // TAG (rede Find My) tem cor própria: não é estado de GPS.
+    violet: { borda: 'border-violet-500/30', fundo: 'bg-violet-500/10', ponto: 'bg-violet-400', texto: 'text-violet-300' },
   };
   const tom = cor ? tons[cor] : null;
 
