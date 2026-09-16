@@ -143,7 +143,7 @@ export default function TagsAtivasPage() {
   };
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
+    <div className="h-full space-y-5 overflow-auto p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold">

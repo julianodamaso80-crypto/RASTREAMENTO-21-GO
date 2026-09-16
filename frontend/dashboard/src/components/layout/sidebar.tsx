@@ -9,15 +9,12 @@ import {
   LayoutDashboard,
   Map,
   Bell,
-  Radio,
   Boxes,
   Users,
   Settings,
   ChevronLeft,
   ChevronRight,
   Menu,
-  Wrench,
-  ArrowRight,
   HardHat,
   Bluetooth,
   ClipboardList,
@@ -56,8 +53,6 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: NON_CLIENT_ROLES, route: 'dashboard' },
   { href: '/mapa', label: 'Mapa / Veículos', icon: Map, route: 'mapa' },
   { href: '/alertas', label: 'Alertas', icon: Bell, route: 'alertas' },
-  { href: '/manutencao', label: 'Manutenção', icon: Wrench, roles: NON_CLIENT_ROLES, route: 'manutencao' },
-  { href: '/dispositivos', label: 'Dispositivos', icon: Radio, roles: NON_CLIENT_ROLES, route: 'dispositivos' },
   { href: '/estoque', label: 'Estoque', icon: Boxes, roles: NON_CLIENT_ROLES, route: 'estoque' },
   { href: '/clientes', label: 'Clientes Ativos', icon: Users, roles: NON_CLIENT_ROLES, route: 'clientes' },
   { href: '/tags-ativas', label: 'TAGs Ativas', icon: Bluetooth, roles: NON_CLIENT_ROLES, route: 'tags-ativas' },
@@ -166,28 +161,6 @@ function BrandHeader({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function ProPromo() {
-  return (
-    <div className="mx-3 mb-3 rounded-xl bg-gradient-to-br from-brand-orange-500/15 via-brand-orange-500/5 to-transparent border border-brand-orange-500/20 p-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-orange-500">
-          Plano Pro
-        </span>
-        <span className="text-[10px] text-slate-400 tabular-nums">75%</span>
-      </div>
-      <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden mb-2">
-        <div className="h-full rounded-full bg-brand-orange-500 transition-all" style={{ width: '75%' }} />
-      </div>
-      <Link
-        href="/configuracoes"
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-300 hover:text-brand-orange-400 transition-colors"
-      >
-        Ver detalhes <ArrowRight className="h-3 w-3" />
-      </Link>
-    </div>
-  );
-}
-
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -213,7 +186,6 @@ export function Sidebar() {
         <div className="flex-1 py-4 overflow-y-auto">
           <NavContent collapsed={collapsed} />
         </div>
-        {!collapsed && <ProPromo />}
         <div className="p-2 border-t border-white/5">
           <Button
             variant="ghost"
@@ -236,7 +208,6 @@ export function Sidebar() {
           <div className="py-4">
             <NavContent collapsed={false} />
           </div>
-          <ProPromo />
         </SheetContent>
       </Sheet>
     </>
