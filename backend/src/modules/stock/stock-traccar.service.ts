@@ -205,7 +205,8 @@ export class StockTraccarService {
     try {
       const [itens, snapshot] = await Promise.all([
         this.prisma.stockItem.findMany({
-          where: { deletedAt: null, associatedAt: null },
+          // TAG não fala com o Traccar: fora do destrava de ignição.
+          where: { deletedAt: null, associatedAt: null, kind: 'RASTREADOR' },
           select: { imei: true },
         }),
         this.snapshot(),
