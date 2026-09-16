@@ -48,6 +48,11 @@ function montar(item: Record<string, unknown>, lookup: HinovaLookupResult = ATIV
       updateMany: jest.fn(),
     },
     tagLink: { findFirst: jest.fn().mockResolvedValue(null) },
+    tagRefreshRequest: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({ id: 'ped-1', requestedAt: new Date() }),
+    },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     technician: {
       findFirst: jest.fn().mockResolvedValue({ id: 'tec', name: 'Tec', active: true, canReceiveEquipment: true }),
     },
@@ -127,6 +132,76 @@ describe('Estoque — TAG no Associar (SGA)', () => {
   });
 });
 
+describe('Estoque — Atualizar TAG (botão igual ao da Rede)', () => {
+  it('cria o pedido e devolve quando libera de novo', async () => {
+    const { s, prisma } = montar(TAG);
+    const r = await s.solicitarAtualizacaoTag('item-tag', TENANT, 'user-1');
+    expect(prisma.tagRefreshRequest.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tenantId: TENANT,
+          serialNumber: '808092604011925',
+          requestedById: 'user-1',
+        }),
+      }),
+    );
+    expect(r).toMatchObject({ pendente: true });
+    expect(new Date(r.disponivelEm).getTime() - new Date(r.solicitadoEm).getTime()).toBe(180_000);
+  });
+
+  it('recusa com 429 antes dos 3 minutos', async () => {
+    const { s, prisma } = montar(TAG);
+    prisma.tagRefreshRequest.findFirst.mockResolvedValue({
+      requestedAt: new Date(Date.now() - 60_000),
+      doneAt: null,
+      positionsFound: null,
+    });
+    await expect(s.solicitarAtualizacaoTag('item-tag', TENANT)).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(prisma.tagRefreshRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('rastreador não tem Atualizar TAG', async () => {
+    const { s, prisma } = montar(TAG);
+    prisma.stockItem.findFirst.mockResolvedValue(null);
+    await expect(s.solicitarAtualizacaoTag('item-rastreador', TENANT)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.stockItem.findFirst.mock.calls.at(-1)[0].where).toMatchObject({ kind: 'TAG' });
+  });
+
+  it('estado diz quantos avistamentos vieram — zero é resposta honesta', async () => {
+    const { s, prisma } = montar(TAG);
+    const pedido = new Date(Date.now() - 200_000);
+    prisma.tagRefreshRequest.findFirst.mockResolvedValue({
+      requestedAt: pedido,
+      doneAt: new Date(pedido.getTime() + 30_000),
+      positionsFound: 0,
+    });
+    const r = await s.estadoAtualizacaoTagDoEstoque('item-tag', TENANT);
+    expect(r).toMatchObject({ pendente: false, avistamentosNovos: 0, segundosRestantes: 0 });
+  });
+
+  it('a listagem devolve a última posição de cada TAG', async () => {
+    const { s, prisma } = montar(TAG);
+    prisma.stockItem.findMany.mockResolvedValue([{ id: 'i1', imei: '808092604011925', kind: 'TAG' }]);
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        serial_number: '808092604011925',
+        latitude: -22.9,
+        longitude: -43.5,
+        accuracy_m: 41,
+        seen_at: new Date('2026-09-16T17:09:40Z'),
+      },
+    ]);
+    const r = await s.findAll(TENANT, { page: 1, perPage: 20 } as never);
+    expect(r.data[0]).toMatchObject({
+      tagPosition: { lat: -22.9, lng: -43.5, accuracyM: 41 },
+    });
+  });
+});
+
 describe('Estoque — TAG nunca chega ao servidor GPS', () => {
   it('conferência, validação e bloqueio de teste só procuram RASTREADOR', async () => {
     const { s, prisma } = montar(TAG);
@@ -177,15 +252,20 @@ describe('Estoque — TAG nunca chega ao servidor GPS', () => {
     expect(r).toMatchObject({ rastreadores: 1501, tags: 530 });
   });
 
-  it('cadastro automático, cartões de conexão e mapa do estoque ignoram TAG', async () => {
-    const prisma = { stockItem: { findMany: jest.fn().mockResolvedValue([]) } };
+  it('cadastro automático e cartões de conexão ignoram TAG; o mapa busca TAG à parte', async () => {
+    const prisma = {
+      stockItem: { findMany: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    };
     const st = new StockTraccarService(prisma as never, {} as never, {} as never);
     await st.ensurePending(TENANT);
     await st.connectivity(TENANT).catch(() => undefined);
     await st.mapPoints(TENANT).catch(() => undefined);
-    expect(prisma.stockItem.findMany).toHaveBeenCalledTimes(3);
-    for (const call of prisma.stockItem.findMany.mock.calls) {
-      expect(call[0].where).toMatchObject({ kind: 'RASTREADOR' });
-    }
+
+    const kinds = prisma.stockItem.findMany.mock.calls.map((c) => c[0].where.kind);
+    // ensurePending e connectivity: só rastreador. mapPoints: uma busca de TAG
+    // (o ponto vem da rede Find My) e uma de rastreador (vem do Traccar).
+    expect(kinds.filter((k) => k === 'RASTREADOR').length).toBeGreaterThanOrEqual(3);
+    expect(kinds).toContain('TAG');
   });
 });

@@ -20,6 +20,7 @@ Três coisas aqui existem para proteger a conta Apple, e nenhuma é enfeite:
 """
 import csv
 import json
+import os
 import sys
 from datetime import timezone
 
@@ -29,8 +30,10 @@ from findmy.errors import UnauthorizedError
 
 TAMANHO_DO_LOTE = 256
 SESSAO = '/sessao/account.json'
-ENTRADA = '/sessao/todas.csv'
-SAIDA = '/sessao/posicoes.csv'
+# Os caminhos vêm por ambiente para o "Atualizar TAG" (consulta sob demanda de
+# uma TAG só) reusar este mesmo script sem mexer no ciclo de hora em hora.
+ENTRADA = os.environ.get('ENTRADA', '/sessao/todas.csv')
+SAIDA = os.environ.get('SAIDA', '/sessao/posicoes.csv')
 ANISETTE = 'http://localhost:6969'
 
 SAI_OK = 0

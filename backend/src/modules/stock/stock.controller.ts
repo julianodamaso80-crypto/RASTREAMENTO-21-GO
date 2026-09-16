@@ -187,6 +187,38 @@ export class StockController {
     return this.stockService.importFromBuffer(file.buffer, req.tenantId);
   }
 
+  /**
+   * "Atualizar TAG": re-consulta a rede Find My só desta TAG. Trava de 3 min,
+   * a mesma da RedeVeiculos — cada consulta usa a conta Apple do dono.
+   */
+  @Post(':id/atualizar-tag')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Pede ao coletor uma consulta imediata desta TAG na rede Find My ' +
+      '(1 a cada 3 minutos). Não obriga a TAG a se anunciar.',
+  })
+  atualizarTag(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.solicitarAtualizacaoTag(
+      id,
+      req.tenantId,
+      req.user.id,
+    );
+  }
+
+  @Get(':id/atualizar-tag')
+  @ApiOperation({ summary: 'Estado da última atualização pedida para a TAG' })
+  estadoAtualizarTag(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.estadoAtualizacaoTagDoEstoque(id, req.tenantId);
+  }
+
   @Post(':id/associate')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)

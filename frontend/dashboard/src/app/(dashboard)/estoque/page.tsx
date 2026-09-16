@@ -25,7 +25,7 @@ import {
   LockOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn, formatDateOnlyBR } from '@/lib/utils';
+import { cn, formatDateOnlyBR, formatRelativeTime } from '@/lib/utils';
 import { stockApi } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
@@ -579,9 +579,11 @@ export default function EstoquePage() {
                   </td>
                   <td className="px-3 py-2">
                     {item.kind === 'TAG' ? (
-                      <Badge className="text-xs border bg-violet-500/15 text-violet-300 border-violet-500/30">
-                        TAG
-                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {item.tagPosition
+                          ? `vista ${formatRelativeTime(item.tagPosition.seenAt)}`
+                          : 'sem posição'}
+                      </span>
                     ) : (
                       <BadgeConexao estado={conn?.statuses[item.imei]} />
                     )}
@@ -616,17 +618,15 @@ export default function EstoquePage() {
                   {canManage && (
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-1.5">
-                        {item.kind !== 'TAG' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8"
-                            onClick={() => abrirNoMapa(item)}
-                          >
-                            <MapPin className="h-3.5 w-3.5 mr-1" />
-                            Abrir no mapa
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => abrirNoMapa(item)}
+                        >
+                          <MapPin className="h-3.5 w-3.5 mr-1" />
+                          Abrir no mapa
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"

@@ -222,6 +222,7 @@ model Tenant {
   tagKeys              TagKey[]
   tagPositions         TagPosition[]
   tagLinks             TagLink[]
+  tagRefreshRequests   TagRefreshRequest[]
   installationRoutes   InstallationRoute[]
 
   appointments Appointment[]
@@ -1184,6 +1185,27 @@ model TagPosition {
   @@index([tenantId, plate, seenAt(sort: Desc)])
   @@index([tenantId, seenAt(sort: Desc)])
   @@map("tag_positions")
+}
+
+/// Pedido de "Atualizar TAG": o backend não fala com a Apple (a consulta é
+/// Python, no droplet), então a solicitação vira uma linha aqui e o coletor de
+/// minuto a minuto a executa. `positionsFound` é o que deixa a tela dizer a
+/// verdade: 0 = ninguém passou perto da TAG desde o último avistamento.
+model TagRefreshRequest {
+  id String @id @default(uuid()) @db.Uuid
+
+  serialNumber   String    @map("serial_number")
+  requestedById  String?   @map("requested_by_id") @db.Uuid
+  requestedAt    DateTime  @default(now()) @map("requested_at")
+  doneAt         DateTime? @map("done_at")
+  positionsFound Int?      @map("positions_found")
+
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, serialNumber, requestedAt(sort: Desc)])
+  @@map("tag_refresh_requests")
 }
 
 /// Vínculo de uma TAG com um veículo do SGA — spec 2026-09-16.

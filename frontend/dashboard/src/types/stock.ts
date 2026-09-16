@@ -21,6 +21,13 @@ export interface StockItem {
   validationNotes: string | null;
   /** RASTREADOR (fala com o servidor GPS) ou TAG (K-Tag, rede Find My). */
   kind: 'RASTREADOR' | 'TAG';
+  /** Último avistamento da TAG na rede Find My. Nunca é posição do momento. */
+  tagPosition?: {
+    lat: number;
+    lng: number;
+    accuracyM: number | null;
+    seenAt: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -96,6 +103,10 @@ export type StockConexao = 'ONLINE' | 'OFFLINE' | 'SLEEP' | 'NUNCA';
 export interface StockMapPoint {
   id: string;
   imei: string;
+  /** RASTREADOR (posição de GPS) ou TAG (avistamento na rede Find My). */
+  tipo?: 'RASTREADOR' | 'TAG';
+  /** Raio de confiança do avistamento da TAG, em metros. */
+  precisaoM?: number | null;
   iccid: string | null;
   line: string | null;
   operator: string | null;

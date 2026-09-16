@@ -742,6 +742,34 @@ export const stockApi = {
     });
     return res.data.data;
   },
+  /**
+   * "Atualizar TAG": pede ao coletor uma consulta imediata na rede Find My.
+   * Trava de 3 min por TAG (mesma regra da referência) — 429 quando cedo demais.
+   */
+  atualizarTag: async (
+    id: string,
+  ): Promise<{ pendente: boolean; solicitadoEm: string; disponivelEm: string }> => {
+    const res = await api.post<ApiResponse<{ pendente: boolean; solicitadoEm: string; disponivelEm: string }>>(
+      `/stock/${id}/atualizar-tag`,
+    );
+    return res.data.data;
+  },
+  estadoAtualizarTag: async (
+    id: string,
+  ): Promise<{
+    pendente: boolean;
+    concluidoEm: string | null;
+    avistamentosNovos: number | null;
+    segundosRestantes: number;
+  }> => {
+    const res = await api.get<ApiResponse<{
+      pendente: boolean;
+      concluidoEm: string | null;
+      avistamentosNovos: number | null;
+      segundosRestantes: number;
+    }>>(`/stock/${id}/atualizar-tag`);
+    return res.data.data;
+  },
   /** Conferência de instalação ao vivo: GPS, satélites, voltagem e ignição. */
   signal: async (id: string): Promise<DeviceHealth> => {
     const res = await api.get<ApiResponse<DeviceHealth>>(`/stock/${id}/signal`);

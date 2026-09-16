@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
@@ -8,6 +10,7 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { Prisma } from '.prisma/client';
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
@@ -23,6 +26,7 @@ import {
   normalizeSgaStatusLabel,
 } from '../hinova/sga-status';
 import { decidirTipoVeiculo } from '../hinova/tipo-veiculo';
+import { estadoAtualizacaoTag } from './tag-atualizacao';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
@@ -46,6 +50,14 @@ type ParsedRow = {
   registeredAt: Date | null;
   activatedAt: Date | null;
 };
+
+/** Último avistamento de uma TAG na rede Find My. Nunca é posição do momento. */
+export interface PosicaoDeTag {
+  lat: number;
+  lng: number;
+  accuracyM: number | null;
+  seenAt: Date;
+}
 
 export type StockTestCommandResult = {
   imei: string;
@@ -433,7 +445,120 @@ export class StockService {
       this.prisma.stockItem.count({ where }),
     ]);
 
-    return { data, meta: { total, page, perPage, gpsIndisponivel: false } };
+    return {
+      data: await this.comPosicaoDeTag(tenantId, data),
+      meta: { total, page, perPage, gpsIndisponivel: false },
+    };
+  }
+
+  /**
+   * Última posição de cada TAG da página, numa consulta só.
+   *
+   * A TAG não tem estado no servidor GPS; o que responde "ela está viva?" é o
+   * carimbo do último avistamento na rede Find My. Rastreador passa direto.
+   */
+  private async comPosicaoDeTag<T extends { imei: string; kind?: string }>(
+    tenantId: string,
+    itens: T[],
+  ): Promise<Array<T & { tagPosition?: PosicaoDeTag | null }>> {
+    const seriais = itens.filter((i) => i.kind === 'TAG').map((i) => i.imei);
+    if (seriais.length === 0) return itens;
+
+    const linhas = await this.prisma.$queryRaw<
+      Array<{
+        serial_number: string;
+        latitude: number;
+        longitude: number;
+        accuracy_m: number | null;
+        seen_at: Date;
+      }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON (serial_number)
+             serial_number, latitude, longitude, accuracy_m, seen_at
+        FROM tag_positions
+       WHERE tenant_id = ${tenantId}::uuid
+         AND serial_number IN (${Prisma.join(seriais)})
+       ORDER BY serial_number, seen_at DESC`);
+
+    const porSerial = new Map(
+      linhas.map((l) => [
+        l.serial_number,
+        {
+          lat: l.latitude,
+          lng: l.longitude,
+          accuracyM: l.accuracy_m,
+          seenAt: l.seen_at,
+        },
+      ]),
+    );
+    return itens.map((i) =>
+      i.kind === 'TAG'
+        ? { ...i, tagPosition: porSerial.get(i.imei) ?? null }
+        : i,
+    );
+  }
+
+  /** Item de estoque que é TAG — com a trava de 3 min já resolvida. */
+  private async tagDoEstoque(id: string, tenantId: string) {
+    const item = await this.prisma.stockItem.findFirst({
+      where: { id, tenantId, deletedAt: null, kind: 'TAG' },
+      select: { id: true, imei: true },
+    });
+    if (!item) throw new NotFoundException('TAG não encontrada no estoque');
+
+    const ultima = await this.prisma.tagRefreshRequest.findFirst({
+      where: { tenantId, serialNumber: item.imei },
+      orderBy: { requestedAt: 'desc' },
+      select: { requestedAt: true, doneAt: true, positionsFound: true },
+    });
+    return { item, ultima };
+  }
+
+  /**
+   * "Atualizar TAG": pede ao coletor uma consulta à Apple só desta TAG.
+   *
+   * NÃO obriga a TAG a se anunciar — só pergunta de novo à rede. Se ninguém
+   * passou perto dela, nada muda, e é isso que a tela mostra. A espera de 3 min
+   * é a mesma da RedeVeiculos e protege a conta Apple.
+   */
+  async solicitarAtualizacaoTag(id: string, tenantId: string, userId?: string) {
+    const { item, ultima } = await this.tagDoEstoque(id, tenantId);
+    const estado = estadoAtualizacaoTag(ultima?.requestedAt ?? null);
+    if (!estado.pode) {
+      throw new HttpException(
+        {
+          message: `Espere ${estado.segundosRestantes}s para atualizar esta TAG de novo.`,
+          disponivelEm: estado.disponivelEm.toISOString(),
+          segundosRestantes: estado.segundosRestantes,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const pedido = await this.prisma.tagRefreshRequest.create({
+      data: { tenantId, serialNumber: item.imei, requestedById: userId ?? null },
+      select: { id: true, requestedAt: true },
+    });
+    this.logger.log(`Atualizar TAG ${item.imei} solicitado (pedido ${pedido.id}).`);
+    return {
+      pendente: true,
+      solicitadoEm: pedido.requestedAt,
+      disponivelEm: estadoAtualizacaoTag(pedido.requestedAt).disponivelEm,
+    };
+  }
+
+  /** Estado da última solicitação — a tela usa para o contador e o resultado. */
+  async estadoAtualizacaoTagDoEstoque(id: string, tenantId: string) {
+    const { ultima } = await this.tagDoEstoque(id, tenantId);
+    const estado = estadoAtualizacaoTag(ultima?.requestedAt ?? null);
+    return {
+      pendente: Boolean(ultima && !ultima.doneAt),
+      solicitadoEm: ultima?.requestedAt ?? null,
+      concluidoEm: ultima?.doneAt ?? null,
+      avistamentosNovos: ultima?.positionsFound ?? null,
+      disponivelEm: estado.disponivelEm,
+      segundosRestantes: estado.segundosRestantes,
+    };
   }
 
   /**

@@ -33,6 +33,8 @@ interface Props {
 
 /** Cor do marcador pelo estado de conexão — mesma leitura da lista lateral. */
 export function corDaConexao(ponto: StockMapPoint): string {
+  // TAG não tem conexão: cor própria, pra não ser lida como rastreador mudo.
+  if (ponto.tipo === 'TAG') return '#a78bfa';
   if (ponto.conexao === 'ONLINE') return '#10b981';
   if (ponto.conexao === 'SLEEP') return '#38bdf8';
   if (ponto.conexao === 'NUNCA') return '#94a3b8';

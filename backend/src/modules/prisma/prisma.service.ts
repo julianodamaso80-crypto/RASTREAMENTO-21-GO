@@ -231,6 +231,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get tagLink() {
     return this.base.tagLink;
   }
+  // Pedido de atualização da TAG, executado pelo coletor no droplet.
+  get tagRefreshRequest() {
+    return this.base.tagRefreshRequest;
+  }
   get installationRoute() {
     return this.base.installationRoute;
   }

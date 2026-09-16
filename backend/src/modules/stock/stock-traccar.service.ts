@@ -6,6 +6,7 @@ import {
   type TraccarDevice,
   type TraccarPosition,
 } from '../traccar/traccar.service';
+import { Prisma } from '.prisma/client';
 import { assessPosition } from '../traccar/position-quality';
 import {
   COMUNICANDO_MS,
@@ -359,6 +360,7 @@ export class StockTraccarService {
    * saber onde o equipamento está: pode estar com o técnico a caminho.
    */
   async mapPoints(tenantId: string): Promise<StockMapResult> {
+    const tags = await this.pontosDeTag(tenantId);
     const itens = await this.prisma.stockItem.findMany({
       where: {
         tenantId,
@@ -394,7 +396,8 @@ export class StockTraccarService {
           erro instanceof Error ? erro.message : erro
         }`,
       );
-      return { indisponivel: true, pontos: [] };
+      // Servidor GPS fora não pode esconder a TAG: ela não depende dele.
+      return { indisponivel: true, pontos: tags };
     }
 
     const porImei = new Map(devices.map((d) => [d.uniqueId, d]));
@@ -458,9 +461,82 @@ export class StockTraccarService {
       };
     });
 
-    await this.preencherEnderecos(pontos);
+    const todos = [...pontos, ...tags];
+    await this.preencherEnderecos(todos);
 
-    return { indisponivel: false, pontos };
+    return { indisponivel: false, pontos: todos };
+  }
+
+  /**
+   * TAGs livres no estoque, com o último avistamento na rede Find My.
+   *
+   * Entram no mesmo mapa do rastreador (é onde o operador vai procurar), mas
+   * com `tipo: 'TAG'` e todo campo de GPS nulo: TAG não tem ignição, satélite,
+   * voltagem nem velocidade, e a posição dela é sempre passado.
+   */
+  private async pontosDeTag(tenantId: string): Promise<StockMapPoint[]> {
+    const itens = await this.prisma.stockItem.findMany({
+      where: { tenantId, deletedAt: null, associatedAt: null, kind: 'TAG' },
+      select: { id: true, imei: true, status: true, notes: true },
+    });
+    if (itens.length === 0) return [];
+
+    const linhas = await this.prisma.$queryRaw<
+      Array<{
+        serial_number: string;
+        latitude: number;
+        longitude: number;
+        accuracy_m: number | null;
+        seen_at: Date;
+      }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON (serial_number)
+             serial_number, latitude, longitude, accuracy_m, seen_at
+        FROM tag_positions
+       WHERE tenant_id = ${tenantId}::uuid
+         AND serial_number IN (${Prisma.join(itens.map((i) => i.imei))})
+       ORDER BY serial_number, seen_at DESC`);
+    const porSerial = new Map(linhas.map((l) => [l.serial_number, l]));
+    const agora = Date.now();
+
+    return itens.map((item): StockMapPoint => {
+      const p = porSerial.get(item.imei);
+      const visto = p ? p.seen_at.toISOString() : null;
+      return {
+        id: item.id,
+        imei: item.imei,
+        tipo: 'TAG',
+        iccid: null,
+        line: null,
+        operator: null,
+        server: null,
+        statusChip: item.status,
+        validatedAt: null,
+        validationOk: null,
+        tecnico: null,
+        conexao: 'NUNCA',
+        lastUpdate: null,
+        fixTime: visto,
+        idadeSegundos: p
+          ? Math.max(0, Math.round((agora - p.seen_at.getTime()) / 1000))
+          : null,
+        latitude: p?.latitude ?? null,
+        longitude: p?.longitude ?? null,
+        endereco: null,
+        // O avistamento da rede Find My tem raio de confiança próprio; não é
+        // fix de GPS e nunca deve ser lido como tal.
+        gpsConfiavel: false,
+        precisaoM: p?.accuracy_m ?? null,
+        ignicao: null,
+        velocidade: null,
+        direcao: null,
+        volts: null,
+        faixaEnergia: 'ausente',
+        satelites: null,
+        bateriaInterna: null,
+        bloqueado: false,
+      };
+    });
   }
 
   /**
@@ -623,6 +699,10 @@ export type StockConexao = 'ONLINE' | 'OFFLINE' | 'SLEEP' | 'NUNCA';
 export interface StockMapPoint {
   id: string;
   imei: string;
+  /** RASTREADOR (posição de GPS) ou TAG (avistamento na rede Find My). */
+  tipo?: 'RASTREADOR' | 'TAG';
+  /** Raio de confiança do avistamento da TAG, em metros. */
+  precisaoM?: number | null;
   iccid: string | null;
   line: string | null;
   operator: string | null;

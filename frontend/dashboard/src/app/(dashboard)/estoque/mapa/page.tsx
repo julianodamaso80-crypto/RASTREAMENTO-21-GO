@@ -32,6 +32,7 @@ import {
   textoVoltagem,
 } from '@/components/stock/stock-format';
 import { StockMapDetail } from '@/components/stock/stock-map-detail';
+import { StockMapDetailTag } from '@/components/stock/stock-map-detail-tag';
 import { SelectionCheckbox } from '@/components/map/selection-checkbox';
 import { SelectionListPanel } from '@/components/map/selection-list-panel';
 import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
@@ -380,7 +381,21 @@ export default function EstoqueMapaPage() {
           </div>
         )}
 
-        {selecionado && (
+        {selecionado && selecionado.tipo === 'TAG' && (
+          <div className="absolute right-0 top-0 z-20 h-full w-full max-w-[360px] border-l shadow-xl">
+            <StockMapDetailTag
+              ponto={selecionado}
+              onClose={() => {
+                if (varios) setDetalheId(null);
+                else setSelecionadosIds([]);
+              }}
+              onAssociar={() => setAssociarItem(selecionado)}
+              onAtualizou={() => void carregar(false)}
+            />
+          </div>
+        )}
+
+        {selecionado && selecionado.tipo !== 'TAG' && (
           <div className="absolute right-0 top-0 z-20 h-full w-full max-w-[360px] border-l shadow-xl">
             <StockMapDetail
               ponto={selecionado}
