@@ -66,13 +66,33 @@ describe('StockTraccarService.responderIgnicaoNaHora', () => {
     expect(payload.attributes['filter.skipAttributes']).toContain('ignition');
   });
 
-  it('encurta o skipLimit: heartbeat sem o campo ignition não pode segurar a tela 10 min', async () => {
+  it('NÃO encurta o skipLimit: heartbeat sem ignition viraria a última posição e a chave sumiria da tela', async () => {
+    // Medido em 16/09/2026 no 869890080181336 com skipLimit=30: 120 das 192
+    // posições em 6 h vieram sem `ignition`, inclusive a última — a tela
+    // mostrava "Não informa". Só a posição que CARREGA a chave interessa.
     const { s, traccar } = servico();
 
     await s.responderIgnicaoNaHora('860123456789012');
 
     const [, payload] = traccar.updateDevice.mock.calls[0];
-    expect(payload.attributes['filter.skipLimit']).toBe(30);
+    expect(payload.attributes['filter.skipLimit']).toBeUndefined();
+  });
+
+  it('device que ficou com o skipLimit=30 de 15/09: limpa ao religar', async () => {
+    const { s, traccar } = servico({
+      ...DEVICE,
+      attributes: {
+        'filter.skipAttributes.enable': true,
+        'filter.skipAttributes': 'ignition',
+        'filter.skipLimit': 30,
+      },
+    });
+
+    await s.responderIgnicaoNaHora('860123456789012');
+
+    const [, payload] = traccar.updateDevice.mock.calls[0];
+    expect(payload.attributes['filter.skipLimit']).toBeUndefined();
+    expect(payload.attributes['filter.skipAttributes.enable']).toBe(true);
   });
 
   it('manda o device inteiro no PUT — corpo parcial o Traccar recusa com 400', async () => {
@@ -91,7 +111,6 @@ describe('StockTraccarService.responderIgnicaoNaHora', () => {
       attributes: {
         'filter.skipAttributes.enable': true,
         'filter.skipAttributes': 'ignition',
-        'filter.skipLimit': 30,
       },
     });
 
@@ -167,5 +186,75 @@ describe('StockTraccarService.voltarAoFiltroNormal', () => {
     await s.voltarAoFiltroNormal('860123456789012');
 
     expect(traccar.updateDevice).not.toHaveBeenCalled();
+  });
+});
+
+describe('StockTraccarService.destravarEstoqueConectado', () => {
+  /**
+   * O time acompanha o teste de liga/desliga pelo MAPA do estoque, não pela
+   * conferência (access log de 15–16/09: ~2.000 GET /stock/map e zero
+   * GET /stock/:id/signal). O destravamento preso à conferência alcançou 1
+   * device em 1.500. Quem precisa dele é o equipamento do estoque que está
+   * falando com o servidor — é esse que está na mão do técnico.
+   */
+  function comEstoque(opcoes: {
+    estoque: string[];
+    comunicando: string[];
+  }) {
+    const traccar = {
+      getDevices: jest.fn().mockResolvedValue(
+        [...new Set([...opcoes.estoque, ...opcoes.comunicando])].map((imei, i) => ({
+          ...DEVICE,
+          id: i + 1,
+          uniqueId: imei,
+          name: imei,
+          status: opcoes.comunicando.includes(imei) ? 'online' : 'offline',
+          lastUpdate: null,
+        })),
+      ),
+      getPositions: jest.fn().mockResolvedValue([]),
+      getDeviceByUniqueId: jest.fn().mockImplementation((imei: string) =>
+        Promise.resolve({ ...DEVICE, uniqueId: imei, name: imei, attributes: {} }),
+      ),
+      updateDevice: jest.fn().mockImplementation((_id, payload) => payload),
+    };
+    const prisma = {
+      stockItem: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue(opcoes.estoque.map((imei) => ({ imei }))),
+      },
+    };
+    const s = new StockTraccarService(prisma as never, traccar as never, {} as never);
+    return { s, traccar, prisma };
+  }
+
+  it('destrava só quem é do estoque E está falando agora', async () => {
+    const { s, traccar } = comEstoque({
+      estoque: ['111', '222'],
+      comunicando: ['111', '999'], // 999 é carro de cliente, não é estoque
+    });
+
+    await s.destravarEstoqueConectado();
+
+    const destravados = traccar.getDeviceByUniqueId.mock.calls.map((c) => c[0]);
+    expect(destravados).toEqual(['111']);
+  });
+
+  it('só olha estoque não instalado e não apagado', async () => {
+    const { s, prisma } = comEstoque({ estoque: [], comunicando: [] });
+
+    await s.destravarEstoqueConectado();
+
+    const where = prisma.stockItem.findMany.mock.calls[0][0].where;
+    expect(where.associatedAt).toBeNull();
+    expect(where.deletedAt).toBeNull();
+  });
+
+  it('servidor GPS fora do ar não derruba o cron', async () => {
+    const { s, traccar } = comEstoque({ estoque: ['111'], comunicando: ['111'] });
+    traccar.getDevices.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    await expect(s.destravarEstoqueConectado()).resolves.toBeUndefined();
   });
 });

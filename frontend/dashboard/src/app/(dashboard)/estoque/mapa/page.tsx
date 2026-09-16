@@ -118,6 +118,10 @@ export default function EstoqueMapaPage() {
     (id: string) => {
       setSelecionadosIds([id]);
       setDetalheId(null);
+      // Escolheu UM na gaveta (celular) → fecha pra revelar o mapa focado. Só
+      // aqui: fechar a cada mudança da seleção fazia a caixinha fechar a
+      // gaveta, e no celular era impossível marcar o segundo equipamento.
+      setListaOpen(false);
       const p = pontos.find((x) => x.id === id);
       if (p?.latitude != null && p?.longitude != null) {
         mapRef.current?.flyTo(p.longitude, p.latitude, FOCO_ZOOM, PAINEL_LARGURA);
@@ -144,10 +148,6 @@ export default function EstoqueMapaPage() {
     [pontos],
   );
 
-  // Selecionou um item na gaveta (mobile) → fecha pra revelar o mapa focado.
-  useEffect(() => {
-    if (selecionadosIds.length > 0) setListaOpen(false);
-  }, [selecionadosIds]);
 
   // Abrir no mapa a partir do estoque: já entra com os pedidos marcados. Um
   // só ganha o voo até ele; vários são enquadrados pelo efeito de baixo.

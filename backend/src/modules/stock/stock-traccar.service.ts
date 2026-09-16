@@ -35,14 +35,13 @@ import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 /** Chaves de filtro do Traccar aceitas como atributo de device. */
 const CHAVE_SKIP_ENABLE = 'filter.skipAttributes.enable';
 const CHAVE_SKIP_LISTA = 'filter.skipAttributes';
+/**
+ * Só existe pra LIMPAR o `filter.skipLimit=30` gravado em 15/09. Não religar:
+ * medido em 16/09, com ele 120 das 192 posições em 6 h entraram sem
+ * `ignition`, inclusive a última, e a tela perdia a chave ("Não informa").
+ */
 const CHAVE_SKIP_LIMITE = 'filter.skipLimit';
 const ATRIBUTO_IGNICAO = 'ignition';
-/**
- * Segundos entre posições garantidas enquanto o equipamento está em
- * conferência. O `skipAttributes` só salva a posição que CARREGA `ignition`;
- * o heartbeat que não traz o campo continuaria esperando os 600 s do servidor.
- */
-const SKIP_LIMITE_CONFERENCIA = 30;
 
 @Injectable()
 export class StockTraccarService {
@@ -123,16 +122,16 @@ export class StockTraccarService {
       if (!device?.id) return false;
 
       const attrs = { ...(device.attributes ?? {}) };
-      const jaEstaComo =
+      const destravado =
         attrs[CHAVE_SKIP_ENABLE] === true &&
-        attrs[CHAVE_SKIP_LISTA] === ATRIBUTO_IGNICAO &&
-        attrs[CHAVE_SKIP_LIMITE] === SKIP_LIMITE_CONFERENCIA;
-      if (jaEstaComo === ligar) return false;
+        attrs[CHAVE_SKIP_LISTA] === ATRIBUTO_IGNICAO;
+      const sujo = CHAVE_SKIP_LIMITE in attrs;
+      if (ligar ? destravado && !sujo : !destravado && !sujo) return false;
 
       if (ligar) {
         attrs[CHAVE_SKIP_ENABLE] = true;
         attrs[CHAVE_SKIP_LISTA] = ATRIBUTO_IGNICAO;
-        attrs[CHAVE_SKIP_LIMITE] = SKIP_LIMITE_CONFERENCIA;
+        delete attrs[CHAVE_SKIP_LIMITE];
       } else {
         delete attrs[CHAVE_SKIP_ENABLE];
         delete attrs[CHAVE_SKIP_LISTA];
@@ -190,6 +189,44 @@ export class StockTraccarService {
       `Estoque no servidor GPS: ${ok}/${pendentes.length} cadastrado(s).`,
     );
     return ok;
+  }
+
+  /**
+   * O time acompanha o liga/desliga pelo MAPA do estoque (access log de
+   * 15–16/09: ~2.000 GET /stock/map, zero GET /stock/:id/signal). Destravar
+   * só na conferência alcançou 1 device em 1.500. Quem precisa é o
+   * equipamento do estoque falando com o servidor agora — é o que está na
+   * mão do técnico. Prateleira desligada não manda nada e não pesa no banco.
+   */
+  @Interval(60 * 1000)
+  async destravarEstoqueConectado(): Promise<void> {
+    try {
+      const [itens, snapshot] = await Promise.all([
+        this.prisma.stockItem.findMany({
+          where: { deletedAt: null, associatedAt: null },
+          select: { imei: true },
+        }),
+        this.snapshot(),
+      ]);
+      const doEstoque = new Set(itens.map((i) => i.imei));
+      const alvos = snapshot
+        .filter((d) => d.comunicando && doEstoque.has(d.uniqueId))
+        .map((d) => d.uniqueId);
+
+      for (let i = 0; i < alvos.length; i += StockTraccarService.CONCORRENCIA) {
+        await Promise.all(
+          alvos
+            .slice(i, i + StockTraccarService.CONCORRENCIA)
+            .map((imei) => this.responderIgnicaoNaHora(imei)),
+        );
+      }
+    } catch (erro) {
+      this.logger.warn(
+        `Destravar ignição do estoque conectado falhou: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+    }
   }
 
   /** Rede de segurança pra quem entrou enquanto o Traccar estava fora. */
