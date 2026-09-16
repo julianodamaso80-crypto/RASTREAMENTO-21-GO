@@ -149,12 +149,6 @@ export function StockMapDetailTag({ ponto, onClose, onAssociar, onAtualizou }: P
         {restam > 0 && <span className="ml-auto font-mono text-xs">{mmss}</span>}
       </Button>
 
-      <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-200">
-        A TAG não transmite sozinha: ela é vista quando um iPhone passa perto.
-        Atualizar pergunta de novo à rede da Apple — se ninguém passou perto
-        desde a última vez, a posição continua a mesma.
-      </p>
-
       {temPosicao ? (
         <div className="rounded-lg border px-3 py-2 text-xs">
           <div className="flex items-baseline justify-between gap-3 py-1">
