@@ -1,0 +1,52 @@
+import { NotFoundException } from '@nestjs/common';
+import { FinancialService } from './financial.service';
+import type { PrismaService } from '../prisma/prisma.service';
+
+const TENANT = '11111111-1111-1111-1111-111111111111';
+
+function prismaFalso() {
+  return {
+    financialEntry: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockImplementation(({ data }) => ({ id: 'novo', ...data })),
+      update: jest.fn().mockImplementation(({ data }) => ({ id: 'x', ...data })),
+    },
+  };
+}
+
+describe('FinancialService', () => {
+  it('lista só a empresa do usuário e ignora excluídos', async () => {
+    const prisma = prismaFalso();
+    const service = new FinancialService(prisma as unknown as PrismaService);
+    await service.findAll(TENANT, ' srl5 ', 'PAID_PIX', 9);
+    const { where } = prisma.financialEntry.findMany.mock.calls[0][0];
+    expect(where.tenantId).toBe(TENANT);
+    expect(where.deletedAt).toBeNull();
+    expect(where.status).toBe('PAID_PIX');
+    expect(where.month).toBe(9);
+    expect(where.OR[0].plate.contains).toBe('srl5');
+  });
+
+  it('descarta situação e mês que não existem no filtro', async () => {
+    const prisma = prismaFalso();
+    const service = new FinancialService(prisma as unknown as PrismaService);
+    await service.findAll(TENANT, '', 'QUALQUER', 13);
+    const { where } = prisma.financialEntry.findMany.mock.calls[0][0];
+    expect(where.status).toBeUndefined();
+    expect(where.month).toBeUndefined();
+    expect(where.OR).toBeUndefined();
+  });
+
+  it('exclusão é soft delete e não mexe em lançamento de outra empresa', async () => {
+    const prisma = prismaFalso();
+    const service = new FinancialService(prisma as unknown as PrismaService);
+    await expect(service.remove('x', TENANT)).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.financialEntry.findFirst.mock.calls[0][0].where.tenantId).toBe(TENANT);
+    expect(prisma.financialEntry.update).not.toHaveBeenCalled();
+
+    prisma.financialEntry.findFirst.mockResolvedValue({ id: 'x' });
+    await service.remove('x', TENANT);
+    expect(prisma.financialEntry.update.mock.calls[0][0].data.deletedAt).toBeInstanceOf(Date);
+  });
+});

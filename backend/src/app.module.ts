@@ -43,6 +43,7 @@ import { LegalModule } from './modules/legal/legal.module';
 import { UsersModule } from './modules/users/users.module';
 import { MapModule } from './modules/map/map.module';
 import { SearchModule } from './modules/search/search.module';
+import { FinancialModule } from './modules/financial/financial.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
@@ -127,6 +128,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     UsersModule,
     MapModule,
     SearchModule,
+    FinancialModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

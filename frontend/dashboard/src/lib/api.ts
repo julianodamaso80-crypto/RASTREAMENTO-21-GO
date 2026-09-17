@@ -25,6 +25,11 @@ import type {
 } from '@/types/appointment';
 import type { GoogleTileSource } from '@/types/map';
 import type {
+  FinancialEntry,
+  FinancialEntryPayload,
+  FinancialFilter,
+} from '@/types/financial';
+import type {
   ActiveTagsResponse,
   BleTag,
   BleSighting,
@@ -1253,3 +1258,30 @@ function ordensParams(f: FiltroOrdens) {
     search: f.search || undefined,
   };
 }
+
+export const financialApi = {
+  getAll: async (f: FinancialFilter): Promise<FinancialEntry[]> => {
+    const res = await api.get<ApiResponse<FinancialEntry[]>>('/financial-entries', {
+      params: {
+        search: f.search || undefined,
+        status: f.status || undefined,
+        month: f.month || undefined,
+      },
+    });
+    return res.data.data;
+  },
+  create: async (payload: FinancialEntryPayload): Promise<FinancialEntry> => {
+    const res = await api.post<ApiResponse<FinancialEntry>>('/financial-entries', payload);
+    return res.data.data;
+  },
+  update: async (id: string, payload: FinancialEntryPayload): Promise<FinancialEntry> => {
+    const res = await api.patch<ApiResponse<FinancialEntry>>(
+      `/financial-entries/${id}`,
+      payload,
+    );
+    return res.data.data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await api.delete(`/financial-entries/${id}`);
+  },
+};

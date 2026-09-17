@@ -21,6 +21,7 @@ import {
   Route,
   ShieldCheck,
   CalendarDays,
+  Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { canAccessRoute, type ManageableRouteKey } from '@/lib/manageable-routes';
@@ -60,6 +61,7 @@ const navItems: NavItem[] = [
   { href: '/agenda', label: 'Agenda', icon: CalendarDays, roles: NON_CLIENT_ROLES, route: 'agenda' },
   { href: '/rotas', label: 'Rota Inteligente', icon: Route, roles: NON_CLIENT_ROLES, route: 'rotas' },
   { href: '/tecnicos', label: 'Técnicos', icon: HardHat, roles: NON_CLIENT_ROLES, route: 'tecnicos' },
+  { href: '/financeiro', label: 'Financeiro', icon: Wallet, roles: ['SUPER_ADMIN', 'ADMIN'] },
   { href: '/usuarios', label: 'Usuários e Acessos', icon: ShieldCheck, roles: ['SUPER_ADMIN', 'ADMIN'], route: 'usuarios' },
   { href: '/configuracoes', label: 'Configurações', icon: Settings, route: 'configuracoes' },
 ];

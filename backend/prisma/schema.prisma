@@ -226,6 +226,8 @@ model Tenant {
   installationRoutes   InstallationRoute[]
 
   appointments Appointment[]
+  financialEntries FinancialEntry[]
+
   @@map("tenants")
 }
 
@@ -1412,4 +1414,34 @@ model Appointment {
   @@index([tenantId, status])
   @@index([tenantId, plate])
   @@map("appointments")
+}
+
+/// Situação do lançamento financeiro — as mesmas três opções da planilha do
+/// financeiro (MIGRAÇÃO, PAGO - PIX, SEM COMPROVANTE).
+enum FinancialEntryStatus {
+  MIGRATION
+  PAID_PIX
+  NO_RECEIPT
+}
+
+/// Aba Financeiro: substitui a planilha mensal de conferência de pagamentos.
+/// Só SUPER_ADMIN e ADMIN leem ou escrevem.
+model FinancialEntry {
+  id             String               @id @default(uuid()) @db.Uuid
+  tenantId       String               @map("tenant_id") @db.Uuid
+  tenant         Tenant               @relation(fields: [tenantId], references: [id])
+  plate          String
+  status         FinancialEntryStatus
+  /// 1 a 12. Null = a planilha deixa o mês em branco (ex.: migração).
+  month          Int?
+  consultantName String?              @map("consultant_name")
+  receiptId      String?              @map("receipt_id")
+  plateCount     Int                  @default(1) @map("plate_count")
+  deletedAt      DateTime?            @map("deleted_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, plate])
+  @@map("financial_entries")
 }
