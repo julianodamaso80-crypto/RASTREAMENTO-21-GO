@@ -1,19 +1,9 @@
-import { Injectable, Logger, NotFoundException, type OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { filtroBusca } from '../../common/search/termo-busca';
 import { coletaCompleta, paraLinha, type UsuarioPower } from './consultants.mapper';
 import { PowerPanelClient } from './power-panel.client';
-
-export type FiltroStatus = 'ativo' | 'bloqueado';
-
-export interface ConsultantListQuery {
-  search?: string;
-  status?: FiltroStatus;
-  office?: number;
-  page: number;
-}
 
 export interface SyncStatus {
   syncing: boolean;
@@ -27,7 +17,6 @@ const TAMANHO_PAGINA = 1000;
 /** Trava: a base tem ~4 mil pessoas; 30 páginas é folga de 7x antes de desconfiar. */
 const MAX_PAGINAS = 30;
 const LOTE_GRAVACAO = 250;
-const POR_PAGINA_TELA = 50;
 
 /**
  * Consultores da 21 GO, espelhados do painel do Power CRM.
@@ -137,72 +126,43 @@ export class ConsultantsService implements OnModuleInit {
     }
   }
 
-  async list(tenantId: string, q: ConsultantListQuery) {
-    const base = { tenantId, deletedAt: null };
-    const busca = q.search?.trim()
-      ? (filtroBusca(q.search, {
-          texto: ['name', 'nickname', 'email', 'managerName', 'cooperative'],
-          documento: ['document'],
-          identificador: ['mobile', 'phone'],
-        }) ?? { OR: [{ id: '00000000-0000-0000-0000-000000000000' }] })
-      : {};
-    const where = {
-      ...base,
-      ...busca,
-      ...(q.status ? { active: q.status === 'ativo' } : {}),
-      ...(q.office ? { office: q.office } : {}),
-    };
-
-    const [items, total, ativos, bloqueados, cargos, ultima] = await Promise.all([
+  /**
+   * A base inteira numa chamada só (~4 mil pessoas, poucas centenas de KB comprimidos).
+   *
+   * Busca, filtro, página e ficha acontecem no navegador: o painel dispara a carga do
+   * mapa em toda tela e uma chamada por tecla ou clique entrava na fila atrás dela
+   * (medido em 17/09/2026: lista em 0,5 s no servidor e 2 a 4,5 s na tela).
+   */
+  async listAll(tenantId: string) {
+    const [items, ultima] = await Promise.all([
       this.prisma.consultant.findMany({
-        where,
+        where: { tenantId, deletedAt: null },
         orderBy: { name: 'asc' },
-        skip: q.page * POR_PAGINA_TELA,
-        take: POR_PAGINA_TELA,
         select: {
           id: true,
+          powerId: true,
           name: true,
+          nickname: true,
           email: true,
-          mobile: true,
+          document: true,
           phone: true,
+          mobile: true,
+          office: true,
           officeLabel: true,
+          branch: true,
           cooperative: true,
+          permissionGroup: true,
+          managerName: true,
           active: true,
           statusLabel: true,
+          powerCreatedAt: true,
+          lastAccessAt: true,
+          blockedAt: true,
         },
-      }),
-      this.prisma.consultant.count({ where }),
-      this.prisma.consultant.count({ where: { ...base, active: true } }),
-      this.prisma.consultant.count({ where: { ...base, active: false } }),
-      this.prisma.consultant.groupBy({
-        by: ['office', 'officeLabel'],
-        where: base,
-        _count: { _all: true },
-        orderBy: { office: 'asc' },
       }),
       this.prisma.consultant.aggregate({ where: { tenantId }, _max: { syncedAt: true } }),
     ]);
-
-    return {
-      items,
-      total,
-      page: q.page,
-      pageSize: POR_PAGINA_TELA,
-      stats: { active: ativos, blocked: bloqueados },
-      offices: cargos
-        .filter((c) => c.office !== null)
-        .map((c) => ({ office: c.office as number, label: c.officeLabel ?? `Cargo ${c.office}`, count: c._count._all })),
-      lastSyncAt: ultima._max.syncedAt,
-      syncing: this.status.syncing,
-    };
-  }
-
-  async findOne(tenantId: string, id: string) {
-    const consultor = await this.prisma.consultant.findFirst({
-      where: { id, tenantId, deletedAt: null },
-    });
-    if (!consultor) throw new NotFoundException('Consultor não encontrado');
-    return consultor;
+    return { items, lastSyncAt: ultima._max.syncedAt, syncing: this.status.syncing };
   }
 
   private async tenantPrincipal(): Promise<string | null> {

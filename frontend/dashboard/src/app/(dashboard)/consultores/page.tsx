@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Contact,
   Search,
@@ -31,17 +31,40 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import type {
-  ConsultantDetail,
-  ConsultantList,
+  Consultant,
+  ConsultantBase,
   ConsultantStatusFilter,
 } from '@/types/consultant';
 
 /**
- * Consultores da 21 GO, copiados do Power CRM a cada 30 minutos.
+ * Consultores da 21 GO, copiados do Power CRM pelo servidor a cada 30 minutos.
  *
- * A tela lê a cópia no nosso banco, nunca o Power ao vivo. Endereço não aparece
- * porque o Power não tem esse campo.
+ * A base inteira vem numa chamada só e fica em memória: busca, filtro, página e
+ * ficha são instantâneos, e voltar para a aba mostra a lista na hora enquanto
+ * ela se atualiza por trás. Endereço não aparece porque o Power não tem.
  */
+
+const POR_PAGINA = 100;
+
+/** Sobrevive à troca de tela dentro do painel. Só memória: some ao recarregar a página. */
+let baseEmMemoria: ConsultantBase | null = null;
+
+function semAcento(t: string): string {
+  return t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+function casaBusca(c: Consultant, termo: string): boolean {
+  const texto = semAcento(termo.trim());
+  if (!texto) return true;
+  const digitos = texto.replace(/\D/g, '');
+  const temLetra = /[a-z]/.test(texto);
+  if (!temLetra && digitos.length >= 3) {
+    return [c.mobile, c.phone, c.document].some((v) => v?.includes(digitos));
+  }
+  return [c.name, c.nickname, c.email, c.managerName, c.cooperative].some(
+    (v) => v && semAcento(v).includes(texto),
+  );
+}
 
 function formatTelefone(d: string | null): string | null {
   if (!d) return null;
@@ -89,109 +112,95 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function FichaConsultor({
-  id,
+  consultor: c,
+  lastSyncAt,
   onClose,
 }: {
-  id: string | null;
+  consultor: Consultant | null;
+  lastSyncAt: string | null;
   onClose: () => void;
 }) {
-  // Um consultor por montagem (a página passa key={id}): nada a zerar aqui.
-  const [c, setC] = useState<ConsultantDetail | null>(null);
-
-  useEffect(() => {
-    if (!id) return;
-    consultantsApi
-      .get(id)
-      .then(setC)
-      .catch(() => toast.error('Não consegui abrir a ficha do consultor'));
-  }, [id]);
-
-  const celular = formatTelefone(c?.mobile ?? null);
-  const fixo = formatTelefone(c?.phone ?? null);
   const whatsapp = whatsappDe(c?.mobile ?? null);
 
   return (
-    <Sheet open={!!id} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={!!c} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{c?.name ?? 'Consultor'}</SheetTitle>
-          <SheetDescription>
-            {c ? `${c.officeLabel ?? 'Sem cargo'} · Power #${c.powerId}` : 'Carregando...'}
-          </SheetDescription>
-        </SheetHeader>
+        {c && (
+          <>
+            <SheetHeader>
+              <SheetTitle>{c.name}</SheetTitle>
+              <SheetDescription>
+                {`${c.officeLabel ?? 'Sem cargo'} · Power #${c.powerId}`}
+              </SheetDescription>
+            </SheetHeader>
 
-        {!c ? (
-          <div className="space-y-3 px-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-5 px-4 pb-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge active={c.active} />
-              {c.blockedAt && (
-                <span className="text-xs text-muted-foreground">
-                  bloqueado em {formatDateBR(c.blockedAt)}
-                </span>
-              )}
-            </div>
+            <div className="space-y-5 px-4 pb-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge active={c.active} />
+                {c.blockedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    bloqueado em {formatDateBR(c.blockedAt)}
+                  </span>
+                )}
+              </div>
 
-            <div className="flex flex-wrap gap-2">
-              {whatsapp && (
-                <a href={whatsapp} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: 'sm' })}>
+              <div className="flex flex-wrap gap-2">
+                {whatsapp && (
+                  <a href={whatsapp} target="_blank" rel="noopener noreferrer" className={buttonVariants({ size: 'sm' })}>
                     <MessageCircle className="h-4 w-4" />
                     WhatsApp
                   </a>
-              )}
-              {c.mobile && (
-                <a href={`tel:${c.mobile}`} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                )}
+                {c.mobile && (
+                  <a href={`tel:${c.mobile}`} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
                     <Phone className="h-4 w-4" />
                     Ligar
                   </a>
-              )}
-              {c.email && (
-                <a href={`mailto:${c.email}`} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                )}
+                {c.email && (
+                  <a href={`mailto:${c.email}`} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
                     <Mail className="h-4 w-4" />
                     E-mail
                   </a>
-              )}
+                )}
+              </div>
+
+              <section className="grid gap-4 sm:grid-cols-2">
+                <Campo label="Celular">{formatTelefone(c.mobile)}</Campo>
+                <Campo label="Telefone">{formatTelefone(c.phone)}</Campo>
+                <div className="sm:col-span-2">
+                  <Campo label="E-mail">{c.email}</Campo>
+                </div>
+                <Campo label="CPF / CNPJ">{formatDocumento(c.document)}</Campo>
+                <Campo label="Nome de tratamento">{c.nickname}</Campo>
+              </section>
+
+              <section className="grid gap-4 sm:grid-cols-2 border-t border-border pt-4">
+                <Campo label="Cargo">{c.officeLabel}</Campo>
+                <Campo label="Grupo">{c.permissionGroup}</Campo>
+                <Campo label="Quem chamou">{c.managerName}</Campo>
+                <Campo label="Filial">{c.branch}</Campo>
+                <div className="sm:col-span-2">
+                  <Campo label="Cooperativa">{c.cooperative}</Campo>
+                </div>
+              </section>
+
+              <section className="grid gap-4 sm:grid-cols-2 border-t border-border pt-4">
+                <Campo label="Cadastrado no Power">
+                  {c.powerCreatedAt ? formatDateBR(c.powerCreatedAt) : null}
+                </Campo>
+                <Campo label="Último acesso ao Power">
+                  {c.lastAccessAt ? formatDateBR(c.lastAccessAt) : 'Nunca acessou'}
+                </Campo>
+              </section>
+
+              <p className="text-xs text-muted-foreground">
+                Dados do Power CRM
+                {lastSyncAt && ` · copiado ${formatRelativeTime(lastSyncAt)}`}. O Power não
+                tem endereço de consultor.
+              </p>
             </div>
-
-            <section className="grid gap-4 sm:grid-cols-2">
-              <Campo label="Celular">{celular}</Campo>
-              <Campo label="Telefone">{fixo}</Campo>
-              <div className="sm:col-span-2">
-                <Campo label="E-mail">{c.email}</Campo>
-              </div>
-              <Campo label="CPF / CNPJ">{formatDocumento(c.document)}</Campo>
-              <Campo label="Nome de tratamento">{c.nickname}</Campo>
-            </section>
-
-            <section className="grid gap-4 sm:grid-cols-2 border-t border-border pt-4">
-              <Campo label="Cargo">{c.officeLabel}</Campo>
-              <Campo label="Grupo">{c.permissionGroup}</Campo>
-              <Campo label="Quem chamou">{c.managerName}</Campo>
-              <Campo label="Filial">{c.branch}</Campo>
-              <div className="sm:col-span-2">
-                <Campo label="Cooperativa">{c.cooperative}</Campo>
-              </div>
-            </section>
-
-            <section className="grid gap-4 sm:grid-cols-2 border-t border-border pt-4">
-              <Campo label="Cadastrado no Power">
-                {c.powerCreatedAt ? formatDateBR(c.powerCreatedAt) : null}
-              </Campo>
-              <Campo label="Último acesso ao Power">
-                {c.lastAccessAt ? formatDateBR(c.lastAccessAt) : 'Nunca acessou'}
-              </Campo>
-            </section>
-
-            <p className="text-xs text-muted-foreground">
-              Dados do Power CRM · copiado {formatRelativeTime(c.syncedAt)}. O Power não tem
-              endereço de consultor.
-            </p>
-          </div>
+          </>
         )}
       </SheetContent>
     </Sheet>
@@ -202,40 +211,60 @@ export default function ConsultoresPage() {
   const { user } = useAuth();
   const podeAtualizar = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
 
-  const [data, setData] = useState<ConsultantList | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [base, setBase] = useState<ConsultantBase | null>(() => baseEmMemoria);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<ConsultantStatusFilter | ''>('');
   const [office, setOffice] = useState('');
   const [page, setPage] = useState(0);
-  const [aberto, setAberto] = useState<string | null>(null);
+  const [aberto, setAberto] = useState<Consultant | null>(null);
 
-  const load = useCallback(async () => {
+  const carregar = useCallback(async () => {
     try {
-      const lista = await consultantsApi.list({
-        search: search || undefined,
-        status: status || undefined,
-        office: office ? Number(office) : undefined,
-        page,
-      });
-      setData(lista);
+      const nova = await consultantsApi.all();
+      baseEmMemoria = nova;
+      setBase(nova);
     } catch {
       toast.error('Erro ao carregar consultores');
-    } finally {
-      setLoading(false);
     }
-  }, [search, status, office, page]);
+  }, []);
 
   useEffect(() => {
-    const t = setTimeout(load, 300);
-    return () => clearTimeout(t);
-  }, [load]);
+    void carregar();
+  }, [carregar]);
 
-  // Filtro novo sempre volta pra primeira página.
-  useEffect(() => {
-    setPage(0);
-  }, [search, status, office]);
+  const todos = base?.items;
+
+  const { ativos, bloqueados, cargos } = useMemo(() => {
+    const lista = todos ?? [];
+    const porCargo = new Map<number, { label: string; count: number }>();
+    for (const c of lista) {
+      if (c.office === null) continue;
+      const atual = porCargo.get(c.office);
+      if (atual) atual.count++;
+      else porCargo.set(c.office, { label: c.officeLabel ?? `Cargo ${c.office}`, count: 1 });
+    }
+    return {
+      ativos: lista.filter((c) => c.active).length,
+      bloqueados: lista.filter((c) => !c.active).length,
+      cargos: [...porCargo.entries()].sort((a, b) => a[0] - b[0]),
+    };
+  }, [todos]);
+
+  const filtrados = useMemo(
+    () =>
+      (todos ?? []).filter(
+        (c) =>
+          (!status || c.active === (status === 'ativo')) &&
+          (!office || c.office === Number(office)) &&
+          casaBusca(c, search),
+      ),
+    [todos, status, office, search],
+  );
+
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
+  const paginaAtual = Math.min(page, totalPaginas - 1);
+  const visiveis = filtrados.slice(paginaAtual * POR_PAGINA, (paginaAtual + 1) * POR_PAGINA);
 
   async function handleSync() {
     try {
@@ -251,15 +280,13 @@ export default function ConsultoresPage() {
         else toast.success(`${s.lastTotal ?? 0} consultores atualizados do Power`);
         break;
       }
-      await load();
+      await carregar();
     } catch {
       toast.error('Não consegui iniciar a atualização');
     } finally {
       setSyncing(false);
     }
   }
-
-  const totalPaginas = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
     <div className="flex flex-col h-full min-w-0 p-4 md:p-6 gap-4 overflow-auto">
@@ -270,8 +297,8 @@ export default function ConsultoresPage() {
             Consultores
           </h1>
           <p className="text-sm text-muted-foreground">
-            Todos os consultores do Power CRM · atualiza sozinho a cada 30 minutos
-            {data?.lastSyncAt && ` · atualizado ${formatRelativeTime(data.lastSyncAt)}`}
+            Todos os consultores do Power CRM · o servidor atualiza sozinho a cada 30 minutos
+            {base?.lastSyncAt && ` · atualizado ${formatRelativeTime(base.lastSyncAt)}`}
           </p>
         </div>
         {podeAtualizar && (
@@ -289,9 +316,11 @@ export default function ConsultoresPage() {
               <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Ativos</span>
               <UserCheck className="h-4 w-4 text-brand-orange-500" />
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums">
-              {(data?.stats.active ?? 0).toLocaleString('pt-BR')}
-            </p>
+            {base ? (
+              <p className="mt-2 text-2xl font-bold tabular-nums">{ativos.toLocaleString('pt-BR')}</p>
+            ) : (
+              <Skeleton className="mt-2 h-8 w-20" />
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -300,9 +329,11 @@ export default function ConsultoresPage() {
               <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Bloqueados</span>
               <UserX className="h-4 w-4 text-muted-foreground" />
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums">
-              {(data?.stats.blocked ?? 0).toLocaleString('pt-BR')}
-            </p>
+            {base ? (
+              <p className="mt-2 text-2xl font-bold tabular-nums">{bloqueados.toLocaleString('pt-BR')}</p>
+            ) : (
+              <Skeleton className="mt-2 h-8 w-20" />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -313,37 +344,52 @@ export default function ConsultoresPage() {
           <Input
             placeholder="Nome, e-mail, CPF ou telefone..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
             className="pl-9"
           />
         </div>
-        <SelectNative value={status} onChange={(e) => setStatus(e.target.value as ConsultantStatusFilter | '')}>
+        <SelectNative
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value as ConsultantStatusFilter | '');
+            setPage(0);
+          }}
+        >
           <option value="">Ativos e bloqueados</option>
           <option value="ativo">Só ativos</option>
           <option value="bloqueado">Só bloqueados</option>
         </SelectNative>
-        <SelectNative value={office} onChange={(e) => setOffice(e.target.value)}>
+        <SelectNative
+          value={office}
+          onChange={(e) => {
+            setOffice(e.target.value);
+            setPage(0);
+          }}
+        >
           <option value="">Todos os cargos</option>
-          {data?.offices.map((o) => (
-            <option key={o.office} value={o.office}>
-              {o.label} ({o.count.toLocaleString('pt-BR')})
+          {cargos.map(([codigo, c]) => (
+            <option key={codigo} value={codigo}>
+              {c.label} ({c.count.toLocaleString('pt-BR')})
             </option>
           ))}
         </SelectNative>
       </div>
 
-      {loading ? (
+      {!base ? (
         <div className="space-y-2">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-14 w-full rounded-lg" />
           ))}
         </div>
-      ) : !data || data.items.length === 0 ? (
+      ) : visiveis.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Contact className="h-12 w-12 text-muted-foreground/30 mb-3" />
             <p className="text-muted-foreground">Nenhum consultor nesse filtro</p>
-            {!data?.lastSyncAt && (
+            {!base.lastSyncAt && (
               <p className="text-xs text-muted-foreground mt-1">
                 A lista ainda não foi copiada do Power. A primeira cópia sai sozinha em instantes.
               </p>
@@ -364,10 +410,10 @@ export default function ConsultoresPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {data.items.map((c) => (
+                {visiveis.map((c) => (
                   <tr
                     key={c.id}
-                    onClick={() => setAberto(c.id)}
+                    onClick={() => setAberto(c)}
                     className="cursor-pointer hover:bg-muted/20"
                   >
                     <td className="px-3 py-2">
@@ -394,21 +440,21 @@ export default function ConsultoresPage() {
         </Card>
       )}
 
-      {data && data.total > 0 && (
+      {base && filtrados.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
-            {data.total.toLocaleString('pt-BR')} consultores · página {page + 1} de {totalPaginas}
+            {filtrados.length.toLocaleString('pt-BR')} consultores · página {paginaAtual + 1} de {totalPaginas}
           </span>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+            <Button size="sm" variant="outline" disabled={paginaAtual === 0} onClick={() => setPage(paginaAtual - 1)}>
               <ChevronLeft className="h-4 w-4" />
               Anterior
             </Button>
             <Button
               size="sm"
               variant="outline"
-              disabled={page + 1 >= totalPaginas}
-              onClick={() => setPage((p) => p + 1)}
+              disabled={paginaAtual + 1 >= totalPaginas}
+              onClick={() => setPage(paginaAtual + 1)}
             >
               Próxima
               <ChevronRight className="h-4 w-4" />
@@ -417,7 +463,7 @@ export default function ConsultoresPage() {
         </div>
       )}
 
-      <FichaConsultor key={aberto ?? 'fechada'} id={aberto} onClose={() => setAberto(null)} />
+      <FichaConsultor consultor={aberto} lastSyncAt={base?.lastSyncAt ?? null} onClose={() => setAberto(null)} />
     </div>
   );
 }
