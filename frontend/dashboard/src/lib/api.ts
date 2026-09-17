@@ -67,6 +67,12 @@ import type {
   InstallationPendingFilters,
 } from '@/types/installation-pending';
 import type {
+  ConsultantDetail,
+  ConsultantFilters,
+  ConsultantList,
+  ConsultantSyncStatus,
+} from '@/types/consultant';
+import type {
   InstallationCluster,
   InstallationRoute,
   RouteFilters,
@@ -850,6 +856,27 @@ export const techniciansApi = {
     const res = await api.get<ApiResponse<TechnicianAssignment[]>>(
       `/technicians/${id}/assignments`,
     );
+    return res.data.data;
+  },
+};
+
+/** Consultores espelhados do Power CRM — só o time interno. */
+export const consultantsApi = {
+  list: async (f: ConsultantFilters): Promise<ConsultantList> => {
+    const res = await api.get<ApiResponse<ConsultantList>>('/consultants', { params: f });
+    return res.data.data;
+  },
+  get: async (id: string): Promise<ConsultantDetail> => {
+    const res = await api.get<ApiResponse<ConsultantDetail>>(`/consultants/${id}`);
+    return res.data.data;
+  },
+  /** Volta na hora: a cópia do Power roda em background no servidor. */
+  startSync: async (): Promise<{ alreadyRunning: boolean }> => {
+    const res = await api.post<ApiResponse<{ alreadyRunning: boolean }>>('/consultants/sync');
+    return res.data.data;
+  },
+  syncStatus: async (): Promise<ConsultantSyncStatus> => {
+    const res = await api.get<ApiResponse<ConsultantSyncStatus>>('/consultants/sync/status');
     return res.data.data;
   },
 };

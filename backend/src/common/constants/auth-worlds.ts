@@ -37,6 +37,7 @@ export const INTERNAL_CONTROLLERS: readonly string[] = [
   'geofences/geofences.controller.ts',
   'hinova/hinova.controller.ts',
   'installation-pendings/installation-pendings.controller.ts',
+  'consultants/consultants.controller.ts',
   'maintenance/maintenance.controller.ts',
   'map/map.controller.ts',
   'search/search.controller.ts',
@@ -148,6 +149,7 @@ export const LEAK_PROBES: readonly LeakProbe[] = [
   { world: 'internal', controller: 'ble-tags/ble-tags.controller.ts', path: '/ble-tags' },
   { world: 'internal', controller: 'chips/chips.controller.ts', path: '/chips' },
   { world: 'internal', controller: 'clients/clients.controller.ts', path: '/clients' },
+  { world: 'internal', controller: 'consultants/consultants.controller.ts', path: '/consultants' },
   { world: 'internal', controller: 'dashboard/dashboard.controller.ts', path: '/dashboard/overview' },
   { world: 'internal', controller: 'devices/devices.controller.ts', path: '/devices' },
   {

@@ -206,6 +206,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get sgaVehicle() {
     return this.base.sgaVehicle;
   }
+  // Consultores do Power: `deletedAt` é filtrado à mão no service, como no sgaVehicle.
+  get consultant() {
+    return this.base.consultant;
+  }
   // Espelho das TAGs da plataforma de origem: é de lá que sai QUAL é a TAG e
   // ONDE ela foi vista. Sem soft delete — reescrito a cada carga.
   //

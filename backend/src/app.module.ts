@@ -21,6 +21,7 @@ import { StockModule } from './modules/stock/stock.module';
 import { GeocodingModule } from './modules/geocoding/geocoding.module';
 import { TechniciansModule } from './modules/technicians/technicians.module';
 import { InstallationPendingsModule } from './modules/installation-pendings/installation-pendings.module';
+import { ConsultantsModule } from './modules/consultants/consultants.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { TechModule } from './modules/tech/tech.module';
 import { ClientsModule } from './modules/clients/clients.module';
@@ -108,6 +109,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     TechModule,
     ClientsModule,
     InstallationPendingsModule,
+    ConsultantsModule,
     AppointmentsModule,
     SmsCommandsModule,
     ServerInfoModule,

@@ -224,6 +224,7 @@ model Tenant {
   tagLinks             TagLink[]
   tagRefreshRequests   TagRefreshRequest[]
   installationRoutes   InstallationRoute[]
+  consultants          Consultant[]
 
   appointments Appointment[]
   financialEntries FinancialEntry[]
@@ -1061,6 +1062,51 @@ model SgaVehicle {
   @@index([tenantId, chassi])
   @@index([tenantId, situationCode])
   @@map("sga_vehicles")
+}
+
+/// Consultor (e demais usuários) espelhado do painel do Power CRM. Só leitura:
+/// quem manda é o Power, um cron reescreve esta tabela. Sem endereço porque o
+/// Power não tem esse campo (conferido em 17/09/2026). Quem some do Power ganha
+/// `deletedAt` — nunca sai da tabela.
+model Consultant {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  /// `id` do usuário no painel do Power.
+  powerId         Int     @map("power_id")
+  name            String
+  /// Nome de tratamento (`name` no Power) — é o que aparece em "quem chamou".
+  nickname        String?
+  email           String?
+  /// Só dígitos: CPF (11) ou CNPJ (14).
+  document        String?
+  phone           String?
+  mobile          String?
+  /// 1 Administrador Master · 3 Vendedor · 4 Consultor · 5 Administrador de Cooperativas
+  office          Int?
+  officeLabel     String? @map("office_label")
+  branch          String?
+  cooperative     String?
+  permissionGroup String? @map("permission_group")
+  /// Nome de tratamento de quem chamou (o Power não dá o id nessa listagem).
+  managerName     String? @map("manager_name")
+  active          Boolean @default(true)
+  statusLabel     String? @map("status_label")
+
+  powerCreatedAt DateTime? @map("power_created_at")
+  lastAccessAt   DateTime? @map("last_access_at")
+  blockedAt      DateTime? @map("blocked_at")
+
+  syncedAt  DateTime  @default(now()) @map("synced_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([tenantId, powerId])
+  @@index([tenantId, active])
+  @@index([tenantId, name])
+  @@map("consultants")
 }
 
 /// Espelho da TAG que roda na RedeVeiculos (plataforma incumbente).
