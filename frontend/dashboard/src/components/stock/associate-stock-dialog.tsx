@@ -125,10 +125,11 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
   const inativoLiberado = inativo && podeLiberarInativo && liberarInativo;
   const situacaoOk = !!lookup?.encontrado && (!inativo || inativoLiberado);
 
-  // TAG não é instalada por técnico como rastreador: basta a situação do SGA.
+  // TAG e rastreador pedem os mesmos dados: quem instalou e onde ficou no carro.
   const canActivate =
     situacaoOk &&
-    (ehTag || (technicianName.trim().length > 0 && installLocation.trim().length > 0)) &&
+    technicianName.trim().length > 0 &&
+    installLocation.trim().length > 0 &&
     !submitting;
 
   const handleActivate = async () => {
@@ -138,8 +139,8 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
     try {
       await stockApi.associate(item.id, {
         placa: placa.toUpperCase().replace(/[^A-Z0-9]/g, ''),
-        technicianName: technicianName.trim() || (ehTag ? 'TAG (interno)' : ''),
-        installLocation: installLocation.trim() || (ehTag ? '—' : ''),
+        technicianName: technicianName.trim(),
+        installLocation: installLocation.trim(),
         ...(inativoLiberado ? { allowInactive: true } : {}),
       });
       toast.success(
@@ -261,8 +262,8 @@ export function AssociateStockDialog({ item, open, onOpenChange, onAssociated }:
             </div>
           )}
 
-          {/* Dados da instalação — obrigatórios (rastreador). TAG não instala. */}
-          {situacaoOk && !ehTag && (
+          {/* Dados da instalação — obrigatórios para rastreador e TAG. */}
+          {situacaoOk && (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="assoc-tec" required>Técnico que instalou</Label>
