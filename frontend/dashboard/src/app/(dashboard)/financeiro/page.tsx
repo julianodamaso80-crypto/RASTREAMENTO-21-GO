@@ -376,7 +376,7 @@ export default function FinanceiroPage() {
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                 <th className="w-[130px] px-3 py-2 font-medium">Placa</th>
-                <th className="w-[170px] px-3 py-2 font-medium">Situação financeira</th>
+                <th className="w-[200px] px-3 py-2 font-medium">Situação financeira</th>
                 <th className="w-[130px] px-3 py-2 font-medium">Mês</th>
                 <th className="px-3 py-2 font-medium">Nome consultor</th>
                 <th className="w-[150px] px-3 py-2 font-medium">Contato</th>
@@ -399,7 +399,11 @@ export default function FinanceiroPage() {
                     />
                   </td>
                   <td className="px-3 py-1.5">
-                    <StatusSelect value={e.status} onChange={(v) => patch(e, { status: v })} />
+                    <StatusSelect
+                      value={e.status}
+                      onChange={(v) => patch(e, { status: v })}
+                      className="w-full min-w-[172px]"
+                    />
                   </td>
                   <td className="px-1.5 py-1.5">
                     <select
