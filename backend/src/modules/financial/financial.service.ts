@@ -6,10 +6,6 @@ import { FINANCIAL_STATUSES } from './financial.constants';
 
 @Injectable()
 export class FinancialService {
-  private get entries() {
-    return (this.prisma as any).financialEntry;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   findAll(tenantId: string, search?: string, status?: string, month?: number) {
@@ -26,26 +22,26 @@ export class FinancialService {
       where.status = status;
     }
     if (month && month >= 1 && month <= 12) where.month = month;
-    return this.entries.findMany({ where, orderBy: { createdAt: 'desc' } });
+    return this.prisma.financialEntry.findMany({ where, orderBy: { createdAt: 'desc' } });
   }
 
   create(dto: CreateFinancialEntryDto, tenantId: string) {
-    return this.entries.create({ data: { ...dto, tenantId } });
+    return this.prisma.financialEntry.create({ data: { ...dto, tenantId } });
   }
 
   async update(id: string, dto: UpdateFinancialEntryDto, tenantId: string) {
     await this.ensureExists(id, tenantId);
-    return this.entries.update({ where: { id }, data: dto });
+    return this.prisma.financialEntry.update({ where: { id }, data: dto });
   }
 
   async remove(id: string, tenantId: string) {
     await this.ensureExists(id, tenantId);
-    await this.entries.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.financialEntry.update({ where: { id }, data: { deletedAt: new Date() } });
     return { id };
   }
 
   private async ensureExists(id: string, tenantId: string) {
-    const found = await this.entries.findFirst({
+    const found = await this.prisma.financialEntry.findFirst({
       where: { id, tenantId, deletedAt: null },
       select: { id: true },
     });
