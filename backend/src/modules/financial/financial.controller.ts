@@ -51,6 +51,15 @@ export class FinancialController {
     );
   }
 
+  @Get('consultants')
+  @ApiOperation({ summary: 'Busca consultor pelo nome para preencher nome e contato' })
+  searchConsultants(
+    @Query('search') search: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.service.searchConsultants(req.tenantId, search);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Cria um lançamento financeiro' })
   create(@Body() dto: CreateFinancialEntryDto, @Req() req: AuthenticatedRequest) {

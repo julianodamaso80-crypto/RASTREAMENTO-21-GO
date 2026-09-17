@@ -1481,6 +1481,8 @@ model FinancialEntry {
   /// 1 a 12. Null = a planilha deixa o mês em branco (ex.: migração).
   month          Int?
   consultantName String?              @map("consultant_name")
+  /// Celular do consultor, copiado da base de consultores ao escolher.
+  consultantContact String?           @map("consultant_contact")
   receiptId      String?              @map("receipt_id")
   plateCount     Int                  @default(1) @map("plate_count")
   deletedAt      DateTime?            @map("deleted_at")

@@ -6,6 +6,7 @@ export interface FinancialEntry {
   status: FinancialStatus;
   month: number | null;
   consultantName: string | null;
+  consultantContact: string | null;
   receiptId: string | null;
   plateCount: number;
   createdAt: string;
@@ -15,7 +16,7 @@ export interface FinancialEntry {
 export type FinancialEntryPayload = Partial<
   Pick<
     FinancialEntry,
-    'plate' | 'status' | 'month' | 'consultantName' | 'receiptId' | 'plateCount'
+    'plate' | 'status' | 'month' | 'consultantName' | 'consultantContact' | 'receiptId' | 'plateCount'
   >
 >;
 
@@ -27,4 +28,12 @@ export interface FinancialFilter {
   from?: string;
   /** ISO, exclusivo. */
   to?: string;
+}
+
+export interface ConsultantOption {
+  id: string;
+  name: string;
+  mobile: string | null;
+  phone: string | null;
+  active: boolean;
 }

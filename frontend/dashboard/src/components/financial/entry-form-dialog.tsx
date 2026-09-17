@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import type { FinancialStatus } from '@/types/financial';
 import { MONTHS } from './financial-meta';
+import { ConsultantCombobox } from './consultant-combobox';
 import { StatusSelect } from './status-select';
 
 export function EntryFormDialog({
@@ -32,6 +33,7 @@ export function EntryFormDialog({
   const [status, setStatus] = useState<FinancialStatus>('PAID_PIX');
   const [month, setMonth] = useState<string>(String(new Date().getMonth() + 1));
   const [consultantName, setConsultantName] = useState('');
+  const [consultantContact, setConsultantContact] = useState('');
   const [receiptId, setReceiptId] = useState('');
   const [plateCount, setPlateCount] = useState('1');
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,7 @@ export function EntryFormDialog({
     setStatus('PAID_PIX');
     setMonth(String(new Date().getMonth() + 1));
     setConsultantName('');
+    setConsultantContact('');
     setReceiptId('');
     setPlateCount('1');
   }, [open]);
@@ -63,6 +66,7 @@ export function EntryFormDialog({
         status,
         month: month ? Number(month) : null,
         consultantName: consultantName.trim() || null,
+        consultantContact: consultantContact.trim() || null,
         receiptId: receiptId.trim() || null,
         plateCount: qtd,
       });
@@ -102,7 +106,7 @@ export function EntryFormDialog({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Situação financeira</Label>
-            <StatusSelect value={status} onChange={setStatus} />
+            <StatusSelect value={status} onChange={setStatus} className="w-full" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="fin-mes">Mês</Label>
@@ -125,13 +129,27 @@ export function EntryFormDialog({
               onChange={(e) => setPlateCount(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5 sm:col-span-2">
+          <div className="space-y-1.5">
             <Label htmlFor="fin-consultor">Nome consultor</Label>
-            <Input
+            <ConsultantCombobox
+              key={open ? 'aberto' : 'fechado'}
               id="fin-consultor"
               value={consultantName}
-              onChange={(e) => setConsultantName(e.target.value)}
-              placeholder="Ex.: RAMON PONTES ARAUJO"
+              placeholder="Digite para buscar"
+              onCommit={(c, daLista) => {
+                setConsultantName(c.name);
+                if (daLista) setConsultantContact(c.contact ?? '');
+              }}
+              className="h-9 w-full min-w-0 rounded-lg border border-border bg-input px-3 text-sm outline-none focus-visible:border-brand-orange-500 focus-visible:ring-2 focus-visible:ring-brand-orange-500/30"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="fin-contato">Contato</Label>
+            <Input
+              id="fin-contato"
+              value={consultantContact}
+              onChange={(e) => setConsultantContact(e.target.value)}
+              placeholder="Vem ao escolher o consultor"
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">

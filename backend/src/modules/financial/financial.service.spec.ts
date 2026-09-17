@@ -12,6 +12,7 @@ function prismaFalso() {
       create: jest.fn().mockImplementation(({ data }) => ({ id: 'novo', ...data })),
       update: jest.fn().mockImplementation(({ data }) => ({ id: 'x', ...data })),
     },
+    consultant: { findMany: jest.fn().mockResolvedValue([]) },
   };
 }
 
@@ -49,6 +50,20 @@ describe('FinancialService', () => {
 
     await service.findAll(TENANT, '', '', undefined, 'ontem', undefined);
     expect(prisma.financialEntry.findMany.mock.calls[1][0].where.createdAt).toBeUndefined();
+  });
+
+  it('busca consultor só na empresa do usuário e não lista a base inteira sem termo', async () => {
+    const prisma = prismaFalso();
+    const service = new FinancialService(prisma as unknown as PrismaService);
+    expect(await service.searchConsultants(TENANT, '  ')).toEqual([]);
+    expect(prisma.consultant.findMany).not.toHaveBeenCalled();
+
+    await service.searchConsultants(TENANT, 'ramon');
+    const { where, take } = prisma.consultant.findMany.mock.calls[0][0];
+    expect(where.tenantId).toBe(TENANT);
+    expect(where.deletedAt).toBeNull();
+    expect(where.OR[0].name.contains).toBe('ramon');
+    expect(take).toBe(15);
   });
 
   it('exclusão é soft delete e não mexe em lançamento de outra empresa', async () => {

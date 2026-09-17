@@ -38,6 +38,25 @@ export class FinancialService {
     return this.prisma.financialEntry.findMany({ where, orderBy: { createdAt: 'desc' } });
   }
 
+  /** Sugestões do campo consultor: base espelhada do Power CRM, ativos primeiro. */
+  searchConsultants(tenantId: string, search?: string) {
+    const termo = search?.trim();
+    if (!termo) return [];
+    return this.prisma.consultant.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        OR: [
+          { name: { contains: termo, mode: 'insensitive' } },
+          { nickname: { contains: termo, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, name: true, mobile: true, phone: true, active: true },
+      orderBy: [{ active: 'desc' }, { name: 'asc' }],
+      take: 15,
+    });
+  }
+
   create(dto: CreateFinancialEntryDto, tenantId: string) {
     return this.prisma.financialEntry.create({ data: { ...dto, tenantId } });
   }

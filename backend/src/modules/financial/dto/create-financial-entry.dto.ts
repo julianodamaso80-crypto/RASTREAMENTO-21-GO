@@ -43,6 +43,13 @@ export class CreateFinancialEntryDto {
   @MaxLength(160)
   consultantName?: string | null;
 
+  @ApiPropertyOptional({ example: '(21) 99834-5046' })
+  @IsOptional()
+  @Transform(aparar)
+  @IsString()
+  @MaxLength(40)
+  consultantContact?: string | null;
+
   @ApiPropertyOptional({ example: 'E18236120202609021756s12ddb5002f' })
   @IsOptional()
   @Transform(aparar)

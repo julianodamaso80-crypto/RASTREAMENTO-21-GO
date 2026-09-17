@@ -25,6 +25,7 @@ import type {
 } from '@/types/appointment';
 import type { GoogleTileSource } from '@/types/map';
 import type {
+  ConsultantOption,
   FinancialEntry,
   FinancialEntryPayload,
   FinancialFilter,
@@ -1304,5 +1305,12 @@ export const financialApi = {
   },
   remove: async (id: string): Promise<void> => {
     await api.delete(`/financial-entries/${id}`);
+  },
+  searchConsultants: async (search: string): Promise<ConsultantOption[]> => {
+    const res = await api.get<ApiResponse<ConsultantOption[]>>(
+      '/financial-entries/consultants',
+      { params: { search } },
+    );
+    return res.data.data;
   },
 };
