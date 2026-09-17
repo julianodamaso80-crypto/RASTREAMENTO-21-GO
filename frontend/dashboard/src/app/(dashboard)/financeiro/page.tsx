@@ -218,7 +218,7 @@ export default function FinanceiroPage() {
         <StatCard3D
           label="Quantidade de placas"
           value={totals.plates}
-          hint={`Em ${entries.length.toLocaleString('pt-BR')} lançamentos`}
+          hint={`Em ${entries.length.toLocaleString('pt-BR')} ${entries.length === 1 ? 'lançamento' : 'lançamentos'}`}
           icon={Hash}
           from="#4257a3"
           to="#293c82"
@@ -325,7 +325,7 @@ export default function FinanceiroPage() {
                         onChange={(ev) =>
                           patch(e, { month: ev.target.value ? Number(ev.target.value) : null })
                         }
-                        className="min-w-[140px] border-transparent bg-transparent font-semibold hover:border-white/10"
+                        className="min-w-[140px] border-transparent bg-transparent font-semibold text-slate-100 hover:border-white/10 hover:bg-white/5"
                       >
                         <option value="">—</option>
                         {MONTHS.map((m, idx) => (
