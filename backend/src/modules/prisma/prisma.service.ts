@@ -161,6 +161,11 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get financialEntry() {
     return this.ext.financialEntry;
   }
+  // Comprovante anexado ao lançamento. Sem soft delete: some junto com o
+  // lançamento (onDelete: Cascade) ou quando alguém troca o arquivo.
+  get financialReceipt() {
+    return this.base.financialReceipt;
+  }
 
   // Models sem soft delete — usam cliente base (tabela de junção / log de comandos / audit)
   get geofenceVehicle() {

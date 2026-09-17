@@ -1489,7 +1489,28 @@ model FinancialEntry {
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
 
+  receipt FinancialReceipt?
+
   @@index([tenantId, deletedAt])
   @@index([tenantId, plate])
   @@map("financial_entries")
+}
+
+/// Comprovante de pagamento anexado a um lançamento (imagem ou PDF).
+/// Mora em tabela separada porque `data` é o arquivo inteiro: na mesma tabela
+/// do lançamento, toda listagem arrastaria megabytes.
+model FinancialReceipt {
+  id       String         @id @default(uuid()) @db.Uuid
+  entryId  String         @unique @map("entry_id") @db.Uuid
+  entry    FinancialEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  fileName String         @map("file_name")
+  mimeType String         @map("mime_type")
+  size     Int
+  data     Bytes
+  /// Quem anexou (users.id). Fica solto de propósito: usuário apagado não
+  /// pode derrubar o comprovante.
+  uploadedById String?   @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@map("financial_receipts")
 }

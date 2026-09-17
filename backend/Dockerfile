@@ -28,6 +28,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+# Logomarca usada no PDF do relatório do Financeiro.
+COPY --from=builder /app/assets ./assets
 
 ARG GIT_SHA=undefined
 ARG BUILD_TIME=undefined

@@ -11,6 +11,13 @@ export interface FinancialEntry {
   plateCount: number;
   createdAt: string;
   updatedAt: string;
+  /** Comprovante anexado (imagem ou PDF). Null = ainda não anexaram. */
+  receipt: {
+    fileName: string;
+    mimeType: string;
+    size: number;
+    createdAt: string;
+  } | null;
 }
 
 export type FinancialEntryPayload = Partial<

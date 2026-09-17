@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2, Wallet } from 'lucide-react';
+import { Download, Loader2, Plus, Search, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { financialApi } from '@/lib/api';
@@ -15,6 +15,7 @@ import { SelectNative } from '@/components/ui/select-native';
 import { EntryFormDialog } from '@/components/financial/entry-form-dialog';
 import { StatusSelect } from '@/components/financial/status-select';
 import { ConsultantCombobox } from '@/components/financial/consultant-combobox';
+import { ReceiptCell } from '@/components/financial/receipt-cell';
 import {
   FINANCIAL_STATUS_META,
   FINANCIAL_STATUS_ORDER,
@@ -190,6 +191,7 @@ export default function FinanceiroPage() {
   const [de, setDe] = useState('');
   const [ate, setAte] = useState('');
   const [formOpen, setFormOpen] = useState(false);
+  const [baixando, setBaixando] = useState(false);
 
   useEffect(() => {
     if (user && !canView) router.replace('/dashboard');
@@ -246,6 +248,32 @@ export default function FinanceiroPage() {
     }
   };
 
+  /** Baixa o PDF do que está filtrado na tela — mesmo período, busca e mês. */
+  const exportarPdf = async () => {
+    const { from, to } = limitesDoPeriodo(periodo, de, ate);
+    setBaixando(true);
+    try {
+      const blob = await financialApi.relatorioPdf({
+        search: debounced,
+        status,
+        month,
+        from: from?.toISOString(),
+        to: to?.toISOString(),
+        periodo: PERIODOS.find((p) => p.key === periodo)?.label,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `financeiro-${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch {
+      toast.error('Erro ao gerar o relatório');
+    } finally {
+      setBaixando(false);
+    }
+  };
+
   const remove = async (entry: FinancialEntry) => {
     if (!confirm(`Excluir o lançamento da placa ${entry.plate}?`)) return;
     try {
@@ -271,10 +299,25 @@ export default function FinanceiroPage() {
             Conferência de pagamentos por placa. Clique na célula para editar.
           </p>
         </div>
-        <Button size="sm" onClick={() => setFormOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Novo lançamento
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={exportarPdf}
+            disabled={baixando || loading}
+          >
+            {baixando ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-1 h-4 w-4" />
+            )}
+            Exportar PDF
+          </Button>
+          <Button size="sm" onClick={() => setFormOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Novo lançamento
+          </Button>
+        </div>
       </div>
 
       <div className="flex shrink-0 gap-2 overflow-x-auto pb-1">
@@ -372,7 +415,7 @@ export default function FinanceiroPage() {
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[1080px] text-sm">
+          <table className="w-full min-w-[1210px] text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
                 <th className="w-[130px] px-3 py-2 font-medium">Placa</th>
@@ -382,6 +425,7 @@ export default function FinanceiroPage() {
                 <th className="w-[150px] px-3 py-2 font-medium">Contato</th>
                 <th className="px-3 py-2 font-medium">ID do comprovante</th>
                 <th className="w-[110px] px-3 py-2 text-center font-medium">Qtd. de placas</th>
+                <th className="w-[130px] px-3 py-2 font-medium">Comprovante</th>
                 <th className="w-12 px-3 py-2" />
               </tr>
             </thead>
@@ -467,6 +511,16 @@ export default function FinanceiroPage() {
                         }
                         patch(e, { plateCount: n });
                       }}
+                    />
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <ReceiptCell
+                      entry={e}
+                      onChange={(atualizado) =>
+                        setEntries((list) =>
+                          list.map((x) => (x.id === atualizado.id ? atualizado : x)),
+                        )
+                      }
                     />
                   </td>
                   <td className="px-3 py-1.5 text-right">

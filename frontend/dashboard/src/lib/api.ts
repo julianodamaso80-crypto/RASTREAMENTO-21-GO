@@ -1306,6 +1306,42 @@ export const financialApi = {
   remove: async (id: string): Promise<void> => {
     await api.delete(`/financial-entries/${id}`);
   },
+  anexarComprovante: async (id: string, file: File): Promise<FinancialEntry> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await api.post<ApiResponse<FinancialEntry>>(
+      `/financial-entries/${id}/receipt`,
+      form,
+    );
+    return res.data.data;
+  },
+  /** Blob do comprovante — o arquivo exige o token, não dá para usar <a href>. */
+  baixarComprovante: async (id: string): Promise<Blob> => {
+    const res = await api.get(`/financial-entries/${id}/receipt`, {
+      responseType: 'blob',
+    });
+    return res.data as Blob;
+  },
+  removerComprovante: async (id: string): Promise<FinancialEntry> => {
+    const res = await api.delete<ApiResponse<FinancialEntry>>(
+      `/financial-entries/${id}/receipt`,
+    );
+    return res.data.data;
+  },
+  relatorioPdf: async (f: FinancialFilter & { periodo?: string }): Promise<Blob> => {
+    const res = await api.get('/financial-entries/report.pdf', {
+      params: {
+        search: f.search || undefined,
+        status: f.status || undefined,
+        month: f.month || undefined,
+        from: f.from || undefined,
+        to: f.to || undefined,
+        periodo: f.periodo || undefined,
+      },
+      responseType: 'blob',
+    });
+    return res.data as Blob;
+  },
   searchConsultants: async (search: string): Promise<ConsultantOption[]> => {
     const res = await api.get<ApiResponse<ConsultantOption[]>>(
       '/financial-entries/consultants',

@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { FinancialService } from './financial.service';
 import type { PrismaService } from '../prisma/prisma.service';
 
@@ -12,6 +12,12 @@ function prismaFalso() {
       create: jest.fn().mockImplementation(({ data }) => ({ id: 'novo', ...data })),
       update: jest.fn().mockImplementation(({ data }) => ({ id: 'x', ...data })),
     },
+    financialReceipt: {
+      upsert: jest.fn().mockResolvedValue({}),
+      findUnique: jest.fn().mockResolvedValue(null),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    tenant: { findFirst: jest.fn().mockResolvedValue({ name: '21 GO' }) },
     consultant: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -110,6 +116,75 @@ describe('FinancialService', () => {
       expect(await service.registrarVinculo({ tenantId: TENANT, plate: 'SRL5A25' })).toBeNull();
       expect(prisma.financialEntry.create).not.toHaveBeenCalled();
     });
+  });
+
+  describe('comprovante de pagamento', () => {
+    const arquivo = (mimetype: string) => ({
+      originalname: 'comprovante.pdf',
+      mimetype,
+      size: 1234,
+      buffer: Buffer.from('conteudo'),
+    });
+
+    it('aceita imagem e PDF e substitui o anexo anterior', async () => {
+      const prisma = prismaFalso();
+      prisma.financialEntry.findFirst.mockResolvedValue({ id: 'lanc-1' });
+      const service = new FinancialService(prisma as unknown as PrismaService);
+      await service.anexarComprovante('lanc-1', TENANT, arquivo('application/pdf'), 'user-1');
+      const chamada = prisma.financialReceipt.upsert.mock.calls[0][0];
+      expect(chamada.where).toEqual({ entryId: 'lanc-1' });
+      expect(chamada.update.mimeType).toBe('application/pdf');
+      expect(chamada.create.uploadedById).toBe('user-1');
+    });
+
+    it('recusa tipo que não é imagem nem PDF', async () => {
+      const prisma = prismaFalso();
+      prisma.financialEntry.findFirst.mockResolvedValue({ id: 'lanc-1' });
+      const service = new FinancialService(prisma as unknown as PrismaService);
+      await expect(
+        service.anexarComprovante('lanc-1', TENANT, arquivo('application/zip')),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      expect(prisma.financialReceipt.upsert).not.toHaveBeenCalled();
+    });
+
+    it('lançamento de outra empresa não deixa anexar', async () => {
+      const prisma = prismaFalso();
+      const service = new FinancialService(prisma as unknown as PrismaService);
+      await expect(
+        service.anexarComprovante('lanc-1', TENANT, arquivo('image/png')),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  it('relatório sai em PDF de verdade, com os filtros do período', async () => {
+    const prisma = prismaFalso();
+    prisma.financialEntry.findMany.mockResolvedValue([
+      {
+        plate: 'SRL5A25',
+        status: 'PAID_PIX',
+        month: 9,
+        consultantName: 'RAMON',
+        consultantContact: '(21) 99834-5046',
+        receiptId: null,
+        plateCount: 1,
+        createdAt: new Date(),
+        receipt: { fileName: 'c.pdf' },
+      },
+    ]);
+    const service = new FinancialService(prisma as unknown as PrismaService);
+    const doc = await service.relatorioPdf(TENANT, {
+      from: '2026-09-14T03:00:00.000Z',
+      to: '2026-09-21T03:00:00.000Z',
+    });
+    const bytes: Buffer = await new Promise((resolve, reject) => {
+      const partes: Buffer[] = [];
+      doc.on('data', (p: Buffer) => partes.push(p));
+      doc.on('end', () => resolve(Buffer.concat(partes)));
+      doc.on('error', reject);
+      doc.end();
+    });
+    expect(bytes.subarray(0, 4).toString()).toBe('%PDF');
+    expect(bytes.length).toBeGreaterThan(1000);
   });
 
   it('exclusão é soft delete e não mexe em lançamento de outra empresa', async () => {
