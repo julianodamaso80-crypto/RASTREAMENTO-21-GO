@@ -77,6 +77,7 @@ function montar(item: Record<string, unknown>, lookup: HinovaLookupResult = ATIV
     { lookup: jest.fn().mockResolvedValue(lookup), contato: jest.fn(), tipoCru: jest.fn() } as never,
     {} as never,
     {} as never,
+    { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
   );
   return { s, prisma, tx, traccar, stockTraccar, pendencias };
 }

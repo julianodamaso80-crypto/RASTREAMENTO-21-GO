@@ -12,7 +12,10 @@ function prismaFalso() {
       create: jest.fn().mockImplementation(({ data }) => ({ id: 'novo', ...data })),
       update: jest.fn().mockImplementation(({ data }) => ({ id: 'x', ...data })),
     },
-    consultant: { findMany: jest.fn().mockResolvedValue([]) },
+    consultant: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
   };
 }
 
@@ -64,6 +67,49 @@ describe('FinancialService', () => {
     expect(where.deletedAt).toBeNull();
     expect(where.OR[0].name.contains).toBe('ramon');
     expect(take).toBe(15);
+  });
+
+  describe('vínculo feito no Estoque abre a linha do Financeiro', () => {
+    it('nasce em SEM COMPROVANTE com o celular do consultor', async () => {
+      const prisma = prismaFalso();
+      prisma.consultant.findFirst.mockResolvedValue({
+        mobile: '21998345046',
+        phone: null,
+      });
+      const service = new FinancialService(prisma as unknown as PrismaService);
+      await service.registrarVinculo({
+        tenantId: TENANT,
+        plate: ' srl5a25 ',
+        consultantName: ' Ramon Pontes Araujo ',
+      });
+      const { data } = prisma.financialEntry.create.mock.calls[0][0];
+      expect(data).toMatchObject({
+        tenantId: TENANT,
+        plate: 'SRL5A25',
+        status: 'NO_RECEIPT',
+        consultantName: 'RAMON PONTES ARAUJO',
+        consultantContact: '(21) 99834-5046',
+      });
+    });
+
+    it('sem consultor na pendência a linha vem só com a placa', async () => {
+      const prisma = prismaFalso();
+      const service = new FinancialService(prisma as unknown as PrismaService);
+      await service.registrarVinculo({ tenantId: TENANT, plate: 'SRL5A25' });
+      expect(prisma.consultant.findFirst).not.toHaveBeenCalled();
+      expect(prisma.financialEntry.create.mock.calls[0][0].data).toMatchObject({
+        consultantName: null,
+        consultantContact: null,
+      });
+    });
+
+    it('placa que já tem lançamento aberto não ganha outro', async () => {
+      const prisma = prismaFalso();
+      prisma.financialEntry.findFirst.mockResolvedValue({ id: 'ja-existe' });
+      const service = new FinancialService(prisma as unknown as PrismaService);
+      expect(await service.registrarVinculo({ tenantId: TENANT, plate: 'SRL5A25' })).toBeNull();
+      expect(prisma.financialEntry.create).not.toHaveBeenCalled();
+    });
   });
 
   it('exclusão é soft delete e não mexe em lançamento de outra empresa', async () => {

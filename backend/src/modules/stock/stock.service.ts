@@ -38,6 +38,7 @@ import { SgaMirrorService } from '../installation-pendings/sga-mirror.service';
 import { RoutesService } from '../installation-pendings/routes.service';
 import { StockTraccarService } from './stock-traccar.service';
 import { PositionsService } from '../positions/positions.service';
+import { FinancialService } from '../financial/financial.service';
 import { ValidateStockDto } from './dto/validate-stock.dto';
 
 type ParsedRow = {
@@ -146,6 +147,7 @@ export class StockService {
     private mirror: SgaMirrorService,
     private routes: RoutesService,
     private positions: PositionsService,
+    private financial: FinancialService,
   ) {}
 
   /**
@@ -1208,7 +1210,30 @@ export class StockService {
     // Tudo daqui pra baixo é best-effort: a instalação JÁ foi commitada, então
     // nenhuma falha acessória pode virar erro pro técnico (ele tentaria de novo
     // e receberia "item já associado", que confunde). Ver P1.6 do plano.
+    // O consultor da venda vem da pendência do SGA (nome_voluntario) — e ela
+    // é apagada logo abaixo, então lê antes.
+    const pendencia = await this.prisma.installationPending.findFirst({
+      where: { tenantId, plate: placa },
+      select: { consultantName: true },
+    });
+
     await this.installationPendings.removeByPlate(tenantId, placa);
+
+    // Placa vinculada entra na aba Financeiro com placa, consultor e contato.
+    try {
+      await this.financial.registrarVinculo({
+        tenantId,
+        plate: placa,
+        consultantName: pendencia?.consultantName,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Não consegui abrir o lançamento financeiro da placa ${placa}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    }
+
     try {
       await this.routes.markStopDoneByPlate(tenantId, placa);
     } catch (error) {

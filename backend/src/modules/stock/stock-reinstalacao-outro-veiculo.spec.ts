@@ -108,6 +108,7 @@ function servico(opcoes: {
     } as never,
     {} as never,
     {} as never,
+    { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
   );
   return { s, tx };
 }

@@ -94,6 +94,7 @@ function servico(tipoNoEspelho: string | null, chassi = VIVO.veiculo.chassi) {
     } as never,
     { markStopDoneByPlate: jest.fn().mockResolvedValue(undefined) } as never,
     { persistIfRelevant: jest.fn().mockResolvedValue(undefined) } as never,
+    { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
   );
   return { s, tx, tipoCru };
 }

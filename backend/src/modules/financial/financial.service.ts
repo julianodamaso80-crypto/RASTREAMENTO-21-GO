@@ -4,6 +4,14 @@ import { CreateFinancialEntryDto } from './dto/create-financial-entry.dto';
 import { UpdateFinancialEntryDto } from './dto/update-financial-entry.dto';
 import { FINANCIAL_STATUSES } from './financial.constants';
 
+/** Celular só com dígitos → (21) 99834-5046. Formato desconhecido volta como veio. */
+function formatarContato(valor: string | null | undefined): string | null {
+  const d = (valor ?? '').replace(/\D/g, '');
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return valor?.trim() || null;
+}
+
 @Injectable()
 export class FinancialService {
   constructor(private prisma: PrismaService) {}
@@ -54,6 +62,55 @@ export class FinancialService {
       select: { id: true, name: true, mobile: true, phone: true, active: true },
       orderBy: [{ active: 'desc' }, { name: 'asc' }],
       take: 15,
+    });
+  }
+
+  /**
+   * Vínculo feito no Estoque ("Associar (SGA)") abre a linha do Financeiro com
+   * o que o sistema já sabe: placa, consultor (nome do voluntário que o SGA
+   * mandou na pendência) e o celular dele na base de consultores. O resto —
+   * situação, mês, comprovante, quantidade — o financeiro preenche na mão, por
+   * isso a linha nasce em SEM COMPROVANTE.
+   *
+   * Placa que já tem lançamento aberto não gera outro: reinstalar o rastreador
+   * no mesmo carro não é venda nova.
+   */
+  async registrarVinculo(dados: {
+    tenantId: string;
+    plate: string;
+    consultantName?: string | null;
+  }) {
+    const plate = dados.plate.trim().toUpperCase();
+    if (!plate) return null;
+    const jaTem = await this.prisma.financialEntry.findFirst({
+      where: { tenantId: dados.tenantId, plate, deletedAt: null },
+      select: { id: true },
+    });
+    if (jaTem) return null;
+
+    const consultantName = dados.consultantName?.trim().toUpperCase() || null;
+    let consultantContact: string | null = null;
+    if (consultantName) {
+      const consultor = await this.prisma.consultant.findFirst({
+        where: {
+          tenantId: dados.tenantId,
+          deletedAt: null,
+          name: { equals: consultantName, mode: 'insensitive' },
+        },
+        orderBy: { active: 'desc' },
+        select: { mobile: true, phone: true },
+      });
+      consultantContact = formatarContato(consultor?.mobile || consultor?.phone);
+    }
+
+    return this.prisma.financialEntry.create({
+      data: {
+        tenantId: dados.tenantId,
+        plate,
+        status: 'NO_RECEIPT',
+        consultantName,
+        consultantContact,
+      },
     });
   }
 
