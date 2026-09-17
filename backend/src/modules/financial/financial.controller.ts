@@ -37,6 +37,8 @@ export class FinancialController {
     @Query('search') search: string | undefined,
     @Query('status') status: string | undefined,
     @Query('month') month: string | undefined,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.service.findAll(
@@ -44,6 +46,8 @@ export class FinancialController {
       search,
       status,
       month ? Number(month) : undefined,
+      from,
+      to,
     );
   }
 

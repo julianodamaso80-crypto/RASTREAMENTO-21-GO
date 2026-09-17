@@ -38,6 +38,19 @@ describe('FinancialService', () => {
     expect(where.OR).toBeUndefined();
   });
 
+  it('filtra pelo período do lançamento e ignora data inválida', async () => {
+    const prisma = prismaFalso();
+    const service = new FinancialService(prisma as unknown as PrismaService);
+    await service.findAll(TENANT, '', '', undefined, '2026-09-14T03:00:00.000Z', '2026-09-21T03:00:00.000Z');
+    expect(prisma.financialEntry.findMany.mock.calls[0][0].where.createdAt).toEqual({
+      gte: new Date('2026-09-14T03:00:00.000Z'),
+      lt: new Date('2026-09-21T03:00:00.000Z'),
+    });
+
+    await service.findAll(TENANT, '', '', undefined, 'ontem', undefined);
+    expect(prisma.financialEntry.findMany.mock.calls[1][0].where.createdAt).toBeUndefined();
+  });
+
   it('exclusão é soft delete e não mexe em lançamento de outra empresa', async () => {
     const prisma = prismaFalso();
     const service = new FinancialService(prisma as unknown as PrismaService);

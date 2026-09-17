@@ -8,7 +8,14 @@ import { FINANCIAL_STATUSES } from './financial.constants';
 export class FinancialService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(tenantId: string, search?: string, status?: string, month?: number) {
+  findAll(
+    tenantId: string,
+    search?: string,
+    status?: string,
+    month?: number,
+    from?: string,
+    to?: string,
+  ) {
     const where: any = { tenantId, deletedAt: null };
     const termo = search?.trim();
     if (termo) {
@@ -22,6 +29,12 @@ export class FinancialService {
       where.status = status;
     }
     if (month && month >= 1 && month <= 12) where.month = month;
+    // Período do lançamento: `from` inclusivo, `to` exclusivo. O painel manda
+    // os limites já no fuso de quem está olhando.
+    const inicio = from ? new Date(from) : null;
+    const fim = to ? new Date(to) : null;
+    if (inicio && !isNaN(inicio.getTime())) where.createdAt = { gte: inicio };
+    if (fim && !isNaN(fim.getTime())) where.createdAt = { ...where.createdAt, lt: fim };
     return this.prisma.financialEntry.findMany({ where, orderBy: { createdAt: 'desc' } });
   }
 

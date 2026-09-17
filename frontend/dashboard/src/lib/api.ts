@@ -1285,6 +1285,8 @@ export const financialApi = {
         search: f.search || undefined,
         status: f.status || undefined,
         month: f.month || undefined,
+        from: f.from || undefined,
+        to: f.to || undefined,
       },
     });
     return res.data.data;

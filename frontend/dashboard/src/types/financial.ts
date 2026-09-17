@@ -23,4 +23,8 @@ export interface FinancialFilter {
   search?: string;
   status?: FinancialStatus | '';
   month?: number | '';
+  /** ISO, inclusivo. */
+  from?: string;
+  /** ISO, exclusivo. */
+  to?: string;
 }

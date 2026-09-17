@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import type { FinancialStatus } from '@/types/financial';
 import { FINANCIAL_STATUS_META, FINANCIAL_STATUS_ORDER } from './financial-meta';
 
-/** Seletor da situação em forma de selo em relevo, na cor da opção escolhida. */
+/** Seletor da situação pintado com a cor da opção, como a célula da planilha. */
 export function StatusSelect({
   value,
   onChange,
@@ -17,18 +17,13 @@ export function StatusSelect({
 }) {
   const meta = FINANCIAL_STATUS_META[value];
   return (
-    <div className={cn('relative inline-flex w-full min-w-[168px]', className)}>
+    <div className={cn('relative w-full', className)}>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as FinancialStatus)}
         aria-label="Situação financeira"
-        className="h-9 w-full cursor-pointer appearance-none rounded-lg pl-3 pr-8 text-xs font-extrabold tracking-wide outline-none transition-transform duration-150 hover:-translate-y-px active:translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white/60 [&>option]:bg-popover [&>option]:text-foreground"
-        style={{
-          color: meta.text,
-          background: `linear-gradient(180deg, ${meta.from} 0%, ${meta.to} 100%)`,
-          boxShadow: `inset 0 1px 0 rgba(255,255,255,.45), 0 3px 0 ${meta.edge}, 0 6px 14px -4px ${meta.edge}`,
-          textShadow: meta.text === '#ffffff' ? '0 1px 1px rgba(0,0,0,.35)' : 'none',
-        }}
+        className="h-8 w-full cursor-pointer appearance-none px-2 pr-7 text-center text-xs font-bold outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-blue-500 [&>option]:bg-white [&>option]:text-slate-900"
+        style={{ color: meta.text, backgroundColor: meta.bg }}
       >
         {FINANCIAL_STATUS_ORDER.map((s) => (
           <option key={s} value={s}>
@@ -37,7 +32,7 @@ export function StatusSelect({
         ))}
       </select>
       <ChevronDown
-        className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2"
+        className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
         style={{ color: meta.text }}
       />
     </div>
