@@ -397,6 +397,17 @@ export class HinovaService implements IHinovaClient {
         );
       } catch (error: unknown) {
         ultimoErro = error;
+        // Bloqueio por volume (403 "Token BLOQUEADO") só é liberado depois de
+        // minutos SEM uso — insistir mantém o token bloqueado. Ver
+        // bloqueio-sga.spec.ts.
+        const resposta = (error as { response?: { status: number; data?: unknown } })
+          .response;
+        if (resposta?.status === 403) {
+          throw new Error(
+            HinovaService.extractError(resposta.data) ||
+              'SGA recusou o acesso (403).',
+          );
+        }
         if (tentativa === TENTATIVAS) break;
         // 401 força reautenticação na próxima volta.
         if ((error as { response?: { status: number } }).response?.status === 401) {
