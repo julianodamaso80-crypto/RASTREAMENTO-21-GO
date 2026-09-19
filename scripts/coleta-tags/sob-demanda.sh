@@ -86,14 +86,16 @@ if [ -s "$PASTA/posicoes-sob-demanda.csv" ]; then
   docker exec "$cid" rm -f /tmp/pos.csv
 fi
 
-ids=$(cut -d'|' -f1 "$PASTA/pedidos.csv" | paste -sd"','" -)
+# Cada id entre aspas e separado por virgula. `paste -d"','"` NAO serve: o -d
+# e uma lista de caracteres usados em rodizio, e com 2+ pedidos o SQL quebrava.
+ids=$(cut -d'|' -f1 "$PASTA/pedidos.csv" | sed "s/.*/'&'/" | paste -sd, -)
 psql -c "UPDATE tag_refresh_requests
             SET done_at = now(),
                 positions_found = COALESCE((
                   SELECT count(*) FROM tag_positions tp
                    WHERE tp.serial_number = tag_refresh_requests.serial_number
                      AND tp.received_at > tag_refresh_requests.requested_at), 0)
-          WHERE id IN ('$ids');" > /dev/null 2>>"$LOG"
+          WHERE id IN ($ids);" > /dev/null 2>>"$LOG"
 
 registrar "fim — $novos avistamento(s) novo(s) em $quantos TAG(s)"
 rm -f "$PASTA/pedidos.csv" "$PASTA/todas-sob-demanda.csv"

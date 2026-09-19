@@ -179,6 +179,10 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let tick = 0;
     const poll = async () => {
+      // Aba escondida não mostra mapa: baixar a frota a cada 8s em toda aba
+      // aberta somou 8 GB num dia só do escritório (18/09/2026) e saturou o
+      // link — o estoque levava minutos para responder. Volta na hora ao aparecer.
+      if (document.hidden) return;
       try {
         // A lista de veículos também precisa acompanhar: um vínculo feito no
         // estoque (outra aba ou outra rota) criava veículo que só aparecia no
@@ -201,9 +205,14 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       }
     };
     const id = setInterval(poll, 8000);
+    const aoVoltar = () => {
+      if (!document.hidden) void poll();
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
     return () => {
       cancelled = true;
       clearInterval(id);
+      document.removeEventListener('visibilitychange', aoVoltar);
     };
   }, [token, loadAllVehicles]);
 

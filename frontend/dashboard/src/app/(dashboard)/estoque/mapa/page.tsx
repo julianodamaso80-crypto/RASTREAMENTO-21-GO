@@ -106,8 +106,19 @@ export default function EstoqueMapaPage() {
 
   useEffect(() => {
     void carregar(true);
-    const timer = setInterval(() => void carregar(false), REFRESH_MS);
-    return () => clearInterval(timer);
+    // ~1 MB por volta: aba escondida não recarrega (mesmo motivo do
+    // tracking-context) e atualiza na hora quando volta a aparecer.
+    const timer = setInterval(() => {
+      if (!document.hidden) void carregar(false);
+    }, REFRESH_MS);
+    const aoVoltar = () => {
+      if (!document.hidden) void carregar(false);
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', aoVoltar);
+    };
   }, [carregar]);
 
   const visiveis = useMemo(() => {

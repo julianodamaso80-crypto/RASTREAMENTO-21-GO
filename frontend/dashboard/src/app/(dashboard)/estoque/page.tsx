@@ -103,27 +103,40 @@ export default function EstoquePage() {
   const [totalFiltrado, setTotalFiltrado] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Uma requisição por tecla fazia a busca curta ("8", o estoque quase todo,
+  // ~1,3 MB) chegar DEPOIS da busca pelo IMEI completo e sobrescrever a
+  // tabela: o equipamento "sumia" com o IMEI escrito no campo (access log de
+  // 18/09/2026). Espera a digitação parar e só aceita a resposta da última carga.
+  const [buscaDebounced, setBuscaDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+  const ultimaCarga = useRef(0);
+
   const loadStock = useCallback(async () => {
+    const carga = ++ultimaCarga.current;
     try {
       // Estoque inteiro: com 100 por vez a importação das TAGs (mais novas)
       // ocupava a tela toda e os rastreadores sumiam do "Todos".
       const params: Record<string, string | number> = { perPage: 5000 };
-      if (search) params.search = search;
+      if (buscaDebounced) params.search = buscaDebounced;
       if (statusFilter) params.status = statusFilter;
       if (assignmentFilter) params.assignment = assignmentFilter;
       if (conexaoFilter) params.conexao = conexaoFilter;
       if (tipoFilter) params.tipo = tipoFilter;
       const res = await stockApi.getAll(params);
+      if (carga !== ultimaCarga.current) return; // resposta velha: já existe carga mais nova
       // Rastreador primeiro, TAG depois; dentro de cada um, a ordem da API.
       setItems([...res.data].sort((a, b) => Number(a.kind === 'TAG') - Number(b.kind === 'TAG')));
       setTotalFiltrado(res.meta?.total ?? res.data.length);
       setSelected(new Set()); // recarregou a lista, seleção antiga não vale mais
     } catch {
-      toast.error('Erro ao carregar estoque');
+      if (carga === ultimaCarga.current) toast.error('Erro ao carregar estoque');
     } finally {
-      setLoading(false);
+      if (carga === ultimaCarga.current) setLoading(false);
     }
-  }, [search, statusFilter, assignmentFilter, conexaoFilter, tipoFilter]);
+  }, [buscaDebounced, statusFilter, assignmentFilter, conexaoFilter, tipoFilter]);
 
   const loadStats = useCallback(async () => {
     try {
