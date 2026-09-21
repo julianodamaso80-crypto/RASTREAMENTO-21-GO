@@ -201,6 +201,20 @@ describe('SearchService.buscar', () => {
     expect(chamadas.stockItem[0].where.deletedAt).toBeNull();
   });
 
+  it('item do estoque já vinculado leva a Clientes Ativos, não ao Estoque (que o esconde)', async () => {
+    const { service } = montar({
+      stockItem: [
+        { id: 's1', imei: '808092604069451', associatedAt: new Date(), status: 'TAG' },
+        { id: 's2', imei: '808092600000001', associatedAt: null, status: 'TAG' },
+      ],
+    });
+    const r = await service.buscar(TENANT, '8080926');
+    const itens = r.grupos.find((g) => g.tipo === 'ESTOQUE')!.itens;
+
+    expect(itens.find((i) => i.id === 's1')!.href).toBe('/clientes?busca=808092604069451');
+    expect(itens.find((i) => i.id === 's2')!.href).toBe('/estoque?busca=808092600000001');
+  });
+
   it('limita o número de itens por grupo', async () => {
     const muitos = Array.from({ length: 30 }, (_, i) =>
       veiculo({ id: `v${i}`, plate: `AAA${i}` }),

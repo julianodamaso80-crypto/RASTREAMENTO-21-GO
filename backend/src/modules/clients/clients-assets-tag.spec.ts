@@ -132,4 +132,20 @@ describe('findAssets — TAG só para o time interno', () => {
     expect(carro.plate).toBe('CAR1A11');
     expect(carro.tag?.serialNumber).toBe(LINK.serialNumber);
   });
+
+  it('busca pelo número da TAG acha o carro com rastreador que carrega o selo', async () => {
+    const prisma = montarPrisma();
+    prisma.tagLink.findMany.mockResolvedValue([{ ...LINK, plate: 'CAR1A11', hinovaVehicleCode: '100' }]);
+    prisma.sgaVehicle.findMany.mockResolvedValue([{ ...SGA_MOTO, plate: 'CAR1A11', hinovaVehicleCode: '100' }]);
+    prisma.vehicle.findMany.mockImplementation(({ select }: { select?: unknown }) =>
+      select ? Promise.resolve([{ plate: 'CAR1A11' }]) : Promise.resolve([VEICULO]),
+    );
+    const s = new ClientsService(prisma as never);
+    await s.findAssets(TENANT, { verTags: true, perPage: 20, search: LINK.serialNumber });
+
+    // O número da TAG não está em campo nenhum do veículo: o carro só entra
+    // na busca se a placa dele for acrescentada ao OR.
+    const where = prisma.vehicle.count.mock.calls[0][0].where;
+    expect(where.OR).toEqual(expect.arrayContaining([{ plate: { in: ['CAR1A11'] } }]));
+  });
 });

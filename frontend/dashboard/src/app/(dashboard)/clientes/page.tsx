@@ -28,6 +28,7 @@ import {
   type TecnicoAlvo,
 } from '@/components/clientes/asset-dialogs';
 import type { ClientAsset } from '@/types/assets';
+import { useBuscaDaUrl } from '@/lib/use-busca-url';
 
 const TAMANHOS_PAGINA = [20, 60, 140, 200, 400, 500];
 
@@ -46,6 +47,7 @@ export default function ClientesPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [search, setSearch] = useState('');
+  useBuscaDaUrl(setSearch);
   const [loading, setLoading] = useState(true);
 
   const [retirando, setRetirando] = useState<RetiradaAlvo | null>(null);

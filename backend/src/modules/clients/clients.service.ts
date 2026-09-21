@@ -139,6 +139,14 @@ export class ClientsService {
     );
     const apenasTag = soTag.filter((x) => !placasComVeiculo.has(x.vinculo.plate));
 
+    // A busca casou a TAG (pelo número de série, por exemplo) de um carro que
+    // tem rastreador: o card desse carro é onde a TAG aparece, então ele entra
+    // no resultado mesmo sem o termo casar em campo nenhum do veículo.
+    if (params.search?.trim() && placasComVeiculo.size > 0) {
+      where.OR = [...((where.OR as Prisma.VehicleWhereInput[]) ?? []), { plate: { in: [...placasComVeiculo] } }];
+      delete where.id;
+    }
+
     const totalVeiculos = await this.prisma.vehicle.count({ where });
     const total = totalVeiculos + apenasTag.length;
     const { skipVeiculos, takeVeiculos, inicioTag, fimTag } = fatiaCombinada(
