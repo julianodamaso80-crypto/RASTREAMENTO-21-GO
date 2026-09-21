@@ -261,6 +261,56 @@ export function umPorVeiculo<
   return [...porVeiculo.values()];
 }
 
+/**
+ * Separa quem é "só TAG": vínculo cuja placa NÃO tem veículo com rastreador
+ * nosso. O carro que tem rastreador carrega a TAG como selo, nunca como um
+ * segundo card — nem em Clientes Ativos, nem no Mapa. Os dois usam esta mesma
+ * função para que o número de TAGs das duas telas seja um só.
+ */
+export async function separarSoTag<T extends { vinculo: { plate: string } }>(
+  prisma: PrismaService,
+  tenantId: string,
+  itens: T[],
+): Promise<{ apenasTag: T[]; placasComVeiculo: Set<string> }> {
+  const placasComVeiculo = new Set(
+    (
+      await prisma.vehicle.findMany({
+        where: { tenantId, deletedAt: null, plate: { in: itens.map((x) => x.vinculo.plate) } },
+        select: { plate: true },
+      })
+    ).map((v) => v.plate),
+  );
+  return {
+    apenasTag: itens.filter((x) => !placasComVeiculo.has(x.vinculo.plate)),
+    placasComVeiculo,
+  };
+}
+
+/**
+ * Ponto de TAG no Mapa. Só o que a TAG sabe dizer: onde foi vista, quando e
+ * com que precisão. Nada de ignição, velocidade ou bloqueio — ela não mede
+ * nada disso, e a posição é sempre passado (a TAG só é vista quando um iPhone
+ * passa perto).
+ */
+export function tagNoMapa(
+  x: { vinculo: VinculoTag; sga: SgaLinha | null },
+  pos: PosicaoTag | undefined,
+) {
+  const card = ativoSoTag(x, pos);
+  return {
+    id: card.id,
+    serialNumber: x.vinculo.serialNumber,
+    plate: card.plate,
+    associateName: card.associate.name,
+    model: card.model,
+    vehicleType: card.vehicleType,
+    latitude: pos?.lat ?? null,
+    longitude: pos?.lng ?? null,
+    accuracyM: pos?.accuracyM ?? null,
+    seenAt: pos?.seenAt ?? null,
+  };
+}
+
 /** Card de quem só tem TAG (nenhum rastreador nosso no veículo). */
 export function ativoSoTag(
   x: { vinculo: VinculoTag; sga: SgaLinha | null },

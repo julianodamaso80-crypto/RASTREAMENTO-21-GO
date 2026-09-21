@@ -508,12 +508,43 @@ export class StockService {
     });
     if (!item) throw new NotFoundException('TAG não encontrada no estoque');
 
-    const ultima = await this.prisma.tagRefreshRequest.findFirst({
-      where: { tenantId, serialNumber: item.imei },
+    return { item, ultima: await this.ultimoPedidoDaTag(item.imei, tenantId) };
+  }
+
+  private ultimoPedidoDaTag(serialNumber: string, tenantId: string) {
+    return this.prisma.tagRefreshRequest.findFirst({
+      where: { tenantId, serialNumber },
       orderBy: { requestedAt: 'desc' },
       select: { requestedAt: true, doneAt: true, positionsFound: true },
     });
-    return { item, ultima };
+  }
+
+  /**
+   * A mesma TAG vista pelo número de série — é assim que o Mapa a conhece. A
+   * TAG vinculada a cliente pela Rede pode não ter item de estoque, mas o
+   * coletor atende pelo número; basta ele ser uma TAG deste tenant.
+   */
+  private async tagPorSerie(serialNumber: string, tenantId: string) {
+    const existe =
+      (await this.prisma.tagLink.findFirst({
+        where: { tenantId, serialNumber, deletedAt: null },
+        select: { id: true },
+      })) ??
+      (await this.prisma.stockItem.findFirst({
+        where: { tenantId, imei: serialNumber, deletedAt: null, kind: 'TAG' },
+        select: { id: true },
+      }));
+    if (!existe) throw new NotFoundException('TAG não encontrada');
+    return { item: { imei: serialNumber }, ultima: await this.ultimoPedidoDaTag(serialNumber, tenantId) };
+  }
+
+  /** "Atualizar TAG" a partir do Mapa — mesmas regras e mesma trava do Estoque. */
+  async solicitarAtualizacaoTagPorSerie(serialNumber: string, tenantId: string, userId?: string) {
+    return this.pedirAtualizacao(await this.tagPorSerie(serialNumber, tenantId), tenantId, userId);
+  }
+
+  async estadoAtualizacaoTagPorSerie(serialNumber: string, tenantId: string) {
+    return this.estadoDoPedido((await this.tagPorSerie(serialNumber, tenantId)).ultima);
   }
 
   /**
@@ -524,7 +555,14 @@ export class StockService {
    * é a mesma da RedeVeiculos e protege a conta Apple.
    */
   async solicitarAtualizacaoTag(id: string, tenantId: string, userId?: string) {
-    const { item, ultima } = await this.tagDoEstoque(id, tenantId);
+    return this.pedirAtualizacao(await this.tagDoEstoque(id, tenantId), tenantId, userId);
+  }
+
+  private async pedirAtualizacao(
+    { item, ultima }: { item: { imei: string }; ultima: { requestedAt: Date } | null },
+    tenantId: string,
+    userId?: string,
+  ) {
     const estado = estadoAtualizacaoTag(ultima?.requestedAt ?? null);
     if (!estado.pode) {
       throw new HttpException(
@@ -554,7 +592,12 @@ export class StockService {
 
   /** Estado da última solicitação — a tela usa para o contador e o resultado. */
   async estadoAtualizacaoTagDoEstoque(id: string, tenantId: string) {
-    const { ultima } = await this.tagDoEstoque(id, tenantId);
+    return this.estadoDoPedido((await this.tagDoEstoque(id, tenantId)).ultima);
+  }
+
+  private estadoDoPedido(
+    ultima: { requestedAt: Date; doneAt: Date | null; positionsFound: number | null } | null,
+  ) {
     const estado = estadoAtualizacaoTag(ultima?.requestedAt ?? null);
     return {
       pendente: Boolean(ultima && !ultima.doneAt),

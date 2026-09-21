@@ -22,6 +22,8 @@ import { formatSpeed, formatRelativeTime } from '@/lib/utils';
 import { resolveSatelliteStyle, type SatelliteProvider } from '@/lib/basemap';
 import { mapApi } from '@/lib/api';
 import type { VehicleWithTracking } from '@/types/vehicle';
+import type { TagNoMapa } from '@/types/tag-map';
+import { COR_TAG } from '@/components/vehicles/tag-list-item';
 import { BasemapToggle } from './basemap-toggle';
 import { GoogleMapsAttribution } from './google-attribution';
 
@@ -57,6 +59,27 @@ interface MapContainerProps {
    *  veículo pra abrir (ex.: "Abrir no mapa") precisa disso: o componente é
    *  carregado sob demanda e o `flyTo` disparado antes disso ia pro vazio. */
   onReady?: () => void;
+  /** Veículos que só têm TAG. Vão numa camada do próprio mapa (WebGL), não
+   *  como marcador DOM: são milhares, e mil marcadores DOM já é o teto. */
+  tags?: TagNoMapa[];
+  selectedTagId?: string | null;
+  onTagClick?: (tagId: string) => void;
+}
+
+const FONTE_TAGS = 'tags-clientes';
+const CAMADA_TAGS = 'tags-clientes-pontos';
+const FONTE_PRECISAO = 'tag-precisao';
+
+/** Círculo de `raioM` metros em volta do ponto — a precisão real da TAG. */
+function circuloEmMetros(lng: number, lat: number, raioM: number): [number, number][] {
+  const pontos: [number, number][] = [];
+  const dLat = raioM / 111_320;
+  const dLng = raioM / (111_320 * Math.cos((lat * Math.PI) / 180));
+  for (let i = 0; i <= 48; i++) {
+    const a = (i / 48) * 2 * Math.PI;
+    pontos.push([lng + dLng * Math.cos(a), lat + dLat * Math.sin(a)]);
+  }
+  return pontos;
 }
 
 /** Duração do deslize do marcador entre duas posições reportadas. */
@@ -111,9 +134,17 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       basemapToggleClassName,
       onReady,
       selectedIds,
+      tags,
+      selectedTagId,
+      onTagClick,
     },
     ref,
   ) {
+    const onTagClickRef = useRef(onTagClick);
+    useEffect(() => {
+      onTagClickRef.current = onTagClick;
+    }, [onTagClick]);
+    const etiquetaTagRef = useRef<maplibregl.Marker | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     // Guardado em ref pra não entrar nas dependências do efeito que cria o
@@ -234,6 +265,19 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
 
       mapRef.current = map;
       map.once('load', () => onReadyRef.current?.());
+
+      // Clique na TAG. Registrado por id de camada: continua valendo depois de
+      // trocar o estilo, quando a camada é recolocada com o mesmo id.
+      map.on('click', CAMADA_TAGS, (e) => {
+        const id = e.features?.[0]?.properties?.id;
+        if (typeof id === 'string') onTagClickRef.current?.(id);
+      });
+      map.on('mouseenter', CAMADA_TAGS, () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', CAMADA_TAGS, () => {
+        map.getCanvas().style.cursor = '';
+      });
 
       return () => {
         markersRef.current.forEach((m) => m.remove());
@@ -649,6 +693,115 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       pintarMarcador,
       animarMarcador,
     ]);
+
+    // ─────────────────────────────────────────────────────────────────
+    // TAGs: camada de círculos + o círculo de precisão da selecionada.
+    //
+    // `setStyle` (troca Padrão ↔ Satélite) apaga fontes e camadas — ao
+    // contrário dos marcadores DOM. Por isso `garantir` roda a cada
+    // `styledata`: se a fonte sumiu, recoloca; se existe, só troca os dados.
+    // ─────────────────────────────────────────────────────────────────
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      const comPosicao = (tags ?? []).filter(
+        (t) => t.latitude !== null && t.longitude !== null,
+      );
+      const pontos: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features: comPosicao.map((t) => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [t.longitude as number, t.latitude as number] },
+          properties: { id: t.id, selecionada: t.id === selectedTagId },
+        })),
+      };
+      const sel = comPosicao.find((t) => t.id === selectedTagId);
+      const precisao: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features:
+          sel && sel.accuracyM
+            ? [{
+                type: 'Feature',
+                geometry: {
+                  type: 'Polygon',
+                  coordinates: [circuloEmMetros(sel.longitude as number, sel.latitude as number, sel.accuracyM)],
+                },
+                properties: {},
+              }]
+            : [],
+      };
+
+      const garantir = () => {
+        // Fonte já existe: troca os dados SEMPRE. `isStyleLoaded()` fica falso
+        // enquanto os pedaços do mapa carregam (logo depois de um voo da
+        // câmera) — checá-lo aqui descartava a atualização, e ao soltar a TAG
+        // o mapa continuava mostrando só ela.
+        const fonte = map.getSource(FONTE_TAGS) as maplibregl.GeoJSONSource | undefined;
+        if (fonte) {
+          fonte.setData(pontos);
+          (map.getSource(FONTE_PRECISAO) as maplibregl.GeoJSONSource | undefined)?.setData(precisao);
+          return;
+        }
+        // Criar só com o estilo pronto; senão o próximo `styledata` tenta.
+        if (!map.isStyleLoaded()) return;
+        map.addSource(FONTE_PRECISAO, { type: 'geojson', data: precisao });
+        map.addLayer({
+          id: `${FONTE_PRECISAO}-area`,
+          type: 'fill',
+          source: FONTE_PRECISAO,
+          paint: { 'fill-color': COR_TAG, 'fill-opacity': 0.12 },
+        });
+        map.addLayer({
+          id: `${FONTE_PRECISAO}-borda`,
+          type: 'line',
+          source: FONTE_PRECISAO,
+          paint: { 'line-color': COR_TAG, 'line-width': 1.5, 'line-dasharray': [2, 2] },
+        });
+        map.addSource(FONTE_TAGS, { type: 'geojson', data: pontos });
+        map.addLayer({
+          id: CAMADA_TAGS,
+          type: 'circle',
+          source: FONTE_TAGS,
+          paint: {
+            'circle-color': COR_TAG,
+            'circle-radius': [
+              'interpolate', ['linear'], ['zoom'],
+              8, ['case', ['get', 'selecionada'], 7, 3],
+              15, ['case', ['get', 'selecionada'], 11, 7],
+            ],
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': ['case', ['get', 'selecionada'], 2.5, 1],
+            'circle-opacity': 0.9,
+          },
+        });
+      };
+
+      garantir();
+      map.on('styledata', garantir);
+      map.on('load', garantir);
+
+      // Etiqueta da TAG selecionada: placa e a idade do avistamento, sempre à
+      // vista — posição de TAG é passado, e o operador tem que saber de quando.
+      etiquetaTagRef.current?.remove();
+      etiquetaTagRef.current = null;
+      if (sel) {
+        const el = document.createElement('div');
+        el.style.cssText = `padding:4px 9px;background:rgba(15,23,42,0.95);border:1px solid ${COR_TAG};border-radius:6px;white-space:nowrap;font-size:11px;line-height:1.35;color:#e2e8f0;text-align:center;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,0.55);`;
+        el.innerHTML = `
+          <div style="font-weight:700;letter-spacing:0.6px;">${sel.plate}</div>
+          <div style="color:${COR_TAG};font-weight:600;">TAG · ${sel.seenAt ? `vista ${formatRelativeTime(sel.seenAt)}` : 'nunca vista'}</div>
+        `;
+        etiquetaTagRef.current = new maplibregl.Marker({ element: el, offset: [0, 30] })
+          .setLngLat([sel.longitude as number, sel.latitude as number])
+          .addTo(map);
+      }
+
+      return () => {
+        map.off('styledata', garantir);
+        map.off('load', garantir);
+      };
+    }, [tags, selectedTagId]);
 
     return (
       <div className="relative w-full h-full">

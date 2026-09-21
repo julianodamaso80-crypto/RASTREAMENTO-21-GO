@@ -53,6 +53,7 @@ import type {
   StockBatchSignal,
 } from '@/types/stock';
 import type { ClientAsset, AssetsSummary } from '@/types/assets';
+import type { TagNoMapa } from '@/types/tag-map';
 import type {
   Technician,
   TechnicianAssignment,
@@ -777,6 +778,31 @@ export const stockApi = {
     }>>(`/stock/${id}/atualizar-tag`);
     return res.data.data;
   },
+  /** "Atualizar TAG" pelo número de série — é como o Mapa conhece a TAG. */
+  atualizarTagPorSerie: async (
+    serial: string,
+  ): Promise<{ pendente: boolean; solicitadoEm: string; disponivelEm: string }> => {
+    const res = await api.post<ApiResponse<{ pendente: boolean; solicitadoEm: string; disponivelEm: string }>>(
+      `/stock/tags/${encodeURIComponent(serial)}/atualizar`,
+    );
+    return res.data.data;
+  },
+  estadoAtualizarTagPorSerie: async (
+    serial: string,
+  ): Promise<{
+    pendente: boolean;
+    concluidoEm: string | null;
+    avistamentosNovos: number | null;
+    segundosRestantes: number;
+  }> => {
+    const res = await api.get<ApiResponse<{
+      pendente: boolean;
+      concluidoEm: string | null;
+      avistamentosNovos: number | null;
+      segundosRestantes: number;
+    }>>(`/stock/tags/${encodeURIComponent(serial)}/atualizar`);
+    return res.data.data;
+  },
   /** Conferência de instalação ao vivo: GPS, satélites, voltagem e ignição. */
   signal: async (id: string): Promise<DeviceHealth> => {
     const res = await api.get<ApiResponse<DeviceHealth>>(`/stock/${id}/signal`);
@@ -898,6 +924,11 @@ export const clientsApi = {
       },
     });
     return res.data;
+  },
+  /** TAGs de cliente sem rastreador, com a última posição — só time interno. */
+  getTagsMap: async (): Promise<TagNoMapa[]> => {
+    const res = await api.get<ApiResponse<TagNoMapa[]>>('/clients/tags-map');
+    return res.data.data;
   },
   getAssetsSummary: async (weekOffset = 0): Promise<AssetsSummary> => {
     const res = await api.get<ApiResponse<AssetsSummary>>(

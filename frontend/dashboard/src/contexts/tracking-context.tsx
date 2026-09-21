@@ -9,11 +9,13 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import type { Vehicle, VehicleWithTracking, DisplayStatus } from '@/types/vehicle';
+import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
 import type { BleTag, BleSightingEvent } from '@/types/ble-tag';
-import { vehiclesApi, traccarApi, alertsApi, bleTagsApi } from '@/lib/api';
+import { vehiclesApi, traccarApi, alertsApi, bleTagsApi, clientsApi } from '@/lib/api';
+import { PERFIS_QUE_VEEM_TAG, type TagNoMapa } from '@/types/tag-map';
+import { tagCasaBusca, tagsDaAba, type FiltroDoMapa } from '@/lib/tags-no-mapa';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import { useTraccarSocket } from '@/hooks/use-traccar-socket';
@@ -26,6 +28,8 @@ interface StatusCounts {
   ignition_off: number;
   offline: number;
   alert: number;
+  /** Veículos que só têm TAG (sem rastreador). Também entram no `total`. */
+  tag: number;
 }
 
 interface TrackingContextType {
@@ -51,8 +55,8 @@ interface TrackingContextType {
   toggleVehicle: (id: string) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
-  statusFilter: 'all' | DisplayStatus;
-  setStatusFilter: (f: 'all' | DisplayStatus) => void;
+  statusFilter: FiltroDoMapa;
+  setStatusFilter: (f: FiltroDoMapa) => void;
   statusCounts: StatusCounts;
   isSocketConnected: boolean;
   isLoading: boolean;
@@ -62,6 +66,17 @@ interface TrackingContextType {
   markAllAlertsRead: () => void;
   bleTags: BleTag[];
   refreshBleTags: () => Promise<void>;
+  /**
+   * TAGs de cliente sem rastreador — o mesmo conjunto dos cards "só TAG" de
+   * Clientes Ativos. Vazio para quem não é time interno: a TAG é segredo.
+   */
+  tags: TagNoMapa[];
+  /** As TAGs que a busca e a aba deixam na tela. */
+  filteredTags: TagNoMapa[];
+  /** A TAG aberta no mapa. Selecionar TAG solta os veículos, e vice-versa. */
+  selectedTagId: string | null;
+  selectTag: (id: string | null) => void;
+  refreshTags: () => Promise<void>;
   // Atualiza um veículo localmente (otimista) — ex.: trocar o tipo (carro/moto)
   // reflete na hora no mapa sem esperar reload.
   updateVehicleLocal: (id: string, patch: Partial<Vehicle>) => void;
@@ -78,9 +93,35 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<'all' | DisplayStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<FiltroDoMapa>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [bleTags, setBleTags] = useState<BleTag[]>([]);
+  const [tags, setTags] = useState<TagNoMapa[]>([]);
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const veTags = PERFIS_QUE_VEEM_TAG.includes(user?.role ?? '');
+
+  const refreshTags = useCallback(async () => {
+    if (!veTags) {
+      setTags([]);
+      return;
+    }
+    try {
+      setTags(await clientsApi.getTagsMap());
+    } catch {
+      // mantém as últimas — TAG é complemento, não pode derrubar o mapa
+    }
+  }, [veTags]);
+
+  // A posição da TAG vem da coleta na rede Find My (minutos, não segundos):
+  // recarregar a cada 60 s basta. Aba escondida não busca, como os veículos.
+  useEffect(() => {
+    if (!token) return;
+    void refreshTags();
+    const id = setInterval(() => {
+      if (!document.hidden) void refreshTags();
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [token, refreshTags]);
 
   const updateVehicleLocal = useCallback((id: string, patch: Partial<Vehicle>) => {
     setVehicleMap((prev) => {
@@ -325,8 +366,18 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
 
   const filteredVehicles = useMemo(() => {
     if (statusFilter === 'all') return searchedVehicles;
+    if (statusFilter === 'tag') return [];
     return searchedVehicles.filter((v) => v.displayStatus === statusFilter);
   }, [searchedVehicles, statusFilter]);
+
+  const searchedTags = useMemo(
+    () => (searchQuery ? tags.filter((t) => tagCasaBusca(t, searchQuery)) : tags),
+    [tags, searchQuery],
+  );
+  const filteredTags = useMemo(
+    () => tagsDaAba(searchedTags, statusFilter),
+    [searchedTags, statusFilter],
+  );
 
   // Contadores
   const statusCounts = useMemo<StatusCounts>(() => {
@@ -336,13 +387,18 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       ignition_off: 0,
       offline: 0,
       alert: 0,
+      tag: 0,
     };
     searchedVehicles.forEach((v) => {
       counts.total++;
       counts[v.displayStatus]++;
     });
+    // "Todos" = veículos com rastreador + veículos só com TAG — o mesmo total
+    // de Clientes Ativos.
+    counts.tag = searchedTags.length;
+    counts.total += searchedTags.length;
     return counts;
-  }, [searchedVehicles]);
+  }, [searchedVehicles, searchedTags]);
 
   // Só existe "o veículo selecionado" quando há exatamente um marcado. Com
   // vários, quem manda na tela é o painel de lista — e a câmera não persegue
@@ -351,11 +407,18 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
 
   const selectVehicle = useCallback((id: string | null) => {
     setSelectedIds(id ? [id] : []);
+    setSelectedTagId(null);
+  }, []);
+
+  const selectTag = useCallback((id: string | null) => {
+    setSelectedTagId(id);
+    setSelectedIds([]);
   }, []);
 
   // Marcar acrescenta no FIM da lista: a numeração do pino no mapa é a ordem
   // em que o operador marcou, e ela não pode dançar quando ele marca o quarto.
   const toggleVehicle = useCallback((id: string) => {
+    setSelectedTagId(null);
     setSelectedIds((atual) =>
       atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
     );
@@ -395,6 +458,11 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         markAllAlertsRead,
         bleTags,
         refreshBleTags,
+        tags,
+        filteredTags,
+        selectedTagId,
+        selectTag,
+        refreshTags,
         updateVehicleLocal,
       }}
     >

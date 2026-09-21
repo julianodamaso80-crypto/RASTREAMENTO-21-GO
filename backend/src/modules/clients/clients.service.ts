@@ -9,6 +9,8 @@ import {
   casaBusca,
   fatiaCombinada,
   resumoTag,
+  separarSoTag,
+  tagNoMapa,
   ultimasPosicoes,
   vinculosVisiveis,
 } from './clients-tags';
@@ -129,15 +131,7 @@ export class ClientsService {
       );
 
     // Quem já tem rastreador nosso não vira card de "só TAG": ganha só o selo.
-    const placasComVeiculo = new Set(
-      (
-        await this.prisma.vehicle.findMany({
-          where: { tenantId, deletedAt: null, plate: { in: soTag.map((x) => x.vinculo.plate) } },
-          select: { plate: true },
-        })
-      ).map((v) => v.plate),
-    );
-    const apenasTag = soTag.filter((x) => !placasComVeiculo.has(x.vinculo.plate));
+    const { apenasTag, placasComVeiculo } = await separarSoTag(this.prisma, tenantId, soTag);
 
     // A busca casou a TAG (pelo número de série, por exemplo) de um carro que
     // tem rastreador: o card desse carro é onde a TAG aparece, então ele entra
@@ -201,6 +195,28 @@ export class ClientsService {
       data: [...dataVeiculos, ...dataTags],
       meta: { total, page, perPage },
     };
+  }
+
+  /**
+   * As TAGs de cliente para o Mapa — todas de uma vez, com a última posição.
+   *
+   * O conjunto é o MESMO dos cards de "só TAG" de Clientes Ativos (mesmo
+   * `vinculosVisiveis` + `separarSoTag`): o Mapa somava só veículos e a tela de
+   * clientes somava veículos e TAGs, e o dono via 990 num lugar e 3.835 no
+   * outro. Só o time interno chega aqui — o gate é do controller.
+   */
+  async tagsNoMapa(tenantId: string) {
+    const { apenasTag } = await separarSoTag(
+      this.prisma,
+      tenantId,
+      await vinculosVisiveis(this.prisma, tenantId),
+    );
+    const pos = await ultimasPosicoes(
+      this.prisma,
+      tenantId,
+      apenasTag.map((x) => x.vinculo.serialNumber),
+    );
+    return apenasTag.map((x) => tagNoMapa(x, pos.get(x.vinculo.serialNumber)));
   }
 
   /**

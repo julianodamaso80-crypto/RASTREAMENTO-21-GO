@@ -15,7 +15,7 @@ import { Role } from '.prisma/client';
 import { RequireRoute, Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ClientsService } from './clients.service';
-import { podeVerTag } from './clients-tags';
+import { PERFIS_QUE_VEEM_TAG, podeVerTag } from './clients-tags';
 import { AssociateAuthService } from '../app/associate-auth.service';
 import {
   SetAppAccessDto,
@@ -56,6 +56,20 @@ export class ClientsController {
       // rota 'clientes'), mas o gate por papel é a barreira que não depende disso.
       verTags: podeVerTag(req.user?.role),
     });
+  }
+
+  /**
+   * As TAGs de cliente para o Mapa. Segue a permissão da TELA do mapa (não a de
+   * Clientes Ativos): quem vê o mapa vê as TAGs nele. E só o time interno —
+   * a TAG é segredo, o associado nunca sabe que ela existe.
+   */
+  @Get('tags-map')
+  @RequireRoute('mapa')
+  @UseGuards(RolesGuard)
+  @Roles(...PERFIS_QUE_VEEM_TAG)
+  @ApiOperation({ summary: 'TAGs de cliente sem rastreador, com a última posição (Mapa)' })
+  tagsNoMapa(@Req() req: AuthenticatedRequest) {
+    return this.clientsService.tagsNoMapa(req.tenantId);
   }
 
   @Get('assets/summary')

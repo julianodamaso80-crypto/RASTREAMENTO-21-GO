@@ -210,6 +210,33 @@ export class StockController {
     );
   }
 
+  /**
+   * "Atualizar TAG" pelo NÚMERO DE SÉRIE — é como o Mapa conhece a TAG de
+   * cliente (a vinculada pela Rede pode não ter item de estoque). Mesmas regras
+   * e mesma trava de 3 min da versão do Estoque.
+   */
+  @Post('tags/:serial/atualizar')
+  @RequireRoute('estoque', 'mapa')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Pede ao coletor uma consulta imediata da TAG (por número de série)' })
+  atualizarTagPorSerie(
+    @Param('serial') serial: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.solicitarAtualizacaoTagPorSerie(serial, req.tenantId, req.user.id);
+  }
+
+  @Get('tags/:serial/atualizar')
+  @RequireRoute('estoque', 'mapa')
+  @ApiOperation({ summary: 'Estado da última atualização pedida para a TAG (por número de série)' })
+  estadoAtualizarTagPorSerie(
+    @Param('serial') serial: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.estadoAtualizacaoTagPorSerie(serial, req.tenantId);
+  }
+
   @Get(':id/atualizar-tag')
   @ApiOperation({ summary: 'Estado da última atualização pedida para a TAG' })
   estadoAtualizarTag(
