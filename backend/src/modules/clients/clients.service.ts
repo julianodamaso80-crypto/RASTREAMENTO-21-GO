@@ -8,12 +8,17 @@ import {
   ativoSoTag,
   casaBusca,
   fatiaCombinada,
+  normalizarNome,
   resumoTag,
   separarSoTag,
   tagNoMapa,
   ultimasPosicoes,
-  vinculosVisiveis,
+  vinculosDaTela,
 } from './clients-tags';
+
+// Acentos do cadastro → letra sem acento, no SQL (espelha normalizarNome).
+const COM_ACENTO = 'ÁÀÂÃÄÅáàâãäåÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñÝýÿ';
+const SEM_ACENTO = 'AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNnYyy';
 
 /** Situação financeira do ativo no SGA. */
 export type FinancialStatus = 'ADIMPLENTE' | 'INADIMPLENTE';
@@ -92,6 +97,13 @@ export class ClientsService {
       where.id = '00000000-0000-0000-0000-000000000000';
     }
 
+    // "sergio" tem que achar "SÉRGIO": o contains do Prisma diferencia acento.
+    const porNome = await this.associadosPorNome(tenantId, params.search);
+    if (porNome.length > 0) {
+      where.OR = [...((where.OR as Prisma.VehicleWhereInput[]) ?? []), { associateId: { in: porNome } }];
+      delete where.id;
+    }
+
     // Sem TAG (CLIENT e app do associado): exatamente o comportamento antigo.
     if (!params.verTags) {
       const [total, vehicles] = await Promise.all([
@@ -116,7 +128,12 @@ export class ClientsService {
 
     // Time interno: veículos (rastreador) primeiro, depois quem só tem TAG,
     // numa paginação só. O selo de TAG entra nos veículos com TAG na placa.
-    const soTag = (await vinculosVisiveis(this.prisma, tenantId))
+    // Sem busca, a lista é a régua do dono (só TAG rastreável). Buscando, toda
+    // TAG de carro ATIVO tem que ser achável: a sem posição e a divergente
+    // entram, e o selo do card avisa ("sem posição ainda" / "conferir").
+    const { visiveis, ocultos } = await vinculosDaTela(this.prisma, tenantId);
+    const buscando = !!params.search?.trim();
+    const soTag = (buscando ? [...visiveis, ...ocultos] : visiveis)
       .filter((x) =>
         casaBusca(
           {
@@ -125,6 +142,7 @@ export class ClientsService {
             associateName: x.sga?.associateName ?? x.vinculo.associateName,
             associateCpf: x.sga?.cpf ?? x.vinculo.associateCpf,
             serialNumber: x.vinculo.serialNumber,
+            outrosSeriais: x.outrosSeriais,
           },
           params.search,
         ),
@@ -195,6 +213,18 @@ export class ClientsService {
       data: [...dataVeiculos, ...dataTags],
       meta: { total, page, perPage },
     };
+  }
+
+  /** Associados cujo nome casa com o termo ignorando acento e espaço repetido. */
+  private async associadosPorNome(tenantId: string, termo: string | undefined): Promise<string[]> {
+    const nome = normalizarNome(termo);
+    if (!/[a-z]/.test(nome)) return [];
+    const padrao = `%${nome.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const linhas = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id FROM associates
+       WHERE tenant_id = ${tenantId}::uuid AND deleted_at IS NULL
+         AND regexp_replace(lower(translate(name, ${COM_ACENTO}, ${SEM_ACENTO})), '\\s+', ' ', 'g') LIKE ${padrao}`);
+    return linhas.map((l) => l.id);
   }
 
   /**

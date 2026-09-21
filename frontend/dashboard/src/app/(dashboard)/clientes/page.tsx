@@ -59,21 +59,28 @@ export default function ClientesPage() {
 
   // Recarregar em background não pode piscar a lista inteira.
   const primeiraCarga = useRef(true);
+  const ultimaCarga = useRef(0);
 
   const load = useCallback(async () => {
+    const carga = ++ultimaCarga.current;
     try {
       const res = await clientsApi.getAssets({
         search: search || undefined,
         page,
         perPage,
       });
+      // Busca por 3 dígitos demora mais que por 5: sem isto a resposta velha
+      // chega depois e a lista mostra o resultado de um termo que já mudou.
+      if (carga !== ultimaCarga.current) return;
       setAssets(res.data);
       setTotal(res.meta.total);
     } catch {
-      toast.error('Erro ao carregar os ativos');
+      if (carga === ultimaCarga.current) toast.error('Erro ao carregar os ativos');
     } finally {
-      primeiraCarga.current = false;
-      setLoading(false);
+      if (carga === ultimaCarga.current) {
+        primeiraCarga.current = false;
+        setLoading(false);
+      }
     }
   }, [search, page, perPage]);
 

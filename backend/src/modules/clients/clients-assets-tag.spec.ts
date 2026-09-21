@@ -148,4 +148,32 @@ describe('findAssets — TAG só para o time interno', () => {
     const where = prisma.vehicle.count.mock.calls[0][0].where;
     expect(where.OR).toEqual(expect.arrayContaining([{ plate: { in: ['CAR1A11'] } }]));
   });
+
+  it('TAG sem posição: sem busca o total não muda; buscando pelo nome, o card aparece', async () => {
+    const prisma = montarPrisma();
+    prisma.tagLink.findMany.mockResolvedValue([{ ...LINK, verdict: 'AGUARDANDO_PROVA' }]);
+    // Nenhuma posição coletada para a TAG, e nenhum associado casa pelo nome.
+    prisma.$queryRaw.mockResolvedValue([]);
+    const s = new ClientsService(prisma as never);
+
+    const semBusca = await s.findAssets(TENANT, { verTags: true, perPage: 20 });
+    expect(semBusca.meta.total).toBe(1);
+    expect(semBusca.data.some((a) => (a as { soTag?: boolean }).soTag)).toBe(false);
+
+    const buscando = await s.findAssets(TENANT, { verTags: true, perPage: 20, search: LINK.serialNumber });
+    const card = buscando.data.find((a) => (a as { soTag?: boolean }).soTag) as { tag?: { serialNumber: string; lastSeenAt: unknown } };
+    expect(card?.tag?.serialNumber).toBe(LINK.serialNumber);
+    expect(card?.tag?.lastSeenAt).toBeNull();
+  });
+
+  it('nome digitado sem acento acha o veículo do associado acentuado', async () => {
+    const prisma = montarPrisma();
+    prisma.$queryRaw.mockImplementation((sql: { strings?: string[] }) =>
+      Promise.resolve((sql.strings ?? []).join('').includes('FROM associates') ? [{ id: 'a1' }] : []),
+    );
+    const s = new ClientsService(prisma as never);
+    await s.findAssets(TENANT, { verTags: false, perPage: 20, search: 'sergio batista' });
+    const where = prisma.vehicle.count.mock.calls[0][0].where;
+    expect(where.OR).toEqual(expect.arrayContaining([{ associateId: { in: ['a1'] } }]));
+  });
 });

@@ -2,6 +2,7 @@ import {
   casaBusca,
   fatiaCombinada,
   podeVerTag,
+  separarVinculos,
   umPorVeiculo,
   vinculoAparece,
 } from './clients-tags';
@@ -99,4 +100,47 @@ describe('casaBusca', () => {
     expect(casaBusca(outro, 'LMX4B84')).toBe(false);
   });
   it('menos de 3 dígitos não busca em CPF nem série', () => expect(casaBusca(item, '12')).toBe(false));
+  it('nome sem acento, em minúscula e com espaço a mais casa com o cadastro', () => {
+    const acentuado = { ...item, associateName: 'SÉRGIO  BATISTA DE OLIVEIRA' };
+    expect(casaBusca(acentuado, 'sergio batista')).toBe(true);
+    expect(casaBusca(acentuado, 'Sérgio   Batista')).toBe(true);
+    expect(casaBusca(item, 'joao silva')).toBe(true);
+  });
+  it('número de outra TAG do mesmo carro casa com o card dele', () => {
+    const comOutra = { ...item, outrosSeriais: ['808092604156050'] };
+    expect(casaBusca(comOutra, '604156050')).toBe(true);
+    expect(casaBusca(item, '604156050')).toBe(false);
+  });
+});
+
+describe('separarVinculos — toda TAG de carro ATIVO cai em algum card', () => {
+  const x = (serialNumber: string, opts: { cod?: string; sit?: string; origin?: string; verdict?: string } = {}) => ({
+    vinculo: {
+      serialNumber,
+      plate: 'P' + (opts.cod ?? serialNumber),
+      origin: opts.origin ?? 'REDE',
+      verdict: opts.verdict ?? 'AGUARDANDO_PROVA',
+    },
+    sga: { hinovaVehicleCode: opts.cod ?? serialNumber, situationLabel: opts.sit ?? 'ATIVO' },
+  });
+
+  it('com posição é visível; sem posição e divergente ficam ocultas (acháveis pela busca)', () => {
+    const r = separarVinculos([x('A'), x('B'), x('C', { verdict: 'DIVERGENTE' })], new Set(['A', 'C']));
+    expect(r.visiveis.map((v) => v.vinculo.serialNumber)).toEqual(['A']);
+    expect(r.ocultos.map((v) => v.vinculo.serialNumber).sort()).toEqual(['B', 'C']);
+  });
+
+  it('associado fora de ATIVO não entra em nenhuma das duas', () => {
+    const r = separarVinculos([x('A', { sit: 'INATIVO' })], new Set(['A']));
+    expect(r.visiveis).toEqual([]);
+    expect(r.ocultos).toEqual([]);
+  });
+
+  it('segunda TAG do mesmo carro vira número extra do card, não some', () => {
+    const r = separarVinculos([x('A', { cod: '1' }), x('B', { cod: '1' }), x('C', { cod: '1' })], new Set(['A', 'B']));
+    expect(r.visiveis).toHaveLength(1);
+    expect(r.visiveis[0].vinculo.serialNumber).toBe('A');
+    expect(r.visiveis[0].outrosSeriais.sort()).toEqual(['B', 'C']);
+    expect(r.ocultos).toEqual([]);
+  });
 });

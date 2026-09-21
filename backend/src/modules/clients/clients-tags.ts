@@ -86,6 +86,19 @@ function soAlfanumerico(s: string | null | undefined) {
   return (s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+/**
+ * Nome como o operador digita: sem acento, minúsculo, um espaço só. O cadastro
+ * tem "SÉRGIO", "ÂNGELO" e espaço dobrado; quem busca digita "sergio".
+ */
+export function normalizarNome(s: string | null | undefined): string {
+  return (s ?? '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function casaBusca(
   item: {
     plate: string;
@@ -93,6 +106,8 @@ export function casaBusca(
     associateName: string | null;
     associateCpf: string | null;
     serialNumber: string;
+    /** Outras TAGs do mesmo carro: o card é um só, a busca acha por qualquer uma. */
+    outrosSeriais?: string[];
   },
   termo: string | undefined,
 ): boolean {
@@ -103,11 +118,13 @@ export function casaBusca(
   if (alfa && (soAlfanumerico(item.plate).includes(alfa) || soAlfanumerico(item.chassi).includes(alfa))) {
     return true;
   }
-  if ((item.associateName ?? '').toLowerCase().includes(t.toLowerCase())) return true;
+  const nome = normalizarNome(t);
+  if (nome && normalizarNome(item.associateName).includes(nome)) return true;
   // Mesma regra do núcleo de busca (termo-busca.ts): termo com letra nunca vira
   // busca numérica — "LMX4B84" viraria "484" e casaria com metade das TAGs.
   if (/[A-Za-z]/.test(t) || digitos.length < 3) return false;
-  if (digitos && ((item.associateCpf ?? '').includes(digitos) || item.serialNumber.includes(digitos))) {
+  const seriais = [item.serialNumber, ...(item.outrosSeriais ?? [])];
+  if (digitos && ((item.associateCpf ?? '').includes(digitos) || seriais.some((sn) => sn.includes(digitos)))) {
     return true;
   }
   return false;
@@ -173,6 +190,15 @@ type SgaLinha = {
  * no SGA; sem ele, pela placa ou pelo chassi (0 km tem "Zero KM" na placa).
  */
 export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) {
+  return (await vinculosDaTela(prisma, tenantId)).visiveis;
+}
+
+/**
+ * `visiveis`: a lista da tela (régua do dono). `ocultos`: TAG de carro ATIVO que
+ * a régua esconde (sem posição ainda ou divergente) — fora da lista, mas a busca
+ * tem que achar: nenhuma TAG de cliente ativo pode ficar impossível de localizar.
+ */
+export async function vinculosDaTela(prisma: PrismaService, tenantId: string) {
   const vinculos: VinculoTag[] = await prisma.tagLink.findMany({
     where: { tenantId, deletedAt: null },
     select: {
@@ -188,7 +214,7 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
       checkedAt: true,
     },
   });
-  if (vinculos.length === 0) return [];
+  if (vinculos.length === 0) return { visiveis: [], ocultos: [] };
 
   const codigos = vinculos.map((v) => v.hinovaVehicleCode).filter((c): c is string => !!c);
   const chassis = vinculos.map((v) => v.chassi).filter((c): c is string => !!c);
@@ -224,23 +250,45 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
     vinculos.map((v) => v.serialNumber),
   );
 
-  const visiveis = vinculos
-    .map((v) => {
-      const linha =
-        (v.hinovaVehicleCode && porCodigo.get(v.hinovaVehicleCode)) ||
-        (v.chassi && porChassi.get(v.chassi)) ||
-        porPlaca.get(v.plate) ||
-        null;
-      return { vinculo: v, sga: linha };
-    })
-    .filter((x) =>
-      vinculoAparece(
-        x.vinculo,
-        x.sga?.situationLabel ?? null,
-        comPosicao.has(x.vinculo.serialNumber),
-      ),
-    );
-  return umPorVeiculo(visiveis, comPosicao);
+  const itens = vinculos.map((v) => {
+    const linha =
+      (v.hinovaVehicleCode && porCodigo.get(v.hinovaVehicleCode)) ||
+      (v.chassi && porChassi.get(v.chassi)) ||
+      porPlaca.get(v.plate) ||
+      null;
+    return { vinculo: v, sga: linha };
+  });
+  return separarVinculos(itens, comPosicao);
+}
+
+type ItemVinculo = {
+  vinculo: Pick<VinculoTag, 'serialNumber' | 'plate' | 'origin' | 'verdict'>;
+  sga: { hinovaVehicleCode: string; situationLabel: string } | null;
+};
+
+const chaveDoVeiculo = (x: ItemVinculo) => x.sga?.hinovaVehicleCode ?? `placa:${x.vinculo.plate}`;
+
+/**
+ * Toda TAG de carro ATIVO no SGA cai em exatamente um card: a visível pela
+ * régua, ou — se o carro já tem card — vira número extra dele, ou fica oculta.
+ */
+export function separarVinculos<T extends ItemVinculo>(itens: T[], comPosicao: Set<string>) {
+  const aparecem = new Set(
+    itens.filter((x) =>
+      vinculoAparece(x.vinculo, x.sga?.situationLabel ?? null, comPosicao.has(x.vinculo.serialNumber)),
+    ),
+  );
+  const visiveis = umPorVeiculo([...aparecem], comPosicao);
+  const cardDoVeiculo = new Map(visiveis.map((x) => [chaveDoVeiculo(x), x]));
+
+  const semCard: T[] = [];
+  for (const x of itens) {
+    if (aparecem.has(x) || x.sga?.situationLabel !== 'ATIVO') continue;
+    const card = cardDoVeiculo.get(chaveDoVeiculo(x));
+    if (card) card.outrosSeriais.push(x.vinculo.serialNumber);
+    else semCard.push(x);
+  }
+  return { visiveis, ocultos: umPorVeiculo(semCard, comPosicao) };
 }
 
 /**
@@ -249,16 +297,25 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
  */
 export function umPorVeiculo<
   T extends { vinculo: { serialNumber: string; plate: string }; sga: { hinovaVehicleCode: string } | null },
->(itens: T[], comPosicao: Set<string>): T[] {
-  const porVeiculo = new Map<string, T>();
+>(itens: T[], comPosicao: Set<string>): Array<T & { outrosSeriais: string[] }> {
+  const porVeiculo = new Map<string, { card: T; todos: string[] }>();
   for (const x of itens) {
     const chave = x.sga?.hinovaVehicleCode ?? `placa:${x.vinculo.plate}`;
     const atual = porVeiculo.get(chave);
-    if (!atual || (!comPosicao.has(atual.vinculo.serialNumber) && comPosicao.has(x.vinculo.serialNumber))) {
-      porVeiculo.set(chave, x);
+    if (!atual) {
+      porVeiculo.set(chave, { card: x, todos: [x.vinculo.serialNumber] });
+      continue;
+    }
+    atual.todos.push(x.vinculo.serialNumber);
+    if (!comPosicao.has(atual.card.vinculo.serialNumber) && comPosicao.has(x.vinculo.serialNumber)) {
+      atual.card = x;
     }
   }
-  return [...porVeiculo.values()];
+  // As TAGs que não viraram o card ficam como número extra dele: a busca acha.
+  return [...porVeiculo.values()].map(({ card, todos }) => ({
+    ...card,
+    outrosSeriais: todos.filter((sn) => sn !== card.vinculo.serialNumber),
+  }));
 }
 
 /**
