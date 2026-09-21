@@ -104,6 +104,15 @@ export class ClientsService {
       delete where.id;
     }
 
+    // IMEI com letra (conta demo "DEMO00000000001"): termo com letra não entra
+    // na busca numérica, então casa pelo termo inteiro. Placa nunca está
+    // contida num IMEI só de dígitos.
+    const alfa = (params.search ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (/[A-Z]/.test(alfa)) {
+      where.OR = [...((where.OR as Prisma.VehicleWhereInput[]) ?? []), { device: { imei: { contains: alfa } } }];
+      delete where.id;
+    }
+
     // Sem TAG (CLIENT e app do associado): exatamente o comportamento antigo.
     if (!params.verTags) {
       const [total, vehicles] = await Promise.all([

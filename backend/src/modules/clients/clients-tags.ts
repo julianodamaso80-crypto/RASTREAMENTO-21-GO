@@ -120,11 +120,16 @@ export function casaBusca(
   }
   const nome = normalizarNome(t);
   if (nome && normalizarNome(item.associateName).includes(nome)) return true;
+  const seriais = [item.serialNumber, ...(item.outrosSeriais ?? [])];
+  // Série com letra ("K306491") casa pelo termo inteiro; placa com letra nunca
+  // está contida numa série só de dígitos, então a regra abaixo continua valendo.
+  if (/[A-Za-z]/.test(t) && alfa && seriais.some((sn) => soAlfanumerico(sn).includes(alfa))) {
+    return true;
+  }
   // Mesma regra do núcleo de busca (termo-busca.ts): termo com letra nunca vira
   // busca numérica — "LMX4B84" viraria "484" e casaria com metade das TAGs.
   if (/[A-Za-z]/.test(t) || digitos.length < 3) return false;
-  const seriais = [item.serialNumber, ...(item.outrosSeriais ?? [])];
-  if (digitos && ((item.associateCpf ?? '').includes(digitos) || seriais.some((sn) => sn.includes(digitos)))) {
+  if (digitos &&((item.associateCpf ?? '').includes(digitos) || seriais.some((sn) => sn.includes(digitos)))) {
     return true;
   }
   return false;

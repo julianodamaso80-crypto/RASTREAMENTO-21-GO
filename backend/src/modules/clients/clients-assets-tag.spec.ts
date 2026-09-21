@@ -176,4 +176,13 @@ describe('findAssets — TAG só para o time interno', () => {
     const where = prisma.vehicle.count.mock.calls[0][0].where;
     expect(where.OR).toEqual(expect.arrayContaining([{ associateId: { in: ['a1'] } }]));
   });
+
+  it('IMEI com letra (DEMO00000000001) é achado pelo termo com letra', async () => {
+    const prisma = montarPrisma();
+    prisma.$queryRaw.mockResolvedValue([]);
+    const s = new ClientsService(prisma as never);
+    await s.findAssets(TENANT, { verTags: false, perPage: 20, search: 'demo0000' });
+    const where = prisma.vehicle.count.mock.calls[0][0].where;
+    expect(where.OR).toEqual(expect.arrayContaining([{ device: { imei: { contains: 'DEMO0000' } } }]));
+  });
 });

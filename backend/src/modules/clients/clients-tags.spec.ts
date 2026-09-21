@@ -106,6 +106,13 @@ describe('casaBusca', () => {
     expect(casaBusca(acentuado, 'Sérgio   Batista')).toBe(true);
     expect(casaBusca(item, 'joao silva')).toBe(true);
   });
+  it('número de TAG com letra (K306491) casa inteiro ou pelo começo', () => {
+    const comLetra = { ...item, serialNumber: 'K306491' };
+    expect(casaBusca(comLetra, 'K306491')).toBe(true);
+    expect(casaBusca(comLetra, 'k30')).toBe(true);
+    // A regra do fe6ff02 continua: placa com letra não casa série numérica.
+    expect(casaBusca({ ...item, serialNumber: '808092600484001' }, 'LMX4B84')).toBe(false);
+  });
   it('número de outra TAG do mesmo carro casa com o card dele', () => {
     const comOutra = { ...item, outrosSeriais: ['808092604156050'] };
     expect(casaBusca(comOutra, '604156050')).toBe(true);
