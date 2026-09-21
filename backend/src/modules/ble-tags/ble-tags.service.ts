@@ -16,6 +16,7 @@ import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
 import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
 import { ehTagRastreavel } from './tag-ativa-regra';
+import { vinculosVisiveis } from '../clients/clients-tags';
 import {
   segmentar,
   detectarLocaisHabituais,
@@ -235,6 +236,20 @@ export class BleTagsService {
       ...(query.search ? filtroBuscaSga(query.search) : {}),
     };
 
+    // TAG que já é cliente ativo nosso (vinculada, ativa no SGA e rastreável)
+    // aparece em Clientes Ativos e sai daqui: esta tela fica só com o que
+    // ainda não controlamos. Mesma régua da outra tela, sem cópia.
+    const emClientesAtivos = [
+      ...new Set(
+        (await vinculosVisiveis(this.prisma, tenantId))
+          .map((x) => x.sga?.hinovaVehicleCode)
+          .filter((c): c is string => !!c),
+      ),
+    ];
+    if (emClientesAtivos.length > 0) {
+      where.hinovaVehicleCode = { notIn: emClientesAtivos };
+    }
+
     // A regra de "TAG ativa" (ver tag-ativa-regra.ts) mora no espelho, que é
     // outra tabela sem relação declarada no Prisma. Por isso o recorte vira
     // uma lista de placas em vez de um join.
@@ -327,6 +342,8 @@ export class BleTagsService {
         /** Destes, quantos têm posição conhecida — as ativas de verdade. */
         rastreaveis,
         semPosicao: Math.max(0, contratadas - rastreaveis),
+        /** TAGs que já viraram cliente ativo nosso e por isso saíram desta lista. */
+        emClientesAtivos: emClientesAtivos.length,
       },
     };
   }

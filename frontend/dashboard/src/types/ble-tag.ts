@@ -128,6 +128,8 @@ export interface ActiveTagsResponse {
     /** Destes, quantos têm posição conhecida: as ativas de verdade. */
     rastreaveis?: number;
     semPosicao?: number;
+    /** TAGs que já viraram cliente ativo nosso e saíram desta lista. */
+    emClientesAtivos?: number;
   };
 }
 

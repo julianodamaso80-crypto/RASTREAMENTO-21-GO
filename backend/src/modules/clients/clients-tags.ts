@@ -35,19 +35,35 @@ export interface VinculoTag {
 }
 
 /**
- * Quando o vínculo aparece para o time:
- * - vindo da Rede: só com a localização provada (CONFIRMADA);
- * - vinculado à mão no Estoque: a pessoa que vinculou é a fonte, mas nunca se
- *   a posição contradisser o carro (DIVERGENTE).
- * E sempre com o associado ATIVO no SGA agora — é a tela de clientes ATIVOS.
+ * Quando o vínculo aparece para o time — regra do dono (21/09/2026): associado
+ * ATIVO no SGA + TAG vinculada + TAG rastreável = cliente ativo nosso.
+ * - vindo da Rede: rastreável = já temos posição dela pela nossa coleta (ou a
+ *   localização foi provada contra o rastreador do carro);
+ * - vinculado à mão no Estoque: a pessoa que vinculou é a fonte.
+ * Nos dois casos, nunca se a posição contradisser o carro (DIVERGENTE).
  */
 export function vinculoAparece(
   v: Pick<VinculoTag, 'origin' | 'verdict'>,
   situacaoSgaAtual: string | null,
+  rastreavel: boolean,
 ): boolean {
   if (situacaoSgaAtual !== 'ATIVO') return false;
-  if (v.verdict === 'CONFIRMADA') return true;
-  return v.origin === 'ESTOQUE' && v.verdict !== 'DIVERGENTE';
+  if (v.verdict === 'DIVERGENTE') return false;
+  if (v.origin === 'ESTOQUE') return true;
+  return v.verdict === 'CONFIRMADA' || rastreavel;
+}
+
+/** Seriais que têm ao menos uma posição da nossa coleta. */
+async function seriaisComPosicao(
+  prisma: PrismaService,
+  tenantId: string,
+  seriais: string[],
+): Promise<Set<string>> {
+  if (seriais.length === 0) return new Set();
+  const linhas = await prisma.$queryRaw<Array<{ serial_number: string }>>(Prisma.sql`
+    SELECT DISTINCT serial_number FROM tag_positions
+     WHERE tenant_id = ${tenantId}::uuid AND serial_number IN (${Prisma.join(seriais)})`);
+  return new Set(linhas.map((l) => l.serial_number));
 }
 
 /** Veículos (rastreador) primeiro, depois quem só tem TAG, numa paginação só. */
@@ -199,6 +215,11 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
   const porCodigo = new Map(sga.map((s) => [s.hinovaVehicleCode, s]));
   const porChassi = new Map(sga.filter((s) => s.chassi).map((s) => [s.chassi as string, s]));
   const porPlaca = new Map(sga.map((s) => [s.plate, s]));
+  const comPosicao = await seriaisComPosicao(
+    prisma,
+    tenantId,
+    vinculos.filter((v) => v.origin !== 'ESTOQUE').map((v) => v.serialNumber),
+  );
 
   return vinculos
     .map((v) => {
@@ -209,7 +230,13 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
         null;
       return { vinculo: v, sga: linha };
     })
-    .filter((x) => vinculoAparece(x.vinculo, x.sga?.situationLabel ?? null));
+    .filter((x) =>
+      vinculoAparece(
+        x.vinculo,
+        x.sga?.situationLabel ?? null,
+        comPosicao.has(x.vinculo.serialNumber),
+      ),
+    );
 }
 
 /** Card de quem só tem TAG (nenhum rastreador nosso no veículo). */

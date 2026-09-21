@@ -18,18 +18,27 @@ describe('podeVerTag', () => {
 
 describe('vinculoAparece', () => {
   it('só com associado ATIVO no SGA agora', () => {
-    expect(vinculoAparece({ origin: 'REDE', verdict: 'CONFIRMADA' }, 'INATIVO')).toBe(false);
-    expect(vinculoAparece({ origin: 'REDE', verdict: 'CONFIRMADA' }, null)).toBe(false);
+    expect(vinculoAparece({ origin: 'REDE', verdict: 'CONFIRMADA' }, 'INATIVO', true)).toBe(false);
+    expect(vinculoAparece({ origin: 'REDE', verdict: 'CONFIRMADA' }, null, true)).toBe(false);
   });
 
-  it('da Rede exige localização provada', () => {
-    expect(vinculoAparece({ origin: 'REDE', verdict: 'CONFIRMADA' }, 'ATIVO')).toBe(true);
-    expect(vinculoAparece({ origin: 'REDE', verdict: 'AGUARDANDO_PROVA' }, 'ATIVO')).toBe(false);
+  // Regra do dono (21/09/2026): ativo no SGA + vinculado + rastreável = cliente ativo.
+  it('da Rede aparece quando a TAG é rastreável (tem posição nossa)', () => {
+    expect(vinculoAparece({ origin: 'REDE', verdict: 'AGUARDANDO_PROVA' }, 'ATIVO', true)).toBe(true);
+    expect(vinculoAparece({ origin: 'REDE', verdict: 'CONFIRMADA' }, 'ATIVO', true)).toBe(true);
+  });
+
+  it('da Rede sem nenhuma posição nossa ainda não aparece', () => {
+    expect(vinculoAparece({ origin: 'REDE', verdict: 'AGUARDANDO_PROVA' }, 'ATIVO', false)).toBe(false);
+  });
+
+  it('posição que contradiz o carro nunca aparece', () => {
+    expect(vinculoAparece({ origin: 'REDE', verdict: 'DIVERGENTE' }, 'ATIVO', true)).toBe(false);
   });
 
   it('vinculado no Estoque aparece na hora, menos se a posição contradisser', () => {
-    expect(vinculoAparece({ origin: 'ESTOQUE', verdict: 'AGUARDANDO_PROVA' }, 'ATIVO')).toBe(true);
-    expect(vinculoAparece({ origin: 'ESTOQUE', verdict: 'DIVERGENTE' }, 'ATIVO')).toBe(false);
+    expect(vinculoAparece({ origin: 'ESTOQUE', verdict: 'AGUARDANDO_PROVA' }, 'ATIVO', false)).toBe(true);
+    expect(vinculoAparece({ origin: 'ESTOQUE', verdict: 'DIVERGENTE' }, 'ATIVO', true)).toBe(false);
   });
 });
 

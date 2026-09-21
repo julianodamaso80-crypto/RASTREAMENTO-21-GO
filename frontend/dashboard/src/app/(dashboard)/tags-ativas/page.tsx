@@ -157,6 +157,12 @@ export default function TagsAtivasPage() {
                 ? 'TAG contratada no SGA que ainda não conseguimos localizar'
                 : 'Todo veículo com TAG contratada e cliente ativo — fonte: SGA'}
           </p>
+          {(meta?.emClientesAtivos ?? 0) > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {meta?.emClientesAtivos} já estão em Clientes Ativos (ativas no SGA, vinculadas e
+              rastreáveis) e saíram desta lista.
+            </p>
+          )}
         </div>
         <Button
           variant="outline"
