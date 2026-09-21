@@ -14,6 +14,7 @@ import {
   tagNoMapa,
   ultimasPosicoes,
   vinculosDaTela,
+  vinculosVisiveis,
 } from './clients-tags';
 
 // Acentos do cadastro → letra sem acento, no SQL (espelha normalizarNome).
