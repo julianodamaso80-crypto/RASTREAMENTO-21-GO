@@ -218,10 +218,10 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
   const comPosicao = await seriaisComPosicao(
     prisma,
     tenantId,
-    vinculos.filter((v) => v.origin !== 'ESTOQUE').map((v) => v.serialNumber),
+    vinculos.map((v) => v.serialNumber),
   );
 
-  return vinculos
+  const visiveis = vinculos
     .map((v) => {
       const linha =
         (v.hinovaVehicleCode && porCodigo.get(v.hinovaVehicleCode)) ||
@@ -237,6 +237,25 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
         comPosicao.has(x.vinculo.serialNumber),
       ),
     );
+  return umPorVeiculo(visiveis, comPosicao);
+}
+
+/**
+ * Um card por veículo. A Rede tem carro com duas TAGs (14 em 21/09/2026);
+ * fica a que tem posição, e no empate a primeira.
+ */
+export function umPorVeiculo<
+  T extends { vinculo: { serialNumber: string; plate: string }; sga: { hinovaVehicleCode: string } | null },
+>(itens: T[], comPosicao: Set<string>): T[] {
+  const porVeiculo = new Map<string, T>();
+  for (const x of itens) {
+    const chave = x.sga?.hinovaVehicleCode ?? `placa:${x.vinculo.plate}`;
+    const atual = porVeiculo.get(chave);
+    if (!atual || (!comPosicao.has(atual.vinculo.serialNumber) && comPosicao.has(x.vinculo.serialNumber))) {
+      porVeiculo.set(chave, x);
+    }
+  }
+  return [...porVeiculo.values()];
 }
 
 /** Card de quem só tem TAG (nenhum rastreador nosso no veículo). */

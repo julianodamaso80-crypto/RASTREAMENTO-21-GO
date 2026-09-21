@@ -2,6 +2,7 @@ import {
   casaBusca,
   fatiaCombinada,
   podeVerTag,
+  umPorVeiculo,
   vinculoAparece,
 } from './clients-tags';
 import { Role } from '.prisma/client';
@@ -39,6 +40,31 @@ describe('vinculoAparece', () => {
   it('vinculado no Estoque aparece na hora, menos se a posição contradisser', () => {
     expect(vinculoAparece({ origin: 'ESTOQUE', verdict: 'AGUARDANDO_PROVA' }, 'ATIVO', false)).toBe(true);
     expect(vinculoAparece({ origin: 'ESTOQUE', verdict: 'DIVERGENTE' }, 'ATIVO', true)).toBe(false);
+  });
+});
+
+describe('umPorVeiculo — carro com duas TAGs na Rede vira um card só', () => {
+  const item = (serialNumber: string, codigo: string | null, plate = 'SSA5I19') => ({
+    vinculo: { serialNumber, plate },
+    sga: codigo ? { hinovaVehicleCode: codigo } : null,
+  });
+
+  it('fica a TAG que tem posição', () => {
+    const r = umPorVeiculo([item('A', '37985'), item('B', '37985')], new Set(['B']));
+    expect(r.map((x) => x.vinculo.serialNumber)).toEqual(['B']);
+  });
+
+  it('empate: fica a primeira', () => {
+    const r = umPorVeiculo([item('A', '1'), item('B', '1')], new Set(['A', 'B']));
+    expect(r.map((x) => x.vinculo.serialNumber)).toEqual(['A']);
+  });
+
+  it('sem código do SGA agrupa pela placa; veículos diferentes não se juntam', () => {
+    const r = umPorVeiculo(
+      [item('A', null, 'AAA1A11'), item('B', null, 'AAA1A11'), item('C', '9')],
+      new Set(),
+    );
+    expect(r.map((x) => x.vinculo.serialNumber)).toEqual(['A', 'C']);
   });
 });
 
