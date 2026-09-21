@@ -104,6 +104,9 @@ export function casaBusca(
     return true;
   }
   if ((item.associateName ?? '').toLowerCase().includes(t.toLowerCase())) return true;
+  // Mesma regra do núcleo de busca (termo-busca.ts): termo com letra nunca vira
+  // busca numérica — "LMX4B84" viraria "484" e casaria com metade das TAGs.
+  if (/[A-Za-z]/.test(t) || digitos.length < 3) return false;
   if (digitos && ((item.associateCpf ?? '').includes(digitos) || item.serialNumber.includes(digitos))) {
     return true;
   }

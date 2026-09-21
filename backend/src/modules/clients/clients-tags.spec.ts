@@ -93,4 +93,10 @@ describe('casaBusca', () => {
     expect(casaBusca(item, '808092')).toBe(true);
   });
   it('não casa o que não bate', () => expect(casaBusca(item, 'XYZ9Z99')).toBe(false));
+  it('placa com letra não vira busca pelos dígitos soltos', () => {
+    // "LMX4B84" → "484": casava com qualquer CPF/série que contivesse 484 (21/09).
+    const outro = { ...item, associateCpf: '14848400000', serialNumber: '808092600484001' };
+    expect(casaBusca(outro, 'LMX4B84')).toBe(false);
+  });
+  it('menos de 3 dígitos não busca em CPF nem série', () => expect(casaBusca(item, '12')).toBe(false));
 });
