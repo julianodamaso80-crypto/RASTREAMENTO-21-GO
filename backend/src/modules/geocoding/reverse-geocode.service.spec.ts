@@ -10,8 +10,8 @@ import {
 /** Prisma de mentira mínimo — sem linha nenhuma de cache, upsert vira no-op. */
 function prismaFakeVazio() {
   return {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     geoAddress: {
-      findMany: jest.fn().mockResolvedValue([]),
       upsert: jest.fn().mockResolvedValue(undefined),
     },
   } as never;
@@ -127,17 +127,15 @@ describe('cache por proximidade', () => {
   /** Prisma de mentira: devolve o que o teste plantou e registra a busca. */
   function prismaFake(linhas: Array<{ lat: number; lng: number; address: string }>) {
     return {
-      geoAddress: {
-        findMany: jest.fn().mockResolvedValue(
-          linhas.map((l) => ({
-            latKey: Math.round(l.lat * 1e4) / 1e4,
-            lngKey: Math.round(l.lng * 1e4) / 1e4,
-            lat: l.lat,
-            lng: l.lng,
-            address: l.address,
-          })),
-        ),
-      },
+      $queryRaw: jest.fn().mockResolvedValue(
+        linhas.map((l) => ({
+          latKey: Math.round(l.lat * 1e4) / 1e4,
+          lngKey: Math.round(l.lng * 1e4) / 1e4,
+          lat: l.lat,
+          lng: l.lng,
+          address: l.address,
+        })),
+      ),
     } as never;
   }
 
@@ -209,17 +207,15 @@ describe('distanciaMetros', () => {
 describe('tolerância zero — o painel do veículo', () => {
   it('recusa até o vizinho a 4 m quando a tolerância pedida é zero', async () => {
     const prisma = {
-      geoAddress: {
-        findMany: jest.fn().mockResolvedValue([
-          {
-            latKey: -22.9058,
-            lngKey: -43.1795,
-            lat: -22.9058,
-            lng: -43.1795,
-            address: 'Rua Vizinha - Centro, Rio de Janeiro - RJ',
-          },
-        ]),
-      },
+      $queryRaw: jest.fn().mockResolvedValue([
+        {
+          latKey: -22.9058,
+          lngKey: -43.1795,
+          lat: -22.9058,
+          lng: -43.1795,
+          address: 'Rua Vizinha - Centro, Rio de Janeiro - RJ',
+        },
+      ]),
     } as never;
     const servico = new ReverseGeocodeService(prisma);
 
@@ -259,7 +255,7 @@ describe('proximoSlot — portão de 1 chamada por vez ao Nominatim', () => {
 describe('enfileirarFaltantes — freio da geocodificação em massa', () => {
   it('não põe nada na fila quando o chamador pede só leitura de cache', async () => {
     const prisma = {
-      geoAddress: { findMany: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     } as never;
     const servico = new ReverseGeocodeService(prisma);
     const fetchSpy = jest
@@ -283,7 +279,7 @@ describe('enfileirarFaltantes — freio da geocodificação em massa', () => {
 describe('backoff ao levar 429', () => {
   it('para de chamar o Nominatim depois da primeira recusa', async () => {
     const prisma = {
-      geoAddress: { findMany: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     } as never;
     const servico = new ReverseGeocodeService(prisma);
 
@@ -590,5 +586,44 @@ describe('a key do geocoder próprio nunca aparece no log', () => {
 
     const textoLogado = warnSpy.mock.calls.map((chamada) => String(chamada[0])).join('\n');
     expect(textoLogado).not.toContain('SEGREDO123');
+  });
+});
+
+describe('formato fixo da busca no cache — vazamento de memória de 21/09', () => {
+  // Medido em produção: o findMany com OR de 9 células por ponto gerava um
+  // plano novo no cache do Prisma a cada quantidade diferente de pontos
+  // (chave de ~650 KB cada, até 1.000 planos). O heap chegava a 4 GB e o
+  // backend caía. SQL cru não passa pelo cache de planos do Prisma 7.
+  function prismaSoRaw() {
+    const textos: string[] = [];
+    const prisma = {
+      geoAddress: {
+        findMany: jest.fn().mockRejectedValue(new Error('findMany não pode ser usado aqui')),
+      },
+      $queryRaw: jest.fn((sql: { sql: string }) => {
+        textos.push(sql.sql);
+        return Promise.resolve([]);
+      }),
+    };
+    return { prisma: prisma as never, textos, findMany: prisma.geoAddress.findMany };
+  }
+
+  function pontos(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      latitude: -22.9 - i * 0.001,
+      longitude: -43.1 - i * 0.001,
+    }));
+  }
+
+  it('usa o mesmo texto de consulta com 1 ponto e com 500 pontos', async () => {
+    const { prisma, textos, findMany } = prismaSoRaw();
+    const servico = new ReverseGeocodeService(prisma);
+
+    await servico.lookupCached(pontos(1), undefined, false);
+    await servico.lookupCached(pontos(500), undefined, false);
+
+    expect(findMany).not.toHaveBeenCalled();
+    expect(textos).toHaveLength(2);
+    expect(textos[0]).toBe(textos[1]);
   });
 });

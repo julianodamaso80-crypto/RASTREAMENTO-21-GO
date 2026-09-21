@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -146,21 +147,19 @@ export class ReverseGeocodeService {
       }
     }
 
-    const achados = await this.prisma.geoAddress.findMany({
-      where: {
-        OR: [...celulas.values()].map((c) => ({
-          latKey: c.latitude,
-          lngKey: c.longitude,
-        })),
-      },
-      select: {
-        latKey: true,
-        lngKey: true,
-        lat: true,
-        lng: true,
-        address: true,
-      },
-    });
+    // SQL cru de texto fixo, com as células em dois arrays. O findMany com OR
+    // de N células fazia o Prisma 7 compilar e guardar um plano novo para cada
+    // N diferente (chave de ~650 KB, até 1.000 planos): o heap chegava a 4 GB
+    // e o backend caía (21/09/2026). SQL cru não passa pelo cache de planos.
+    const lista = [...celulas.values()];
+    const achados = await this.prisma.$queryRaw<
+      Array<{ latKey: number; lngKey: number; lat: number | null; lng: number | null; address: string }>
+    >(Prisma.sql`
+      SELECT g.lat_key AS "latKey", g.lng_key AS "lngKey", g.lat, g.lng, g.address
+        FROM geo_addresses g
+        JOIN unnest(${lista.map((c) => c.latitude)}::float8[],
+                    ${lista.map((c) => c.longitude)}::float8[]) AS c(lat, lng)
+          ON g.lat_key = c.lat AND g.lng_key = c.lng`);
 
     // Para cada ponto pedido, o endereço mais próximo dentro da tolerância.
     const resultado = new Map<string, string>();
