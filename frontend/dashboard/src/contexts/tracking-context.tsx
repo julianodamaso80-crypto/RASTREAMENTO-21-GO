@@ -165,7 +165,11 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadData() {
       try {
-        const [vehiclesList, devices, positions, alertsRes, unread] = await Promise.all([
+        // `allSettled`, não `all`. Com `all`, UMA chamada lenta segurava as
+        // outras quatro e o painel inteiro ficava em branco — foi o que os
+        // usuários viram em 22/09/2026. Aqui cada pedaço que chega é usado, e
+        // o que falhou só deixa a sua própria parte vazia: a tela SEMPRE abre.
+        const [vehiclesR, devicesR, positionsR, alertsR, unreadR] = await Promise.allSettled([
           loadAllVehicles(),
           traccarApi.getDevices(),
           traccarApi.getPositions(),
@@ -173,21 +177,39 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
           alertsApi.getUnreadCount(),
         ]);
 
-        setAlerts(alertsRes.data);
-        setUnreadCount(unread);
+        if (alertsR.status === 'fulfilled') setAlerts(alertsR.value.data);
+        if (unreadR.status === 'fulfilled') setUnreadCount(unreadR.value);
 
         const vMap = new Map<string, Vehicle>();
-        vehiclesList.forEach((v) => vMap.set(v.id, v));
+        if (vehiclesR.status === 'fulfilled') {
+          vehiclesR.value.forEach((v) => vMap.set(v.id, v));
+        }
 
         const dMap = new Map<number, TraccarDevice>();
-        devices.forEach((d) => dMap.set(d.id, d));
+        if (devicesR.status === 'fulfilled') {
+          devicesR.value.forEach((d) => dMap.set(d.id, d));
+        }
 
         const pMap = new Map<number, TraccarPosition>();
-        positions.forEach((p) => pMap.set(p.deviceId, p));
+        if (positionsR.status === 'fulfilled') {
+          positionsR.value.forEach((p) => pMap.set(p.deviceId, p));
+        }
 
         setVehicleMap(vMap);
         setDeviceMap(dMap);
         setPositionMap(pMap);
+
+        // Estado vazio nunca vira mock, mas o operador precisa saber o que
+        // faltou em vez de achar que a frota sumiu. O polling de 8s recupera.
+        const faltou = [
+          vehiclesR.status === 'rejected' && 'veículos',
+          devicesR.status === 'rejected' && 'rastreadores',
+          positionsR.status === 'rejected' && 'posições',
+        ].filter(Boolean);
+        if (faltou.length > 0) {
+          toast.error(`Não carregou: ${faltou.join(', ')}. Tentando de novo em segundos.`);
+        }
+
         // BLE Tags em paralelo (não-crítico se falhar)
         bleTagsApi
           .getAll()

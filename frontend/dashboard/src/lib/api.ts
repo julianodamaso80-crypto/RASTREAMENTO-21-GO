@@ -81,10 +81,21 @@ import type {
   UserWithPassword,
 } from '@/types/user';
 
+// `timeout` NÃO é detalhe: sem ele o axios espera para sempre. Em 22/09/2026 o
+// trecho entre o origin (nyc1) e o edge do Cloudflare no Rio ficou com perda de
+// pacote, respostas grandes travaram, e as abas que caíram nisso ficaram em
+// branco PARA SEMPRE — sem erro, sem nova tentativa, porque a promise nunca
+// resolvia nem rejeitava. 90s é de propósito maior que qualquer chamada real e
+// menor que o corte do próprio Cloudflare (~100s): não tira capacidade de nada,
+// só garante que uma requisição pendurada vire erro tratável.
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
   headers: { 'Content-Type': 'application/json' },
+  timeout: 90_000,
 });
+
+/** Chamadas do mapa: precisam desistir cedo para a tela abrir mesmo sem elas. */
+const TRACKING_TIMEOUT = 25_000;
 
 // JWT interceptor
 api.interceptors.request.use((config) => {
@@ -396,11 +407,15 @@ export const assistantApi = {
 
 export const traccarApi = {
   getDevices: async (): Promise<TraccarDevice[]> => {
-    const res = await api.get<ApiResponse<TraccarDevice[]>>('/traccar/devices');
+    const res = await api.get<ApiResponse<TraccarDevice[]>>('/traccar/devices', {
+      timeout: TRACKING_TIMEOUT,
+    });
     return res.data.data;
   },
   getPositions: async (): Promise<TraccarPosition[]> => {
-    const res = await api.get<ApiResponse<TraccarPosition[]>>('/traccar/positions');
+    const res = await api.get<ApiResponse<TraccarPosition[]>>('/traccar/positions', {
+      timeout: TRACKING_TIMEOUT,
+    });
     return res.data.data;
   },
   getHistory: async (deviceId: number, from: string, to: string): Promise<TraccarPosition[]> => {
