@@ -183,7 +183,9 @@ export default function EstoquePage() {
     try {
       const res = await stockApi.import(file);
       toast.success(
-        `Importação concluída: ${res.imported} novos, ${res.updated} atualizados` +
+        (res.tipo === 'TAG'
+          ? `TAGs importadas: ${res.imported} novas, ${res.updated} já existiam`
+          : `Importação concluída: ${res.imported} novos, ${res.updated} atualizados`) +
           (res.skipped ? `, ${res.skipped} ignorados` : ''),
         { id: toastId },
       );

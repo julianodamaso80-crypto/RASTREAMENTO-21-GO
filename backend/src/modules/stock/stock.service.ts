@@ -74,7 +74,25 @@ export type ImportResult = {
   updated: number; // linhas atualizadas (IMEI já existia)
   skipped: number; // linhas ignoradas (sem IMEI)
   total: number; // linhas de dados lidas
+  tipo?: 'RASTREADOR' | 'TAG';
 };
+
+/**
+ * Cabeçalho reduzido a letras e números: o arquivo do fabricante da TAG vem
+ * como "SN码", "MAC地址", "privateKey值", "hashedAdvKey值".
+ */
+function chaveDeCabecalho(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/** Algumas células do fabricante vêm com "=" na frente (24 das 500 do lote 808092). */
+function semIgual(v: string): string {
+  return v.trim().replace(/^=+/, '').trim();
+}
+
+function bytesBase64(v: string): number {
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(v) ? Buffer.from(v, 'base64').length : -1;
+}
 
 // Normaliza cabeçalho: remove acentos, espaços extras e caixa alta, pra casar variações.
 /** Saúde vazia com o aviso de que o servidor GPS não respondeu por este IMEI. */
@@ -1532,6 +1550,16 @@ export class StockService {
 
     // Mapeia índice da coluna -> campo, lendo a primeira linha como cabeçalho.
     const headerRow = worksheet.getRow(1);
+
+    const colunasTag = new Map<string, number>();
+    for (let c = 1; c <= worksheet.columnCount; c++) {
+      const k = chaveDeCabecalho(this.cellText(headerRow.getCell(c)));
+      if (['SN', 'MAC', 'PRIVATEKEY', 'HASHEDADVKEY'].includes(k)) colunasTag.set(k, c);
+    }
+    if (colunasTag.has('SN') && colunasTag.has('PRIVATEKEY') && colunasTag.has('HASHEDADVKEY')) {
+      return this.importarTags(worksheet, colunasTag, tenantId);
+    }
+
     const colToField = new Map<number, keyof ParsedRow>();
     for (let c = 1; c <= worksheet.columnCount; c++) {
       const header = this.cellText(headerRow.getCell(c));
@@ -1647,6 +1675,101 @@ export class StockService {
     });
 
     return { imported, updated, skipped, total: rows.length };
+  }
+
+  /**
+   * Arquivo do fabricante das TAGs: cada linha vira chave (tag_keys — o coletor
+   * Find My consulta todas a cada ciclo) + TAG livre no Estoque. Não passa pelo
+   * servidor GPS: TAG não é rastreador. A chave é conferida (28/32 bytes) antes
+   * de gravar — número de série no lugar da chave faria o coletor perguntar
+   * por chave inexistente e receber silêncio.
+   */
+  private async importarTags(
+    worksheet: ExcelJS.Worksheet,
+    colunas: Map<string, number>,
+    tenantId: string,
+  ): Promise<ImportResult> {
+    const ler = (row: ExcelJS.Row, k: string) =>
+      colunas.has(k) ? semIgual(this.cellText(row.getCell(colunas.get(k)!))) : '';
+
+    const linhas: Array<{ sn: string; mac: string | null; privateKey: string; hashedAdvKey: string }> = [];
+    let skipped = 0;
+    for (let r = 2; r <= worksheet.rowCount; r++) {
+      const row = worksheet.getRow(r);
+      const sn = ler(row, 'SN');
+      if (!sn) continue; // linha vazia no fim do arquivo não é erro
+      const privateKey = ler(row, 'PRIVATEKEY');
+      const hashedAdvKey = ler(row, 'HASHEDADVKEY');
+      if (!/^\d{6,20}$/.test(sn) || bytesBase64(privateKey) !== 28 || bytesBase64(hashedAdvKey) !== 32) {
+        this.logger.warn(`Import TAG: linha ${r} (SN ${sn}) com chave inválida — ignorada`);
+        skipped++;
+        continue;
+      }
+      linhas.push({ sn, mac: ler(row, 'MAC') || null, privateKey, hashedAdvKey });
+    }
+
+    if (linhas.length === 0) {
+      throw new BadRequestException('Nenhuma TAG com chave válida encontrada na planilha.');
+    }
+
+    const seriais = linhas.map((l) => l.sn);
+    const [noEstoque, vinculadas] = await Promise.all([
+      this.prisma.stockItem.findMany({
+        where: { tenantId, imei: { in: seriais } },
+        select: { id: true, imei: true, kind: true, deletedAt: true, associatedAt: true },
+      }),
+      this.prisma.tagLink.findMany({
+        where: { tenantId, serialNumber: { in: seriais }, deletedAt: null },
+        select: { serialNumber: true },
+      }),
+    ]);
+    const estoquePorSerial = new Map(noEstoque.map((s) => [s.imei, s]));
+    const jaVinculada = new Set(vinculadas.map((v) => v.serialNumber));
+
+    let imported = 0;
+    let updated = 0;
+    const batchSize = 25;
+    for (let i = 0; i < linhas.length; i += batchSize) {
+      const lote = linhas.slice(i, i + batchSize);
+      const resultados = await Promise.all(
+        lote.map(async (l) => {
+          const item = estoquePorSerial.get(l.sn);
+          // Mesmo número já cadastrado como rastreador: não sobrescrever.
+          if (item && item.kind !== 'TAG') return 'ignorada' as const;
+
+          const batch = l.sn.slice(0, 6);
+          const chave = { macAddress: l.mac, privateKey: l.privateKey, hashedAdvKey: l.hashedAdvKey, batch };
+          await this.prisma.tagKey.upsert({
+            where: { tenantId_serialNumber: { tenantId, serialNumber: l.sn } },
+            create: { tenantId, serialNumber: l.sn, ...chave },
+            update: chave,
+          });
+
+          // Vinculada a cliente não volta pro Estoque.
+          if (jaVinculada.has(l.sn)) return 'atualizada' as const;
+          if (item) {
+            if (item.deletedAt && !item.associatedAt) {
+              await this.prisma.stockItem.update({ where: { id: item.id }, data: { deletedAt: null } });
+            }
+            return 'atualizada' as const;
+          }
+          await this.prisma.stockItem.create({
+            data: { tenantId, imei: l.sn, kind: 'TAG', status: 'TAG', notes: `Lote ${batch}` },
+          });
+          return 'nova' as const;
+        }),
+      );
+      for (const r of resultados) {
+        if (r === 'nova') imported++;
+        else if (r === 'atualizada') updated++;
+        else skipped++;
+      }
+    }
+
+    this.logger.log(
+      `Import TAG tenant=${tenantId}: ${imported} novas, ${updated} atualizadas, ${skipped} ignoradas`,
+    );
+    return { imported, updated, skipped, total: linhas.length, tipo: 'TAG' };
   }
 
   // --- helpers de leitura de célula (exceljs retorna tipos variados) ---

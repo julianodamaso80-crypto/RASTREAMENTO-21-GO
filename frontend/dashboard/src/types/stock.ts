@@ -167,6 +167,7 @@ export interface StockImportResult {
   updated: number;
   skipped: number;
   total: number;
+  tipo?: 'RASTREADOR' | 'TAG';
 }
 
 export interface StockStats {
