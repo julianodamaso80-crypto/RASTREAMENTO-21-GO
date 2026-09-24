@@ -66,6 +66,24 @@ o botão de bloquear/desbloquear daquele veículo.
 - Resultado: sucesso, fila (rastreador offline) ou erro, sempre em texto claro.
 - Sai na versão 1.5.2 (build + lojas). Painel e API sobem antes, independentes.
 
+## Estado de bloqueio visível ao associado (pedido do dono, 24/09)
+
+Vale para **todo associado**, com ou sem acesso ao bloqueador. Um veículo bloqueado pela
+empresa também precisa aparecer como bloqueado.
+
+- Hoje o `GET /app/vehicles` já devolve `status: BLOCKED` (gravado quando o comando é
+  aceito), mas o app ignora o campo e mostra "Desligado". O `blocked` que o próprio
+  rastreador informa na posição não é repassado.
+- API: `toPositionDto` passa a devolver `blocked: a.blocked ?? null`. O que o rastreador
+  informa é a fonte da verdade; o `status` do banco só diz que o comando saiu.
+- App (tela de veículos e ficha do veículo):
+  - `position.blocked === true` → "Bloqueado", em vermelho, no lugar de
+    "Desligado/Ligado".
+  - `status === BLOCKED` e o rastreador ainda não confirmou → "Bloqueio enviado,
+    aguardando o rastreador".
+  - Caso contrário, igual a hoje.
+- Chega ao associado na mesma versão 1.5.2.
+
 ## Ordem de entrega
 
 1. Migração + backend (painel e rotas do app) + painel. Deploy normal, combinado com as
