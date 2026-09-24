@@ -19,6 +19,7 @@ import { PERFIS_QUE_VEEM_TAG, podeVerTag } from './clients-tags';
 import { AssociateAuthService } from '../app/associate-auth.service';
 import {
   SetAppAccessDto,
+  SetBlockerAccessDto,
   SetFinancialStatusDto,
   SetTechnicianDto,
 } from './dto/asset-actions.dto';
@@ -99,6 +100,22 @@ export class ClientsController {
       dto.blocked,
     );
   }
+  @Patch('assets/:vehicleId/blocker-access')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @ApiOperation({ summary: 'Libera ou retira o bloqueador do app para um ativo' })
+  setBlockerAccess(
+    @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
+    @Body() dto: SetBlockerAccessDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.clientsService.setBlockerAccess(
+      req.tenantId,
+      vehicleId,
+      dto.allowed,
+    );
+  }
+
 
   @Patch('assets/:vehicleId/financial-status')
   @UseGuards(RolesGuard)

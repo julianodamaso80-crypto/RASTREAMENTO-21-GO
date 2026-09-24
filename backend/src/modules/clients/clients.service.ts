@@ -349,6 +349,7 @@ export class ClientsService {
       financialStatus: v.financialStatus as FinancialStatus | null,
       financialStatusAt: v.financialStatusAt,
       appAccessBlocked: v.appAccessBlocked,
+      blockerAccessAllowed: v.blockerAccessAllowed,
       sga: { code: v.hinovaCode, statusLabel: v.sgaStatusLabel },
     };
   }
@@ -495,6 +496,16 @@ export class ClientsService {
       select: { id: true, plate: true, appAccessBlocked: true },
     });
     return v;
+  }
+
+  /** Liga ou desliga o botão de bloqueio do app do associado para UM ativo. */
+  async setBlockerAccess(tenantId: string, vehicleId: string, allowed: boolean) {
+    await this.assertVehicle(tenantId, vehicleId);
+    return this.prisma.vehicle.update({
+      where: { id: vehicleId },
+      data: { blockerAccessAllowed: allowed },
+      select: { id: true, plate: true, blockerAccessAllowed: true },
+    });
   }
 
   /**

@@ -963,6 +963,9 @@ export const clientsApi = {
   setAppAccess: async (vehicleId: string, blocked: boolean): Promise<void> => {
     await api.patch(`/clients/assets/${vehicleId}/app-access`, { blocked });
   },
+  setBlockerAccess: async (vehicleId: string, allowed: boolean): Promise<void> => {
+    await api.patch(`/clients/assets/${vehicleId}/blocker-access`, { allowed });
+  },
   setFinancialStatus: async (
     vehicleId: string,
     status: 'ADIMPLENTE' | 'INADIMPLENTE',

@@ -402,6 +402,7 @@ export function ativoSoTag(
     financialStatus: null,
     financialStatusAt: null,
     appAccessBlocked: false,
+    blockerAccessAllowed: false,
     sga: { code: v.hinovaVehicleCode, statusLabel: sga?.situationLabel ?? null },
     soTag: true,
     tag: resumoTag(v, pos),

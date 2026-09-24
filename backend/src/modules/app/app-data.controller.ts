@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators';
 import { AppDataService } from './app-data.service';
@@ -22,6 +30,28 @@ export class AppDataController {
     @CurrentAssociate('tenantId') tenantId: string,
   ) {
     return this.service.getVehicles(associateId, tenantId);
+  }
+
+  @Post('vehicles/:id/block')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Associado bloqueia o próprio veículo (se liberado)' })
+  async block(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id') vehicleId: string,
+  ) {
+    return this.service.setBlocked(associateId, tenantId, vehicleId, true);
+  }
+
+  @Post('vehicles/:id/unblock')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Associado desbloqueia o próprio veículo (se liberado)' })
+  async unblock(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id') vehicleId: string,
+  ) {
+    return this.service.setBlocked(associateId, tenantId, vehicleId, false);
   }
 
   @Get('vehicles/:id/history')

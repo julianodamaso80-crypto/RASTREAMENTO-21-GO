@@ -7,6 +7,12 @@ export class SetAppAccessDto {
   blocked!: boolean;
 }
 
+export class SetBlockerAccessDto {
+  @ApiProperty({ description: 'true libera o associado a bloquear este ativo pelo app' })
+  @IsBoolean()
+  allowed!: boolean;
+}
+
 export class SetFinancialStatusDto {
   @ApiProperty({ enum: ['ADIMPLENTE', 'INADIMPLENTE'] })
   @IsIn(['ADIMPLENTE', 'INADIMPLENTE'])

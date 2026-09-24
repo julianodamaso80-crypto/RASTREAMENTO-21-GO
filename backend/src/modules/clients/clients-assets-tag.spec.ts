@@ -26,6 +26,7 @@ const VEICULO = {
   financialStatus: null,
   financialStatusAt: null,
   appAccessBlocked: false,
+  blockerAccessAllowed: false,
 };
 
 const LINK = {

@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { AlertType } from '.prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { AlertType, VehicleStatus } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   TraccarService,
@@ -50,6 +56,7 @@ function toPositionDto(p: TraccarPosition) {
     odometer:
       a.totalDistance != null ? Math.round(a.totalDistance / 1000) : null, // km
     powerCut: a.powerCut ?? null, // alimentação cortada (possível sabotagem)
+    blocked: a.blocked ?? null, // relé de bloqueio, como o PRÓPRIO rastreador informa
   };
 }
 
@@ -68,6 +75,7 @@ function toVehicleDto(v: {
   year: number | null;
   status: unknown;
   traccarDeviceId: number | null;
+  blockerAccessAllowed: boolean;
 }) {
   return {
     id: v.id,
@@ -79,6 +87,7 @@ function toVehicleDto(v: {
     year: v.year,
     status: v.status,
     traccarDeviceId: v.traccarDeviceId,
+    blockerAccessAllowed: v.blockerAccessAllowed,
   };
 }
 
@@ -131,6 +140,7 @@ export class AppDataService {
         year: true,
         status: true,
         traccarDeviceId: true,
+        blockerAccessAllowed: true,
       },
       orderBy: { plate: 'asc' },
     });
@@ -168,6 +178,55 @@ export class AppDataService {
           : null,
       };
     });
+  }
+
+  /**
+   * Bloqueio/desbloqueio pelo próprio associado. A permissão é conferida no
+   * momento da chamada: se o admin retirou o acesso, o app aberto para na hora.
+   * Rastreador offline → o Traccar guarda na fila (202) e o app avisa.
+   */
+  async setBlocked(
+    associateId: string,
+    tenantId: string,
+    vehicleId: string,
+    block: boolean,
+  ) {
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: { id: vehicleId, associateId, tenantId, deletedAt: null },
+      select: {
+        id: true,
+        traccarDeviceId: true,
+        blockerAccessAllowed: true,
+        appAccessBlocked: true,
+      },
+    });
+    if (!vehicle || vehicle.appAccessBlocked) {
+      throw new NotFoundException('Veículo não encontrado');
+    }
+    if (!vehicle.blockerAccessAllowed) {
+      throw new ForbiddenException('Bloqueio não liberado para este veículo');
+    }
+    if (!vehicle.traccarDeviceId) {
+      throw new BadRequestException('Veículo sem rastreador instalado');
+    }
+
+    let enviado: boolean;
+    try {
+      ({ enviado } = await this.traccar.sendCommandNow(
+        vehicle.traccarDeviceId,
+        block ? 'engineStop' : 'engineResume',
+      ));
+    } catch {
+      throw new ServiceUnavailableException(
+        `Não foi possível ${block ? 'bloquear' : 'desbloquear'} agora. Tente de novo em instantes.`,
+      );
+    }
+
+    await this.prisma.vehicle.update({
+      where: { id: vehicle.id },
+      data: { status: block ? VehicleStatus.BLOCKED : VehicleStatus.ACTIVE },
+    });
+    return { status: block ? 'BLOCKED' : 'ACTIVE', queued: !enviado };
   }
 
   /** Histórico de posições de um veículo do associado num intervalo. */

@@ -48,6 +48,8 @@ export interface ClientAsset {
   financialStatus: FinancialStatus | null;
   financialStatusAt: string | null;
   appAccessBlocked: boolean;
+  /** Associado pode bloquear/desbloquear este veículo pelo app. Só admin liga. */
+  blockerAccessAllowed: boolean;
   sga: { code: string | null; statusLabel: string | null };
   /** Veículo que só tem TAG (nenhum rastreador nosso). Interno. */
   soTag?: boolean;

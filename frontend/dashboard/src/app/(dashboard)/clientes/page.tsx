@@ -137,6 +137,21 @@ export default function ClientesPage() {
     }
   };
 
+  const alternarBloqueador = async (asset: ClientAsset) => {
+    const liberar = !asset.blockerAccessAllowed;
+    try {
+      await clientsApi.setBlockerAccess(asset.id, liberar);
+      toast.success(
+        liberar
+          ? `Bloqueador liberado: o cliente já pode bloquear ${asset.plate} pelo app.`
+          : `Acesso ao bloqueador de ${asset.plate} retirado.`,
+      );
+      await load();
+    } catch {
+      toast.error('Não consegui alterar o acesso ao bloqueador. Tente de novo.');
+    }
+  };
+
   const alternarFinanceiro = async (asset: ClientAsset) => {
     const novo =
       asset.financialStatus === 'INADIMPLENTE' ? 'ADIMPLENTE' : 'INADIMPLENTE';
@@ -328,6 +343,7 @@ export default function ClientesPage() {
                   }
                   onAlterarFinanceiro={() => alternarFinanceiro(asset)}
                   onAlterarAcesso={() => alternarAcesso(asset)}
+                  onAlterarBloqueador={() => alternarBloqueador(asset)}
                   onRedefinirSenha={() => resetarSenha(asset)}
                   onRetirar={() => {
                     if (!asset.device) return;

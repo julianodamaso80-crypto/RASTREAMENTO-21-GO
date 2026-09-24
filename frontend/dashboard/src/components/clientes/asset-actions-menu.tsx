@@ -11,6 +11,8 @@ import {
   Unlock,
   KeyRound,
   Loader2,
+  ShieldCheck,
+  ShieldOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +31,8 @@ export function AssetActionsMenu({
   onAlterarTecnico,
   onAlterarFinanceiro,
   onAlterarAcesso,
+  onAlterarBloqueador,
+  podeLiberarBloqueador,
   onRedefinirSenha,
   redefinindoSenha,
 }: {
@@ -38,6 +42,9 @@ export function AssetActionsMenu({
   onAlterarTecnico: () => void;
   onAlterarFinanceiro: () => void;
   onAlterarAcesso: () => void;
+  onAlterarBloqueador: () => void;
+  /** Só ADMIN/SUPER_ADMIN; os demais nem veem o item. */
+  podeLiberarBloqueador: boolean;
   onRedefinirSenha: () => void;
   redefinindoSenha: boolean;
 }) {
@@ -95,6 +102,19 @@ export function AssetActionsMenu({
             </>
           )}
         </DropdownMenuItem>
+        {podeLiberarBloqueador && (
+          <DropdownMenuItem onClick={onAlterarBloqueador}>
+            {asset.blockerAccessAllowed ? (
+              <>
+                <ShieldOff className="h-4 w-4" /> Retirar acesso ao bloqueador
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="h-4 w-4" /> Liberar acesso ao bloqueador
+              </>
+            )}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onClick={onRedefinirSenha}
           disabled={!asset.associate || redefinindoSenha}

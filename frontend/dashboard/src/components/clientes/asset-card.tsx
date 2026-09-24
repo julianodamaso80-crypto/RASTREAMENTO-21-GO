@@ -34,6 +34,7 @@ export function AssetCard({
   onAlterarTecnico,
   onAlterarFinanceiro,
   onAlterarAcesso,
+  onAlterarBloqueador,
   onRedefinirSenha,
   onRetirar,
   onDesvincularTag,
@@ -45,6 +46,7 @@ export function AssetCard({
   onAlterarTecnico: () => void;
   onAlterarFinanceiro: () => void;
   onAlterarAcesso: () => void;
+  onAlterarBloqueador: () => void;
   onRedefinirSenha: () => void;
   onRetirar: () => void;
   onDesvincularTag: () => void;
@@ -104,6 +106,10 @@ export function AssetCard({
           onAlterarTecnico={onAlterarTecnico}
           onAlterarFinanceiro={onAlterarFinanceiro}
           onAlterarAcesso={onAlterarAcesso}
+          onAlterarBloqueador={onAlterarBloqueador}
+          podeLiberarBloqueador={
+            user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN'
+          }
           onRedefinirSenha={onRedefinirSenha}
           redefinindoSenha={redefinindoSenha}
         />

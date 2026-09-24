@@ -64,7 +64,7 @@ describe('contrato do associado — /app/vehicles', () => {
     const r = await servico([veiculoGordo]).getVehicles('a1', 'tn1');
     for (const k of PROIBIDOS) expect(chaves(r[0])).not.toContain(k);
     expect(chaves(r[0]).sort()).toEqual(
-      ['brand', 'color', 'connection', 'id', 'model', 'plate', 'position', 'status', 'traccarDeviceId', 'vehicleType', 'year'].sort(),
+      ['blockerAccessAllowed', 'brand', 'color', 'connection', 'id', 'model', 'plate', 'position', 'status', 'traccarDeviceId', 'vehicleType', 'year'].sort(),
     );
   });
 
@@ -72,7 +72,7 @@ describe('contrato do associado — /app/vehicles', () => {
     const r = await servico([{ ...veiculoGordo, traccarDeviceId: null }]).getVehicles('a1', 'tn1');
     for (const k of PROIBIDOS) expect(chaves(r[0])).not.toContain(k);
     expect(chaves(r[0]).sort()).toEqual(
-      ['brand', 'color', 'connection', 'id', 'model', 'plate', 'position', 'status', 'traccarDeviceId', 'vehicleType', 'year'].sort(),
+      ['blockerAccessAllowed', 'brand', 'color', 'connection', 'id', 'model', 'plate', 'position', 'status', 'traccarDeviceId', 'vehicleType', 'year'].sort(),
     );
   });
 });
