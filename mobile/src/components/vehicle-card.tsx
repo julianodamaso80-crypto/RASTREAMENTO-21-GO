@@ -1,6 +1,16 @@
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Linking,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Vehicle } from '@/lib/api';
+import { AppApi, Vehicle } from '@/lib/api';
+import { blockState, BLOCK_LABEL } from '@/lib/vehicle-visual';
 import { useAddress } from '@/lib/geocode';
 import { timeAgo, compass, formatDateTime } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
@@ -9,6 +19,8 @@ type IconName = keyof typeof Ionicons.glyphMap;
 
 /** Status derivado da POSIÇÃO GPS real (nunca do heartbeat de conexão). */
 function statusOf(v: Vehicle): { color: string; label: string; icon: IconName } {
+  const bloqueio = blockState(v);
+  if (bloqueio === 'BLOQUEADO') return { color: colors.red, label: BLOCK_LABEL.BLOQUEADO, icon: 'lock-closed' };
   const p = v.position;
   if (!p) return { color: colors.textFaint, label: 'Sem sinal', icon: 'help-circle' };
   if (p.motion) return { color: colors.green, label: 'Em movimento', icon: 'navigate' };
@@ -44,13 +56,20 @@ export function VehicleCard({
   ownerName,
   onFocus,
   onHistory,
+  onChanged,
 }: {
   vehicle: Vehicle;
   selected: boolean;
   ownerName?: string | null;
   onFocus: () => void;
   onHistory: () => void;
+  /** Recarrega a lista depois de bloquear/desbloquear. */
+  onChanged?: () => void;
 }) {
+  const [enviando, setEnviando] = useState(false);
+  const bloqueio = blockState(vehicle);
+  // Botão segue o último comando: depois de pedir o bloqueio, oferece desbloquear.
+  const comandadoBloqueio = vehicle.status === 'BLOCKED';
   const p = vehicle.position;
   const address = useAddress(p?.latitude, p?.longitude);
   const st = statusOf(vehicle);
@@ -77,6 +96,48 @@ export function VehicleCard({
     );
   }
 
+  async function enviar(bloquear: boolean) {
+    setEnviando(true);
+    try {
+      const r = await AppApi.setBlocked(vehicle.id, bloquear);
+      Alert.alert(
+        bloquear ? 'Bloqueio enviado' : 'Desbloqueio enviado',
+        r.queued
+          ? `O rastreador está sem conexão agora. O veículo será ${bloquear ? 'bloqueado' : 'desbloqueado'} assim que ele se comunicar.`
+          : `O comando foi entregue ao rastreador. A confirmação aparece aqui em alguns minutos.`,
+      );
+      onChanged?.();
+    } catch (e: any) {
+      const status = e?.response?.status;
+      Alert.alert(
+        'Não foi possível',
+        status === 403
+          ? 'O bloqueio não está liberado para este veículo. Fale com a 21 Go.'
+          : 'Não conseguimos enviar o comando agora. Tente de novo em instantes.',
+      );
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  function pedirBloqueio() {
+    Alert.alert(
+      'Bloquear veículo?',
+      'O veículo vai parar de funcionar. Se estiver em movimento, pode desligar no meio da via. Confirmar bloqueio?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Bloquear', style: 'destructive', onPress: () => enviar(true) },
+      ],
+    );
+  }
+
+  function pedirDesbloqueio() {
+    Alert.alert('Desbloquear veículo?', 'O veículo volta a funcionar normalmente.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Desbloquear', onPress: () => enviar(false) },
+    ]);
+  }
+
   return (
     <View style={[styles.card, selected && styles.cardSelected]}>
       {/* Cabeçalho: status + placa + conexão */}
@@ -95,6 +156,37 @@ export function VehicleCard({
           </Text>
         </View>
       </TouchableOpacity>
+
+      {bloqueio && bloqueio !== 'BLOQUEADO' ? (
+        <View style={styles.pending}>
+          <Ionicons name="time-outline" size={15} color={colors.amber} />
+          <Text style={styles.pendingText}>{BLOCK_LABEL[bloqueio]}</Text>
+        </View>
+      ) : null}
+
+      {vehicle.blockerAccessAllowed ? (
+        <TouchableOpacity
+          style={[styles.blockBtn, comandadoBloqueio && styles.unblockBtn]}
+          onPress={comandadoBloqueio ? pedirDesbloqueio : pedirBloqueio}
+          disabled={enviando}
+          activeOpacity={0.85}
+        >
+          {enviando ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <>
+              <Ionicons
+                name={comandadoBloqueio ? 'lock-open' : 'lock-closed'}
+                size={17}
+                color={colors.white}
+              />
+              <Text style={styles.blockBtnText}>
+                {comandadoBloqueio ? 'Desbloquear veículo' : 'Bloquear veículo'}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      ) : null}
 
       {p ? (
         <>
@@ -224,6 +316,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white, borderWidth: 1, borderColor: colors.border,
   },
   btnText: { color: colors.navy, fontWeight: '700', fontSize: 12 },
+  pending: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: 10, paddingHorizontal: 10, paddingVertical: 8,
+    borderRadius: radii.md, backgroundColor: '#fef3c7',
+  },
+  pendingText: { flex: 1, fontSize: 12.5, fontWeight: '700', color: '#92400e' },
+  blockBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, marginTop: 12, paddingVertical: 12, borderRadius: radii.md,
+    backgroundColor: colors.red,
+  },
+  unblockBtn: { backgroundColor: colors.green },
+  blockBtnText: { color: colors.white, fontWeight: '800', fontSize: 14 },
   waiting: {
     marginTop: 12, paddingTop: 12,
     borderTopWidth: 1, borderTopColor: colors.border,

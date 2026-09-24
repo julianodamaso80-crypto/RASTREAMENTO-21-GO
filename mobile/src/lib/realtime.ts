@@ -37,6 +37,7 @@ export interface RawTraccarPosition {
     satellites?: number;
     totalDistance?: number;
     powerCut?: boolean;
+    blocked?: boolean;
   };
 }
 
@@ -65,6 +66,7 @@ export function mapTraccarPosition(p: RawTraccarPosition): Position {
         ? Math.round(p.attributes.totalDistance / 1000)
         : null,
     powerCut: p.attributes?.powerCut ?? null,
+    blocked: p.attributes?.blocked ?? null,
   };
 }
 
