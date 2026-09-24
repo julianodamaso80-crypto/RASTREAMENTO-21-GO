@@ -27,7 +27,8 @@ export interface InstallationPendingStats {
   total: number;
   tracker: number;
   tag: number;
-  exposedValue: number;
+  /** null para quem não é admin. */
+  exposedValue: number | null;
   lastSyncAt: string | null;
   syncing: boolean;
 }

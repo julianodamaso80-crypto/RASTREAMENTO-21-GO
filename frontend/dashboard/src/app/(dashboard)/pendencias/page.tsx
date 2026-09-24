@@ -27,6 +27,7 @@ import type {
   PendingType,
 } from '@/types/installation-pending';
 import { useBuscaDaUrl } from '@/lib/use-busca-url';
+import { useAuth } from '@/contexts/auth-context';
 
 /**
  * Fila de instalação pendente vinda do SGA Hinova.
@@ -112,6 +113,8 @@ function StatCard({
 }
 
 export default function PendenciasPage() {
+  const { user } = useAuth();
+  const verPatrimonio = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
   const [rows, setRows] = useState<InstallationPending[]>([]);
   const [stats, setStats] = useState<InstallationPendingStats | null>(null);
   const [cities, setCities] = useState<string[]>([]);
@@ -277,7 +280,12 @@ export default function PendenciasPage() {
       </div>
 
       {/* Totais */}
-      <div className="grid gap-3 grid-cols-2 xl:grid-cols-4 shrink-0">
+      <div
+        className={cn(
+          'grid gap-3 grid-cols-2 shrink-0',
+          verPatrimonio ? 'xl:grid-cols-4' : 'xl:grid-cols-3',
+        )}
+      >
         <StatCard
           label="Total pendente"
           value={String(stats?.total ?? 0)}
@@ -297,12 +305,14 @@ export default function PendenciasPage() {
           hint="Aguardando instalação"
           icon={Tag}
         />
-        <StatCard
-          label="Patrimônio exposto"
-          value={moeda(stats?.exposedValue ?? 0)}
-          hint="Valor protegido sem equipamento"
-          icon={Wallet}
-        />
+        {verPatrimonio && (
+          <StatCard
+            label="Patrimônio exposto"
+            value={moeda(stats?.exposedValue ?? 0)}
+            hint="Valor protegido sem equipamento"
+            icon={Wallet}
+          />
+        )}
       </div>
 
       {/* Filtros */}
