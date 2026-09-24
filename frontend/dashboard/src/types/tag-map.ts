@@ -19,6 +19,11 @@ export interface TagNoMapa {
   accuracyM: number | null;
   /** Quando a TAG foi vista pela última vez (ISO). */
   seenAt: string | null;
+  /**
+   * O carro também tem rastreador nosso. A TAG aparece na aba TAG e na busca,
+   * mas fica fora do total de "Todos" — o carro já conta pelo rastreador.
+   */
+  comRastreador?: boolean;
 }
 
 /** Os perfis que enxergam TAG — espelho de `PERFIS_QUE_VEEM_TAG` no backend. */

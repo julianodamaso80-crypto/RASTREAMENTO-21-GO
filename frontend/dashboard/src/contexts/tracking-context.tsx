@@ -397,8 +397,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     [tags, searchQuery],
   );
   const filteredTags = useMemo(
-    () => tagsDaAba(searchedTags, statusFilter),
-    [searchedTags, statusFilter],
+    () => tagsDaAba(searchedTags, statusFilter, !!searchQuery),
+    [searchedTags, statusFilter, searchQuery],
   );
 
   // Contadores
@@ -418,9 +418,9 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     // "Todos" = veículos com rastreador + veículos só com TAG — o mesmo total
     // de Clientes Ativos.
     counts.tag = searchedTags.length;
-    counts.total += searchedTags.length;
+    counts.total += tagsDaAba(searchedTags, 'all', !!searchQuery).length;
     return counts;
-  }, [searchedVehicles, searchedTags]);
+  }, [searchedVehicles, searchedTags, searchQuery]);
 
   // Só existe "o veículo selecionado" quando há exatamente um marcado. Com
   // vários, quem manda na tela é o painel de lista — e a câmera não persegue

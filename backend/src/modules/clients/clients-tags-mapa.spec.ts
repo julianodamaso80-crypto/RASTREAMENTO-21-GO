@@ -27,7 +27,8 @@ const LINK_MOTO = {
 };
 
 // TAG num carro que JÁ tem rastreador nosso: em Clientes Ativos vira selo no
-// card do carro, então no Mapa também não pode virar um segundo ponto.
+// card do carro. No Mapa ela aparece (dono, 24/09: "tem que aparecer no mapa
+// para a gente rastrear") marcada `comRastreador`, fora do total de "Todos".
 const LINK_CARRO = {
   ...LINK_MOTO,
   id: 'l2',
@@ -76,8 +77,9 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
     const s = new ClientsService(montarPrisma() as never);
     const r = await s.tagsNoMapa(TENANT);
 
-    expect(r).toHaveLength(1);
-    expect(r[0]).toEqual({
+    const semRastreador = r.filter((t) => !t.comRastreador);
+    expect(semRastreador).toHaveLength(1);
+    expect(semRastreador[0]).toEqual({
       id: 'tag-l1',
       serialNumber: LINK_MOTO.serialNumber,
       plate: 'MOTO2B22',
@@ -88,13 +90,19 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       longitude: -43.3,
       accuracyM: 40,
       seenAt: AGORA,
+      comRastreador: false,
     });
   });
 
-  it('TAG em carro que já tem rastreador NÃO vira segundo ponto', async () => {
+  it('TAG em carro que já tem rastreador aparece, marcada comRastreador', async () => {
     const s = new ClientsService(montarPrisma() as never);
     const r = await s.tagsNoMapa(TENANT);
-    expect(r.some((t) => t.plate === 'CAR1A11')).toBe(false);
+    expect(r.find((t) => t.plate === 'CAR1A11')).toMatchObject({
+      serialNumber: LINK_CARRO.serialNumber,
+      latitude: -22.8,
+      longitude: -43.4,
+      comRastreador: true,
+    });
   });
 
   it('é o MESMO conjunto de "só TAG" que Clientes Ativos conta', async () => {
@@ -106,7 +114,10 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       .map((a) => a.id)
       .sort();
 
-    const noMapa = (await s.tagsNoMapa(TENANT)).map((t) => t.id).sort();
+    const noMapa = (await s.tagsNoMapa(TENANT))
+      .filter((t) => !t.comRastreador)
+      .map((t) => t.id)
+      .sort();
     expect(noMapa).toEqual(soTagAtivos);
   });
 
@@ -116,7 +127,7 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
     prisma.tagLink.findMany.mockResolvedValue([{ ...LINK_MOTO, origin: 'ESTOQUE' }]);
     prisma.$queryRaw.mockResolvedValue([]);
     const s = new ClientsService(prisma as never);
-    const r = await s.tagsNoMapa(TENANT);
+    const r = (await s.tagsNoMapa(TENANT)).filter((t) => !t.comRastreador);
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ latitude: null, longitude: null, accuracyM: null, seenAt: null });
   });
@@ -128,6 +139,6 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       sga('CAR1A11', '100'),
     ]);
     const s = new ClientsService(prisma as never);
-    expect(await s.tagsNoMapa(TENANT)).toHaveLength(0);
+    expect((await s.tagsNoMapa(TENANT)).map((t) => t.plate)).toEqual(['CAR1A11']);
   });
 });

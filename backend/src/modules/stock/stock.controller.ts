@@ -227,6 +227,23 @@ export class StockController {
     return this.stockService.solicitarAtualizacaoTagPorSerie(serial, req.tenantId, req.user.id);
   }
 
+  /**
+   * "Desvincular TAG" do card de Clientes Ativos (ou do Mapa): associado
+   * cancelou, a TAG volta ao estoque disponível. Mesmos perfis que retiram
+   * rastreador.
+   */
+  @Post('tags/:serial/desvincular')
+  @RequireRoute('estoque', 'clientes', 'mapa')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Desvincula a TAG do veículo e devolve ao estoque (por número de série)' })
+  desvincularTag(
+    @Param('serial') serial: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.desvincularTag(serial, req.tenantId);
+  }
+
   @Get('tags/:serial/atualizar')
   @RequireRoute('estoque', 'mapa')
   @ApiOperation({ summary: 'Estado da última atualização pedida para a TAG (por número de série)' })

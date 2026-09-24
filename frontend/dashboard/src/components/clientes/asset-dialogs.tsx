@@ -31,6 +31,15 @@ export interface RetiradaAlvo {
   cliente: string;
 }
 
+/** TAG em processo de desvínculo (dados só pra confirmação na tela). */
+export interface DesvinculoTagAlvo {
+  serialNumber: string;
+  plate: string;
+  cliente: string;
+  /** O carro tem rastreador nosso, que continua instalado. */
+  temRastreador: boolean;
+}
+
 /** Ativo cujo técnico está sendo corrigido. */
 export interface TecnicoAlvo {
   vehicleId: string;
@@ -162,6 +171,61 @@ export function RetirarRastreadorDialog({
             onClick={() => onConfirm(motivo.trim())}
             disabled={salvando}
           >
+            {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Confirmar desvínculo
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Desvínculo da TAG: sai do veículo e volta ao estoque disponível. Não toca o
+ * rastreador do mesmo carro — esse tem o botão próprio.
+ */
+export function DesvincularTagDialog({
+  alvo,
+  salvando,
+  onCancel,
+  onConfirm,
+}: {
+  alvo: DesvinculoTagAlvo | null;
+  salvando: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog
+      open={!!alvo}
+      onOpenChange={(aberto) => {
+        if (!aberto && !salvando) onCancel();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Desvincular TAG</DialogTitle>
+          <DialogDescription>
+            A TAG{' '}
+            <span className="font-mono font-semibold">{alvo?.serialNumber}</span>{' '}
+            vai sair do veículo{' '}
+            <span className="font-semibold">{alvo?.plate}</span> de{' '}
+            {alvo?.cliente}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-sm text-amber-200">
+          A TAG volta pro estoque disponível e pode ser associada a outra placa.
+          O histórico de posições é preservado.
+          {alvo?.temRastreador &&
+            ' O rastreador deste veículo continua instalado — para retirá-lo também, use "Desvincular rastreador".'}
+        </p>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={salvando}>
+            Cancelar
+          </Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={salvando}>
             {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Confirmar desvínculo
           </Button>

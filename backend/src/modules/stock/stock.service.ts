@@ -885,6 +885,53 @@ export class StockService {
     return { tag: true, placa, associado: lookup.cliente.nome ?? null };
   }
 
+  /**
+   * "Desvincular TAG": associado cancelou, a TAG volta ao Estoque disponível.
+   * O vínculo é só `tag_links` — o rastreador do mesmo carro (Device) e o
+   * Traccar ficam intocados. A TAG vinculada pela Rede pode nunca ter tido
+   * item de estoque; nesse caso ele nasce aqui.
+   */
+  async desvincularTag(serialNumber: string, tenantId: string) {
+    const vivo = { tenantId, serialNumber, deletedAt: null };
+    const vinculos = await this.prisma.tagLink.findMany({
+      where: vivo,
+      select: { id: true, plate: true },
+    });
+    if (vinculos.length === 0) {
+      throw new NotFoundException(`A TAG ${serialNumber} não está vinculada a nenhum veículo.`);
+    }
+    // Sem filtro de deletedAt: o (tenant, imei) é único mesmo para item apagado.
+    const item = await this.prisma.stockItem.findFirst({
+      where: { tenantId, imei: serialNumber },
+      select: { id: true },
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.tagLink.updateMany({
+        where: vivo,
+        data: { deletedAt: new Date(), verdict: 'INATIVO' },
+      });
+      const disponivel = {
+        associatedAt: null,
+        assignedTechnicianId: null,
+        assignedAt: null,
+        deletedAt: null,
+        kind: 'TAG',
+      };
+      if (item) {
+        await tx.stockItem.update({ where: { id: item.id }, data: disponivel });
+      } else {
+        await tx.stockItem.create({
+          data: { tenantId, imei: serialNumber, status: 'TAG', ...disponivel },
+        });
+      }
+    });
+
+    const placa = vinculos[0].plate;
+    this.logger.log(`TAG ${serialNumber} desvinculada da placa ${placa} — voltou ao estoque.`);
+    return { serialNumber, placa };
+  }
+
   async associate(
     id: string,
     tenantId: string,

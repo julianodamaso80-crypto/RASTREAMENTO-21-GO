@@ -793,6 +793,13 @@ export const stockApi = {
     }>>(`/stock/${id}/atualizar-tag`);
     return res.data.data;
   },
+  /** Solta a TAG do veículo e devolve ao estoque — o rastreador do carro fica. */
+  desvincularTag: async (serial: string): Promise<{ serialNumber: string; placa: string }> => {
+    const res = await api.post<ApiResponse<{ serialNumber: string; placa: string }>>(
+      `/stock/tags/${encodeURIComponent(serial)}/desvincular`,
+    );
+    return res.data.data;
+  },
   /** "Atualizar TAG" pelo número de série — é como o Mapa conhece a TAG. */
   atualizarTagPorSerie: async (
     serial: string,

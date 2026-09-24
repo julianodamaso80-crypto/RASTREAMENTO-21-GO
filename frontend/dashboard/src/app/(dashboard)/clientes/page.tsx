@@ -11,7 +11,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { clientsApi, devicesApi } from '@/lib/api';
+import { clientsApi, devicesApi, stockApi } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,8 +21,10 @@ import { AssetCard } from '@/components/clientes/asset-card';
 import { AssetsAnalytics } from '@/components/clientes/assets-analytics';
 import {
   AlterarTecnicoDialog,
+  DesvincularTagDialog,
   RetirarRastreadorDialog,
   SenhaTemporariaDialog,
+  type DesvinculoTagAlvo,
   type RetiradaAlvo,
   type SenhaTemporaria,
   type TecnicoAlvo,
@@ -52,6 +54,8 @@ export default function ClientesPage() {
 
   const [retirando, setRetirando] = useState<RetiradaAlvo | null>(null);
   const [salvandoRetirada, setSalvandoRetirada] = useState(false);
+  const [soltandoTag, setSoltandoTag] = useState<DesvinculoTagAlvo | null>(null);
+  const [salvandoTag, setSalvandoTag] = useState(false);
   const [trocandoTecnico, setTrocandoTecnico] = useState<TecnicoAlvo | null>(null);
   const [salvandoTecnico, setSalvandoTecnico] = useState(false);
   const [resetandoId, setResetandoId] = useState<string | null>(null);
@@ -182,6 +186,24 @@ export default function ClientesPage() {
       toast.error('Não consegui retirar o rastreador. Tente de novo.');
     } finally {
       setSalvandoRetirada(false);
+    }
+  };
+
+  /** A TAG sai do veículo e volta ao estoque; o rastreador do carro fica. */
+  const confirmarDesvinculoTag = async () => {
+    if (!soltandoTag) return;
+    setSalvandoTag(true);
+    try {
+      await stockApi.desvincularTag(soltandoTag.serialNumber);
+      toast.success(
+        `TAG ${soltandoTag.serialNumber} desvinculada — voltou pro estoque disponível.`,
+      );
+      setSoltandoTag(null);
+      await load();
+    } catch {
+      toast.error('Não consegui desvincular a TAG. Tente de novo.');
+    } finally {
+      setSalvandoTag(false);
     }
   };
 
@@ -316,6 +338,15 @@ export default function ClientesPage() {
                       cliente: asset.associate?.name ?? 'cliente',
                     });
                   }}
+                  onDesvincularTag={() => {
+                    if (!asset.tag) return;
+                    setSoltandoTag({
+                      serialNumber: asset.tag.serialNumber,
+                      plate: asset.plate,
+                      cliente: asset.associate?.name ?? 'cliente',
+                      temRastreador: !!asset.device,
+                    });
+                  }}
                 />
               ))}
             </div>
@@ -356,6 +387,12 @@ export default function ClientesPage() {
         salvando={salvandoRetirada}
         onCancel={() => setRetirando(null)}
         onConfirm={confirmarRetirada}
+      />
+      <DesvincularTagDialog
+        alvo={soltandoTag}
+        salvando={salvandoTag}
+        onCancel={() => setSoltandoTag(null)}
+        onConfirm={confirmarDesvinculoTag}
       />
       <AlterarTecnicoDialog
         alvo={trocandoTecnico}

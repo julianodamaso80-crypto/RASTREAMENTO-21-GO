@@ -36,6 +36,7 @@ export function AssetCard({
   onAlterarAcesso,
   onRedefinirSenha,
   onRetirar,
+  onDesvincularTag,
   redefinindoSenha,
 }: {
   asset: ClientAsset;
@@ -46,6 +47,7 @@ export function AssetCard({
   onAlterarAcesso: () => void;
   onRedefinirSenha: () => void;
   onRetirar: () => void;
+  onDesvincularTag: () => void;
   redefinindoSenha: boolean;
 }) {
   const { user } = useAuth();
@@ -175,6 +177,17 @@ export function AssetCard({
             >
               <PackageOpen className="h-3.5 w-3.5" />
               Desvincular rastreador
+            </Button>
+          )}
+          {asset.tag && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDesvincularTag}
+              className="h-7 gap-1.5 border-red-500/30 px-2.5 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+            >
+              <Tag className="h-3.5 w-3.5" />
+              Desvincular TAG
             </Button>
           )}
         </div>

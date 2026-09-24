@@ -9,8 +9,17 @@ export type FiltroDoMapa = 'all' | 'tag' | 'ignition_on' | 'ignition_off' | 'off
  * mede nada disso, e pôr uma TAG em "Desligado" seria afirmar o que ninguém
  * mediu.
  */
-export function tagsDaAba(tags: TagNoMapa[], filtro: FiltroDoMapa): TagNoMapa[] {
-  return filtro === 'all' || filtro === 'tag' ? tags : [];
+export function tagsDaAba(
+  tags: TagNoMapa[],
+  filtro: FiltroDoMapa,
+  buscando = false,
+): TagNoMapa[] {
+  if (filtro === 'tag') return tags;
+  if (filtro !== 'all') return [];
+  // Em "Todos" a TAG de carro com rastreador só entra quando o operador a
+  // procura: sem busca, o carro já está ali pelo rastreador e o total de
+  // "Todos" continua igual ao de Clientes Ativos.
+  return buscando ? tags : tags.filter((t) => !t.comRastreador);
 }
 
 /** A busca da TAG cobre o que o operador tem em mãos: placa, nome e número. */

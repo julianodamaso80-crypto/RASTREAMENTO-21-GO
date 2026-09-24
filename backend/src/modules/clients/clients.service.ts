@@ -246,17 +246,20 @@ export class ClientsService {
    * outro. Só o time interno chega aqui — o gate é do controller.
    */
   async tagsNoMapa(tenantId: string) {
-    const { apenasTag } = await separarSoTag(
-      this.prisma,
-      tenantId,
-      await vinculosVisiveis(this.prisma, tenantId),
-    );
+    const visiveis = await vinculosVisiveis(this.prisma, tenantId);
+    const { placasComVeiculo } = await separarSoTag(this.prisma, tenantId, visiveis);
     const pos = await ultimasPosicoes(
       this.prisma,
       tenantId,
-      apenasTag.map((x) => x.vinculo.serialNumber),
+      visiveis.map((x) => x.vinculo.serialNumber),
     );
-    return apenasTag.map((x) => tagNoMapa(x, pos.get(x.vinculo.serialNumber)));
+    // A TAG de carro que também tem rastreador vem junto (dono, 24/09: "tem que
+    // aparecer no mapa para a gente rastrear"), marcada `comRastreador` — o
+    // Mapa a deixa fora do total de "Todos", que segue igual a Clientes Ativos.
+    return visiveis.map((x) => ({
+      ...tagNoMapa(x, pos.get(x.vinculo.serialNumber)),
+      comRastreador: placasComVeiculo.has(x.vinculo.plate),
+    }));
   }
 
   /**
