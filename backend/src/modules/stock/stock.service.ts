@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
@@ -8,6 +10,7 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { Prisma } from '.prisma/client';
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { FilterStockDto } from './dto/filter-stock.dto';
@@ -23,6 +26,7 @@ import {
   normalizeSgaStatusLabel,
 } from '../hinova/sga-status';
 import { decidirTipoVeiculo } from '../hinova/tipo-veiculo';
+import { estadoAtualizacaoTag } from './tag-atualizacao';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
@@ -34,6 +38,7 @@ import { SgaMirrorService } from '../installation-pendings/sga-mirror.service';
 import { RoutesService } from '../installation-pendings/routes.service';
 import { StockTraccarService } from './stock-traccar.service';
 import { PositionsService } from '../positions/positions.service';
+import { FinancialService } from '../financial/financial.service';
 import { ValidateStockDto } from './dto/validate-stock.dto';
 
 type ParsedRow = {
@@ -46,6 +51,14 @@ type ParsedRow = {
   registeredAt: Date | null;
   activatedAt: Date | null;
 };
+
+/** Último avistamento de uma TAG na rede Find My. Nunca é posição do momento. */
+export interface PosicaoDeTag {
+  lat: number;
+  lng: number;
+  accuracyM: number | null;
+  seenAt: Date;
+}
 
 export type StockTestCommandResult = {
   imei: string;
@@ -61,9 +74,55 @@ export type ImportResult = {
   updated: number; // linhas atualizadas (IMEI já existia)
   skipped: number; // linhas ignoradas (sem IMEI)
   total: number; // linhas de dados lidas
+  tipo?: 'RASTREADOR' | 'TAG';
 };
 
+/**
+ * Cabeçalho reduzido a letras e números: o arquivo do fabricante da TAG vem
+ * como "SN码", "MAC地址", "privateKey值", "hashedAdvKey值".
+ */
+function chaveDeCabecalho(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/** Algumas células do fabricante vêm com "=" na frente (24 das 500 do lote 808092). */
+function semIgual(v: string): string {
+  return v.trim().replace(/^=+/, '').trim();
+}
+
+function bytesBase64(v: string): number {
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(v) ? Buffer.from(v, 'base64').length : -1;
+}
+
 // Normaliza cabeçalho: remove acentos, espaços extras e caixa alta, pra casar variações.
+/** Saúde vazia com o aviso de que o servidor GPS não respondeu por este IMEI. */
+function indisponivel(imei: string): DeviceHealth {
+  return {
+    imei,
+    encontradoNoGps: false,
+    jaReportou: false,
+    comunicando: false,
+    lastUpdate: null,
+    gps: {
+      ok: false,
+      fixTime: null,
+      idadeSegundos: null,
+      satellites: null,
+      latitude: null,
+      longitude: null,
+      address: null,
+    },
+    energia: { volts: null, sistema: null, faixa: 'ausente', bateriaInterna: null },
+    ignicao: { reportada: false, ligada: null },
+    velocidade: null,
+    direcao: null,
+    distanceM: null,
+    checkOk: false,
+    motivos: ['servidor GPS indisponível — tente de novo em instantes'],
+    indisponivel: true,
+  };
+}
+
 function normalizeHeader(raw: string): string {
   return raw
     .normalize('NFD')
@@ -106,6 +165,7 @@ export class StockService {
     private mirror: SgaMirrorService,
     private routes: RoutesService,
     private positions: PositionsService,
+    private financial: FinancialService,
   ) {}
 
   /**
@@ -121,19 +181,74 @@ export class StockService {
     refLat?: number,
     refLng?: number,
   ): Promise<DeviceHealth> {
+    // TAG não fala com o servidor GPS: só rastreador chega aqui.
     const item = await this.prisma.stockItem.findFirst({
-      where: { id, tenantId, deletedAt: null },
+      where: { id, tenantId, deletedAt: null, kind: 'RASTREADOR' },
       select: { id: true, imei: true, traccarDeviceId: true },
     });
     if (!item) throw new NotFoundException('Item de estoque não encontrado');
 
     await this.stockTraccar.ensureDevice(item);
+    // Teste de liga e desliga com o carro parado: sem isto o filtro de
+    // distância do Traccar descarta a posição que traz a ignição nova e a tela
+    // fica até 12 min mostrando a chave errada.
+    await this.stockTraccar.responderIgnicaoNaHora(item.imei);
 
     return this.deviceHealth.diagnose(item.imei, {
       refLat,
       refLng,
       ensureDevice: true,
     });
+  }
+
+  /**
+   * Conferência em pacote: vários equipamentos no mesmo pedido.
+   *
+   * Existe porque o teste de campo acontece com vários técnicos ao mesmo tempo,
+   * cada um girando a chave do seu veículo. Uma requisição por equipamento a
+   * cada 10 s não se sustenta — 20 abertos dariam 120 chamadas por minuto.
+   *
+   * Equipamento que o servidor GPS não conseguiu responder entra no resultado
+   * marcado como indisponível: o pacote não cai por causa de um.
+   */
+  async signalBatch(
+    ids: string[],
+    tenantId: string,
+  ): Promise<Array<{ id: string; imei: string; health: DeviceHealth }>> {
+    if (ids.length === 0) return [];
+
+    const itens = await this.prisma.stockItem.findMany({
+      where: { id: { in: ids }, tenantId, deletedAt: null, kind: 'RASTREADOR' },
+      select: { id: true, imei: true, traccarDeviceId: true },
+    });
+
+    const saidas: Array<{ id: string; imei: string; health: DeviceHealth }> = [];
+    for (let i = 0; i < itens.length; i += 5) {
+      const lote = itens.slice(i, i + 5);
+      const parciais = await Promise.all(
+        lote.map(async (item) => {
+          try {
+            await this.stockTraccar.ensureDevice(item);
+            await this.stockTraccar.responderIgnicaoNaHora(item.imei);
+            const health = await this.deviceHealth.diagnose(item.imei, {
+              ensureDevice: true,
+            });
+            return { id: item.id, imei: item.imei, health };
+          } catch {
+            return {
+              id: item.id,
+              imei: item.imei,
+              health: indisponivel(item.imei),
+            };
+          }
+        }),
+      );
+      saidas.push(...parciais);
+    }
+
+    // Devolve na ordem em que a tela pediu — é a ordem dos cards.
+    const porId = new Map(saidas.map((s) => [s.id, s]));
+    return ids.map((id) => porId.get(id)).filter((s) => s !== undefined);
   }
 
   /**
@@ -149,8 +264,9 @@ export class StockService {
     userId: string,
     userName: string,
   ) {
+    // TAG não fala com o servidor GPS: só rastreador chega aqui.
     const item = await this.prisma.stockItem.findFirst({
-      where: { id, tenantId, deletedAt: null },
+      where: { id, tenantId, deletedAt: null, kind: 'RASTREADOR' },
       select: { id: true, imei: true, traccarDeviceId: true },
     });
     if (!item) throw new NotFoundException('Item de estoque não encontrado');
@@ -202,7 +318,7 @@ export class StockService {
     op: 'block' | 'unblock',
   ): Promise<StockTestCommandResult> {
     const item = await this.prisma.stockItem.findFirst({
-      where: { id, tenantId, deletedAt: null },
+      where: { id, tenantId, deletedAt: null, kind: 'RASTREADOR' },
       select: { id: true, imei: true, traccarDeviceId: true, associatedAt: true },
     });
     if (!item) throw new NotFoundException('Item de estoque não encontrado');
@@ -218,6 +334,11 @@ export class StockService {
         'Servidor GPS indisponível agora. Tente de novo em instantes.',
       );
     }
+
+    // O teste é justamente ver a chave cair quando a energia é cortada. Sem
+    // isto, a posição que traz a ignição nova morre no filtro de distância
+    // (bancada = aparelho parado) e a tela continua dizendo "Ligada".
+    await this.stockTraccar.responderIgnicaoNaHora(item.imei);
 
     if (op === 'block') {
       const device = await this.traccar.getDevice(deviceId);
@@ -270,14 +391,23 @@ export class StockService {
   }
 
   async findAll(tenantId: string, filters: FilterStockDto) {
-    const { page, perPage, search, status, operator, assignment, conexao } =
-      filters;
+    const {
+      page,
+      perPage,
+      search,
+      status,
+      operator,
+      assignment,
+      conexao,
+      tipo,
+    } = filters;
     // associatedAt: null → só rastreadores disponíveis (associados saíram do estoque).
     const where: Record<string, unknown> = {
       tenantId,
       deletedAt: null,
       associatedAt: null,
     };
+    if (tipo) where.kind = tipo;
 
     // Filtro por estado no servidor GPS. Precisa entrar no `where` (e não sair
     // filtrando no navegador) porque a lista é paginada: com 1.000 itens, os
@@ -295,6 +425,8 @@ export class StockService {
         };
       }
 
+      // Online/offline/sem GPS é estado no servidor GPS: TAG não entra.
+      where.kind = 'RASTREADOR';
       if (conexao === 'online') where.imei = { in: vivos.comunicando };
       else if (conexao === 'offline') where.imei = { notIn: vivos.comunicando };
       else where.imei = { in: vivos.semGps };
@@ -333,7 +465,166 @@ export class StockService {
       this.prisma.stockItem.count({ where }),
     ]);
 
-    return { data, meta: { total, page, perPage, gpsIndisponivel: false } };
+    return {
+      data: await this.comPosicaoDeTag(tenantId, data),
+      meta: { total, page, perPage, gpsIndisponivel: false },
+    };
+  }
+
+  /**
+   * Última posição de cada TAG da página, numa consulta só.
+   *
+   * A TAG não tem estado no servidor GPS; o que responde "ela está viva?" é o
+   * carimbo do último avistamento na rede Find My. Rastreador passa direto.
+   */
+  private async comPosicaoDeTag<T extends { imei: string; kind?: string }>(
+    tenantId: string,
+    itens: T[],
+  ): Promise<Array<T & { tagPosition?: PosicaoDeTag | null }>> {
+    const seriais = itens.filter((i) => i.kind === 'TAG').map((i) => i.imei);
+    if (seriais.length === 0) return itens;
+
+    const linhas = await this.prisma.$queryRaw<
+      Array<{
+        serial_number: string;
+        latitude: number;
+        longitude: number;
+        accuracy_m: number | null;
+        seen_at: Date;
+      }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON (serial_number)
+             serial_number, latitude, longitude, accuracy_m, seen_at
+        FROM tag_positions
+       WHERE tenant_id = ${tenantId}::uuid
+         AND serial_number IN (${Prisma.join(seriais)})
+       ORDER BY serial_number, seen_at DESC`);
+
+    const porSerial = new Map(
+      linhas.map((l) => [
+        l.serial_number,
+        {
+          lat: l.latitude,
+          lng: l.longitude,
+          accuracyM: l.accuracy_m,
+          seenAt: l.seen_at,
+        },
+      ]),
+    );
+    return itens.map((i) =>
+      i.kind === 'TAG'
+        ? { ...i, tagPosition: porSerial.get(i.imei) ?? null }
+        : i,
+    );
+  }
+
+  /** Item de estoque que é TAG — com a trava de 3 min já resolvida. */
+  private async tagDoEstoque(id: string, tenantId: string) {
+    const item = await this.prisma.stockItem.findFirst({
+      where: { id, tenantId, deletedAt: null, kind: 'TAG' },
+      select: { id: true, imei: true },
+    });
+    if (!item) throw new NotFoundException('TAG não encontrada no estoque');
+
+    return { item, ultima: await this.ultimoPedidoDaTag(item.imei, tenantId) };
+  }
+
+  private ultimoPedidoDaTag(serialNumber: string, tenantId: string) {
+    return this.prisma.tagRefreshRequest.findFirst({
+      where: { tenantId, serialNumber },
+      orderBy: { requestedAt: 'desc' },
+      select: { requestedAt: true, doneAt: true, positionsFound: true },
+    });
+  }
+
+  /**
+   * A mesma TAG vista pelo número de série — é assim que o Mapa a conhece. A
+   * TAG vinculada a cliente pela Rede pode não ter item de estoque, mas o
+   * coletor atende pelo número; basta ele ser uma TAG deste tenant.
+   */
+  private async tagPorSerie(serialNumber: string, tenantId: string) {
+    const existe =
+      (await this.prisma.tagLink.findFirst({
+        where: { tenantId, serialNumber, deletedAt: null },
+        select: { id: true },
+      })) ??
+      (await this.prisma.stockItem.findFirst({
+        where: { tenantId, imei: serialNumber, deletedAt: null, kind: 'TAG' },
+        select: { id: true },
+      }));
+    if (!existe) throw new NotFoundException('TAG não encontrada');
+    return { item: { imei: serialNumber }, ultima: await this.ultimoPedidoDaTag(serialNumber, tenantId) };
+  }
+
+  /** "Atualizar TAG" a partir do Mapa — mesmas regras e mesma trava do Estoque. */
+  async solicitarAtualizacaoTagPorSerie(serialNumber: string, tenantId: string, userId?: string) {
+    return this.pedirAtualizacao(await this.tagPorSerie(serialNumber, tenantId), tenantId, userId);
+  }
+
+  async estadoAtualizacaoTagPorSerie(serialNumber: string, tenantId: string) {
+    return this.estadoDoPedido((await this.tagPorSerie(serialNumber, tenantId)).ultima);
+  }
+
+  /**
+   * "Atualizar TAG": pede ao coletor uma consulta à Apple só desta TAG.
+   *
+   * NÃO obriga a TAG a se anunciar — só pergunta de novo à rede. Se ninguém
+   * passou perto dela, nada muda, e é isso que a tela mostra. A espera de 3 min
+   * é a mesma da RedeVeiculos e protege a conta Apple.
+   */
+  async solicitarAtualizacaoTag(id: string, tenantId: string, userId?: string) {
+    return this.pedirAtualizacao(await this.tagDoEstoque(id, tenantId), tenantId, userId);
+  }
+
+  private async pedirAtualizacao(
+    { item, ultima }: { item: { imei: string }; ultima: { requestedAt: Date } | null },
+    tenantId: string,
+    userId?: string,
+  ) {
+    const estado = estadoAtualizacaoTag(ultima?.requestedAt ?? null);
+    if (!estado.pode) {
+      throw new HttpException(
+        {
+          // `error` explícito: sem ele o filtro global rotula qualquer
+          // HttpException com corpo de objeto como "Internal Server Error".
+          error: 'Too Many Requests',
+          message: `Espere ${estado.segundosRestantes}s para atualizar esta TAG de novo.`,
+          disponivelEm: estado.disponivelEm.toISOString(),
+          segundosRestantes: estado.segundosRestantes,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const pedido = await this.prisma.tagRefreshRequest.create({
+      data: { tenantId, serialNumber: item.imei, requestedById: userId ?? null },
+      select: { id: true, requestedAt: true },
+    });
+    this.logger.log(`Atualizar TAG ${item.imei} solicitado (pedido ${pedido.id}).`);
+    return {
+      pendente: true,
+      solicitadoEm: pedido.requestedAt,
+      disponivelEm: estadoAtualizacaoTag(pedido.requestedAt).disponivelEm,
+    };
+  }
+
+  /** Estado da última solicitação — a tela usa para o contador e o resultado. */
+  async estadoAtualizacaoTagDoEstoque(id: string, tenantId: string) {
+    return this.estadoDoPedido((await this.tagDoEstoque(id, tenantId)).ultima);
+  }
+
+  private estadoDoPedido(
+    ultima: { requestedAt: Date; doneAt: Date | null; positionsFound: number | null } | null,
+  ) {
+    const estado = estadoAtualizacaoTag(ultima?.requestedAt ?? null);
+    return {
+      pendente: Boolean(ultima && !ultima.doneAt),
+      solicitadoEm: ultima?.requestedAt ?? null,
+      concluidoEm: ultima?.doneAt ?? null,
+      avistamentosNovos: ultima?.positionsFound ?? null,
+      disponivelEm: estado.disponivelEm,
+      segundosRestantes: estado.segundosRestantes,
+    };
   }
 
   /**
@@ -344,7 +635,7 @@ export class StockService {
    */
   async stats(tenantId: string) {
     const disponivel = { tenantId, deletedAt: null, associatedAt: null };
-    const [total, installed, byStatusRaw] = await Promise.all([
+    const [total, installed, byStatusRaw, byKindRaw] = await Promise.all([
       this.prisma.stockItem.count({ where: disponivel }),
       this.prisma.stockItem.count({
         where: { tenantId, deletedAt: null, associatedAt: { not: null } },
@@ -354,14 +645,29 @@ export class StockService {
         where: disponivel,
         _count: { _all: true },
       }),
+      this.prisma.stockItem.groupBy({
+        by: ['kind'],
+        where: disponivel,
+        _count: { _all: true },
+      }),
     ]);
+    const porTipo = (k: string) =>
+      (byKindRaw as Array<{ kind: string; _count: { _all: number } }>).find(
+        (r) => r.kind === k,
+      )?._count._all ?? 0;
     const byStatus = byStatusRaw.map(
       (r: { status: string | null; _count: { _all: number } }) => ({
         status: r.status ?? 'SEM STATUS',
         count: r._count._all,
       }),
     );
-    return { total, installed, byStatus };
+    return {
+      total,
+      installed,
+      byStatus,
+      rastreadores: porTipo('RASTREADOR'),
+      tags: porTipo('TAG'),
+    };
   }
 
   async remove(id: string, tenantId: string) {
@@ -494,6 +800,138 @@ export class StockService {
     return null;
   }
 
+  /**
+   * "Associar (SGA)" de uma TAG. Mesmas regras de consulta e de situação do
+   * rastreador — mas o vínculo vai para `tag_links`, nunca para Device (o
+   * `vehicle_id` é único e desvincularia o rastreador do carro) nem para
+   * Vehicle/Associate (TAG é segredo interno; nada disso pode chegar ao app do
+   * associado). Não toca o Traccar e não baixa pendência de rastreador.
+   */
+  private async associateTag(
+    item: { id: string; imei: string },
+    tenantId: string,
+    dto: AssociateStockDto,
+    liberadorAdmin: boolean,
+    userId?: string,
+  ) {
+    const lookup = await this.lookupSga(tenantId, dto.placa);
+    if (!lookup.encontrado) {
+      throw new UnprocessableEntityException(
+        lookup.motivo || 'Placa não encontrada no SGA.',
+      );
+    }
+    const bloqueio = StockService.motivoDeBloqueio(lookup, dto.placa);
+    if (bloqueio) {
+      if (!dto.allowInactive) {
+        throw new UnprocessableEntityException(
+          `${bloqueio} — vínculo bloqueado. ` +
+            'Só um administrador pode liberar assim mesmo.',
+        );
+      }
+      if (!liberadorAdmin) {
+        throw new ForbiddenException(
+          `${bloqueio}. Somente um administrador pode liberar assim mesmo.`,
+        );
+      }
+    }
+
+    const jaVinculada = await this.prisma.tagLink.findFirst({
+      where: { tenantId, serialNumber: item.imei, deletedAt: null },
+      select: { id: true, plate: true },
+    });
+    if (jaVinculada) {
+      throw new UnprocessableEntityException(
+        `A TAG ${item.imei} já está vinculada à placa ${jaVinculada.plate}.`,
+      );
+    }
+
+    const placa = (lookup.veiculo.placa || dto.placa)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.tagLink.create({
+        data: {
+          tenantId,
+          serialNumber: item.imei,
+          plate: placa,
+          chassi: lookup.veiculo.chassi ?? null,
+          hinovaVehicleCode: lookup.veiculo.codigoVeiculo ?? null,
+          associateName: lookup.cliente.nome ?? null,
+          associateCpf: lookup.cliente.cpf?.replace(/\D/g, '') ?? null,
+          origin: 'ESTOQUE',
+          verdict: 'AGUARDANDO_PROVA',
+          evidence: {
+            placaDigitada: dto.placa,
+            tecnico: dto.technicianName?.trim() ?? null,
+            localInstalacao: dto.installLocation?.trim() ?? null,
+            situacaoSga: lookup.situacao.descricao ?? null,
+            liberadoPorAdmin: Boolean(bloqueio),
+          },
+          createdById: userId ?? null,
+        },
+      });
+      await tx.stockItem.update({
+        where: { id: item.id },
+        data: {
+          associatedAt: new Date(),
+          assignedTechnicianId: null,
+          assignedAt: null,
+        },
+      });
+    });
+
+    this.logger.log(`TAG ${item.imei} vinculada à placa ${placa} pelo estoque.`);
+    return { tag: true, placa, associado: lookup.cliente.nome ?? null };
+  }
+
+  /**
+   * "Desvincular TAG": associado cancelou, a TAG volta ao Estoque disponível.
+   * O vínculo é só `tag_links` — o rastreador do mesmo carro (Device) e o
+   * Traccar ficam intocados. A TAG vinculada pela Rede pode nunca ter tido
+   * item de estoque; nesse caso ele nasce aqui.
+   */
+  async desvincularTag(serialNumber: string, tenantId: string) {
+    const vivo = { tenantId, serialNumber, deletedAt: null };
+    const vinculos = await this.prisma.tagLink.findMany({
+      where: vivo,
+      select: { id: true, plate: true },
+    });
+    if (vinculos.length === 0) {
+      throw new NotFoundException(`A TAG ${serialNumber} não está vinculada a nenhum veículo.`);
+    }
+    // Sem filtro de deletedAt: o (tenant, imei) é único mesmo para item apagado.
+    const item = await this.prisma.stockItem.findFirst({
+      where: { tenantId, imei: serialNumber },
+      select: { id: true },
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.tagLink.updateMany({
+        where: vivo,
+        data: { deletedAt: new Date(), verdict: 'INATIVO' },
+      });
+      const disponivel = {
+        associatedAt: null,
+        assignedTechnicianId: null,
+        assignedAt: null,
+        deletedAt: null,
+        kind: 'TAG',
+      };
+      if (item) {
+        await tx.stockItem.update({ where: { id: item.id }, data: disponivel });
+      } else {
+        await tx.stockItem.create({
+          data: { tenantId, imei: serialNumber, status: 'TAG', ...disponivel },
+        });
+      }
+    });
+
+    const placa = vinculos[0].plate;
+    this.logger.log(`TAG ${serialNumber} desvinculada da placa ${placa} — voltou ao estoque.`);
+    return { serialNumber, placa };
+  }
+
   async associate(
     id: string,
     tenantId: string,
@@ -504,6 +942,8 @@ export class StockService {
      * sem este argumento, então nunca libera.
      */
     liberadorAdmin = false,
+    /** Quem vinculou — fica registrado no vínculo da TAG. */
+    userId?: string,
   ) {
     const item = await this.prisma.stockItem.findFirst({
       where: { id, tenantId, deletedAt: null, associatedAt: null },
@@ -512,6 +952,9 @@ export class StockService {
       throw new NotFoundException(
         'Item de estoque não encontrado ou já associado.',
       );
+    }
+    if (item.kind === 'TAG') {
+      return this.associateTag(item, tenantId, dto, liberadorAdmin, userId);
     }
 
     // Fonte da verdade: o servidor rebusca no SGA (não confia no que veio da tela).
@@ -816,6 +1259,9 @@ export class StockService {
       if (traccarDevice?.id) {
         traccarDeviceId = traccarDevice.id;
         traccarLastUpdate = traccarDevice.lastUpdate ?? null;
+        // Instalado: volta pro filtro do parque. O modo de ignição imediata é
+        // da bancada e do campo, não de 30 mil veículos gravando tudo.
+        await this.stockTraccar.voltarAoFiltroNormal(item.imei);
         await this.prisma.$transaction([
           this.prisma.vehicle.update({
             where: { id: result.vehicle.id },
@@ -872,7 +1318,30 @@ export class StockService {
     // Tudo daqui pra baixo é best-effort: a instalação JÁ foi commitada, então
     // nenhuma falha acessória pode virar erro pro técnico (ele tentaria de novo
     // e receberia "item já associado", que confunde). Ver P1.6 do plano.
+    // O consultor da venda vem da pendência do SGA (nome_voluntario) — e ela
+    // é apagada logo abaixo, então lê antes.
+    const pendencia = await this.prisma.installationPending.findFirst({
+      where: { tenantId, plate: placa },
+      select: { consultantName: true },
+    });
+
     await this.installationPendings.removeByPlate(tenantId, placa);
+
+    // Placa vinculada entra na aba Financeiro com placa, consultor e contato.
+    try {
+      await this.financial.registrarVinculo({
+        tenantId,
+        plate: placa,
+        consultantName: pendencia?.consultantName,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Não consegui abrir o lançamento financeiro da placa ${placa}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    }
+
     try {
       await this.routes.markStopDoneByPlate(tenantId, placa);
     } catch (error) {
@@ -1007,8 +1476,15 @@ export class StockService {
       );
     }
 
+    // TAG não vai para o login do técnico: o PWA de campo confere instalação
+    // pelo servidor GPS, que a TAG não tem. Volta como "não encontrado".
     const items = await this.prisma.stockItem.findMany({
-      where: { id: { in: stockItemIds }, tenantId, deletedAt: null },
+      where: {
+        id: { in: stockItemIds },
+        tenantId,
+        deletedAt: null,
+        kind: 'RASTREADOR',
+      },
       select: {
         id: true,
         imei: true,
@@ -1055,10 +1531,29 @@ export class StockService {
       });
     }
 
+    // Equipamento que saiu com técnico vai ser testado em campo: deixa a
+    // ignição responder na hora antes de alguém girar a chave. Em segundo
+    // plano — a reserva não espera o Traccar.
+    const imeisReservados = items
+      .filter((i) => okIds.includes(i.id))
+      .map((i) => i.imei);
+    void this.ligarRespostaImediata(imeisReservados);
+
     this.logger.log(
       `Reserva: ${okIds.length} equipamento(s) pro técnico ${technician.name} (${skipped.length} ignorados)`,
     );
     return { ok: okIds.length, skipped };
+  }
+
+  /** Liga o modo de ignição imediata numa lista de IMEIs, de 5 em 5. */
+  private async ligarRespostaImediata(imeis: string[]): Promise<void> {
+    for (let i = 0; i < imeis.length; i += 5) {
+      await Promise.all(
+        imeis
+          .slice(i, i + 5)
+          .map((imei) => this.stockTraccar.responderIgnicaoNaHora(imei)),
+      );
+    }
   }
 
   /** Devolve equipamentos ao estoque livre (cancela a reserva). */
@@ -1102,6 +1597,16 @@ export class StockService {
 
     // Mapeia índice da coluna -> campo, lendo a primeira linha como cabeçalho.
     const headerRow = worksheet.getRow(1);
+
+    const colunasTag = new Map<string, number>();
+    for (let c = 1; c <= worksheet.columnCount; c++) {
+      const k = chaveDeCabecalho(this.cellText(headerRow.getCell(c)));
+      if (['SN', 'MAC', 'PRIVATEKEY', 'HASHEDADVKEY'].includes(k)) colunasTag.set(k, c);
+    }
+    if (colunasTag.has('SN') && colunasTag.has('PRIVATEKEY') && colunasTag.has('HASHEDADVKEY')) {
+      return this.importarTags(worksheet, colunasTag, tenantId);
+    }
+
     const colToField = new Map<number, keyof ParsedRow>();
     for (let c = 1; c <= worksheet.columnCount; c++) {
       const header = this.cellText(headerRow.getCell(c));
@@ -1217,6 +1722,101 @@ export class StockService {
     });
 
     return { imported, updated, skipped, total: rows.length };
+  }
+
+  /**
+   * Arquivo do fabricante das TAGs: cada linha vira chave (tag_keys — o coletor
+   * Find My consulta todas a cada ciclo) + TAG livre no Estoque. Não passa pelo
+   * servidor GPS: TAG não é rastreador. A chave é conferida (28/32 bytes) antes
+   * de gravar — número de série no lugar da chave faria o coletor perguntar
+   * por chave inexistente e receber silêncio.
+   */
+  private async importarTags(
+    worksheet: ExcelJS.Worksheet,
+    colunas: Map<string, number>,
+    tenantId: string,
+  ): Promise<ImportResult> {
+    const ler = (row: ExcelJS.Row, k: string) =>
+      colunas.has(k) ? semIgual(this.cellText(row.getCell(colunas.get(k)!))) : '';
+
+    const linhas: Array<{ sn: string; mac: string | null; privateKey: string; hashedAdvKey: string }> = [];
+    let skipped = 0;
+    for (let r = 2; r <= worksheet.rowCount; r++) {
+      const row = worksheet.getRow(r);
+      const sn = ler(row, 'SN');
+      if (!sn) continue; // linha vazia no fim do arquivo não é erro
+      const privateKey = ler(row, 'PRIVATEKEY');
+      const hashedAdvKey = ler(row, 'HASHEDADVKEY');
+      if (!/^\d{6,20}$/.test(sn) || bytesBase64(privateKey) !== 28 || bytesBase64(hashedAdvKey) !== 32) {
+        this.logger.warn(`Import TAG: linha ${r} (SN ${sn}) com chave inválida — ignorada`);
+        skipped++;
+        continue;
+      }
+      linhas.push({ sn, mac: ler(row, 'MAC') || null, privateKey, hashedAdvKey });
+    }
+
+    if (linhas.length === 0) {
+      throw new BadRequestException('Nenhuma TAG com chave válida encontrada na planilha.');
+    }
+
+    const seriais = linhas.map((l) => l.sn);
+    const [noEstoque, vinculadas] = await Promise.all([
+      this.prisma.stockItem.findMany({
+        where: { tenantId, imei: { in: seriais } },
+        select: { id: true, imei: true, kind: true, deletedAt: true, associatedAt: true },
+      }),
+      this.prisma.tagLink.findMany({
+        where: { tenantId, serialNumber: { in: seriais }, deletedAt: null },
+        select: { serialNumber: true },
+      }),
+    ]);
+    const estoquePorSerial = new Map(noEstoque.map((s) => [s.imei, s]));
+    const jaVinculada = new Set(vinculadas.map((v) => v.serialNumber));
+
+    let imported = 0;
+    let updated = 0;
+    const batchSize = 25;
+    for (let i = 0; i < linhas.length; i += batchSize) {
+      const lote = linhas.slice(i, i + batchSize);
+      const resultados = await Promise.all(
+        lote.map(async (l) => {
+          const item = estoquePorSerial.get(l.sn);
+          // Mesmo número já cadastrado como rastreador: não sobrescrever.
+          if (item && item.kind !== 'TAG') return 'ignorada' as const;
+
+          const batch = l.sn.slice(0, 6);
+          const chave = { macAddress: l.mac, privateKey: l.privateKey, hashedAdvKey: l.hashedAdvKey, batch };
+          await this.prisma.tagKey.upsert({
+            where: { tenantId_serialNumber: { tenantId, serialNumber: l.sn } },
+            create: { tenantId, serialNumber: l.sn, ...chave },
+            update: chave,
+          });
+
+          // Vinculada a cliente não volta pro Estoque.
+          if (jaVinculada.has(l.sn)) return 'atualizada' as const;
+          if (item) {
+            if (item.deletedAt && !item.associatedAt) {
+              await this.prisma.stockItem.update({ where: { id: item.id }, data: { deletedAt: null } });
+            }
+            return 'atualizada' as const;
+          }
+          await this.prisma.stockItem.create({
+            data: { tenantId, imei: l.sn, kind: 'TAG', status: 'TAG', notes: `Lote ${batch}` },
+          });
+          return 'nova' as const;
+        }),
+      );
+      for (const r of resultados) {
+        if (r === 'nova') imported++;
+        else if (r === 'atualizada') updated++;
+        else skipped++;
+      }
+    }
+
+    this.logger.log(
+      `Import TAG tenant=${tenantId}: ${imported} novas, ${updated} atualizadas, ${skipped} ignoradas`,
+    );
+    return { imported, updated, skipped, total: linhas.length, tipo: 'TAG' };
   }
 
   // --- helpers de leitura de célula (exceljs retorna tipos variados) ---

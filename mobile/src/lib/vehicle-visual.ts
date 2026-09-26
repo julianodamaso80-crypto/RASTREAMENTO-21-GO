@@ -23,6 +23,27 @@ export function vehicleTypeLabel(type?: VehicleType | null): string {
   return type === 'MOTORCYCLE' ? 'Moto' : 'Carro';
 }
 
+export type BlockState = 'BLOQUEADO' | 'BLOQUEIO_PENDENTE' | 'DESBLOQUEIO_PENDENTE' | null;
+
+/**
+ * Estado do bloqueio. Quem manda é o rastreador; o `status` do veículo só diz
+ * que o comando saiu. O rastreador não informa o relé em todo pacote — `null`
+ * não é "desbloqueado", então aí vale o que o sistema gravou.
+ */
+export function blockState(v: Vehicle): BlockState {
+  const doRastreador = v.position?.blocked ?? null;
+  const comandado = v.status === 'BLOCKED';
+  if (doRastreador === true) return comandado ? 'BLOQUEADO' : 'DESBLOQUEIO_PENDENTE';
+  if (doRastreador === false) return comandado ? 'BLOQUEIO_PENDENTE' : null;
+  return comandado ? 'BLOQUEADO' : null;
+}
+
+export const BLOCK_LABEL: Record<Exclude<BlockState, null>, string> = {
+  BLOQUEADO: 'Bloqueado',
+  BLOQUEIO_PENDENTE: 'Bloqueio enviado, aguardando o rastreador',
+  DESBLOQUEIO_PENDENTE: 'Desbloqueio enviado, aguardando o rastreador',
+};
+
 export interface VehicleStatus {
   color: string;
   label: string;
@@ -35,6 +56,8 @@ export interface VehicleStatus {
  * parado, vermelho desligado, cinza sem sinal.
  */
 export function vehicleStatus(v: Vehicle): VehicleStatus {
+  const bloqueio = blockState(v);
+  if (bloqueio === 'BLOQUEADO') return { color: colors.red, label: BLOCK_LABEL.BLOQUEADO, moving: false };
   const p: Position | null = v.position;
   if (!p) return { color: colors.textFaint, label: 'Sem sinal', moving: false };
   if (p.motion) return { color: colors.green, label: 'Em movimento', moving: true };

@@ -143,7 +143,7 @@ export default function TagsAtivasPage() {
   };
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
+    <div className="h-full space-y-5 overflow-auto p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -157,6 +157,12 @@ export default function TagsAtivasPage() {
                 ? 'TAG contratada no SGA que ainda não conseguimos localizar'
                 : 'Todo veículo com TAG contratada e cliente ativo — fonte: SGA'}
           </p>
+          {(meta?.emClientesAtivos ?? 0) > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {meta?.emClientesAtivos} já estão em Clientes Ativos (ativas no SGA, vinculadas e
+              rastreáveis) e saíram desta lista.
+            </p>
+          )}
         </div>
         <Button
           variant="outline"

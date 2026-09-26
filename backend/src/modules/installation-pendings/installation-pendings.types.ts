@@ -37,7 +37,7 @@ export interface PendingStats {
   tracker: number;
   tag: number;
   /** Soma do valor protegido dos veículos sem equipamento instalado. */
-  exposedValue: number;
+  exposedValue: number | null;
   lastSyncAt: string | null;
   syncing: boolean;
 }

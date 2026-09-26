@@ -48,7 +48,25 @@ export interface ClientAsset {
   financialStatus: FinancialStatus | null;
   financialStatusAt: string | null;
   appAccessBlocked: boolean;
+  /** Associado pode bloquear/desbloquear este veículo pelo app. Só admin liga. */
+  blockerAccessAllowed: boolean;
   sga: { code: string | null; statusLabel: string | null };
+  /** Veículo que só tem TAG (nenhum rastreador nosso). Interno. */
+  soTag?: boolean;
+  /**
+   * TAG vinculada a este veículo. Só chega para o time interno; o associado
+   * nunca recebe. Posição sempre passado — a TAG só é vista quando um iPhone
+   * passa perto.
+   */
+  tag?: {
+    serialNumber: string;
+    origin: string;
+    verdict: string;
+    lastSeenAt: string | null;
+    lat: number | null;
+    lng: number | null;
+    accuracyM: number | null;
+  } | null;
 }
 
 export interface AssetsSummary {

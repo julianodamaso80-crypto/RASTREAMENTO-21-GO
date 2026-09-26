@@ -25,6 +25,12 @@ import type {
 } from '@/types/appointment';
 import type { GoogleTileSource } from '@/types/map';
 import type {
+  ConsultantOption,
+  FinancialEntry,
+  FinancialEntryPayload,
+  FinancialFilter,
+} from '@/types/financial';
+import type {
   ActiveTagsResponse,
   BleTag,
   BleSighting,
@@ -44,8 +50,10 @@ import type {
   StockValidateResult,
   StockMapResult,
   StockTestCommandResult,
+  StockBatchSignal,
 } from '@/types/stock';
 import type { ClientAsset, AssetsSummary } from '@/types/assets';
+import type { TagNoMapa } from '@/types/tag-map';
 import type {
   Technician,
   TechnicianAssignment,
@@ -60,6 +68,7 @@ import type {
   InstallationPendingSyncStatus,
   InstallationPendingFilters,
 } from '@/types/installation-pending';
+import type { ConsultantBase, ConsultantSyncStatus } from '@/types/consultant';
 import type {
   InstallationCluster,
   InstallationRoute,
@@ -72,10 +81,21 @@ import type {
   UserWithPassword,
 } from '@/types/user';
 
+// `timeout` NÃO é detalhe: sem ele o axios espera para sempre. Em 22/09/2026 o
+// trecho entre o origin (nyc1) e o edge do Cloudflare no Rio ficou com perda de
+// pacote, respostas grandes travaram, e as abas que caíram nisso ficaram em
+// branco PARA SEMPRE — sem erro, sem nova tentativa, porque a promise nunca
+// resolvia nem rejeitava. 90s é de propósito maior que qualquer chamada real e
+// menor que o corte do próprio Cloudflare (~100s): não tira capacidade de nada,
+// só garante que uma requisição pendurada vire erro tratável.
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL + '/api/v1',
   headers: { 'Content-Type': 'application/json' },
+  timeout: 90_000,
 });
+
+/** Chamadas do mapa: precisam desistir cedo para a tela abrir mesmo sem elas. */
+const TRACKING_TIMEOUT = 25_000;
 
 // JWT interceptor
 api.interceptors.request.use((config) => {
@@ -387,11 +407,15 @@ export const assistantApi = {
 
 export const traccarApi = {
   getDevices: async (): Promise<TraccarDevice[]> => {
-    const res = await api.get<ApiResponse<TraccarDevice[]>>('/traccar/devices');
+    const res = await api.get<ApiResponse<TraccarDevice[]>>('/traccar/devices', {
+      timeout: TRACKING_TIMEOUT,
+    });
     return res.data.data;
   },
   getPositions: async (): Promise<TraccarPosition[]> => {
-    const res = await api.get<ApiResponse<TraccarPosition[]>>('/traccar/positions');
+    const res = await api.get<ApiResponse<TraccarPosition[]>>('/traccar/positions', {
+      timeout: TRACKING_TIMEOUT,
+    });
     return res.data.data;
   },
   getHistory: async (deviceId: number, from: string, to: string): Promise<TraccarPosition[]> => {
@@ -741,9 +765,77 @@ export const stockApi = {
     });
     return res.data.data;
   },
+  /**
+   * "Atualizar TAG": pede ao coletor uma consulta imediata na rede Find My.
+   * Trava de 3 min por TAG (mesma regra da referência) — 429 quando cedo demais.
+   */
+  atualizarTag: async (
+    id: string,
+  ): Promise<{ pendente: boolean; solicitadoEm: string; disponivelEm: string }> => {
+    const res = await api.post<ApiResponse<{ pendente: boolean; solicitadoEm: string; disponivelEm: string }>>(
+      `/stock/${id}/atualizar-tag`,
+    );
+    return res.data.data;
+  },
+  estadoAtualizarTag: async (
+    id: string,
+  ): Promise<{
+    pendente: boolean;
+    concluidoEm: string | null;
+    avistamentosNovos: number | null;
+    segundosRestantes: number;
+  }> => {
+    const res = await api.get<ApiResponse<{
+      pendente: boolean;
+      concluidoEm: string | null;
+      avistamentosNovos: number | null;
+      segundosRestantes: number;
+    }>>(`/stock/${id}/atualizar-tag`);
+    return res.data.data;
+  },
+  /** Solta a TAG do veículo e devolve ao estoque — o rastreador do carro fica. */
+  desvincularTag: async (serial: string): Promise<{ serialNumber: string; placa: string }> => {
+    const res = await api.post<ApiResponse<{ serialNumber: string; placa: string }>>(
+      `/stock/tags/${encodeURIComponent(serial)}/desvincular`,
+    );
+    return res.data.data;
+  },
+  /** "Atualizar TAG" pelo número de série — é como o Mapa conhece a TAG. */
+  atualizarTagPorSerie: async (
+    serial: string,
+  ): Promise<{ pendente: boolean; solicitadoEm: string; disponivelEm: string }> => {
+    const res = await api.post<ApiResponse<{ pendente: boolean; solicitadoEm: string; disponivelEm: string }>>(
+      `/stock/tags/${encodeURIComponent(serial)}/atualizar`,
+    );
+    return res.data.data;
+  },
+  estadoAtualizarTagPorSerie: async (
+    serial: string,
+  ): Promise<{
+    pendente: boolean;
+    concluidoEm: string | null;
+    avistamentosNovos: number | null;
+    segundosRestantes: number;
+  }> => {
+    const res = await api.get<ApiResponse<{
+      pendente: boolean;
+      concluidoEm: string | null;
+      avistamentosNovos: number | null;
+      segundosRestantes: number;
+    }>>(`/stock/tags/${encodeURIComponent(serial)}/atualizar`);
+    return res.data.data;
+  },
   /** Conferência de instalação ao vivo: GPS, satélites, voltagem e ignição. */
   signal: async (id: string): Promise<DeviceHealth> => {
     const res = await api.get<ApiResponse<DeviceHealth>>(`/stock/${id}/signal`);
+    return res.data.data;
+  },
+  /** A mesma conferência, de vários equipamentos numa pergunta só. */
+  signalBatch: async (stockItemIds: string[]): Promise<StockBatchSignal[]> => {
+    const res = await api.post<ApiResponse<StockBatchSignal[]>>(
+      '/stock/signal-batch',
+      { stockItemIds },
+    );
     return res.data.data;
   },
   /** Carimba a conferência (aprovada ou reprovada) com o retrato do momento. */
@@ -812,6 +904,24 @@ export const techniciansApi = {
   },
 };
 
+/** Consultores espelhados do Power CRM — só o time interno. */
+export const consultantsApi = {
+  /** A base inteira: busca, filtro e ficha acontecem no navegador. */
+  all: async (): Promise<ConsultantBase> => {
+    const res = await api.get<ApiResponse<ConsultantBase>>('/consultants');
+    return res.data.data;
+  },
+  /** Volta na hora: a cópia do Power roda em background no servidor. */
+  startSync: async (): Promise<{ alreadyRunning: boolean }> => {
+    const res = await api.post<ApiResponse<{ alreadyRunning: boolean }>>('/consultants/sync');
+    return res.data.data;
+  },
+  syncStatus: async (): Promise<ConsultantSyncStatus> => {
+    const res = await api.get<ApiResponse<ConsultantSyncStatus>>('/consultants/sync/status');
+    return res.data.data;
+  },
+};
+
 export const hinovaApi = {
   lookup: async (placa: string): Promise<HinovaLookup> => {
     const res = await api.get<ApiResponse<HinovaLookup>>(
@@ -837,6 +947,11 @@ export const clientsApi = {
     });
     return res.data;
   },
+  /** TAGs de cliente sem rastreador, com a última posição — só time interno. */
+  getTagsMap: async (): Promise<TagNoMapa[]> => {
+    const res = await api.get<ApiResponse<TagNoMapa[]>>('/clients/tags-map');
+    return res.data.data;
+  },
   getAssetsSummary: async (weekOffset = 0): Promise<AssetsSummary> => {
     const res = await api.get<ApiResponse<AssetsSummary>>(
       '/clients/assets/summary',
@@ -847,6 +962,9 @@ export const clientsApi = {
   /** Corta ou devolve o acesso do cliente a ESTE ativo no app. */
   setAppAccess: async (vehicleId: string, blocked: boolean): Promise<void> => {
     await api.patch(`/clients/assets/${vehicleId}/app-access`, { blocked });
+  },
+  setBlockerAccess: async (vehicleId: string, allowed: boolean): Promise<void> => {
+    await api.patch(`/clients/assets/${vehicleId}/blocker-access`, { allowed });
   },
   setFinancialStatus: async (
     vehicleId: string,
@@ -1216,3 +1334,75 @@ function ordensParams(f: FiltroOrdens) {
     search: f.search || undefined,
   };
 }
+
+export const financialApi = {
+  getAll: async (f: FinancialFilter): Promise<FinancialEntry[]> => {
+    const res = await api.get<ApiResponse<FinancialEntry[]>>('/financial-entries', {
+      params: {
+        search: f.search || undefined,
+        status: f.status || undefined,
+        month: f.month || undefined,
+        from: f.from || undefined,
+        to: f.to || undefined,
+      },
+    });
+    return res.data.data;
+  },
+  create: async (payload: FinancialEntryPayload): Promise<FinancialEntry> => {
+    const res = await api.post<ApiResponse<FinancialEntry>>('/financial-entries', payload);
+    return res.data.data;
+  },
+  update: async (id: string, payload: FinancialEntryPayload): Promise<FinancialEntry> => {
+    const res = await api.patch<ApiResponse<FinancialEntry>>(
+      `/financial-entries/${id}`,
+      payload,
+    );
+    return res.data.data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await api.delete(`/financial-entries/${id}`);
+  },
+  anexarComprovante: async (id: string, file: File): Promise<FinancialEntry> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await api.post<ApiResponse<FinancialEntry>>(
+      `/financial-entries/${id}/receipt`,
+      form,
+    );
+    return res.data.data;
+  },
+  /** Blob do comprovante — o arquivo exige o token, não dá para usar <a href>. */
+  baixarComprovante: async (id: string): Promise<Blob> => {
+    const res = await api.get(`/financial-entries/${id}/receipt`, {
+      responseType: 'blob',
+    });
+    return res.data as Blob;
+  },
+  removerComprovante: async (id: string): Promise<FinancialEntry> => {
+    const res = await api.delete<ApiResponse<FinancialEntry>>(
+      `/financial-entries/${id}/receipt`,
+    );
+    return res.data.data;
+  },
+  relatorioPdf: async (f: FinancialFilter & { periodo?: string }): Promise<Blob> => {
+    const res = await api.get('/financial-entries/report.pdf', {
+      params: {
+        search: f.search || undefined,
+        status: f.status || undefined,
+        month: f.month || undefined,
+        from: f.from || undefined,
+        to: f.to || undefined,
+        periodo: f.periodo || undefined,
+      },
+      responseType: 'blob',
+    });
+    return res.data as Blob;
+  },
+  searchConsultants: async (search: string): Promise<ConsultantOption[]> => {
+    const res = await api.get<ApiResponse<ConsultantOption[]>>(
+      '/financial-entries/consultants',
+      { params: { search } },
+    );
+    return res.data.data;
+  },
+};

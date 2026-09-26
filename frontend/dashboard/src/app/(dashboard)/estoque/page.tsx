@@ -25,7 +25,7 @@ import {
   LockOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn, formatDateOnlyBR } from '@/lib/utils';
+import { cn, formatDateOnlyBR, formatRelativeTime } from '@/lib/utils';
 import { stockApi } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,7 @@ import {
 import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog';
 import { AssignTechnicianDialog } from '@/components/stock/assign-technician-dialog';
 import { InstallCheckSheet } from '@/components/stock/install-check-sheet';
+import { InstallCheckBatchSheet } from '@/components/stock/install-check-batch-sheet';
 import type {
   StockConnectivity,
   StockConnectivityItem,
@@ -85,6 +86,9 @@ export default function EstoquePage() {
   const [conexaoFilter, setConexaoFilter] = useState<
     '' | 'online' | 'offline' | 'sem-gps'
   >('');
+  // Rastreador ou TAG. TAG não fala com o servidor GPS, então online/offline
+  // não se aplica a ela.
+  const [tipoFilter, setTipoFilter] = useState<'' | 'RASTREADOR' | 'TAG'>('');
   const [associItem, setAssociItem] = useState<StockItem | null>(null);
   const [associOpen, setAssociOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -92,27 +96,47 @@ export default function EstoquePage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [checkItem, setCheckItem] = useState<StockItem | null>(null);
   const [checkOpen, setCheckOpen] = useState(false);
+  // Conferência em pacote: vários técnicos girando a chave ao mesmo tempo.
+  const [batchItems, setBatchItems] = useState<StockItem[]>([]);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [conn, setConn] = useState<StockConnectivity | null>(null);
   const [totalFiltrado, setTotalFiltrado] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Uma requisição por tecla fazia a busca curta ("8", o estoque quase todo,
+  // ~1,3 MB) chegar DEPOIS da busca pelo IMEI completo e sobrescrever a
+  // tabela: o equipamento "sumia" com o IMEI escrito no campo (access log de
+  // 18/09/2026). Espera a digitação parar e só aceita a resposta da última carga.
+  const [buscaDebounced, setBuscaDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+  const ultimaCarga = useRef(0);
+
   const loadStock = useCallback(async () => {
+    const carga = ++ultimaCarga.current;
     try {
-      const params: Record<string, string | number> = { perPage: 100 };
-      if (search) params.search = search;
+      // Estoque inteiro: com 100 por vez a importação das TAGs (mais novas)
+      // ocupava a tela toda e os rastreadores sumiam do "Todos".
+      const params: Record<string, string | number> = { perPage: 5000 };
+      if (buscaDebounced) params.search = buscaDebounced;
       if (statusFilter) params.status = statusFilter;
       if (assignmentFilter) params.assignment = assignmentFilter;
       if (conexaoFilter) params.conexao = conexaoFilter;
+      if (tipoFilter) params.tipo = tipoFilter;
       const res = await stockApi.getAll(params);
-      setItems(res.data);
+      if (carga !== ultimaCarga.current) return; // resposta velha: já existe carga mais nova
+      // Rastreador primeiro, TAG depois; dentro de cada um, a ordem da API.
+      setItems([...res.data].sort((a, b) => Number(a.kind === 'TAG') - Number(b.kind === 'TAG')));
       setTotalFiltrado(res.meta?.total ?? res.data.length);
       setSelected(new Set()); // recarregou a lista, seleção antiga não vale mais
     } catch {
-      toast.error('Erro ao carregar estoque');
+      if (carga === ultimaCarga.current) toast.error('Erro ao carregar estoque');
     } finally {
-      setLoading(false);
+      if (carga === ultimaCarga.current) setLoading(false);
     }
-  }, [search, statusFilter, assignmentFilter, conexaoFilter]);
+  }, [buscaDebounced, statusFilter, assignmentFilter, conexaoFilter, tipoFilter]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -159,7 +183,9 @@ export default function EstoquePage() {
     try {
       const res = await stockApi.import(file);
       toast.success(
-        `Importação concluída: ${res.imported} novos, ${res.updated} atualizados` +
+        (res.tipo === 'TAG'
+          ? `TAGs importadas: ${res.imported} novas, ${res.updated} já existiam`
+          : `Importação concluída: ${res.imported} novos, ${res.updated} atualizados`) +
           (res.skipped ? `, ${res.skipped} ignorados` : ''),
         { id: toastId },
       );
@@ -294,7 +320,7 @@ export default function EstoquePage() {
             Estoque
           </h1>
           <p className="text-sm text-muted-foreground">
-            Rastreadores disponíveis — associe a um cliente do SGA ou importe a planilha
+            Rastreadores e TAGs disponíveis — associe a um cliente do SGA ou importe a planilha
           </p>
         </div>
         <input
@@ -318,53 +344,78 @@ export default function EstoquePage() {
         </Button>
       </div>
 
-      {/* Conectividade no servidor GPS — no celular vira faixa com rolagem
-          horizontal e chips compactos: informação de relance sem empurrar a
-          tabela pra fora da tela. Do md pra cima, tamanho normal de sempre. */}
-      {conn && !conn.indisponivel && (
-        <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
-          <AbaConexao
-            ativa={conexaoFilter === ''}
-            onClick={() => setConexaoFilter('')}
-            rotulo="Todos"
-            valor={conn.total}
-          />
-          <AbaConexao
-            ativa={conexaoFilter === 'online'}
-            onClick={() =>
-              setConexaoFilter(conexaoFilter === 'online' ? '' : 'online')
-            }
-            rotulo="Online"
-            valor={conn.conectados}
-            cor="emerald"
-          />
-          <AbaConexao
-            ativa={conexaoFilter === 'offline'}
-            onClick={() =>
-              setConexaoFilter(conexaoFilter === 'offline' ? '' : 'offline')
-            }
-            rotulo="Offline"
-            valor={conn.desconectados}
-            cor="red"
-          />
-          <AbaConexao
-            ativa={conexaoFilter === 'sem-gps'}
-            onClick={() =>
-              setConexaoFilter(conexaoFilter === 'sem-gps' ? '' : 'sem-gps')
-            }
-            rotulo="Sem sinal GPS"
-            valor={conn.semGps}
-            cor="amber"
-          />
-          {conn.semCadastro > 0 && (
-            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
-              <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
-              <span className="text-[10px] text-muted-foreground md:text-xs">Entrando no servidor GPS</span>
-              <span className="text-sm font-bold md:text-lg">{conn.semCadastro}</span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Uma faixa só: Todos · Rastreadores · TAGs · Online · Offline · Sem GPS.
+          Rastreador e TAG dividem a mesma lista (pedido do dono), e os cartões
+          de conexão valem só para rastreador — TAG não fala com o servidor GPS,
+          então selecionar TAGs esconde os três. No celular a faixa rola. */}
+      <div className="shrink-0 flex gap-1.5 overflow-x-auto pb-0.5 md:flex-wrap md:gap-2 md:pb-0">
+        <AbaConexao
+          ativa={tipoFilter === '' && conexaoFilter === ''}
+          onClick={() => {
+            setTipoFilter('');
+            setConexaoFilter('');
+          }}
+          rotulo="Todos"
+          valor={stats ? stats.rastreadores + stats.tags : (conn?.total ?? 0)}
+        />
+        <AbaConexao
+          ativa={tipoFilter === 'RASTREADOR'}
+          onClick={() =>
+            setTipoFilter((t) => (t === 'RASTREADOR' ? '' : 'RASTREADOR'))
+          }
+          rotulo="Rastreadores"
+          valor={stats?.rastreadores ?? conn?.total ?? 0}
+        />
+        <AbaConexao
+          ativa={tipoFilter === 'TAG'}
+          onClick={() => {
+            // TAG não tem estado no servidor GPS: o filtro de conexão sai junto.
+            setConexaoFilter('');
+            setTipoFilter((t) => (t === 'TAG' ? '' : 'TAG'));
+          }}
+          rotulo="TAGs"
+          valor={stats?.tags ?? 0}
+          cor="violet"
+        />
+        {conn && !conn.indisponivel && tipoFilter !== 'TAG' && (
+          <>
+            <AbaConexao
+              ativa={conexaoFilter === 'online'}
+              onClick={() =>
+                setConexaoFilter(conexaoFilter === 'online' ? '' : 'online')
+              }
+              rotulo="Online"
+              valor={conn.conectados}
+              cor="emerald"
+            />
+            <AbaConexao
+              ativa={conexaoFilter === 'offline'}
+              onClick={() =>
+                setConexaoFilter(conexaoFilter === 'offline' ? '' : 'offline')
+              }
+              rotulo="Offline"
+              valor={conn.desconectados}
+              cor="red"
+            />
+            <AbaConexao
+              ativa={conexaoFilter === 'sem-gps'}
+              onClick={() =>
+                setConexaoFilter(conexaoFilter === 'sem-gps' ? '' : 'sem-gps')
+              }
+              rotulo="Sem sinal GPS"
+              valor={conn.semGps}
+              cor="amber"
+            />
+            {conn.semCadastro > 0 && (
+              <div className="flex shrink-0 items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-2">
+                <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
+                <span className="text-[10px] text-muted-foreground md:text-xs">Entrando no servidor GPS</span>
+                <span className="text-sm font-bold md:text-lg">{conn.semCadastro}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {conexaoFilter !== '' && (
         <p className="shrink-0 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -498,8 +549,24 @@ export default function EstoquePage() {
                   )}
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <ConnDot estado={conn?.statuses[item.imei]} />
+                      {item.kind === 'TAG' ? (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full bg-violet-400"
+                          title="TAG (rede Find My) — sem conexão GPS"
+                        />
+                      ) : (
+                        <ConnDot estado={conn?.statuses[item.imei]} />
+                      )}
                       <span className="font-mono text-xs">{item.imei}</span>
+                      {item.kind === 'TAG' ? (
+                        <Badge className="text-[10px] border bg-violet-500/15 text-violet-500 border-violet-500/30">
+                          TAG
+                        </Badge>
+                      ) : (
+                        <Badge className="text-[10px] border bg-brand-orange-500/15 text-brand-orange-600 border-brand-orange-500/30">
+                          Rastreador
+                        </Badge>
+                      )}
                     </div>
                     {item.validatedAt && (
                       <span
@@ -526,7 +593,15 @@ export default function EstoquePage() {
                     {item.line ?? '—'}
                   </td>
                   <td className="px-3 py-2">
-                    <BadgeConexao estado={conn?.statuses[item.imei]} />
+                    {item.kind === 'TAG' ? (
+                      <span className="text-xs text-muted-foreground">
+                        {item.tagPosition
+                          ? `vista ${formatRelativeTime(item.tagPosition.seenAt)}`
+                          : 'sem posição'}
+                      </span>
+                    ) : (
+                      <BadgeConexao estado={conn?.statuses[item.imei]} />
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {item.status ? (
@@ -597,9 +672,9 @@ export default function EstoquePage() {
         </div>
       )}
 
-      {items.length >= 100 && (
+      {items.length < totalFiltrado && (
         <p className="text-xs text-muted-foreground text-center">
-          Mostrando os primeiros 100 itens. Use a busca para refinar.
+          Mostrando {items.length} de {totalFiltrado} itens. Use a busca para refinar.
         </p>
       )}
 
@@ -620,6 +695,17 @@ export default function EstoquePage() {
             <Button size="sm" variant="outline" onClick={abrirSelecionadosNoMapa}>
               <MapPin className="h-4 w-4 mr-1" />
               Abrir no mapa
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setBatchItems(selectedItems);
+                setBatchOpen(true);
+              }}
+            >
+              <SignalHigh className="h-4 w-4 mr-1" />
+              Testar instalação
             </Button>
             <Button size="sm" onClick={() => openAssign(selectedItems)}>
               <HardHat className="h-4 w-4 mr-1" />
@@ -649,6 +735,13 @@ export default function EstoquePage() {
         onOpenChange={setCheckOpen}
         onValidated={() => Promise.all([loadStock(), loadConnectivity()])}
       />
+
+      <InstallCheckBatchSheet
+        items={batchItems}
+        open={batchOpen}
+        onOpenChange={setBatchOpen}
+        onValidated={() => void loadConnectivity()}
+      />
     </div>
   );
 }
@@ -672,7 +765,7 @@ function AbaConexao({
   onClick: () => void;
   rotulo: string;
   valor: number;
-  cor?: 'emerald' | 'red' | 'amber';
+  cor?: 'emerald' | 'red' | 'amber' | 'violet';
 }) {
   // `emerald` no tema é alias do laranja da marca (ver globals.css). Online
   // precisa ler como online, então usa o verde oficial: brand-green.
@@ -680,6 +773,8 @@ function AbaConexao({
     emerald: { borda: 'border-brand-green-500/40', fundo: 'bg-brand-green-500/10', ponto: 'bg-brand-green-500', texto: 'text-brand-green-600' },
     red: { borda: 'border-red-500/30', fundo: 'bg-red-500/10', ponto: 'bg-red-400', texto: 'text-red-400' },
     amber: { borda: 'border-amber-500/30', fundo: 'bg-amber-500/10', ponto: 'bg-amber-400', texto: 'text-amber-400' },
+    // TAG (rede Find My) tem cor própria: não é estado de GPS.
+    violet: { borda: 'border-violet-500/30', fundo: 'bg-violet-500/10', ponto: 'bg-violet-400', texto: 'text-violet-300' },
   };
   const tom = cor ? tons[cor] : null;
 
@@ -801,18 +896,22 @@ function StockRowMenu({
         }
       />
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuItem onClick={onMapa}>
-          <MapPin className="h-4 w-4" /> Abrir no mapa
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onCheck}>
-          <SignalHigh className="h-4 w-4" /> Validar instalação
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onTestCommand('block')}>
-          <Lock className="h-4 w-4" /> Bloquear (teste)
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onTestCommand('unblock')}>
-          <LockOpen className="h-4 w-4" /> Desbloquear (teste)
-        </DropdownMenuItem>
+        {item.kind !== 'TAG' && (
+          <>
+            <DropdownMenuItem onClick={onMapa}>
+              <MapPin className="h-4 w-4" /> Abrir no mapa
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onCheck}>
+              <SignalHigh className="h-4 w-4" /> Validar instalação
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onTestCommand('block')}>
+              <Lock className="h-4 w-4" /> Bloquear (teste)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onTestCommand('unblock')}>
+              <LockOpen className="h-4 w-4" /> Desbloquear (teste)
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuItem onClick={onAssociate}>
           <UserCheck className="h-4 w-4" /> Associar um cliente e ativo
         </DropdownMenuItem>

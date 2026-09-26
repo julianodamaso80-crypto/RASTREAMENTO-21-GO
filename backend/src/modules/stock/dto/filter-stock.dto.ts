@@ -37,4 +37,12 @@ export class FilterStockDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(['online', 'offline', 'sem-gps'])
   conexao?: 'online' | 'offline' | 'sem-gps';
+
+  @ApiPropertyOptional({
+    enum: ['RASTREADOR', 'TAG'],
+    description: 'Tipo do equipamento. Sem o filtro, a lista traz os dois.',
+  })
+  @IsOptional()
+  @IsIn(['RASTREADOR', 'TAG'])
+  tipo?: 'RASTREADOR' | 'TAG';
 }

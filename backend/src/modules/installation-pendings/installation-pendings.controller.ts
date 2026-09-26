@@ -21,7 +21,7 @@ import type { PendingType } from './installation-pendings.types';
 
 interface AuthenticatedRequest {
   tenantId: string;
-  user?: { id: string };
+  user?: { id: string; role?: string };
 }
 
 interface CreateRouteBody {
@@ -68,8 +68,11 @@ export class InstallationPendingsController {
   @Get('stats')
   @ApiOperation({ summary: 'Totais, patrimônio exposto e data do último sync' })
   @ApiQuery({ name: 'days', required: false })
-  stats(@Req() req: AuthenticatedRequest, @Query('days') days?: string) {
-    return this.service.stats(req.tenantId, parseDias(days));
+  async stats(@Req() req: AuthenticatedRequest, @Query('days') days?: string) {
+    const stats = await this.service.stats(req.tenantId, parseDias(days));
+    // Patrimônio exposto é número de diretoria: só admin recebe.
+    const admin = req.user?.role === Role.SUPER_ADMIN || req.user?.role === Role.ADMIN;
+    return admin ? stats : { ...stats, exposedValue: null };
   }
 
   @Get('cities')

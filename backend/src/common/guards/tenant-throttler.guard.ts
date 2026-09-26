@@ -1,28 +1,48 @@
 import { Injectable } from '@nestjs/common';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerGuard, type ThrottlerRequest } from '@nestjs/throttler';
 
 /**
- * Throttler que rastreia requests por tenantId quando autenticado, ou por IP
- * quando público. Padrão do `@nestjs/throttler` é só por IP — falha em SaaS
- * porque operadores de empresas grandes ficam atrás de um único NAT corporativo
- * e drop em uns no outros.
- *
- * Default IP: 100/min globalmente.
- * Com tenant: 100/min por tenant (cada empresa tem sua quota).
+ * Limite para quem está logado, por usuário. Cada aba do painel aberta no mapa
+ * já faz ~15 requisições/min (posições e devices a cada 8 s); com busca e
+ * estoque juntos, um operador ativo passa de 100.
  */
+export const LIMITE_POR_USUARIO = 300;
+
+type Requisicao = {
+  user?: { id?: string };
+  tenantId?: string;
+  ip?: string;
+  headers?: Record<string, string | string[] | undefined>;
+};
+
+/**
+ * De quem é a cota. Antes era da EMPRESA inteira (tenant): em 16/09/2026 o
+ * escritório somou 305 req/min e o Estoque abriu "Erro ao carregar estoque"
+ * para todos (32 respostas 429 no access log). Cada usuário tem a sua agora.
+ * Rota pública (login etc.) continua por IP, que é o que segura força bruta.
+ */
+export function rastreadorDaRequisicao(req: Requisicao): string {
+  if (req.user?.id) return `user:${req.user.id}`;
+  if (req.tenantId) return `tenant:${req.tenantId}`;
+  const ip = req.ip ?? req.headers?.['x-forwarded-for'] ?? 'unknown';
+  return `ip:${Array.isArray(ip) ? ip[0] : ip}`;
+}
+
+export function limiteDaRequisicao(req: Requisicao, limitePadrao: number): number {
+  return req.user?.id ? LIMITE_POR_USUARIO : limitePadrao;
+}
+
 @Injectable()
 export class TenantThrottlerGuard extends ThrottlerGuard {
   protected async getTracker(req: Record<string, unknown>): Promise<string> {
-    // request.tenantId é setado pelo TenantGuard após JWT.
-    const tenantId = (req as { tenantId?: string }).tenantId;
-    if (tenantId) return `tenant:${tenantId}`;
-    // Fallback IP — pra rotas públicas (login, health, etc).
-    const ip =
-      (req as { ip?: string }).ip ??
-      (req as { headers?: Record<string, string | string[]> }).headers?.[
-        'x-forwarded-for'
-      ] ??
-      'unknown';
-    return `ip:${Array.isArray(ip) ? ip[0] : ip}`;
+    return rastreadorDaRequisicao(req as Requisicao);
+  }
+
+  protected async handleRequest(requestProps: ThrottlerRequest): Promise<boolean> {
+    const { req } = this.getRequestResponse(requestProps.context);
+    return super.handleRequest({
+      ...requestProps,
+      limit: limiteDaRequisicao(req as Requisicao, requestProps.limit),
+    });
   }
 }

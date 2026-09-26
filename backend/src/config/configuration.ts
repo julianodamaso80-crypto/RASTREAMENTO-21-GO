@@ -58,6 +58,14 @@ export default () => ({
     // desliga o envio sem exigir configurar nada em condições normais.
     enabled: process.env.EXPO_PUSH_ENABLED !== 'false',
   },
+  power: {
+    // Painel do Power CRM — de onde sai a aba Consultores. Mesma conta do CRM.
+    baseUrl: process.env.POWER_APP_BASE_URL || 'https://app.powercrm.com.br',
+    companyId: process.env.POWER_COMPANY_ID,
+    username: process.env.POWER_LOGIN_USERNAME,
+    password: process.env.POWER_LOGIN_PASSWORD,
+    syncEnabled: process.env.CONSULTANTS_SYNC_ENABLED || 'true',
+  },
   server: {
     primaryIp: process.env.SERVER_PRIMARY_IP || '0.0.0.0',
     secondaryIp: process.env.SERVER_SECONDARY_IP || '0.0.0.0',

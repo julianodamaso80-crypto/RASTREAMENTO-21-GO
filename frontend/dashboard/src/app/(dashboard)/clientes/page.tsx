@@ -11,7 +11,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { clientsApi, devicesApi } from '@/lib/api';
+import { clientsApi, devicesApi, stockApi } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,13 +21,16 @@ import { AssetCard } from '@/components/clientes/asset-card';
 import { AssetsAnalytics } from '@/components/clientes/assets-analytics';
 import {
   AlterarTecnicoDialog,
+  DesvincularTagDialog,
   RetirarRastreadorDialog,
   SenhaTemporariaDialog,
+  type DesvinculoTagAlvo,
   type RetiradaAlvo,
   type SenhaTemporaria,
   type TecnicoAlvo,
 } from '@/components/clientes/asset-dialogs';
 import type { ClientAsset } from '@/types/assets';
+import { useBuscaDaUrl } from '@/lib/use-busca-url';
 
 const TAMANHOS_PAGINA = [20, 60, 140, 200, 400, 500];
 
@@ -46,10 +49,13 @@ export default function ClientesPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [search, setSearch] = useState('');
+  useBuscaDaUrl(setSearch);
   const [loading, setLoading] = useState(true);
 
   const [retirando, setRetirando] = useState<RetiradaAlvo | null>(null);
   const [salvandoRetirada, setSalvandoRetirada] = useState(false);
+  const [soltandoTag, setSoltandoTag] = useState<DesvinculoTagAlvo | null>(null);
+  const [salvandoTag, setSalvandoTag] = useState(false);
   const [trocandoTecnico, setTrocandoTecnico] = useState<TecnicoAlvo | null>(null);
   const [salvandoTecnico, setSalvandoTecnico] = useState(false);
   const [resetandoId, setResetandoId] = useState<string | null>(null);
@@ -57,21 +63,28 @@ export default function ClientesPage() {
 
   // Recarregar em background não pode piscar a lista inteira.
   const primeiraCarga = useRef(true);
+  const ultimaCarga = useRef(0);
 
   const load = useCallback(async () => {
+    const carga = ++ultimaCarga.current;
     try {
       const res = await clientsApi.getAssets({
         search: search || undefined,
         page,
         perPage,
       });
+      // Busca por 3 dígitos demora mais que por 5: sem isto a resposta velha
+      // chega depois e a lista mostra o resultado de um termo que já mudou.
+      if (carga !== ultimaCarga.current) return;
       setAssets(res.data);
       setTotal(res.meta.total);
     } catch {
-      toast.error('Erro ao carregar os ativos');
+      if (carga === ultimaCarga.current) toast.error('Erro ao carregar os ativos');
     } finally {
-      primeiraCarga.current = false;
-      setLoading(false);
+      if (carga === ultimaCarga.current) {
+        primeiraCarga.current = false;
+        setLoading(false);
+      }
     }
   }, [search, page, perPage]);
 
@@ -124,6 +137,21 @@ export default function ClientesPage() {
     }
   };
 
+  const alternarBloqueador = async (asset: ClientAsset) => {
+    const liberar = !asset.blockerAccessAllowed;
+    try {
+      await clientsApi.setBlockerAccess(asset.id, liberar);
+      toast.success(
+        liberar
+          ? `Bloqueador liberado: o cliente já pode bloquear ${asset.plate} pelo app.`
+          : `Acesso ao bloqueador de ${asset.plate} retirado.`,
+      );
+      await load();
+    } catch {
+      toast.error('Não consegui alterar o acesso ao bloqueador. Tente de novo.');
+    }
+  };
+
   const alternarFinanceiro = async (asset: ClientAsset) => {
     const novo =
       asset.financialStatus === 'INADIMPLENTE' ? 'ADIMPLENTE' : 'INADIMPLENTE';
@@ -173,6 +201,24 @@ export default function ClientesPage() {
       toast.error('Não consegui retirar o rastreador. Tente de novo.');
     } finally {
       setSalvandoRetirada(false);
+    }
+  };
+
+  /** A TAG sai do veículo e volta ao estoque; o rastreador do carro fica. */
+  const confirmarDesvinculoTag = async () => {
+    if (!soltandoTag) return;
+    setSalvandoTag(true);
+    try {
+      await stockApi.desvincularTag(soltandoTag.serialNumber);
+      toast.success(
+        `TAG ${soltandoTag.serialNumber} desvinculada — voltou pro estoque disponível.`,
+      );
+      setSoltandoTag(null);
+      await load();
+    } catch {
+      toast.error('Não consegui desvincular a TAG. Tente de novo.');
+    } finally {
+      setSalvandoTag(false);
     }
   };
 
@@ -297,6 +343,7 @@ export default function ClientesPage() {
                   }
                   onAlterarFinanceiro={() => alternarFinanceiro(asset)}
                   onAlterarAcesso={() => alternarAcesso(asset)}
+                  onAlterarBloqueador={() => alternarBloqueador(asset)}
                   onRedefinirSenha={() => resetarSenha(asset)}
                   onRetirar={() => {
                     if (!asset.device) return;
@@ -305,6 +352,15 @@ export default function ClientesPage() {
                       imei: asset.device.imei,
                       plate: asset.plate,
                       cliente: asset.associate?.name ?? 'cliente',
+                    });
+                  }}
+                  onDesvincularTag={() => {
+                    if (!asset.tag) return;
+                    setSoltandoTag({
+                      serialNumber: asset.tag.serialNumber,
+                      plate: asset.plate,
+                      cliente: asset.associate?.name ?? 'cliente',
+                      temRastreador: !!asset.device,
                     });
                   }}
                 />
@@ -347,6 +403,12 @@ export default function ClientesPage() {
         salvando={salvandoRetirada}
         onCancel={() => setRetirando(null)}
         onConfirm={confirmarRetirada}
+      />
+      <DesvincularTagDialog
+        alvo={soltandoTag}
+        salvando={salvandoTag}
+        onCancel={() => setSoltandoTag(null)}
+        onConfirm={confirmarDesvinculoTag}
       />
       <AlterarTecnicoDialog
         alvo={trocandoTecnico}

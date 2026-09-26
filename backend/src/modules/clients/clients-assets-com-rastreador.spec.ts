@@ -39,6 +39,8 @@ function montar() {
     },
     position: { groupBy: jest.fn().mockResolvedValue([]) },
     device: { findMany: jest.fn().mockResolvedValue([]) },
+    // Busca de nome sem acento (associados): nenhum casa.
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   const service = new ClientsService(prisma);
   return { service, findManyArgs, countArgs, groupByArgs };

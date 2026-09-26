@@ -82,6 +82,19 @@
       o fixTime antigo e continua sinalizado, corretamente.
     -->
     <entry key='filter.skipLimit'>600</entry>
+    <!--
+      NÃO ligar `filter.skipAttributes` aqui. A chave faz a posição escapar dos
+      filtros quando ela CARREGA o atributo listado — e o parque gt06/J16 manda
+      `ignition` em toda posição, então no XML isso desligaria o filtro de
+      distância para 30 mil rastreadores (o banco passaria a gravar ~12x mais
+      por veículo parado; disco cheio já derrubou o Traccar em 10/09).
+
+      O teste de instalação precisa da ignição na hora, e resolve isso POR
+      DEVICE: o backend grava `filter.skipAttributes.enable` + `filter.skipAttributes`
+      nos atributos do device em conferência/reserva de técnico e tira quando o
+      equipamento é instalado (StockTraccarService.responderIgnicaoNaHora).
+      As chaves de filtro são lidas com AttributeUtil.lookup(..., deviceId).
+    -->
     <!-- Descarta fix marcado como inválido pelo próprio protocolo. -->
     <entry key='filter.invalid'>true</entry>
     <!-- Descarta posição por torre de celular (LBS / cell tower). -->

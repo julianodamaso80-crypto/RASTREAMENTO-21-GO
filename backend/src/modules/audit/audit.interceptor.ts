@@ -17,6 +17,7 @@ const SKIP_PATHS = [/^\/api\/v1\/health/, /^\/api\/docs/];
 interface AuthenticatedRequest extends Request {
   tenantId?: string;
   user?: { id: string; email?: string; role?: string };
+  associate?: { id: string };
 }
 
 @Injectable()
@@ -62,7 +63,13 @@ export class AuditInterceptor implements NestInterceptor {
       statusCode: status,
       ip: this.resolveIp(req),
       userAgent: req.headers['user-agent']?.toString() ?? null,
-      metadata: err ? { error: this.serializeError(err) } : null,
+      metadata:
+        err || req.associate
+          ? {
+              ...(req.associate ? { associateId: req.associate.id } : {}),
+              ...(err ? { error: this.serializeError(err) } : {}),
+            }
+          : null,
     };
 
     this.audit.log(input);

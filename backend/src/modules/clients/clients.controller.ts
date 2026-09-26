@@ -15,15 +15,18 @@ import { Role } from '.prisma/client';
 import { RequireRoute, Roles } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ClientsService } from './clients.service';
+import { PERFIS_QUE_VEEM_TAG, podeVerTag } from './clients-tags';
 import { AssociateAuthService } from '../app/associate-auth.service';
 import {
   SetAppAccessDto,
+  SetBlockerAccessDto,
   SetFinancialStatusDto,
   SetTechnicianDto,
 } from './dto/asset-actions.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
+  user: { role: Role };
 }
 
 @ApiTags('Clientes Ativos')
@@ -50,7 +53,24 @@ export class ClientsController {
       search,
       page: page ? Number(page) : undefined,
       perPage: perPage ? Number(perPage) : undefined,
+      // TAG é segredo interno: só o time vê. CLIENT nem chega aqui (não tem a
+      // rota 'clientes'), mas o gate por papel é a barreira que não depende disso.
+      verTags: podeVerTag(req.user?.role),
     });
+  }
+
+  /**
+   * As TAGs de cliente para o Mapa. Segue a permissão da TELA do mapa (não a de
+   * Clientes Ativos): quem vê o mapa vê as TAGs nele. E só o time interno —
+   * a TAG é segredo, o associado nunca sabe que ela existe.
+   */
+  @Get('tags-map')
+  @RequireRoute('mapa')
+  @UseGuards(RolesGuard)
+  @Roles(...PERFIS_QUE_VEEM_TAG)
+  @ApiOperation({ summary: 'TAGs de cliente sem rastreador, com a última posição (Mapa)' })
+  tagsNoMapa(@Req() req: AuthenticatedRequest) {
+    return this.clientsService.tagsNoMapa(req.tenantId);
   }
 
   @Get('assets/summary')
@@ -80,6 +100,22 @@ export class ClientsController {
       dto.blocked,
     );
   }
+  @Patch('assets/:vehicleId/blocker-access')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @ApiOperation({ summary: 'Libera ou retira o bloqueador do app para um ativo' })
+  setBlockerAccess(
+    @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
+    @Body() dto: SetBlockerAccessDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.clientsService.setBlockerAccess(
+      req.tenantId,
+      vehicleId,
+      dto.allowed,
+    );
+  }
+
 
   @Patch('assets/:vehicleId/financial-status')
   @UseGuards(RolesGuard)

@@ -5,12 +5,17 @@ import { Input } from '@/components/ui/input';
 import { useTracking } from '@/contexts/tracking-context';
 import { useDebounce } from '@/hooks/use-debounce';
 import { VehicleListItem } from './vehicle-list-item';
+import { TagListItem } from './tag-list-item';
 import { VehicleFilterTabs } from './vehicle-filter-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useState, useEffect } from 'react';
 
+/** TAGs mostradas por vez: são milhares, e cada linha é um nó na tela. */
+const TAGS_POR_VEZ = 200;
+
 export function VehicleSidebar() {
-  const { filteredVehicles, searchQuery, setSearchQuery, isLoading } = useTracking();
+  const { filteredVehicles, filteredTags, searchQuery, setSearchQuery, isLoading } = useTracking();
+  const [tagsVisiveis, setTagsVisiveis] = useState(TAGS_POR_VEZ);
   // Nasce com a busca que já está valendo (ex.: o IMEI digitado na barra do
   // topo). Começar vazio zerava o filtro assim que o mapa montava, e o
   // operador via a lista inteira de volta com o termo ainda escrito em cima.
@@ -47,7 +52,7 @@ export function VehicleSidebar() {
               <Skeleton key={i} className="h-16 rounded-lg" />
             ))}
           </div>
-        ) : filteredVehicles.length === 0 ? (
+        ) : filteredVehicles.length === 0 && filteredTags.length === 0 ? (
           <div className="p-6 text-center text-muted-foreground text-sm">
             Nenhum veículo encontrado
           </div>
@@ -56,6 +61,18 @@ export function VehicleSidebar() {
             {filteredVehicles.map((vehicle) => (
               <VehicleListItem key={vehicle.id} vehicle={vehicle} />
             ))}
+            {filteredTags.slice(0, tagsVisiveis).map((tag) => (
+              <TagListItem key={tag.id} tag={tag} />
+            ))}
+            {filteredTags.length > tagsVisiveis && (
+              <button
+                type="button"
+                onClick={() => setTagsVisiveis((n) => n + TAGS_POR_VEZ)}
+                className="w-full rounded-lg py-2 text-xs font-medium text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+              >
+                Mostrar mais TAGs ({filteredTags.length - tagsVisiveis} restantes)
+              </button>
+            )}
           </div>
         )}
       </div>

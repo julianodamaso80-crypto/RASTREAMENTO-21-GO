@@ -82,7 +82,7 @@ export default function AgendaPage() {
   );
 
   return (
-    <div className="min-h-full">
+    <div className="h-full overflow-auto">
       <nav className="flex overflow-x-auto bg-[#1f2d63] px-2 text-white md:px-4">
         {ABAS.map(({ id, texto, icone: Icone }) => (
           <button

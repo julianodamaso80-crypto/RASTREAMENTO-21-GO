@@ -21,6 +21,7 @@ function montar(rows: any[] = [], espelho: any[] = [], veiculos: any[] = []) {
       count: jest.fn(() => Promise.resolve(rows.length)),
     },
     vehicle: { findMany: jest.fn(() => Promise.resolve(veiculos)) },
+    tagLink: { findMany: jest.fn().mockResolvedValue([]) },
     rdvTag: {
       findMany: jest.fn((args) => {
         rdvArgs.push(args);
@@ -205,6 +206,7 @@ describe('BleTagsService.findActive — a régua de "ativa"', () => {
         ),
       },
       vehicle: { findMany: jest.fn(() => Promise.resolve([])) },
+      tagLink: { findMany: jest.fn().mockResolvedValue([]) },
       rdvTag: {
         findMany: jest.fn(({ where }: any) =>
           Promise.resolve(

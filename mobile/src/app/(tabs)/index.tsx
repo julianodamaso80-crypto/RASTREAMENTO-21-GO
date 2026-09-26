@@ -102,7 +102,15 @@ export default function MapScreen() {
 
   const onPosition = useCallback((deviceId: number, position: Position) => {
     setVehicles((prev) =>
-      prev.map((v) => (v.traccarDeviceId === deviceId ? { ...v, position } : v)),
+      prev.map((v) =>
+        v.traccarDeviceId === deviceId
+          ? {
+              ...v,
+              // Nem todo pacote informa o relé: sem a informação, mantém a última.
+              position: { ...position, blocked: position.blocked ?? v.position?.blocked ?? null },
+            }
+          : v,
+      ),
     );
   }, []);
 
@@ -252,6 +260,7 @@ export default function MapScreen() {
               selected
               ownerName={name}
               onFocus={() => focusVehicle(current)}
+              onChanged={load}
               onHistory={() =>
                 router.push({
                   pathname: '/vehicle/[id]',

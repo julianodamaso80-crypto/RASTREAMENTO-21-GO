@@ -221,9 +221,14 @@ model Tenant {
   rdvTags              RdvTag[]
   tagKeys              TagKey[]
   tagPositions         TagPosition[]
+  tagLinks             TagLink[]
+  tagRefreshRequests   TagRefreshRequest[]
   installationRoutes   InstallationRoute[]
+  consultants          Consultant[]
 
   appointments Appointment[]
+  financialEntries FinancialEntry[]
+
   @@map("tenants")
 }
 
@@ -472,6 +477,9 @@ model Vehicle {
   /// Corta o acesso do associado a ESTE ativo no app, sem mexer na senha nem
   /// nos outros veículos dele.
   appAccessBlocked  Boolean   @default(false) @map("app_access_blocked")
+  /// Libera o associado a bloquear/desbloquear ESTE veículo pelo app. Nasce
+  /// desligado; só ADMIN/SUPER_ADMIN liga.
+  blockerAccessAllowed Boolean @default(false) @map("blocker_access_allowed")
 
   deletedAt       DateTime?     @map("deleted_at")
   createdAt       DateTime      @default(now()) @map("created_at")
@@ -939,6 +947,9 @@ model StockItem {
   validationOk         Boolean?    @map("validation_ok")
   validationNotes      String?     @map("validation_notes")
   validationSnapshot   Json?       @map("validation_snapshot")
+  /// RASTREADOR (fala com o Traccar) ou TAG (K-Tag, rede Find My). Todo caminho
+  /// que envolve servidor GPS filtra RASTREADOR.
+  kind         String    @default("RASTREADOR")
   deletedAt    DateTime? @map("deleted_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
@@ -946,6 +957,7 @@ model StockItem {
   @@unique([tenantId, imei])
   @@index([tenantId, status])
   @@index([tenantId, assignedTechnicianId])
+  @@index([tenantId, kind])
   @@map("stock_items")
 }
 
@@ -1061,6 +1073,51 @@ model SgaVehicle {
   @@index([tenantId, chassi])
   @@index([tenantId, situationCode])
   @@map("sga_vehicles")
+}
+
+/// Consultor (e demais usuários) espelhado do painel do Power CRM. Só leitura:
+/// quem manda é o Power, um cron reescreve esta tabela. Sem endereço porque o
+/// Power não tem esse campo (conferido em 17/09/2026). Quem some do Power ganha
+/// `deletedAt` — nunca sai da tabela.
+model Consultant {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  /// `id` do usuário no painel do Power.
+  powerId         Int     @map("power_id")
+  name            String
+  /// Nome de tratamento (`name` no Power) — é o que aparece em "quem chamou".
+  nickname        String?
+  email           String?
+  /// Só dígitos: CPF (11) ou CNPJ (14).
+  document        String?
+  phone           String?
+  mobile          String?
+  /// 1 Administrador Master · 3 Vendedor · 4 Consultor · 5 Administrador de Cooperativas
+  office          Int?
+  officeLabel     String? @map("office_label")
+  branch          String?
+  cooperative     String?
+  permissionGroup String? @map("permission_group")
+  /// Nome de tratamento de quem chamou (o Power não dá o id nessa listagem).
+  managerName     String? @map("manager_name")
+  active          Boolean @default(true)
+  statusLabel     String? @map("status_label")
+
+  powerCreatedAt DateTime? @map("power_created_at")
+  lastAccessAt   DateTime? @map("last_access_at")
+  blockedAt      DateTime? @map("blocked_at")
+
+  syncedAt  DateTime  @default(now()) @map("synced_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([tenantId, powerId])
+  @@index([tenantId, active])
+  @@index([tenantId, name])
+  @@map("consultants")
 }
 
 /// Espelho da TAG que roda na RedeVeiculos (plataforma incumbente).
@@ -1187,6 +1244,63 @@ model TagPosition {
   @@index([tenantId, plate, seenAt(sort: Desc)])
   @@index([tenantId, seenAt(sort: Desc)])
   @@map("tag_positions")
+}
+
+/// Pedido de "Atualizar TAG": o backend não fala com a Apple (a consulta é
+/// Python, no droplet), então a solicitação vira uma linha aqui e o coletor de
+/// minuto a minuto a executa. `positionsFound` é o que deixa a tela dizer a
+/// verdade: 0 = ninguém passou perto da TAG desde o último avistamento.
+model TagRefreshRequest {
+  id String @id @default(uuid()) @db.Uuid
+
+  serialNumber   String    @map("serial_number")
+  requestedById  String?   @map("requested_by_id") @db.Uuid
+  requestedAt    DateTime  @default(now()) @map("requested_at")
+  doneAt         DateTime? @map("done_at")
+  positionsFound Int?      @map("positions_found")
+
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, serialNumber, requestedAt(sort: Desc)])
+  @@map("tag_refresh_requests")
+}
+
+/// Vínculo de uma TAG com um veículo do SGA — spec 2026-09-16.
+///
+/// Não é `Device` (vehicle_id é único e desvincularia o rastreador) nem cria
+/// `Vehicle`/`Associate` (TAG é segredo interno; nada disso pode chegar ao app).
+/// Só uma linha viva por TAG: índice único parcial na migration.
+model TagLink {
+  id String @id @default(uuid()) @db.Uuid
+
+  serialNumber      String  @map("serial_number")
+  plate             String
+  chassi            String?
+  hinovaVehicleCode String? @map("hinova_vehicle_code")
+  associateName     String? @map("associate_name")
+  associateCpf      String? @map("associate_cpf")
+
+  /// REDE (conferido na RedeVeiculos) · ESTOQUE (vinculado pelo painel).
+  origin  String
+  /// CONFIRMADA · DIVERGENTE · AGUARDANDO_PROVA · INATIVO — ver portao-localizacao.ts.
+  verdict String
+  /// Provas usadas no veredito (fonte, diferença de tempo, distância).
+  evidence  Json?
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  createdById String?   @map("created_by_id") @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([tenantId, verdict])
+  @@index([tenantId, plate])
+  @@index([tenantId, chassi])
+  @@map("tag_links")
 }
 
 // ============================================================================
@@ -1405,4 +1519,57 @@ model AssociatePushDevice {
 
   @@index([associateId])
   @@map("associate_push_devices")
+}
+
+/// Situação do lançamento financeiro — as mesmas três opções da planilha do
+/// financeiro (MIGRAÇÃO, PAGO - PIX, SEM COMPROVANTE).
+enum FinancialEntryStatus {
+  MIGRATION
+  PAID_PIX
+  NO_RECEIPT
+}
+
+/// Aba Financeiro: substitui a planilha mensal de conferência de pagamentos.
+/// Só SUPER_ADMIN e ADMIN leem ou escrevem.
+model FinancialEntry {
+  id             String               @id @default(uuid()) @db.Uuid
+  tenantId       String               @map("tenant_id") @db.Uuid
+  tenant         Tenant               @relation(fields: [tenantId], references: [id])
+  plate          String
+  status         FinancialEntryStatus
+  /// 1 a 12. Null = a planilha deixa o mês em branco (ex.: migração).
+  month          Int?
+  consultantName String?              @map("consultant_name")
+  /// Celular do consultor, copiado da base de consultores ao escolher.
+  consultantContact String?           @map("consultant_contact")
+  receiptId      String?              @map("receipt_id")
+  plateCount     Int                  @default(1) @map("plate_count")
+  deletedAt      DateTime?            @map("deleted_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  receipt FinancialReceipt?
+
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, plate])
+  @@map("financial_entries")
+}
+
+/// Comprovante de pagamento anexado a um lançamento (imagem ou PDF).
+/// Mora em tabela separada porque `data` é o arquivo inteiro: na mesma tabela
+/// do lançamento, toda listagem arrastaria megabytes.
+model FinancialReceipt {
+  id       String         @id @default(uuid()) @db.Uuid
+  entryId  String         @unique @map("entry_id") @db.Uuid
+  entry    FinancialEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  fileName String         @map("file_name")
+  mimeType String         @map("mime_type")
+  size     Int
+  data     Bytes
+  /// Quem anexou (users.id). Fica solto de propósito: usuário apagado não
+  /// pode derrubar o comprovante.
+  uploadedById String?   @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@map("financial_receipts")
 }

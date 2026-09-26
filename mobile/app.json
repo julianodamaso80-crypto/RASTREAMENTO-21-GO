@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.r21go.client",
-      "buildNumber": "36",
+      "buildNumber": "39",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDisplayName": "21 Tracker"
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.r21go.client",
-      "versionCode": 7,
+      "versionCode": 10,
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -28,7 +28,7 @@
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#293c82",
+        "backgroundColor": "#01339c",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"

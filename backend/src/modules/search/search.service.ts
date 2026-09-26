@@ -274,7 +274,11 @@ export class SearchService {
         e.iccid ? `ICCID ${e.iccid}` : null,
         e.status,
       ),
-      href: `/estoque?busca=${encodeURIComponent(e.imei)}`,
+      // Vinculado saiu do Estoque (a lista só mostra o disponível): quem o
+      // mostra agora é Clientes Ativos, pelo IMEI ou pelo número da TAG.
+      href: e.associatedAt
+        ? `/clientes?busca=${encodeURIComponent(e.imei)}`
+        : `/estoque?busca=${encodeURIComponent(e.imei)}`,
     };
   }
 

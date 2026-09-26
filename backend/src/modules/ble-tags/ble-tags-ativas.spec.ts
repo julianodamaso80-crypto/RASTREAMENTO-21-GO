@@ -10,7 +10,7 @@ import { BleTagsService } from './ble-tags.service';
  */
 const TENANT = '11111111-1111-1111-1111-111111111111';
 
-function montar(rows: any[] = [], veiculos: any[] = []) {
+function montar(rows: any[] = [], veiculos: any[] = [], vinculos: any[] = []) {
   const findManyArgs: any[] = [];
   const countArgs: any[] = [];
   const vehicleArgs: any[] = [];
@@ -31,6 +31,8 @@ function montar(rows: any[] = [], veiculos: any[] = []) {
         return Promise.resolve(veiculos);
       }),
     },
+    tagLink: { findMany: jest.fn().mockResolvedValue(vinculos) },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   return {
     service: new BleTagsService(prisma),
@@ -210,6 +212,47 @@ describe('BleTagsService.findActive', () => {
  * reporta sozinha. Se o servidor GPS cair, a lista continua de pé sem posição:
  * é melhor mostrar o cliente sem localização do que uma tela de erro.
  */
+/**
+ * TAG que já virou cliente ativo nosso (vinculada, ativa no SGA e rastreável)
+ * sai da TAGs Ativas — a tela fica só com o que ainda não controlamos.
+ */
+describe('BleTagsService.findActive — quem já está em Clientes Ativos sai', () => {
+  const vinculoEstoque = {
+    id: 'l1',
+    serialNumber: '808092604156589',
+    plate: 'QWR0A21',
+    chassi: null,
+    hinovaVehicleCode: '555',
+    associateName: 'VALTER',
+    associateCpf: null,
+    origin: 'ESTOQUE',
+    verdict: 'AGUARDANDO_PROVA',
+    checkedAt: new Date(),
+  };
+
+  it('exclui pelo código do SGA o veículo cuja TAG aparece em Clientes Ativos', async () => {
+    const { service, findManyArgs, countArgs } = montar(
+      [linhaSga({ hinovaVehicleCode: '555', plate: 'QWR0A21', situationLabel: 'ATIVO' })],
+      [],
+      [vinculoEstoque],
+    );
+    const r = await service.findActive(TENANT);
+
+    // A primeira findMany do sgaVehicle é a de vinculosVisiveis; a da página é a última.
+    const pagina = findManyArgs[findManyArgs.length - 1];
+    expect(pagina.where.hinovaVehicleCode).toEqual({ notIn: ['555'] });
+    expect(countArgs.every((a) => a.where.hinovaVehicleCode?.notIn?.[0] === '555')).toBe(true);
+    expect(r.meta.emClientesAtivos).toBe(1);
+  });
+
+  it('sem vínculo visível não filtra nada', async () => {
+    const { service, findManyArgs } = montar([linhaSga()]);
+    const r = await service.findActive(TENANT);
+    expect(findManyArgs[findManyArgs.length - 1].where.hinovaVehicleCode).toBeUndefined();
+    expect(r.meta.emClientesAtivos).toBe(0);
+  });
+});
+
 describe('BleTagsService.findActive — última posição', () => {
   function montarComTraccar(posicoes: any[], falha = false) {
     const prisma: any = {
@@ -235,6 +278,7 @@ describe('BleTagsService.findActive — última posição', () => {
           { id: 'v1', plate: 'RIZ3B88', traccarDeviceId: 936, device: null },
         ]),
       },
+      tagLink: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const traccar: any = {
       getPositions: jest.fn(() =>

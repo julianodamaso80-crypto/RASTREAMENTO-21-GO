@@ -148,6 +148,7 @@ describe('StockService.lookupSga', () => {
       mirror as never,
       {} as never,
       {} as never,
+    { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
     );
     return { s, hinova, pendings, mirror };
   }

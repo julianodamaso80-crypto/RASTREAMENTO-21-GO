@@ -7,6 +7,7 @@ import { useTracking } from '@/contexts/tracking-context';
 import { VehicleSidebar } from '@/components/vehicles/vehicle-sidebar';
 import { VehicleDetailPanel } from '@/components/vehicles/vehicle-detail-panel';
 import { SelectionListPanel } from '@/components/map/selection-list-panel';
+import { TagDetailPanel } from '@/components/map/tag-detail-panel';
 import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
 import { formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -34,6 +35,11 @@ export default function MapaPage() {
     selectVehicle,
     toggleVehicle,
     vehicles,
+    tags,
+    filteredTags,
+    selectedTagId,
+    selectTag,
+    refreshTags,
   } = useTracking();
   const mapRef = useRef<MapContainerRef>(null);
   // Painel nasce RECOLHIDO: a prioridade é ver o máximo do mapa. Quem quiser
@@ -87,13 +93,42 @@ export default function MapaPage() {
   //
   // Vem de `vehicles`, não de `filteredVehicles`: o selecionado não pode sumir
   // do mapa porque a busca ou a aba de status deixou de casar com ele.
-  const vehiclesNoMapa = marcados.length > 0 ? marcados : filteredVehicles;
+  const selectedTag = tags.find((t) => t.id === selectedTagId) ?? null;
+
+  // A TAG segue a mesma regra do veículo: aberta, o mapa mostra SÓ ela. E com
+  // veículos marcados as TAGs saem de cena — a pergunta ali é "onde estão estes".
+  const vehiclesNoMapa = selectedTag
+    ? []
+    : marcados.length > 0
+      ? marcados
+      : filteredVehicles;
+  const tagsNoMapa = selectedTag
+    ? [selectedTag]
+    : marcados.length > 0
+      ? []
+      : filteredTags;
 
   // Selecionou um veículo na lista (mobile) → fecha a gaveta pra revelar o
   // mapa já centrado nele, sem precisar de um segundo toque no X.
   useEffect(() => {
-    if (selectedVehicleId) setVehicleListOpen(false);
-  }, [selectedVehicleId]);
+    if (selectedVehicleId || selectedTagId) setVehicleListOpen(false);
+  }, [selectedVehicleId, selectedTagId]);
+
+  // Abriu uma TAG: a câmera vai até ela UMA vez. A posição da TAG não anda
+  // sozinha (ela é o último avistamento), então não há seguimento.
+  const tagLat = selectedTag?.latitude ?? null;
+  const tagLng = selectedTag?.longitude ?? null;
+  const tagFocadaId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedTagId) {
+      tagFocadaId.current = null;
+      return;
+    }
+    if (!mapaPronto || tagLat === null || tagLng === null) return;
+    if (tagFocadaId.current === selectedTagId) return;
+    tagFocadaId.current = selectedTagId;
+    mapRef.current?.flyTo(tagLng, tagLat, FOCUS_ZOOM, PANEL_WIDTH);
+  }, [selectedTagId, tagLat, tagLng, mapaPronto]);
 
   /** Coordenadas dos marcados que já reportaram posição. */
   const pontosMarcados = useMemo(
@@ -146,10 +181,17 @@ export default function MapaPage() {
     const alvo = vehicles.find(
       (v) => v.plate?.toUpperCase() === placa.toUpperCase(),
     );
-    if (!alvo) return;
+    if (alvo) {
+      focouInicial.current = true;
+      selectVehicle(alvo.id);
+      return;
+    }
+    // Não é veículo com rastreador: pode ser um cliente que só tem TAG.
+    const tag = tags.find((t) => t.plate.toUpperCase() === placa.toUpperCase());
+    if (!tag) return;
     focouInicial.current = true;
-    selectVehicle(alvo.id);
-  }, [vehicles, selectVehicle]);
+    selectTag(tag.id);
+  }, [vehicles, tags, selectVehicle, selectTag]);
 
   // Coordenada do veículo selecionado, como número solto.
   //
@@ -234,12 +276,15 @@ export default function MapaPage() {
           selectedIds={selectedIds}
           onVehicleClick={handleVehicleClick}
           onReady={onMapaPronto}
+          tags={tagsNoMapa}
+          selectedTagId={selectedTagId}
+          onTagClick={selectTag}
           // O painel de detalhe cobre os 380px da direita e engolia o seletor
           // de mapa (incluindo o Satélite Google). Com o painel aberto ele sai
           // de baixo: à esquerda do painel no desktop, no canto esquerdo no
           // celular, onde o painel toma quase a tela toda.
           basemapToggleClassName={
-            varios || (selectedVehicleId && panelOpen)
+            varios || (selectedVehicleId && panelOpen) || selectedTag
               ? 'left-3 right-auto lg:left-auto lg:right-[392px]'
               : undefined
           }
@@ -289,6 +334,18 @@ export default function MapaPage() {
             >
               <X className="h-3.5 w-3.5" />
             </button>
+          </div>
+        )}
+
+        {/* TAG aberta: o painel dela entra direto — ela não tem a telemetria
+            do rastreador que justifica o painel recolhido. */}
+        {selectedTag && (
+          <div className="absolute inset-y-0 right-0 z-30 w-full max-w-[380px]">
+            <TagDetailPanel
+              tag={selectedTag}
+              onClose={() => selectTag(null)}
+              onAtualizou={refreshTags}
+            />
           </div>
         )}
 

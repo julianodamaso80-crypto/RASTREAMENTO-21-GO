@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
+  Bluetooth,
   Boxes,
   Crosshair,
   Gauge,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   Satellite,
   Search,
+  Target,
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -32,6 +34,7 @@ import {
   textoVoltagem,
 } from '@/components/stock/stock-format';
 import { StockMapDetail } from '@/components/stock/stock-map-detail';
+import { StockMapDetailTag } from '@/components/stock/stock-map-detail-tag';
 import { SelectionCheckbox } from '@/components/map/selection-checkbox';
 import { SelectionListPanel } from '@/components/map/selection-list-panel';
 import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
@@ -103,8 +106,19 @@ export default function EstoqueMapaPage() {
 
   useEffect(() => {
     void carregar(true);
-    const timer = setInterval(() => void carregar(false), REFRESH_MS);
-    return () => clearInterval(timer);
+    // ~1 MB por volta: aba escondida não recarrega (mesmo motivo do
+    // tracking-context) e atualiza na hora quando volta a aparecer.
+    const timer = setInterval(() => {
+      if (!document.hidden) void carregar(false);
+    }, REFRESH_MS);
+    const aoVoltar = () => {
+      if (!document.hidden) void carregar(false);
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', aoVoltar);
+    };
   }, [carregar]);
 
   const visiveis = useMemo(() => {
@@ -118,6 +132,10 @@ export default function EstoqueMapaPage() {
     (id: string) => {
       setSelecionadosIds([id]);
       setDetalheId(null);
+      // Escolheu UM na gaveta (celular) → fecha pra revelar o mapa focado. Só
+      // aqui: fechar a cada mudança da seleção fazia a caixinha fechar a
+      // gaveta, e no celular era impossível marcar o segundo equipamento.
+      setListaOpen(false);
       const p = pontos.find((x) => x.id === id);
       if (p?.latitude != null && p?.longitude != null) {
         mapRef.current?.flyTo(p.longitude, p.latitude, FOCO_ZOOM, PAINEL_LARGURA);
@@ -144,10 +162,6 @@ export default function EstoqueMapaPage() {
     [pontos],
   );
 
-  // Selecionou um item na gaveta (mobile) → fecha pra revelar o mapa focado.
-  useEffect(() => {
-    if (selecionadosIds.length > 0) setListaOpen(false);
-  }, [selecionadosIds]);
 
   // Abrir no mapa a partir do estoque: já entra com os pedidos marcados. Um
   // só ganha o voo até ele; vários são enquadrados pelo efeito de baixo.
@@ -198,19 +212,29 @@ export default function EstoqueMapaPage() {
     let semGps = 0;
     let sleep = 0;
     let ligados = 0;
+    let tags = 0;
     for (const p of visiveis) {
+      // TAG não fala com o servidor GPS: contá-la como "desconectado" e "sem
+      // GPS" inventaria defeito onde não há equipamento de GPS nenhum.
+      if (p.tipo === 'TAG') {
+        tags++;
+        continue;
+      }
       if (p.conexao === 'ONLINE') online++;
       else if (p.conexao === 'SLEEP') sleep++;
       else offline++;
       if (!p.gpsConfiavel) semGps++;
       if (p.ignicao === true) ligados++;
     }
-    return { online, offline, semGps, sleep, ligados };
+    return { online, offline, semGps, sleep, ligados, tags };
   }, [visiveis]);
 
   const lista = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return visiveis.filter((p) => {
+      // Filtro de estado no servidor GPS não se aplica a TAG — mas em "todos"
+      // ela precisa aparecer, senão some da lista lateral do mapa.
+      if (p.tipo === 'TAG' && filtro !== 'todos') return false;
       if (filtro === 'ONLINE' && p.conexao !== 'ONLINE') return false;
       if (filtro === 'OFFLINE' && p.conexao === 'ONLINE') return false;
       if (filtro === 'SEM_GPS' && p.gpsConfiavel) return false;
@@ -380,7 +404,21 @@ export default function EstoqueMapaPage() {
           </div>
         )}
 
-        {selecionado && (
+        {selecionado && selecionado.tipo === 'TAG' && (
+          <div className="absolute right-0 top-0 z-20 h-full w-full max-w-[360px] border-l shadow-xl">
+            <StockMapDetailTag
+              ponto={selecionado}
+              onClose={() => {
+                if (varios) setDetalheId(null);
+                else setSelecionadosIds([]);
+              }}
+              onAssociar={() => setAssociarItem(selecionado)}
+              onAtualizou={() => void carregar(false)}
+            />
+          </div>
+        )}
+
+        {selecionado && selecionado.tipo !== 'TAG' && (
           <div className="absolute right-0 top-0 z-20 h-full w-full max-w-[360px] border-l shadow-xl">
             <StockMapDetail
               ponto={selecionado}
@@ -586,7 +624,7 @@ function SidebarContent({
           </div>
         ) : lista.length === 0 ? (
           <p className="px-3 py-16 text-center text-xs text-muted-foreground">
-            Nenhum rastreador com esse filtro.
+            Nenhum equipamento com esse filtro.
           </p>
         ) : (
           lista.map((p) => (
@@ -643,7 +681,13 @@ function CardEstoque({
   onClick: () => void;
   onMarcar: () => void;
 }) {
-  const badge = badgeConexao(ponto.conexao);
+  // TAG não tem conexão com o servidor GPS nem telemetria: mostrar "SEM SINAL",
+  // "Voltagem 0.00v" e "Satélites —" nela seria dizer que algo falhou, quando
+  // não existe. O que responde por ela é a idade do último avistamento.
+  const ehTag = ponto.tipo === 'TAG';
+  const badge = ehTag
+    ? { ponto: 'bg-violet-400', fundo: 'bg-violet-500/15', texto: 'text-violet-300', rotulo: 'TAG' }
+    : badgeConexao(ponto.conexao);
   return (
     <div
       className={cn(
@@ -679,7 +723,11 @@ function CardEstoque({
       </div>
 
       <p className="mt-0.5 text-[11px] text-muted-foreground">
-        Última atualização {haQuantoTempo(ponto.lastUpdate)}
+        {ehTag
+          ? ponto.fixTime
+            ? `vista ${haQuantoTempo(ponto.fixTime)}`
+            : 'nunca foi vista pela rede'
+          : `Última atualização ${haQuantoTempo(ponto.lastUpdate)}`}
       </p>
 
       {ponto.endereco && (
@@ -689,6 +737,20 @@ function CardEstoque({
         </p>
       )}
 
+      {ehTag ? (
+        <div className="mt-1.5 grid grid-cols-2 gap-1 border-t pt-1.5 text-center">
+          <Mini
+            icone={Bluetooth}
+            rotulo="Rede"
+            valor="Find My"
+          />
+          <Mini
+            icone={Target}
+            rotulo="Precisão"
+            valor={ponto.precisaoM ? `${Math.round(ponto.precisaoM)} m` : '—'}
+          />
+        </div>
+      ) : (
       <div className="mt-1.5 grid grid-cols-4 gap-1 border-t pt-1.5 text-center">
         <Mini
           icone={KeyRound}
@@ -709,6 +771,7 @@ function CardEstoque({
           valor={ponto.satelites === null ? '—' : String(ponto.satelites)}
         />
       </div>
+      )}
       </button>
     </div>
   );

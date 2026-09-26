@@ -118,6 +118,7 @@ function servico(apagados: VeiculoMock[]) {
     } as never,
     { markStopDoneByPlate: jest.fn().mockResolvedValue(undefined) } as never,
     { persistIfRelevant: jest.fn().mockResolvedValue(undefined) } as never,
+    { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
   );
   return { s, tx };
 }

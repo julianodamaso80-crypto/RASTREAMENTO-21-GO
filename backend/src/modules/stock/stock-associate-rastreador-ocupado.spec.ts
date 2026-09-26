@@ -94,6 +94,7 @@ function servico(deviceJaNoVeiculo: { id: string; imei: string } | null) {
     } as never,
     {} as never,
     {} as never,
+    { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
   );
   return { s, tx };
 }

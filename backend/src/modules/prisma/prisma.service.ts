@@ -17,6 +17,7 @@ const SOFT_DELETE_MODELS = new Set([
   'MaintenancePlan',
   'Technician',
   'Appointment',
+  'FinancialEntry',
 ]);
 
 const READ_OPERATIONS = new Set([
@@ -69,6 +70,7 @@ function createExtendedClient(base: PrismaClient) {
       maintenancePlan: softDeleteModel,
       technician: softDeleteModel,
       appointment: softDeleteModel,
+      financialEntry: softDeleteModel,
     },
     query: {
       $allModels: {
@@ -156,6 +158,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get appointment() {
     return this.ext.appointment;
   }
+  get financialEntry() {
+    return this.ext.financialEntry;
+  }
+  // Comprovante anexado ao lançamento. Sem soft delete: some junto com o
+  // lançamento (onDelete: Cascade) ou quando alguém troca o arquivo.
+  get financialReceipt() {
+    return this.base.financialReceipt;
+  }
 
   // Models sem soft delete — usam cliente base (tabela de junção / log de comandos / audit)
   get geofenceVehicle() {
@@ -201,6 +211,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get sgaVehicle() {
     return this.base.sgaVehicle;
   }
+  // Consultores do Power: `deletedAt` é filtrado à mão no service, como no sgaVehicle.
+  get consultant() {
+    return this.base.consultant;
+  }
   // Espelho das TAGs da plataforma de origem: é de lá que sai QUAL é a TAG e
   // ONDE ela foi vista. Sem soft delete — reescrito a cada carga.
   //
@@ -226,6 +240,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   }
   get tagPosition() {
     return this.base.tagPosition;
+  }
+  // Vínculo TAG → veículo. Soft delete feito à mão (índice único parcial).
+  get tagLink() {
+    return this.base.tagLink;
+  }
+  // Pedido de atualização da TAG, executado pelo coletor no droplet.
+  get tagRefreshRequest() {
+    return this.base.tagRefreshRequest;
   }
   get installationRoute() {
     return this.base.installationRoute;

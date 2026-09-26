@@ -6,6 +6,7 @@ import {
   type TraccarDevice,
   type TraccarPosition,
 } from '../traccar/traccar.service';
+import { Prisma } from '.prisma/client';
 import { assessPosition } from '../traccar/position-quality';
 import {
   COMUNICANDO_MS,
@@ -32,6 +33,17 @@ import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
  * O device nasce com o IMEI como nome; ao ser vinculado, o `associate()`
  * renomeia pra placa.
  */
+/** Chaves de filtro do Traccar aceitas como atributo de device. */
+const CHAVE_SKIP_ENABLE = 'filter.skipAttributes.enable';
+const CHAVE_SKIP_LISTA = 'filter.skipAttributes';
+/**
+ * Só existe pra LIMPAR o `filter.skipLimit=30` gravado em 15/09. Não religar:
+ * medido em 16/09, com ele 120 das 192 posições em 6 h entraram sem
+ * `ignition`, inclusive a última, e a tela perdia a chave ("Não informa").
+ */
+const CHAVE_SKIP_LIMITE = 'filter.skipLimit';
+const ATRIBUTO_IGNICAO = 'ignition';
+
 @Injectable()
 export class StockTraccarService {
   private readonly logger = new Logger(StockTraccarService.name);
@@ -82,6 +94,68 @@ export class StockTraccarService {
   }
 
   /**
+   * Faz a mudança de ignição deste rastreador chegar NA HORA.
+   *
+   * O Traccar roda com `filter.distance=10` e `filter.skipLimit=600`: veículo
+   * parado tem toda posição descartada e só grava uma a cada ~12 min (medido em
+   * produção em 15/09/2026). No teste de liga e desliga o carro está parado, e
+   * é justamente a posição com a ignição nova que o filtro joga fora — o
+   * técnico corta a energia e a tela continua dizendo "Ligada".
+   *
+   * `filter.skipAttributes` faz a posição escapar dos filtros condicionais
+   * quando ela carrega o atributo listado, e vale **por device**
+   * (`AttributeUtil.lookup(..., deviceId)` no FilterHandler). Ligado só em
+   * estoque e reserva de técnico: o gt06 manda `ignition` em toda posição,
+   * então no parque inteiro isso equivaleria a desligar o filtro de distância.
+   */
+  async responderIgnicaoNaHora(imei: string): Promise<boolean> {
+    return this.ajustarFiltro(imei, true);
+  }
+
+  /** Equipamento instalado volta a ser filtrado como o resto do parque. */
+  async voltarAoFiltroNormal(imei: string): Promise<boolean> {
+    return this.ajustarFiltro(imei, false);
+  }
+
+  private async ajustarFiltro(imei: string, ligar: boolean): Promise<boolean> {
+    try {
+      const device = await this.traccar.getDeviceByUniqueId(imei);
+      if (!device?.id) return false;
+
+      const attrs = { ...(device.attributes ?? {}) };
+      const destravado =
+        attrs[CHAVE_SKIP_ENABLE] === true &&
+        attrs[CHAVE_SKIP_LISTA] === ATRIBUTO_IGNICAO;
+      const sujo = CHAVE_SKIP_LIMITE in attrs;
+      if (ligar ? destravado && !sujo : !destravado && !sujo) return false;
+
+      if (ligar) {
+        attrs[CHAVE_SKIP_ENABLE] = true;
+        attrs[CHAVE_SKIP_LISTA] = ATRIBUTO_IGNICAO;
+        delete attrs[CHAVE_SKIP_LIMITE];
+      } else {
+        delete attrs[CHAVE_SKIP_ENABLE];
+        delete attrs[CHAVE_SKIP_LISTA];
+        delete attrs[CHAVE_SKIP_LIMITE];
+      }
+
+      // PUT do Traccar exige o device inteiro — corpo parcial devolve 400.
+      await this.traccar.updateDevice(device.id, {
+        ...device,
+        attributes: attrs,
+      });
+      return true;
+    } catch (erro) {
+      this.logger.warn(
+        `Não consegui ${ligar ? 'ligar' : 'desligar'} a resposta imediata de ignição do IMEI ${imei}: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+      return false;
+    }
+  }
+
+  /**
    * Cadastra no Traccar os itens do estoque que ainda não têm device.
    * Chamado pela importação de planilha (em segundo plano) e pelo cron.
    */
@@ -92,6 +166,8 @@ export class StockTraccarService {
         deletedAt: null,
         associatedAt: null,
         traccarDeviceId: null,
+        // TAG não é cadastrada no servidor GPS.
+        kind: 'RASTREADOR',
       },
       select: { id: true, imei: true, traccarDeviceId: true },
       take: limite,
@@ -118,6 +194,45 @@ export class StockTraccarService {
     return ok;
   }
 
+  /**
+   * O time acompanha o liga/desliga pelo MAPA do estoque (access log de
+   * 15–16/09: ~2.000 GET /stock/map, zero GET /stock/:id/signal). Destravar
+   * só na conferência alcançou 1 device em 1.500. Quem precisa é o
+   * equipamento do estoque falando com o servidor agora — é o que está na
+   * mão do técnico. Prateleira desligada não manda nada e não pesa no banco.
+   */
+  @Interval(60 * 1000)
+  async destravarEstoqueConectado(): Promise<void> {
+    try {
+      const [itens, snapshot] = await Promise.all([
+        this.prisma.stockItem.findMany({
+          // TAG não fala com o Traccar: fora do destrava de ignição.
+          where: { deletedAt: null, associatedAt: null, kind: 'RASTREADOR' },
+          select: { imei: true },
+        }),
+        this.snapshot(),
+      ]);
+      const doEstoque = new Set(itens.map((i) => i.imei));
+      const alvos = snapshot
+        .filter((d) => d.comunicando && doEstoque.has(d.uniqueId))
+        .map((d) => d.uniqueId);
+
+      for (let i = 0; i < alvos.length; i += StockTraccarService.CONCORRENCIA) {
+        await Promise.all(
+          alvos
+            .slice(i, i + StockTraccarService.CONCORRENCIA)
+            .map((imei) => this.responderIgnicaoNaHora(imei)),
+        );
+      }
+    } catch (erro) {
+      this.logger.warn(
+        `Destravar ignição do estoque conectado falhou: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+    }
+  }
+
   /** Rede de segurança pra quem entrou enquanto o Traccar estava fora. */
   @Interval(30 * 60 * 1000)
   async cronSincronizar(): Promise<void> {
@@ -142,7 +257,12 @@ export class StockTraccarService {
    */
   async connectivity(tenantId: string): Promise<StockConnectivity> {
     const itens = await this.prisma.stockItem.findMany({
-      where: { tenantId, deletedAt: null, associatedAt: null },
+      where: {
+        tenantId,
+        deletedAt: null,
+        associatedAt: null,
+        kind: 'RASTREADOR',
+      },
       select: { imei: true },
     });
 
@@ -240,8 +360,14 @@ export class StockTraccarService {
    * saber onde o equipamento está: pode estar com o técnico a caminho.
    */
   async mapPoints(tenantId: string): Promise<StockMapResult> {
+    const tags = await this.pontosDeTag(tenantId);
     const itens = await this.prisma.stockItem.findMany({
-      where: { tenantId, deletedAt: null, associatedAt: null },
+      where: {
+        tenantId,
+        deletedAt: null,
+        associatedAt: null,
+        kind: 'RASTREADOR',
+      },
       select: {
         id: true,
         imei: true,
@@ -270,7 +396,8 @@ export class StockTraccarService {
           erro instanceof Error ? erro.message : erro
         }`,
       );
-      return { indisponivel: true, pontos: [] };
+      // Servidor GPS fora não pode esconder a TAG: ela não depende dele.
+      return { indisponivel: true, pontos: tags };
     }
 
     const porImei = new Map(devices.map((d) => [d.uniqueId, d]));
@@ -334,9 +461,82 @@ export class StockTraccarService {
       };
     });
 
-    await this.preencherEnderecos(pontos);
+    const todos = [...pontos, ...tags];
+    await this.preencherEnderecos(todos);
 
-    return { indisponivel: false, pontos };
+    return { indisponivel: false, pontos: todos };
+  }
+
+  /**
+   * TAGs livres no estoque, com o último avistamento na rede Find My.
+   *
+   * Entram no mesmo mapa do rastreador (é onde o operador vai procurar), mas
+   * com `tipo: 'TAG'` e todo campo de GPS nulo: TAG não tem ignição, satélite,
+   * voltagem nem velocidade, e a posição dela é sempre passado.
+   */
+  private async pontosDeTag(tenantId: string): Promise<StockMapPoint[]> {
+    const itens = await this.prisma.stockItem.findMany({
+      where: { tenantId, deletedAt: null, associatedAt: null, kind: 'TAG' },
+      select: { id: true, imei: true, status: true, notes: true },
+    });
+    if (itens.length === 0) return [];
+
+    const linhas = await this.prisma.$queryRaw<
+      Array<{
+        serial_number: string;
+        latitude: number;
+        longitude: number;
+        accuracy_m: number | null;
+        seen_at: Date;
+      }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON (serial_number)
+             serial_number, latitude, longitude, accuracy_m, seen_at
+        FROM tag_positions
+       WHERE tenant_id = ${tenantId}::uuid
+         AND serial_number IN (${Prisma.join(itens.map((i) => i.imei))})
+       ORDER BY serial_number, seen_at DESC`);
+    const porSerial = new Map(linhas.map((l) => [l.serial_number, l]));
+    const agora = Date.now();
+
+    return itens.map((item): StockMapPoint => {
+      const p = porSerial.get(item.imei);
+      const visto = p ? p.seen_at.toISOString() : null;
+      return {
+        id: item.id,
+        imei: item.imei,
+        tipo: 'TAG',
+        iccid: null,
+        line: null,
+        operator: null,
+        server: null,
+        statusChip: item.status,
+        validatedAt: null,
+        validationOk: null,
+        tecnico: null,
+        conexao: 'NUNCA',
+        lastUpdate: null,
+        fixTime: visto,
+        idadeSegundos: p
+          ? Math.max(0, Math.round((agora - p.seen_at.getTime()) / 1000))
+          : null,
+        latitude: p?.latitude ?? null,
+        longitude: p?.longitude ?? null,
+        endereco: null,
+        // O avistamento da rede Find My tem raio de confiança próprio; não é
+        // fix de GPS e nunca deve ser lido como tal.
+        gpsConfiavel: false,
+        precisaoM: p?.accuracy_m ?? null,
+        ignicao: null,
+        velocidade: null,
+        direcao: null,
+        volts: null,
+        faixaEnergia: 'ausente',
+        satelites: null,
+        bateriaInterna: null,
+        bloqueado: false,
+      };
+    });
   }
 
   /**
@@ -499,6 +699,10 @@ export type StockConexao = 'ONLINE' | 'OFFLINE' | 'SLEEP' | 'NUNCA';
 export interface StockMapPoint {
   id: string;
   imei: string;
+  /** RASTREADOR (posição de GPS) ou TAG (avistamento na rede Find My). */
+  tipo?: 'RASTREADOR' | 'TAG';
+  /** Raio de confiança do avistamento da TAG, em metros. */
+  precisaoM?: number | null;
   iccid: string | null;
   line: string | null;
   operator: string | null;

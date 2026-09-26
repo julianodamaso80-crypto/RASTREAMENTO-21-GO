@@ -20,6 +20,7 @@ export const MANAGEABLE_ROUTES = [
   { key: 'agenda', label: 'Agenda e ordens de serviço', path: '/agenda' },
   { key: 'rotas', label: 'Rota inteligente', path: '/rotas' },
   { key: 'tecnicos', label: 'Técnicos', path: '/tecnicos' },
+  { key: 'consultores', label: 'Consultores', path: '/consultores' },
   { key: 'geofencing', label: 'Cercas virtuais', path: '/geofencing' },
   { key: 'etiquetas-ble', label: 'Etiquetas BLE', path: '/etiquetas-ble' },
   { key: 'usuarios', label: 'Usuários e acessos', path: '/usuarios' },

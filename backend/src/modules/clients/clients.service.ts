@@ -4,6 +4,22 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assessComms } from './asset-comms';
 import { BLE_DEVICE_MODELS } from '../../common/constants/ble-models';
 import { filtroBusca } from '../../common/search/termo-busca';
+import {
+  ativoSoTag,
+  casaBusca,
+  fatiaCombinada,
+  normalizarNome,
+  resumoTag,
+  separarSoTag,
+  tagNoMapa,
+  ultimasPosicoes,
+  vinculosDaTela,
+  vinculosVisiveis,
+} from './clients-tags';
+
+// Acentos do cadastro → letra sem acento, no SQL (espelha normalizarNome).
+const COM_ACENTO = 'ÁÀÂÃÄÅáàâãäåÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñÝýÿ';
+const SEM_ACENTO = 'AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNnYyy';
 
 /** Situação financeira do ativo no SGA. */
 export type FinancialStatus = 'ADIMPLENTE' | 'INADIMPLENTE';
@@ -12,6 +28,12 @@ export interface FindAssetsParams {
   search?: string;
   page?: number;
   perPage?: number;
+  /**
+   * O time interno vê as TAGs (selo no card do rastreador e cards de quem só
+   * tem TAG). CLIENT e o app do associado NUNCA — a TAG é segredo interno. O
+   * controller passa isto pelo papel do usuário.
+   */
+  verTags?: boolean;
 }
 
 /**
@@ -76,29 +98,168 @@ export class ClientsService {
       where.id = '00000000-0000-0000-0000-000000000000';
     }
 
-    const [total, vehicles] = await Promise.all([
-      this.prisma.vehicle.count({ where }),
-      this.prisma.vehicle.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * perPage,
-        take: perPage,
-        include: {
-          associate: true,
-          device: { include: { installedByTechnician: true } },
-        },
-      }),
-    ]);
+    // "sergio" tem que achar "SÉRGIO": o contains do Prisma diferencia acento.
+    const porNome = await this.associadosPorNome(tenantId, params.search);
+    if (porNome.length > 0) {
+      where.OR = [...((where.OR as Prisma.VehicleWhereInput[]) ?? []), { associateId: { in: porNome } }];
+      delete where.id;
+    }
 
-    const lastFixByVehicle = await this.lastFixTimes(
+    // IMEI com letra (conta demo "DEMO00000000001"): termo com letra não entra
+    // na busca numérica, então casa pelo termo inteiro. Placa nunca está
+    // contida num IMEI só de dígitos.
+    const alfa = (params.search ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (/[A-Z]/.test(alfa)) {
+      where.OR = [...((where.OR as Prisma.VehicleWhereInput[]) ?? []), { device: { imei: { contains: alfa } } }];
+      delete where.id;
+    }
+
+    // Sem TAG (CLIENT e app do associado): exatamente o comportamento antigo.
+    if (!params.verTags) {
+      const [total, vehicles] = await Promise.all([
+        this.prisma.vehicle.count({ where }),
+        this.prisma.vehicle.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * perPage,
+          take: perPage,
+          include: {
+            associate: true,
+            device: { include: { installedByTechnician: true } },
+          },
+        }),
+      ]);
+      const lastFix = await this.lastFixTimes(tenantId, vehicles.map((v) => v.id));
+      return {
+        data: vehicles.map((v) => this.toAsset(v, lastFix.get(v.id) ?? null)),
+        meta: { total, page, perPage },
+      };
+    }
+
+    // Time interno: veículos (rastreador) primeiro, depois quem só tem TAG,
+    // numa paginação só. O selo de TAG entra nos veículos com TAG na placa.
+    // Sem busca, a lista é a régua do dono (só TAG rastreável). Buscando, toda
+    // TAG de carro ATIVO tem que ser achável: a sem posição e a divergente
+    // entram, e o selo do card avisa ("sem posição ainda" / "conferir").
+    const { visiveis, ocultos } = await vinculosDaTela(this.prisma, tenantId);
+    const buscando = !!params.search?.trim();
+    const soTag = (buscando ? [...visiveis, ...ocultos] : visiveis)
+      .filter((x) =>
+        casaBusca(
+          {
+            plate: x.sga?.plate ?? x.vinculo.plate,
+            chassi: x.vinculo.chassi,
+            associateName: x.sga?.associateName ?? x.vinculo.associateName,
+            associateCpf: x.sga?.cpf ?? x.vinculo.associateCpf,
+            serialNumber: x.vinculo.serialNumber,
+            outrosSeriais: x.outrosSeriais,
+          },
+          params.search,
+        ),
+      );
+
+    // Quem já tem rastreador nosso não vira card de "só TAG": ganha só o selo.
+    const { apenasTag, placasComVeiculo } = await separarSoTag(this.prisma, tenantId, soTag);
+
+    // A busca casou a TAG (pelo número de série, por exemplo) de um carro que
+    // tem rastreador: o card desse carro é onde a TAG aparece, então ele entra
+    // no resultado mesmo sem o termo casar em campo nenhum do veículo.
+    if (params.search?.trim() && placasComVeiculo.size > 0) {
+      where.OR = [...((where.OR as Prisma.VehicleWhereInput[]) ?? []), { plate: { in: [...placasComVeiculo] } }];
+      delete where.id;
+    }
+
+    const totalVeiculos = await this.prisma.vehicle.count({ where });
+    const total = totalVeiculos + apenasTag.length;
+    const { skipVeiculos, takeVeiculos, inicioTag, fimTag } = fatiaCombinada(
+      totalVeiculos,
+      apenasTag.length,
+      page,
+      perPage,
+    );
+
+    const vehicles =
+      takeVeiculos > 0
+        ? await this.prisma.vehicle.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            skip: skipVeiculos,
+            take: takeVeiculos,
+            include: {
+              associate: true,
+              device: { include: { installedByTechnician: true } },
+            },
+          })
+        : [];
+    const lastFix = await this.lastFixTimes(tenantId, vehicles.map((v) => v.id));
+
+    const tagPorPlaca = new Map(soTag.map((x) => [x.vinculo.plate, x]));
+    const posVeiculo = await ultimasPosicoes(
+      this.prisma,
       tenantId,
-      vehicles.map((v) => v.id),
+      vehicles
+        .map((v) => tagPorPlaca.get(v.plate)?.vinculo.serialNumber)
+        .filter((s): s is string => !!s),
+    );
+    const dataVeiculos = vehicles.map((v) => {
+      const asset = this.toAsset(v, lastFix.get(v.id) ?? null);
+      const x = tagPorPlaca.get(v.plate);
+      return x
+        ? { ...asset, tag: resumoTag(x.vinculo, posVeiculo.get(x.vinculo.serialNumber)) }
+        : asset;
+    });
+
+    const pagina = apenasTag.slice(inicioTag, fimTag);
+    const posTag = await ultimasPosicoes(
+      this.prisma,
+      tenantId,
+      pagina.map((x) => x.vinculo.serialNumber),
+    );
+    const dataTags = pagina.map((x) =>
+      ativoSoTag(x, posTag.get(x.vinculo.serialNumber)),
     );
 
     return {
-      data: vehicles.map((v) => this.toAsset(v, lastFixByVehicle.get(v.id) ?? null)),
+      data: [...dataVeiculos, ...dataTags],
       meta: { total, page, perPage },
     };
+  }
+
+  /** Associados cujo nome casa com o termo ignorando acento e espaço repetido. */
+  private async associadosPorNome(tenantId: string, termo: string | undefined): Promise<string[]> {
+    const nome = normalizarNome(termo);
+    if (!/[a-z]/.test(nome)) return [];
+    const padrao = `%${nome.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const linhas = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id FROM associates
+       WHERE tenant_id = ${tenantId}::uuid AND deleted_at IS NULL
+         AND regexp_replace(lower(translate(name, ${COM_ACENTO}, ${SEM_ACENTO})), '\\s+', ' ', 'g') LIKE ${padrao}`);
+    return linhas.map((l) => l.id);
+  }
+
+  /**
+   * As TAGs de cliente para o Mapa — todas de uma vez, com a última posição.
+   *
+   * O conjunto é o MESMO dos cards de "só TAG" de Clientes Ativos (mesmo
+   * `vinculosVisiveis` + `separarSoTag`): o Mapa somava só veículos e a tela de
+   * clientes somava veículos e TAGs, e o dono via 990 num lugar e 3.835 no
+   * outro. Só o time interno chega aqui — o gate é do controller.
+   */
+  async tagsNoMapa(tenantId: string) {
+    const visiveis = await vinculosVisiveis(this.prisma, tenantId);
+    const { placasComVeiculo } = await separarSoTag(this.prisma, tenantId, visiveis);
+    const pos = await ultimasPosicoes(
+      this.prisma,
+      tenantId,
+      visiveis.map((x) => x.vinculo.serialNumber),
+    );
+    // A TAG de carro que também tem rastreador vem junto (dono, 24/09: "tem que
+    // aparecer no mapa para a gente rastrear"), marcada `comRastreador` — o
+    // Mapa a deixa fora do total de "Todos", que segue igual a Clientes Ativos.
+    return visiveis.map((x) => ({
+      ...tagNoMapa(x, pos.get(x.vinculo.serialNumber)),
+      comRastreador: placasComVeiculo.has(x.vinculo.plate),
+    }));
   }
 
   /**
@@ -188,6 +349,7 @@ export class ClientsService {
       financialStatus: v.financialStatus as FinancialStatus | null,
       financialStatusAt: v.financialStatusAt,
       appAccessBlocked: v.appAccessBlocked,
+      blockerAccessAllowed: v.blockerAccessAllowed,
       sga: { code: v.hinovaCode, statusLabel: v.sgaStatusLabel },
     };
   }
@@ -334,6 +496,16 @@ export class ClientsService {
       select: { id: true, plate: true, appAccessBlocked: true },
     });
     return v;
+  }
+
+  /** Liga ou desliga o botão de bloqueio do app do associado para UM ativo. */
+  async setBlockerAccess(tenantId: string, vehicleId: string, allowed: boolean) {
+    await this.assertVehicle(tenantId, vehicleId);
+    return this.prisma.vehicle.update({
+      where: { id: vehicleId },
+      data: { blockerAccessAllowed: allowed },
+      select: { id: true, plate: true, blockerAccessAllowed: true },
+    });
   }
 
   /**

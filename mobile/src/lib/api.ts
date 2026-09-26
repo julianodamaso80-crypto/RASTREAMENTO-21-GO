@@ -59,6 +59,8 @@ export interface Position {
   satellites: number | null; // nº de satélites GPS
   odometer: number | null; // km
   powerCut: boolean | null; // alimentação cortada
+  /** Relé de bloqueio como o rastreador informa. null = este pacote não disse. */
+  blocked?: boolean | null;
 }
 
 export interface Connection {
@@ -78,6 +80,8 @@ export interface Vehicle {
   year: number | null;
   status: string;
   traccarDeviceId: number | null;
+  /** A empresa liberou este associado a bloquear o veículo pelo app. */
+  blockerAccessAllowed?: boolean;
   position: Position | null;
   connection: Connection | null;
 }
@@ -172,6 +176,14 @@ export const AppApi = {
       .then((r) => r.data),
 
   vehicles: () => api.get<Vehicle[]>('/app/vehicles').then((r) => r.data),
+
+  /** `queued` = rastreador offline; o comando sai quando ele voltar a falar. */
+  setBlocked: (vehicleId: string, block: boolean) =>
+    api
+      .post<{ status: string; queued: boolean }>(
+        `/app/vehicles/${vehicleId}/${block ? 'block' : 'unblock'}`,
+      )
+      .then((r) => r.data),
 
   history: (vehicleId: string, from: string, to: string) =>
     api

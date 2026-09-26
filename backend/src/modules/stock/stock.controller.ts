@@ -27,6 +27,7 @@ import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
 import { AssignStockDto } from './dto/assign-stock.dto';
 import { ValidateStockDto } from './dto/validate-stock.dto';
+import { SignalBatchDto } from './dto/signal-batch.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -107,6 +108,20 @@ export class StockController {
     );
   }
 
+  @Post('signal-batch')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Conferência em pacote: a mesma telemetria ao vivo de vários equipamentos de uma vez',
+  })
+  signalBatch(
+    @Body() dto: SignalBatchDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.signalBatch(dto.stockItemIds, req.tenantId);
+  }
+
   @Post(':id/validate')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
@@ -172,6 +187,82 @@ export class StockController {
     return this.stockService.importFromBuffer(file.buffer, req.tenantId);
   }
 
+  /**
+   * "Atualizar TAG": re-consulta a rede Find My só desta TAG. Trava de 3 min,
+   * a mesma da RedeVeiculos — cada consulta usa a conta Apple do dono.
+   */
+  @Post(':id/atualizar-tag')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Pede ao coletor uma consulta imediata desta TAG na rede Find My ' +
+      '(1 a cada 3 minutos). Não obriga a TAG a se anunciar.',
+  })
+  atualizarTag(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.solicitarAtualizacaoTag(
+      id,
+      req.tenantId,
+      req.user.id,
+    );
+  }
+
+  /**
+   * "Atualizar TAG" pelo NÚMERO DE SÉRIE — é como o Mapa conhece a TAG de
+   * cliente (a vinculada pela Rede pode não ter item de estoque). Mesmas regras
+   * e mesma trava de 3 min da versão do Estoque.
+   */
+  @Post('tags/:serial/atualizar')
+  @RequireRoute('estoque', 'mapa')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Pede ao coletor uma consulta imediata da TAG (por número de série)' })
+  atualizarTagPorSerie(
+    @Param('serial') serial: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.solicitarAtualizacaoTagPorSerie(serial, req.tenantId, req.user.id);
+  }
+
+  /**
+   * "Desvincular TAG" do card de Clientes Ativos (ou do Mapa): associado
+   * cancelou, a TAG volta ao estoque disponível. Mesmos perfis que retiram
+   * rastreador.
+   */
+  @Post('tags/:serial/desvincular')
+  @RequireRoute('estoque', 'clientes', 'mapa')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Desvincula a TAG do veículo e devolve ao estoque (por número de série)' })
+  desvincularTag(
+    @Param('serial') serial: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.desvincularTag(serial, req.tenantId);
+  }
+
+  @Get('tags/:serial/atualizar')
+  @RequireRoute('estoque', 'mapa')
+  @ApiOperation({ summary: 'Estado da última atualização pedida para a TAG (por número de série)' })
+  estadoAtualizarTagPorSerie(
+    @Param('serial') serial: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.estadoAtualizacaoTagPorSerie(serial, req.tenantId);
+  }
+
+  @Get(':id/atualizar-tag')
+  @ApiOperation({ summary: 'Estado da última atualização pedida para a TAG' })
+  estadoAtualizarTag(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.stockService.estadoAtualizacaoTagDoEstoque(id, req.tenantId);
+  }
+
   @Post(':id/associate')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
@@ -187,7 +278,13 @@ export class StockController {
   ) {
     const liberadorAdmin =
       req.user.role === Role.SUPER_ADMIN || req.user.role === Role.ADMIN;
-    return this.stockService.associate(id, req.tenantId, dto, liberadorAdmin);
+    return this.stockService.associate(
+      id,
+      req.tenantId,
+      dto,
+      liberadorAdmin,
+      req.user.id,
+    );
   }
 
   @Post('assign')

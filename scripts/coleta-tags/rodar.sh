@@ -20,7 +20,7 @@ set -uo pipefail
 PASTA=/root/findmy-sessao
 LOG=/var/log/coleta-tags.log
 PARADO="$PASTA/PARADO"
-IMAGEM=localhost:5000/r21go-ktag-worker:latest
+IMAGEM=localhost:5000/r21go-ktag-worker:findmy-0.10.2
 
 registrar() { echo "[$(date '+%F %T')] $*" >> "$LOG"; }
 

@@ -19,6 +19,15 @@ export interface StockItem {
   validatedByName: string | null;
   validationOk: boolean | null;
   validationNotes: string | null;
+  /** RASTREADOR (fala com o servidor GPS) ou TAG (K-Tag, rede Find My). */
+  kind: 'RASTREADOR' | 'TAG';
+  /** Último avistamento da TAG na rede Find My. Nunca é posição do momento. */
+  tagPosition?: {
+    lat: number;
+    lng: number;
+    accuracyM: number | null;
+    seenAt: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,6 +103,10 @@ export type StockConexao = 'ONLINE' | 'OFFLINE' | 'SLEEP' | 'NUNCA';
 export interface StockMapPoint {
   id: string;
   imei: string;
+  /** RASTREADOR (posição de GPS) ou TAG (avistamento na rede Find My). */
+  tipo?: 'RASTREADOR' | 'TAG';
+  /** Raio de confiança do avistamento da TAG, em metros. */
+  precisaoM?: number | null;
   iccid: string | null;
   line: string | null;
   operator: string | null;
@@ -127,6 +140,13 @@ export interface StockMapResult {
   pontos: StockMapPoint[];
 }
 
+/** Um equipamento dentro da conferência em pacote. */
+export interface StockBatchSignal {
+  id: string;
+  imei: string;
+  health: DeviceHealth;
+}
+
 export interface StockValidateResult {
   id: string;
   validatedAt: string;
@@ -147,11 +167,15 @@ export interface StockImportResult {
   updated: number;
   skipped: number;
   total: number;
+  tipo?: 'RASTREADOR' | 'TAG';
 }
 
 export interface StockStats {
   total: number;
   byStatus: Array<{ status: string; count: number }>;
+  /** Contagem por tipo, para os cartões do topo. */
+  rastreadores: number;
+  tags: number;
 }
 
 /** Resultado da consulta de placa ao vivo no SGA (fluxo Associar). */
