@@ -6,11 +6,15 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert as RNAlert,
+  Linking,
+  ScrollView,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AppApi, AssociateProfile } from '@/lib/api';
+import { AppApi, AssociateProfile, NotificationPrefs } from '@/lib/api';
+import { garantirPermissaoPush } from '@/lib/push';
 import { useAuth } from '@/lib/auth-store';
 import { maskDocumento } from '@/lib/format';
 import { colors, radii } from '@/lib/theme';
@@ -20,13 +24,40 @@ export default function ProfileScreen() {
   const logout = useAuth((s) => s.logout);
   const [profile, setProfile] = useState<AssociateProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
 
   useEffect(() => {
     AppApi.me()
       .then(setProfile)
       .catch(() => {})
       .finally(() => setLoading(false));
+    AppApi.notificacoes()
+      .then(setPrefs)
+      .catch(() => {});
   }, []);
+
+  async function alternar(campo: keyof NotificationPrefs, valor: boolean) {
+    if (!prefs) return;
+    const anterior = prefs;
+    setPrefs({ ...prefs, [campo]: valor });
+    try {
+      setPrefs(await AppApi.setNotificacoes({ [campo]: valor }));
+    } catch {
+      setPrefs(anterior);
+      RNAlert.alert('Não foi possível salvar', 'Verifique sua internet e tente de novo.');
+      return;
+    }
+    if (valor && !(await garantirPermissaoPush())) {
+      RNAlert.alert(
+        'Notificações bloqueadas',
+        'O aviso foi ligado, mas as notificações do 21 Tracker estão bloqueadas neste celular. Libere nas configurações para recebê-lo.',
+        [
+          { text: 'Agora não', style: 'cancel' },
+          { text: 'Abrir configurações', onPress: () => Linking.openSettings() },
+        ],
+      );
+    }
+  }
 
   function confirmLogout() {
     RNAlert.alert('Sair', 'Deseja sair da sua conta?', [
@@ -37,54 +68,78 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <Text style={styles.title}>Perfil</Text>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.title}>Perfil</Text>
 
-      {loading ? (
-        <ActivityIndicator color={colors.navy} style={{ marginTop: 40 }} />
-      ) : profile ? (
-        <View style={styles.content}>
-          <View style={styles.avatarWrap}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {profile.name.charAt(0).toUpperCase()}
-              </Text>
+        {loading ? (
+          <ActivityIndicator color={colors.navy} style={{ marginTop: 40 }} />
+        ) : profile ? (
+          <View style={styles.content}>
+            <View style={styles.avatarWrap}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{profile.name.charAt(0).toUpperCase()}</Text>
+              </View>
+              <Text style={styles.name}>{profile.name}</Text>
+              <Text style={styles.tenant}>{profile.tenant?.name}</Text>
             </View>
-            <Text style={styles.name}>{profile.name}</Text>
-            <Text style={styles.tenant}>{profile.tenant?.name}</Text>
+
+            <View style={styles.rows}>
+              <Row
+                icon="card-outline"
+                label={profile.cpf.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'}
+                value={maskDocumento(profile.cpf)}
+              />
+              {profile.email ? (
+                <Row icon="mail-outline" label="E-mail" value={profile.email} />
+              ) : null}
+              {profile.phone ? (
+                <Row icon="call-outline" label="Telefone" value={profile.phone} />
+              ) : null}
+              <Row
+                icon="car-outline"
+                label="Veículos"
+                value={String(profile._count?.vehicles ?? 0)}
+              />
+            </View>
           </View>
+        ) : (
+          <Text style={styles.error}>Não foi possível carregar o perfil.</Text>
+        )}
 
-          <View style={styles.rows}>
-            <Row icon="card-outline" label={profile.cpf.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'} value={maskDocumento(profile.cpf)} />
-            {profile.email ? (
-              <Row icon="mail-outline" label="E-mail" value={profile.email} />
-            ) : null}
-            {profile.phone ? (
-              <Row icon="call-outline" label="Telefone" value={profile.phone} />
-            ) : null}
-            <Row
-              icon="car-outline"
-              label="Veículos"
-              value={String(profile._count?.vehicles ?? 0)}
-            />
+        {prefs ? (
+          <View style={styles.content}>
+            <Text style={styles.section}>Notificações</Text>
+            <View style={styles.rows}>
+              <SwitchRow
+                icon="key-outline"
+                label="Chave ligada"
+                value={prefs.ignicaoLigada}
+                onChange={(v) => alternar('ignicaoLigada', v)}
+              />
+              <SwitchRow
+                icon="power-outline"
+                label="Chave desligada"
+                value={prefs.ignicaoDesligada}
+                onChange={(v) => alternar('ignicaoDesligada', v)}
+              />
+            </View>
           </View>
-        </View>
-      ) : (
-        <Text style={styles.error}>Não foi possível carregar o perfil.</Text>
-      )}
+        ) : null}
 
-      <TouchableOpacity
-        style={styles.action}
-        onPress={() => router.push('/change-password')}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="key-outline" size={20} color={colors.navy} />
-        <Text style={styles.actionText}>Trocar minha senha</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.action}
+          onPress={() => router.push('/change-password')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="key-outline" size={20} color={colors.navy} />
+          <Text style={styles.actionText}>Trocar minha senha</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.logout} onPress={confirmLogout} activeOpacity={0.8}>
-        <Ionicons name="log-out-outline" size={20} color={colors.red} />
-        <Text style={styles.logoutText}>Sair da conta</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.logout} onPress={confirmLogout} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color={colors.red} />
+          <Text style={styles.logoutText}>Sair da conta</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -107,8 +162,43 @@ function Row({
   );
 }
 
+function SwitchRow({
+  icon,
+  label,
+  value,
+  onChange,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <View style={styles.row}>
+      <Ionicons name={icon} size={20} color={colors.textMuted} />
+      <Text style={styles.switchLabel}>{label}</Text>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        trackColor={{ true: colors.navy, false: colors.border }}
+        thumbColor={colors.white}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+  scroll: { flexGrow: 1 },
+  section: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  switchLabel: { fontSize: 15, fontWeight: '600', color: colors.text, flex: 1 },
   title: {
     fontSize: 26,
     fontWeight: '800',

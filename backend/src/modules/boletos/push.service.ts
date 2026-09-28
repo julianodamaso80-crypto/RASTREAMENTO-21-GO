@@ -81,26 +81,44 @@ export class PushService {
     tenantId: string,
     b: { mesReferente: string | null; valor: number | null; vencimento: string | null },
   ): Promise<void> {
+    const entregue = await this.enviar(associateId, tenantId, textoDoAviso(b), { rota: '/boletos' });
+    if (!entregue) return;
+    await this.prisma.associateBoleto.update({
+      where: { id: boletoId },
+      data: { avisadoEm: new Date() },
+    });
+  }
+
+  /**
+   * Manda um push para todos os aparelhos do associado. Devolve true só se a
+   * Expo confirmou ao menos um ticket — sem aparelho, desligado ou falha = false.
+   */
+  async enviar(
+    associateId: string,
+    tenantId: string,
+    corpo: string,
+    data: { rota: string },
+  ): Promise<boolean> {
     const aparelhos = await this.prisma.associatePushDevice.findMany({
       where: { associateId, tenantId },
       select: { expoToken: true },
     });
-    if (!aparelhos.length) return;
+    if (!aparelhos.length) return false;
 
     // Interruptor de emergência (achado M9): a config existia e ninguém a
     // lia. Não carimba — quando religar, o robô tenta de novo pra quem
     // ainda não foi avisado deste boleto.
     if (this.config.get<boolean>('expoPush.enabled') === false) {
-      this.logger.warn('push de boletos desligado (expoPush.enabled=false)');
-      return;
+      this.logger.warn('push desligado (expoPush.enabled=false)');
+      return false;
     }
 
     const url = this.config.get<string>('expoPush.url') ?? 'https://exp.host/--/api/v2/push/send';
     const mensagens = aparelhos.map((a) => ({
       to: a.expoToken,
       title: '21 Tracker',
-      body: textoDoAviso(b),
-      data: { rota: '/boletos' },
+      body: corpo,
+      data,
     }));
 
     let tickets: Array<{ status?: string; details?: { error?: string } }> = [];
@@ -114,7 +132,7 @@ export class PushService {
       if (!r.ok) {
         // Expo recusou (payload malformado, token inválido, limite): não carimba, o robô tenta de novo
         this.logger.warn(`Expo respondeu ${r.status} ao enviar push`);
-        return;
+        return false;
       }
       // Achado I5: a Expo responde HTTP 200 mesmo com ticket individual em
       // erro (ex.: `{"data":[{"status":"error","details":{"error":"DeviceNotRegistered"}}]}`)
@@ -123,7 +141,7 @@ export class PushService {
       tickets = Array.isArray(body?.data) ? body.data : [];
     } catch (err) {
       this.logger.warn(`push não saiu: ${(err as Error).message}`);
-      return;
+      return false;
     }
 
     // Token morto não serve mais pra nada: apaga pra parar de tentar.
@@ -141,12 +159,7 @@ export class PushService {
     if (!algumTicketDeuCerto) {
       // Nenhum ticket confirmou: não carimba, senão este boleto nunca mais avisa ninguém.
       this.logger.warn('Expo não confirmou nenhum ticket do push');
-      return;
     }
-
-    await this.prisma.associateBoleto.update({
-      where: { id: boletoId },
-      data: { avisadoEm: new Date() },
-    });
+    return algumTicketDeuCerto;
   }
 }

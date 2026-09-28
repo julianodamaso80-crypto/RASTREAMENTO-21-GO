@@ -133,6 +133,12 @@ export interface AssociateProfile {
   _count: { vehicles: number };
 }
 
+/** Avisos por push que o associado escolheu receber. Nascem desligados. */
+export interface NotificationPrefs {
+  ignicaoLigada: boolean;
+  ignicaoDesligada: boolean;
+}
+
 export const AppApi = {
   login: (cpf: string, password: string) =>
     api
@@ -231,6 +237,12 @@ export const AppApi = {
     }
     return resultado.uri;
   },
+
+  notificacoes: () =>
+    api.get<NotificationPrefs>('/app/notificacoes').then((r) => r.data),
+
+  setNotificacoes: (prefs: Partial<NotificationPrefs>) =>
+    api.patch<NotificationPrefs>('/app/notificacoes', prefs).then((r) => r.data),
 
   registrarPush: (expoToken: string, platform: string) =>
     api

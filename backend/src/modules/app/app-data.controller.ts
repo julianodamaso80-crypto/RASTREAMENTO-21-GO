@@ -1,8 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -12,6 +14,7 @@ import { Public } from '../../common/decorators';
 import { AppDataService } from './app-data.service';
 import { AssociateJwtGuard } from './guards/associate-jwt.guard';
 import { CurrentAssociate } from './decorators/current-associate.decorator';
+import { NotificationPrefsDto } from './dto/notification-prefs.dto';
 
 @ApiTags('App - Dados do Associado')
 @ApiBearerAuth()
@@ -97,5 +100,24 @@ export class AppDataController {
       tenantId,
       limit ? parseInt(limit, 10) : 50,
     );
+  }
+
+  @Get('notificacoes')
+  @ApiOperation({ summary: 'Quais avisos por push o associado escolheu receber' })
+  async getNotificacoes(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+  ) {
+    return this.service.getNotificationPrefs(associateId, tenantId);
+  }
+
+  @Patch('notificacoes')
+  @ApiOperation({ summary: 'Liga/desliga os avisos por push do associado' })
+  async setNotificacoes(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Body() body: NotificationPrefsDto,
+  ) {
+    return this.service.setNotificationPrefs(associateId, tenantId, body);
   }
 }

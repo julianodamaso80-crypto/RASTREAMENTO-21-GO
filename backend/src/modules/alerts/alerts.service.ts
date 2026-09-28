@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GeofencesService } from '../geofences/geofences.service';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { NotificationDispatcher, DEFAULT_SEVERITY } from '../notifications/notification-dispatcher.service';
+import { IgnitionPushService } from './ignition-push.service';
 import type { FilterAlertsDto } from './dto/filter-alerts.dto';
 import type { TraccarPosition, TraccarPositionAttributes } from '../traccar/traccar.service';
 
@@ -51,6 +52,7 @@ export class AlertsService {
     private geofencesService: GeofencesService,
     private settings: TenantSettingsService,
     private dispatcher: NotificationDispatcher,
+    private ignitionPush: IgnitionPushService,
   ) {}
 
   setEmitter(emitter: AlertEmitter) {
@@ -90,6 +92,7 @@ export class AlertsService {
           'Ignição ligada',
           { latitude: position.latitude, longitude: position.longitude },
         );
+        void this.ignitionPush.avisar(vehicleId, tenantId, true);
       }
       if (previousIgnition === true && ignition === false) {
         await this.createAlert(
@@ -99,6 +102,7 @@ export class AlertsService {
           'Ignição desligada',
           { latitude: position.latitude, longitude: position.longitude },
         );
+        void this.ignitionPush.avisar(vehicleId, tenantId, false);
       }
       this.ignitionState.set(position.deviceId, ignition);
     }

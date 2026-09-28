@@ -365,4 +365,29 @@ export class AppDataService {
     });
     return alerts.map(toAlertDto);
   }
+
+  async getNotificationPrefs(associateId: string, tenantId: string) {
+    const a = await this.prisma.associate.findFirst({
+      where: { id: associateId, tenantId, deletedAt: null },
+      select: { notifyIgnitionOn: true, notifyIgnitionOff: true },
+    });
+    if (!a) throw new NotFoundException('Cadastro não encontrado.');
+    return { ignicaoLigada: a.notifyIgnitionOn, ignicaoDesligada: a.notifyIgnitionOff };
+  }
+
+  async setNotificationPrefs(
+    associateId: string,
+    tenantId: string,
+    prefs: { ignicaoLigada?: boolean; ignicaoDesligada?: boolean },
+  ) {
+    const { count } = await this.prisma.associate.updateMany({
+      where: { id: associateId, tenantId, deletedAt: null },
+      data: {
+        notifyIgnitionOn: prefs.ignicaoLigada,
+        notifyIgnitionOff: prefs.ignicaoDesligada,
+      },
+    });
+    if (!count) throw new NotFoundException('Cadastro não encontrado.');
+    return this.getNotificationPrefs(associateId, tenantId);
+  }
 }

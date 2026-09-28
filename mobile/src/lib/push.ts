@@ -4,7 +4,7 @@ import Constants from 'expo-constants';
 import { AppApi } from './api';
 
 /** Só estas rotas podem vir num push. Qualquer outra coisa é ignorada. */
-const ROTAS_PERMITIDAS = ['/boletos'];
+const ROTAS_PERMITIDAS = ['/boletos', '/(tabs)'];
 
 export function rotaDoAviso(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null;
@@ -31,5 +31,21 @@ export async function registrarParaPush(): Promise<void> {
     await AppApi.registrarPush(token.data, Platform.OS);
   } catch {
     // Sem push o app segue inteiro. Nunca derrubar o boot por causa disso.
+  }
+}
+
+/**
+ * Para quem acabou de ligar um aviso: pede a permissão (se ainda dá pra pedir)
+ * e registra o aparelho. false = o sistema está bloqueando as notificações.
+ */
+export async function garantirPermissaoPush(): Promise<boolean> {
+  try {
+    const atual = await Notifications.getPermissionsAsync();
+    const permissao = atual.granted ? atual : await Notifications.requestPermissionsAsync();
+    if (!permissao.granted) return false;
+    await registrarParaPush();
+    return true;
+  } catch {
+    return false;
   }
 }

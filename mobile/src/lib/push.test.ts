@@ -4,6 +4,9 @@ describe('rotaDoAviso — para onde o toque leva', () => {
   it('aviso de boleto abre a aba de boletos', () => {
     expect(rotaDoAviso({ rota: '/boletos' })).toBe('/boletos');
   });
+  it('aviso de chave ligada/desligada abre o mapa', () => {
+    expect(rotaDoAviso({ rota: '/(tabs)' })).toBe('/(tabs)');
+  });
   it('payload sem rota nao navega', () => {
     expect(rotaDoAviso({})).toBeNull();
   });
