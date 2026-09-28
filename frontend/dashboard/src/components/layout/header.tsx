@@ -1,7 +1,6 @@
 'use client';
 
 import { LogOut, User as UserIcon } from 'lucide-react';
-import { AlertsDropdown } from '@/components/alerts/alerts-dropdown';
 import { AssistantDrawer } from '@/components/assistant/assistant-drawer';
 import { BuscaGlobal } from '@/components/layout/busca-global';
 import {
@@ -36,7 +35,6 @@ export function Header() {
 
       <div className="flex items-center gap-2 shrink-0">
         <AssistantDrawer />
-        <AlertsDropdown />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-lg hover:bg-white/5 transition-colors">
