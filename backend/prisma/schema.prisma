@@ -697,6 +697,7 @@ model Alert {
   @@index([tenantId, deletedAt])
   @@index([tenantId, status, createdAt(sort: Desc)])
   @@index([assignedToId, status])
+  @@index([vehicleId, type, createdAt(sort: Desc)])
   @@map("alerts")
 }
 
