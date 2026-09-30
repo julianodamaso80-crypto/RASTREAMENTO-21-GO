@@ -56,9 +56,12 @@ export default function ChangePasswordScreen() {
         eraObrigatoria ? 'Senha criada' : 'Senha alterada',
         'Pronto. Use essa senha nos próximos acessos.',
       );
-      // No primeiro acesso o gate do _layout libera o app sozinho; na troca
-      // voluntária (pelo perfil) voltamos pra tela de onde o usuário veio.
-      if (!eraObrigatoria && router.canGoBack()) router.back();
+      // O gate do _layout NÃO tira ninguém desta tela (ele a respeita para a
+      // troca voluntária). Sem sair daqui, o cliente do primeiro acesso via o
+      // mesmo formulário preenchido, apertava de novo e levava 401 — foi o
+      // que os logs de 30/09/2026 mostraram em 67 de 73 trocas.
+      if (eraObrigatoria) router.replace('/(tabs)');
+      else if (router.canGoBack()) router.back();
     } catch (e: any) {
       const msg =
         e?.response?.data?.message ||

@@ -2,6 +2,7 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useAuth } from './auth-store';
+import { deveDeslogarPor401 } from './sessao-401';
 import type { Boleto } from './boletos';
 
 /**
@@ -37,7 +38,10 @@ api.interceptors.response.use(
     return r;
   },
   async (error) => {
-    if (error?.response?.status === 401) {
+    // Só o 401 de rota protegida é sessão morta. "Senha atual incorreta" na
+    // troca de senha também é 401 e NÃO pode jogar o cliente pra fora
+    // (ver sessao-401.ts).
+    if (error?.response?.status === 401 && deveDeslogarPor401(error?.config?.url)) {
       await useAuth.getState().logout();
     }
     return Promise.reject(error);

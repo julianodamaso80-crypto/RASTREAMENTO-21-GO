@@ -243,7 +243,18 @@ export class AssociateAuthService {
       return { accessToken: this.jwt.sign(payload), associate: toAssociateDto(a) };
     }
 
-    // Mensagem genérica — não revela se o CPF existe.
+    // Mensagem genérica — não revela se o CPF existe. O motivo real fica só no
+    // log (últimos 4 dígitos), porque sem ele "300 logins recusados por dia"
+    // não diz se é gente sem cadastro ou gente que esqueceu a senha que criou
+    // (auditoria de 30/09/2026).
+    if (candidates.length === 0) {
+      this.logger.warn(`Login recusado (documento não cadastrado): ...${cpf.slice(-4)}`);
+    } else {
+      const jaTrocou = candidates.some((a) => !a.mustChangePassword);
+      this.logger.warn(
+        `Login recusado (senha errada, ${jaTrocou ? 'já tem senha própria' : 'ainda vale o documento'}): ...${cpf.slice(-4)}`,
+      );
+    }
     throw new UnauthorizedException('CPF ou senha inválidos');
   }
 

@@ -117,7 +117,8 @@ export function TagDetailPanel({
             {tag.seenAt ? `vista ${formatRelativeTime(tag.seenAt)}` : 'nunca foi vista pela rede'}
             {/* "Vista há 58 min" sozinho parecia coleta parada. Com a hora da
                 última consulta o operador sabe: perguntamos, e ninguém viu. */}
-            {tag.redeConsultadaEm && ` · rede consultada ${formatRelativeTime(tag.redeConsultadaEm)}`}
+            {tag.redeConsultadaEm &&
+              ` · rede consultada ${formatRelativeTime(tag.redeConsultadaEm)} (a cada 15 min)`}
           </p>
           {temPosicao && (
             <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
@@ -184,7 +185,9 @@ export function TagDetailPanel({
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         A TAG não informa ignição, velocidade nem bloqueio, e a posição é sempre a da
-        última vez que ela foi vista, nunca em tempo real.
+        última vez que ela foi vista, nunca em tempo real. A rede Find My entrega o
+        avistamento com 13 min de atraso em média (27 min em 9 de cada 10 casos, medido
+        em 30/09/2026), e nós a consultamos a cada 15 min.
       </p>
     </div>
   );

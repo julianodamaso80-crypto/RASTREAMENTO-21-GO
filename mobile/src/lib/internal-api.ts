@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { useInternalAuth, InternalUser } from './internal-auth-store';
+import { deveDeslogarPor401 } from './sessao-401';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -29,7 +30,8 @@ internalApi.interceptors.response.use(
     return r;
   },
   async (error) => {
-    if (error?.response?.status === 401) {
+    // Mesma regra do mundo do associado: credencial recusada não é sessão morta.
+    if (error?.response?.status === 401 && deveDeslogarPor401(error?.config?.url)) {
       await useInternalAuth.getState().logout();
     }
     return Promise.reject(error);
