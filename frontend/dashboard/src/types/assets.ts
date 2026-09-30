@@ -62,6 +62,8 @@ export interface ClientAsset {
     serialNumber: string;
     origin: string;
     verdict: string;
+    /** Onde a TAG foi escondida (vem da plataforma de origem ou do painel). */
+    installLocation: string | null;
     lastSeenAt: string | null;
     lat: number | null;
     lng: number | null;
@@ -93,4 +95,12 @@ export interface AssetsSummary {
       }>;
     }>;
   };
+}
+
+/** Resultado da troca de titularidade — de quem saiu e para quem foi. */
+export interface TransferOwnershipResult {
+  vehicleId: string;
+  plate: string;
+  from: { id: string; name: string; cpf: string } | null;
+  to: { id: string; name: string; cpf: string };
 }

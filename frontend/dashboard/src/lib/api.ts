@@ -54,6 +54,7 @@ import type {
 } from '@/types/stock';
 import type { ClientAsset, AssetsSummary } from '@/types/assets';
 import type { TagNoMapa } from '@/types/tag-map';
+import type { TransferOwnershipResult } from '@/types/assets';
 import type {
   Technician,
   TechnicianAssignment,
@@ -971,6 +972,30 @@ export const clientsApi = {
   },
   setBlockerAccess: async (vehicleId: string, allowed: boolean): Promise<void> => {
     await api.patch(`/clients/assets/${vehicleId}/blocker-access`, { allowed });
+  },
+  /** Corrige onde o rastreador foi escondido no veículo. Vazio limpa. */
+  setInstallLocation: async (
+    vehicleId: string,
+    installLocation: string,
+  ): Promise<{ vehicleId: string; installLocation: string | null }> => {
+    const res = await api.patch<
+      ApiResponse<{ vehicleId: string; installLocation: string | null }>
+    >(`/clients/assets/${vehicleId}/install-location`, { installLocation });
+    return res.data.data;
+  },
+  /**
+   * Troca de titularidade: o veículo (com o rastreador que está nele) passa
+   * para o associado que o SGA devolve para a placa.
+   */
+  transferOwnership: async (
+    vehicleId: string,
+    payload: { placa: string; allowInactive?: boolean },
+  ): Promise<TransferOwnershipResult> => {
+    const res = await api.post<ApiResponse<TransferOwnershipResult>>(
+      `/clients/assets/${vehicleId}/transfer-ownership`,
+      payload,
+    );
+    return res.data.data;
   },
   setFinancialStatus: async (
     vehicleId: string,

@@ -1288,6 +1288,9 @@ model TagLink {
   hinovaVehicleCode String? @map("hinova_vehicle_code")
   associateName     String? @map("associate_name")
   associateCpf      String? @map("associate_cpf")
+  /// Onde a TAG foi escondida no veículo. Vem da plataforma de origem
+  /// (RedeVeiculos) ou do vínculo pelo painel. Segredo interno, como no Device.
+  installLocation   String? @map("install_location")
 
   /// REDE (conferido na RedeVeiculos) · ESTOQUE (vinculado pelo painel).
   origin  String

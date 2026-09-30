@@ -566,6 +566,28 @@ export class ClientsService {
     return { vehicleId, technician };
   }
 
+  /**
+   * Corrige onde o rastreador foi escondido. O técnico informa na instalação,
+   * mas erra ou deixa em branco — e o parque migrado da plataforma de origem
+   * chegou sem isso. Vazio limpa o campo.
+   */
+  async setInstallLocation(
+    tenantId: string,
+    vehicleId: string,
+    installLocation: string,
+  ) {
+    const vehicle = await this.assertVehicle(tenantId, vehicleId);
+    if (!vehicle.device) {
+      throw new NotFoundException('Veículo sem rastreador instalado.');
+    }
+    const local = installLocation.trim() || null;
+    await this.prisma.device.update({
+      where: { id: vehicle.device.id },
+      data: { installLocation: local },
+    });
+    return { vehicleId, installLocation: local };
+  }
+
   private async assertVehicle(tenantId: string, vehicleId: string) {
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: vehicleId, tenantId, deletedAt: null },

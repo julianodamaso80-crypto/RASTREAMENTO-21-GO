@@ -29,6 +29,7 @@ export interface VinculoTag {
   hinovaVehicleCode: string | null;
   associateName: string | null;
   associateCpf: string | null;
+  installLocation: string | null;
   origin: string;
   verdict: string;
   checkedAt: Date;
@@ -187,6 +188,7 @@ export function resumoTag(v: VinculoTag, pos: PosicaoTag | undefined) {
     serialNumber: v.serialNumber,
     origin: v.origin,
     verdict: v.verdict,
+    installLocation: v.installLocation ?? null,
     lastSeenAt: pos?.seenAt ?? null,
     lat: pos?.lat ?? null,
     lng: pos?.lng ?? null,
@@ -232,6 +234,7 @@ export async function vinculosDaTela(prisma: PrismaService, tenantId: string) {
       hinovaVehicleCode: true,
       associateName: true,
       associateCpf: true,
+      installLocation: true,
       origin: true,
       verdict: true,
       checkedAt: true,

@@ -35,6 +35,7 @@ export function AssetCard({
   onAlterarFinanceiro,
   onAlterarAcesso,
   onAlterarBloqueador,
+  onTrocarTitularidade,
   onRedefinirSenha,
   onRetirar,
   onDesvincularTag,
@@ -47,6 +48,7 @@ export function AssetCard({
   onAlterarFinanceiro: () => void;
   onAlterarAcesso: () => void;
   onAlterarBloqueador: () => void;
+  onTrocarTitularidade: () => void;
   onRedefinirSenha: () => void;
   onRetirar: () => void;
   onDesvincularTag: () => void;
@@ -110,6 +112,7 @@ export function AssetCard({
           podeLiberarBloqueador={
             user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN'
           }
+          onTrocarTitularidade={onTrocarTitularidade}
           onRedefinirSenha={onRedefinirSenha}
           redefinindoSenha={redefinindoSenha}
         />
@@ -149,6 +152,28 @@ export function AssetCard({
           <p className="flex items-center gap-1.5 text-muted-foreground">
             <Wrench className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{tecnico}</span>
+          </p>
+        )}
+
+        {/* Onde o equipamento foi escondido: rastreador e/ou TAG. É o dado
+            que vale ouro quando o carro é levado — e por isso só o time
+            interno vê (mesma régua do documento inteiro). */}
+        {podeVerDocumento && (asset.device?.installLocation || asset.tag?.installLocation) && (
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-muted-foreground">
+            {asset.device?.installLocation && (
+              <span className="flex items-center gap-1.5 min-w-0">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  Rastreador em: {asset.device.installLocation}
+                </span>
+              </span>
+            )}
+            {asset.tag?.installLocation && (
+              <span className="flex items-center gap-1.5 min-w-0">
+                <Tag className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">TAG em: {asset.tag.installLocation}</span>
+              </span>
+            )}
           </p>
         )}
 

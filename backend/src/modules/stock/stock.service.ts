@@ -790,7 +790,7 @@ export class StockService {
    * inadimplente de verdade chega aqui como situação 4 e cai na regra de cima.
    * A tela mostra o vencimento como aviso — ver `boletoVencido` no lookup.
    */
-  private static motivoDeBloqueio(
+  static motivoDeBloqueio(
     lookup: HinovaLookupResult,
     placaDigitada: string,
   ): string | null {
@@ -1380,7 +1380,7 @@ export class StockService {
    * sem contato o cadastro segue, só que o cliente vai depender do atendimento
    * pra recuperar a senha.
    */
-  private async contatoDaPendencia(
+  async contatoDaPendencia(
     tenantId: string,
     placa: string,
     cpf: string,

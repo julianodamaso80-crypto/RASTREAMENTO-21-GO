@@ -31,6 +31,10 @@ import {
 } from '@/components/clientes/asset-dialogs';
 import type { ClientAsset } from '@/types/assets';
 import { useBuscaDaUrl } from '@/lib/use-busca-url';
+import {
+  TrocaTitularidadeDialog,
+  type TitularidadeAlvo,
+} from '@/components/clientes/troca-titularidade-dialog';
 
 const TAMANHOS_PAGINA = [20, 60, 140, 200, 400, 500];
 
@@ -58,6 +62,7 @@ export default function ClientesPage() {
   const [salvandoTag, setSalvandoTag] = useState(false);
   const [trocandoTecnico, setTrocandoTecnico] = useState<TecnicoAlvo | null>(null);
   const [salvandoTecnico, setSalvandoTecnico] = useState(false);
+  const [trocandoTitular, setTrocandoTitular] = useState<TitularidadeAlvo | null>(null);
   const [resetandoId, setResetandoId] = useState<string | null>(null);
   const [senhaGerada, setSenhaGerada] = useState<SenhaTemporaria | null>(null);
 
@@ -344,6 +349,13 @@ export default function ClientesPage() {
                   onAlterarFinanceiro={() => alternarFinanceiro(asset)}
                   onAlterarAcesso={() => alternarAcesso(asset)}
                   onAlterarBloqueador={() => alternarBloqueador(asset)}
+                  onTrocarTitularidade={() =>
+                    setTrocandoTitular({
+                      vehicleId: asset.id,
+                      plate: asset.plate,
+                      donoAtual: asset.associate?.name ?? null,
+                    })
+                  }
                   onRedefinirSenha={() => resetarSenha(asset)}
                   onRetirar={() => {
                     if (!asset.device) return;
@@ -415,6 +427,14 @@ export default function ClientesPage() {
         salvando={salvandoTecnico}
         onCancel={() => setTrocandoTecnico(null)}
         onConfirm={confirmarTecnico}
+      />
+      <TrocaTitularidadeDialog
+        alvo={trocandoTitular}
+        onCancel={() => setTrocandoTitular(null)}
+        onDone={() => {
+          setTrocandoTitular(null);
+          void load();
+        }}
       />
     </div>
   );

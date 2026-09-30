@@ -12,7 +12,13 @@ import {
   Unlock,
   Phone,
   Wrench,
+  Pencil,
+  Check,
+  Loader2,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { clientsApi } from '@/lib/api';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -33,12 +39,17 @@ interface VehicleDetailPanelProps {
 }
 
 export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
-  const { vehicles, selectedVehicleId, selectVehicle } = useTracking();
+  const { vehicles, selectedVehicleId, selectVehicle, updateVehicleLocal } =
+    useTracking();
   const { user } = useAuth();
   const canBlock = canBlockVehicle(user?.role);
   // Cliente final não pode saber onde o rastreador está escondido.
   const showInstallLocation = canSeeInstallLocation(user?.role);
   const [showBlockModal, setShowBlockModal] = useState(false);
+  // Edição do esconderijo do rastreador, direto no painel.
+  const [editandoLocal, setEditandoLocal] = useState(false);
+  const [localDigitado, setLocalDigitado] = useState('');
+  const [salvandoLocal, setSalvandoLocal] = useState(false);
 
   const vehicle = useMemo(
     () => vehicles.find((v) => v.id === selectedVehicleId),
@@ -75,6 +86,37 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   const displayAddress = reverseAddress || vehicle.address || null;
   // Local físico no veículo informado na instalação (ex.: "atrás do porta-luvas").
   const installLocation = vehicle.device?.installLocation?.trim() || null;
+
+  const abrirEdicaoLocal = () => {
+    setLocalDigitado(installLocation ?? '');
+    setEditandoLocal(true);
+  };
+
+  const salvarLocal = async () => {
+    if (salvandoLocal) return;
+    setSalvandoLocal(true);
+    try {
+      const r = await clientsApi.setInstallLocation(vehicle.id, localDigitado);
+      // O painel lê do contexto do mapa: atualiza ali, sem esperar o próximo
+      // reload da lista de veículos.
+      updateVehicleLocal(vehicle.id, {
+        device: { ...(vehicle.device ?? {}), installLocation: r.installLocation },
+      });
+      toast.success(
+        r.installLocation
+          ? `Local de instalação de ${vehicle.plate} atualizado.`
+          : `Local de instalação de ${vehicle.plate} apagado.`,
+      );
+      setEditandoLocal(false);
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { message?: string | string[] } } })
+          ?.response?.data?.message || 'Não consegui salvar o local. Tente de novo.';
+      toast.error(Array.isArray(msg) ? msg[0] : msg);
+    } finally {
+      setSalvandoLocal(false);
+    }
+  };
   // IMEI do rastreador instalado. `uniqueId` guarda o mesmo número nos ativos
   // vindos do estoque, e serve de rede quando o Device não veio no payload.
   // Mesmo critério do esconderijo: número de equipamento é dado do time
@@ -198,14 +240,69 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                   Rastreador instalado em
                 </p>
-                {installLocation ? (
-                  <p className="text-sm font-medium leading-tight mt-1">
-                    {installLocation}
-                  </p>
+                {editandoLocal ? (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Input
+                      value={localDigitado}
+                      onChange={(e) => setLocalDigitado(e.target.value.slice(0, 160))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') salvarLocal();
+                        if (e.key === 'Escape') setEditandoLocal(false);
+                      }}
+                      placeholder="Ex: embaixo do tanque"
+                      className="h-8 text-sm"
+                      autoFocus
+                      disabled={salvandoLocal}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={salvarLocal}
+                      disabled={salvandoLocal}
+                      aria-label="Salvar local de instalação"
+                    >
+                      {salvandoLocal ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2"
+                      onClick={() => setEditandoLocal(false)}
+                      disabled={salvandoLocal}
+                      aria-label="Cancelar edição"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground italic mt-1">
-                    Local não informado
-                  </p>
+                  <div className="flex items-start justify-between gap-2 mt-1">
+                    {installLocation ? (
+                      <p className="text-sm font-medium leading-tight">
+                        {installLocation}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">
+                        Local não informado
+                      </p>
+                    )}
+                    {/* Só quem tem rastreador nosso pode corrigir o esconderijo. */}
+                    {vehicle.device && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-1.5 -mt-0.5 shrink-0 text-muted-foreground"
+                        onClick={abrirEdicaoLocal}
+                        aria-label="Editar local de instalação"
+                        title="Editar local de instalação"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

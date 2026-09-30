@@ -13,6 +13,7 @@ import {
   Loader2,
   ShieldCheck,
   ShieldOff,
+  UserRoundCog,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +34,7 @@ export function AssetActionsMenu({
   onAlterarAcesso,
   onAlterarBloqueador,
   podeLiberarBloqueador,
+  onTrocarTitularidade,
   onRedefinirSenha,
   redefinindoSenha,
 }: {
@@ -45,6 +47,8 @@ export function AssetActionsMenu({
   onAlterarBloqueador: () => void;
   /** Só ADMIN/SUPER_ADMIN; os demais nem veem o item. */
   podeLiberarBloqueador: boolean;
+  /** O carro foi vendido: passa para o novo dono do SGA, rastreador fica. */
+  onTrocarTitularidade: () => void;
   onRedefinirSenha: () => void;
   redefinindoSenha: boolean;
 }) {
@@ -115,6 +119,9 @@ export function AssetActionsMenu({
             )}
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onClick={onTrocarTitularidade}>
+          <UserRoundCog className="h-4 w-4" /> Troca de titularidade
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={onRedefinirSenha}
           disabled={!asset.associate || redefinindoSenha}

@@ -21,8 +21,11 @@ import {
   SetAppAccessDto,
   SetBlockerAccessDto,
   SetFinancialStatusDto,
+  SetInstallLocationDto,
   SetTechnicianDto,
+  TransferOwnershipDto,
 } from './dto/asset-actions.dto';
+import { OwnershipTransferService } from './ownership-transfer.service';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -37,6 +40,7 @@ export class ClientsController {
   constructor(
     private clientsService: ClientsService,
     private associateAuth: AssociateAuthService,
+    private ownershipTransfer: OwnershipTransferService,
   ) {}
 
   @Get('assets')
@@ -146,6 +150,49 @@ export class ClientsController {
       req.tenantId,
       vehicleId,
       dto.technicianId,
+    );
+  }
+
+  @Patch('assets/:vehicleId/install-location')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Corrige onde o rastreador foi escondido no veículo' })
+  setInstallLocation(
+    @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
+    @Body() dto: SetInstallLocationDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.clientsService.setInstallLocation(
+      req.tenantId,
+      vehicleId,
+      dto.installLocation,
+    );
+  }
+
+  /**
+   * Troca de titularidade: mesma consulta do "Associar (SGA)", mas o rastreador
+   * fica onde está — só o dono do veículo muda. INATIVO no SGA só passa com
+   * `allowInactive` e usuário administrador, como no vínculo do estoque.
+   */
+  @Post('assets/:vehicleId/transfer-ownership')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Troca de titularidade: passa o veículo para o associado que o SGA devolve para a placa',
+  })
+  transferOwnership(
+    @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
+    @Body() dto: TransferOwnershipDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const liberadorAdmin =
+      req.user.role === Role.SUPER_ADMIN || req.user.role === Role.ADMIN;
+    return this.ownershipTransfer.transfer(
+      req.tenantId,
+      vehicleId,
+      dto,
+      liberadorAdmin,
     );
   }
 
