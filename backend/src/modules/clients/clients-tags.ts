@@ -149,13 +149,24 @@ export async function ultimasPosicoes(
   seriais: string[],
 ): Promise<Map<string, PosicaoTag>> {
   if (seriais.length === 0) return new Map();
+  // Uma busca por número no índice (tenant, número, seen_at DESC), e não
+  // DISTINCT ON: o Postgres não sabe "pular" no índice, então o DISTINCT ON
+  // varria os 5,1 milhões de avistamentos inteiros a cada chamada — 8,9 s
+  // medidos em produção em 30/09/2026, contra 0,26 s desta forma. Era isso que
+  // deixava o mapa e a busca lentos (a lista de TAGs recarrega a cada minuto).
   const linhas = await prisma.$queryRaw<
     Array<{ serial_number: string; latitude: number; longitude: number; accuracy_m: number | null; seen_at: Date }>
   >(Prisma.sql`
-    SELECT DISTINCT ON (serial_number) serial_number, latitude, longitude, accuracy_m, seen_at
-      FROM tag_positions
-     WHERE tenant_id = ${tenantId}::uuid AND serial_number IN (${Prisma.join(seriais)})
-     ORDER BY serial_number, seen_at DESC`);
+    SELECT s.serial_number, p.latitude, p.longitude, p.accuracy_m, p.seen_at
+      FROM unnest(${[...new Set(seriais)]}::text[]) AS s(serial_number)
+      CROSS JOIN LATERAL (
+        SELECT latitude, longitude, accuracy_m, seen_at
+          FROM tag_positions tp
+         WHERE tp.tenant_id = ${tenantId}::uuid
+           AND tp.serial_number = s.serial_number
+         ORDER BY tp.seen_at DESC
+         LIMIT 1
+      ) p`);
   return new Map(
     linhas.map((l) => [
       l.serial_number,

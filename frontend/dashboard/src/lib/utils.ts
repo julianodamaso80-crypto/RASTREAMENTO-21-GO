@@ -86,10 +86,18 @@ export function formatTimeOnlyBR(isoDate: string): string {
  * Calcula o status visível do veículo — 3 estados que o dono entende:
  *
  *  alert        — VehicleStatus=BLOCKED (bloqueado manualmente)
- *  offline      — rastreador parou de comunicar (heartbeat >10min OU
- *                 device.status='offline') → "GPS com defeito", VERMELHO
+ *  offline      — rastreador PERDIDO: sem contato há mais de 3 dias
+ *                 (OFFLINE_THRESHOLD_MS)                  → "GPS com defeito", VERMELHO
  *  ignition_on  — motor em FUNCIONAMENTO (rodando/andando) → VERDE,   "Ligado"
- *  ignition_off — parado/motor desligado                   → LARANJA, "Desligado"
+ *  ignition_off — parado/motor desligado, INCLUSIVE com o rastreador dormindo
+ *                 há horas                                → LARANJA, "Desligado"
+ *
+ * Regra do dono (30/09/2026): "GPS com defeito" só quando o rastreador foi
+ * perdido, quebrou ou está sem veículo — NUNCA porque o carro está desligado.
+ * O GT06/J16 cala quando a chave desliga e volta sozinho quando ela gira; o
+ * status sai deste cálculo a cada atualização, então a volta é automática,
+ * sem ninguém precisar mexer. O `status` do Traccar ("offline" = a conexão
+ * TCP fechou) não entra: o aparelho fecha e reabre a conexão o tempo todo.
  *
  * "Ligado" = carro EM MOVIMENTO de verdade. Dois sinais juntos, porque nenhum
  * sozinho basta:
@@ -104,7 +112,7 @@ export function formatTimeOnlyBR(isoDate: string): string {
  */
 const MOVING_KNOTS = 1; // ~1.8 km/h — acima disso é movimento real (evita drift)
 export function getDisplayStatus(
-  deviceStatus: string,
+  _deviceStatus: string,
   speed: number,
   lastUpdate: string,
   vehicleStatus: string,
@@ -113,8 +121,9 @@ export function getDisplayStatus(
 ): DisplayStatus {
   if (vehicleStatus === 'BLOCKED') return 'alert';
   const now = Date.now();
-  // rastreador sumiu (sem comunicação) = GPS com defeito
-  if (now - new Date(lastUpdate).getTime() > OFFLINE_THRESHOLD_MS || deviceStatus === 'offline') {
+  // rastreador perdido (sem contato há dias) = GPS com defeito
+  const contatoAgeMs = now - new Date(lastUpdate).getTime();
+  if (!Number.isFinite(contatoAgeMs) || contatoAgeMs > OFFLINE_THRESHOLD_MS) {
     return 'offline';
   }
   const positionAge = positionTime

@@ -1248,6 +1248,8 @@ model TagPosition {
   @@index([tenantId, serialNumber, seenAt(sort: Desc)])
   @@index([tenantId, plate, seenAt(sort: Desc)])
   @@index([tenantId, seenAt(sort: Desc)])
+  /// "Rede consultada há X" no mapa: max(received_at) do tenant sem varrer a tabela.
+  @@index([tenantId, receivedAt(sort: Desc)])
   @@map("tag_positions")
 }
 

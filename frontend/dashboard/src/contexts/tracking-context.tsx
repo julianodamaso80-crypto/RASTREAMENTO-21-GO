@@ -149,7 +149,10 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   // do tenant. /mine é safe pro server forçar isolamento.
   const loadAllVehicles = useCallback(async (): Promise<Vehicle[]> => {
     const isClient = user?.role === 'CLIENT';
-    const perPage = 200;
+    // Páginas de 200 viravam 20 chamadas em fila (~2 s cada, medido no Traefik
+    // em 30/09/2026): a lista levava ~45 s para existir e a busca por placa
+    // "não achava" enquanto isso. Com 2.000 são 2 chamadas.
+    const perPage = 2000;
     const all: Vehicle[] = [];
     for (let page = 1; page <= 50; page++) {
       const res = isClient
@@ -241,11 +244,17 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     let cancelled = false;
     let tick = 0;
+    let emAndamento = false;
     const poll = async () => {
       // Aba escondida não mostra mapa: baixar a frota a cada 8s em toda aba
       // aberta somou 8 GB num dia só do escritório (18/09/2026) e saturou o
       // link — o estoque levava minutos para responder. Volta na hora ao aparecer.
       if (document.hidden) return;
+      // Um ciclo de cada vez: quando o backend demora mais que 8 s, o intervalo
+      // empilhava pedidos (medido em 30/09/2026: 10.541 chamadas a /vehicles em
+      // 2 h) e cada um chegava mais lento que o anterior.
+      if (emAndamento) return;
+      emAndamento = true;
       try {
         // A lista de veículos também precisa acompanhar: um vínculo feito no
         // estoque (outra aba ou outra rota) criava veículo que só aparecia no
@@ -265,6 +274,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         // silencia — mantém os últimos dados até a próxima tentativa
+      } finally {
+        emAndamento = false;
       }
     };
     const id = setInterval(poll, 8000);

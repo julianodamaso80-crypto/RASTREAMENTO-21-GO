@@ -783,12 +783,15 @@ export const stockApi = {
     pendente: boolean;
     concluidoEm: string | null;
     avistamentosNovos: number | null;
+    /** Carimbo do avistamento mais recente que a consulta trouxe (ISO). */
+    avistamentoMaisRecenteEm: string | null;
     segundosRestantes: number;
   }> => {
     const res = await api.get<ApiResponse<{
       pendente: boolean;
       concluidoEm: string | null;
       avistamentosNovos: number | null;
+      avistamentoMaisRecenteEm: string | null;
       segundosRestantes: number;
     }>>(`/stock/${id}/atualizar-tag`);
     return res.data.data;
@@ -815,12 +818,15 @@ export const stockApi = {
     pendente: boolean;
     concluidoEm: string | null;
     avistamentosNovos: number | null;
+    /** Carimbo do avistamento mais recente que a consulta trouxe (ISO). */
+    avistamentoMaisRecenteEm: string | null;
     segundosRestantes: number;
   }> => {
     const res = await api.get<ApiResponse<{
       pendente: boolean;
       concluidoEm: string | null;
       avistamentosNovos: number | null;
+      avistamentoMaisRecenteEm: string | null;
       segundosRestantes: number;
     }>>(`/stock/tags/${encodeURIComponent(serial)}/atualizar`);
     return res.data.data;

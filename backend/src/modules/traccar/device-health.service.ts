@@ -23,6 +23,21 @@ export const FIX_FRESCO_MS = 5 * 60 * 1000;
 /** Sem pacote nesse tempo, o chip está mudo. */
 export const COMUNICANDO_MS = 5 * 60 * 1000;
 
+/**
+ * Depois disso o rastreador é dado como PERDIDO (defeito, arrancado, sem chip).
+ * Antes disso ele só está dormindo: no parque GT06/J16 o aparelho cala quando o
+ * carro desliga, e volta sozinho quando a chave gira.
+ *
+ * Medido no Traccar em 30/09/2026 (7 dias, 3.982 rastreadores vinculados):
+ * 97% ficaram mudos por mais de 1 h, 86% por mais de 6 h, 46% por mais de 12 h.
+ * Silêncio de 24–48 h aconteceu em 846 aparelhos saudáveis, de 48–72 h em 176
+ * e acima de 72 h em 54. Os 32 sem posição há mais de 7 dias eram os únicos
+ * perdidos de verdade. Três dias cobre fim de semana e feriado sem chamar de
+ * defeito o carro parado na garagem. A régua vale para o mapa, o Estoque e
+ * qualquer tela que diga "sem contato": é UMA só.
+ */
+export const SEM_CONTATO_MS = 72 * 60 * 60 * 1000;
+
 /** Fix 3D exige 4 satélites. Só reprova quando o equipamento REPORTA menos. */
 export const MIN_SATELITES = 4;
 

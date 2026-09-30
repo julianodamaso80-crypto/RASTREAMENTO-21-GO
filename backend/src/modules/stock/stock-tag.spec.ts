@@ -181,7 +181,30 @@ describe('Estoque — Atualizar TAG (botão igual ao da Rede)', () => {
       positionsFound: 0,
     });
     const r = await s.estadoAtualizacaoTagDoEstoque('item-tag', TENANT);
-    expect(r).toMatchObject({ pendente: false, avistamentosNovos: 0, segundosRestantes: 0 });
+    expect(r).toMatchObject({
+      pendente: false,
+      avistamentosNovos: 0,
+      avistamentoMaisRecenteEm: null,
+      segundosRestantes: 0,
+    });
+  });
+
+  it('estado diz QUANDO foi o avistamento mais recente que a consulta trouxe', async () => {
+    // "8 novos" podem ser 8 pontos velhos da janela de 7 dias da Apple; a tela
+    // precisa do carimbo para dizer se a TAG foi vista de novo ou não.
+    const { s, prisma } = montar(TAG);
+    const pedido = new Date(Date.now() - 200_000);
+    prisma.tagRefreshRequest.findFirst.mockResolvedValue({
+      requestedAt: pedido,
+      doneAt: new Date(pedido.getTime() + 30_000),
+      positionsFound: 8,
+    });
+    const visto = new Date('2026-09-30T13:57:50Z');
+    prisma.$queryRaw.mockResolvedValue([{ max: visto }]);
+    const r = await s.estadoAtualizacaoTagDoEstoque('item-tag', TENANT);
+    expect(r).toMatchObject({ avistamentosNovos: 8, avistamentoMaisRecenteEm: visto });
+    const sql = (prisma.$queryRaw.mock.calls.at(-1)[0] as { sql?: string; strings?: string[] });
+    expect((sql.sql ?? sql.strings?.join('?')) ?? '').toMatch(/received_at\s*>/);
   });
 
   it('a listagem devolve a última posição de cada TAG', async () => {

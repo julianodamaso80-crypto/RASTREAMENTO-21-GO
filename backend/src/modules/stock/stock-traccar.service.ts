@@ -6,16 +6,17 @@ import {
   type TraccarDevice,
   type TraccarPosition,
 } from '../traccar/traccar.service';
-import { Prisma } from '.prisma/client';
 import { assessPosition } from '../traccar/position-quality';
 import {
   COMUNICANDO_MS,
   FIX_FRESCO_MS,
+  SEM_CONTATO_MS,
   classificarEnergia,
   extrairVolts,
   type FaixaEnergia,
 } from '../traccar/device-health.service';
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
+import { ultimasPosicoes } from '../clients/clients-tags';
 
 /**
  * Mantém o estoque inteiro cadastrado no servidor GPS.
@@ -307,9 +308,10 @@ export class StockTraccarService {
       }
       if (device.comunicando) conectados++;
       else desconectados++;
-      // "Sem sinal GPS" conta só quem está falando: rastreador desligado já foi
-      // contado como desconectado, e somar de novo inflaria o número.
-      if (device.comunicando && !device.gpsOk) semGps++;
+      // "Sem sinal GPS" conta só quem está falando AGORA: quem dorme não tem
+      // fix novo por estar calado, não por defeito de antena — e rastreador
+      // perdido já foi contado como desconectado.
+      if (device.agora && !device.gpsOk) semGps++;
       statuses[imei] = {
         conhecido: true,
         comunicando: device.comunicando,
@@ -345,7 +347,7 @@ export class StockTraccarService {
     return {
       comunicando: snapshot.filter((d) => d.comunicando).map((d) => d.uniqueId),
       semGps: snapshot
-        .filter((d) => d.comunicando && !d.gpsOk)
+        .filter((d) => d.agora && !d.gpsOk)
         .map((d) => d.uniqueId),
     };
   }
@@ -481,27 +483,16 @@ export class StockTraccarService {
     });
     if (itens.length === 0) return [];
 
-    const linhas = await this.prisma.$queryRaw<
-      Array<{
-        serial_number: string;
-        latitude: number;
-        longitude: number;
-        accuracy_m: number | null;
-        seen_at: Date;
-      }>
-    >(Prisma.sql`
-      SELECT DISTINCT ON (serial_number)
-             serial_number, latitude, longitude, accuracy_m, seen_at
-        FROM tag_positions
-       WHERE tenant_id = ${tenantId}::uuid
-         AND serial_number IN (${Prisma.join(itens.map((i) => i.imei))})
-       ORDER BY serial_number, seen_at DESC`);
-    const porSerial = new Map(linhas.map((l) => [l.serial_number, l]));
+    const porSerial = await ultimasPosicoes(
+      this.prisma,
+      tenantId,
+      itens.map((i) => i.imei),
+    );
     const agora = Date.now();
 
     return itens.map((item): StockMapPoint => {
       const p = porSerial.get(item.imei);
-      const visto = p ? p.seen_at.toISOString() : null;
+      const visto = p ? p.seenAt.toISOString() : null;
       return {
         id: item.id,
         imei: item.imei,
@@ -518,15 +509,15 @@ export class StockTraccarService {
         lastUpdate: null,
         fixTime: visto,
         idadeSegundos: p
-          ? Math.max(0, Math.round((agora - p.seen_at.getTime()) / 1000))
+          ? Math.max(0, Math.round((agora - p.seenAt.getTime()) / 1000))
           : null,
-        latitude: p?.latitude ?? null,
-        longitude: p?.longitude ?? null,
+        latitude: p?.lat ?? null,
+        longitude: p?.lng ?? null,
         endereco: null,
         // O avistamento da rede Find My tem raio de confiança próprio; não é
         // fix de GPS e nunca deve ser lido como tal.
         gpsConfiavel: false,
-        precisaoM: p?.accuracy_m ?? null,
+        precisaoM: p?.accuracyM ?? null,
         ignicao: null,
         velocidade: null,
         direcao: null,
@@ -621,6 +612,9 @@ export class StockTraccarService {
    * `SLEEP` sai do atributo que o próprio equipamento reporta — não é derivado
    * de "faz tempo que não fala", que seria chute. No parque de hoje ninguém
    * reporta sleep, então o contador fica em zero, igual ao da referência.
+   *
+   * ONLINE é quem falou nos últimos 3 dias (SEM_CONTATO_MS): o GT06/J16 cala
+   * com o carro desligado e volta sozinho. OFFLINE é o perdido.
    */
   private classificarConexao(
     device: TraccarDevice | undefined,
@@ -632,7 +626,7 @@ export class StockTraccarService {
     if (device.status === 'online') return 'ONLINE';
     if (
       idadeComunicacao !== null &&
-      idadeComunicacao * 1000 <= COMUNICANDO_MS
+      idadeComunicacao * 1000 <= SEM_CONTATO_MS
     ) {
       return 'ONLINE';
     }
@@ -655,11 +649,20 @@ export class StockTraccarService {
     const snapshot: DeviceSnapshot[] = devices.map((device) => {
       const posicao = posicaoPorDevice.get(device.id);
       const lastUpdate = device.lastUpdate ?? null;
-      const comunicando =
+      const idadeContato =
+        lastUpdate !== null && Number.isFinite(Date.parse(lastUpdate))
+          ? agora - Date.parse(lastUpdate)
+          : null;
+      // `agora`: falando neste instante (é o que prova antena/GPS na hora).
+      // `comunicando`: vivo — falou nos últimos 3 dias. O "offline" do Traccar
+      // não entra: é só a conexão TCP que fechou, e o GT06 fecha e reabre o
+      // tempo todo.
+      const falandoAgora =
         device.status === 'online' ||
-        (lastUpdate !== null &&
-          Number.isFinite(Date.parse(lastUpdate)) &&
-          agora - Date.parse(lastUpdate) <= COMUNICANDO_MS);
+        (idadeContato !== null && idadeContato <= COMUNICANDO_MS);
+      const comunicando =
+        falandoAgora ||
+        (idadeContato !== null && idadeContato <= SEM_CONTATO_MS);
 
       let gpsOk = false;
       if (posicao) {
@@ -671,7 +674,13 @@ export class StockTraccarService {
           idade <= FIX_FRESCO_MS;
       }
 
-      return { uniqueId: device.uniqueId, comunicando, gpsOk, lastUpdate };
+      return {
+        uniqueId: device.uniqueId,
+        comunicando,
+        agora: falandoAgora,
+        gpsOk,
+        lastUpdate,
+      };
     });
 
     this.cache = { at: agora, devices: snapshot };
@@ -681,7 +690,10 @@ export class StockTraccarService {
 
 interface DeviceSnapshot {
   uniqueId: string;
+  /** Vivo: falou nos últimos 3 dias (SEM_CONTATO_MS). */
   comunicando: boolean;
+  /** Falando neste instante (COMUNICANDO_MS) — é o que prova a antena. */
+  agora: boolean;
   gpsOk: boolean;
   lastUpdate: string | null;
 }

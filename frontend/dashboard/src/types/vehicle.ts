@@ -10,9 +10,10 @@ export type VehicleType = 'CAR' | 'MOTORCYCLE';
  *                 localização, defeito técnico)                 → VERMELHO "GPS com defeito" + central
  *  alert        — veículo BLOQUEADO (operação ativa)            → vermelho intenso
  *
- * Carro parado e desligado NÃO é defeito — o rastreador continua online,
- * só não manda GPS novo porque está estático. Só vira "GPS com defeito"
- * quando o rastreador some (heartbeat para = sem comunicação).
+ * Carro parado e desligado NÃO é defeito — o rastreador dorme (GT06/J16 cala
+ * quando a chave desliga) e acorda sozinho. Só vira "GPS com defeito" quando
+ * o rastreador some por mais de 3 dias (OFFLINE_THRESHOLD_MS): perdido,
+ * arrancado ou quebrado.
  */
 export type DisplayStatus =
   | 'ignition_on'

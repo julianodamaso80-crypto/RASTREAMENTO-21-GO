@@ -17,7 +17,8 @@
     "test:mapa": "node scripts/diagnostics/marcador-no-lugar.js",
     "test:tag": "node scripts/diagnostics/tag-historico-honesto.js",
     "test:agenda": "node scripts/diagnostics/agenda-gramatica-visual.js",
-    "test:front": "npm run test:mapa && npm run test:tag && npm run test:agenda"
+    "test:status": "node scripts/diagnostics/status-do-veiculo.js",
+    "test:front": "npm run test:mapa && npm run test:tag && npm run test:agenda && npm run test:status"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

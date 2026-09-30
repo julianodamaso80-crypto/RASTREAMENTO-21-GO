@@ -91,6 +91,9 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       accuracyM: 40,
       seenAt: AGORA,
       comRastreador: false,
+      // O mock de $queryRaw devolve posições também para o max(received_at);
+      // sem coluna `max` a data da consulta vira null — e a tela lida com isso.
+      redeConsultadaEm: null,
     });
   });
 

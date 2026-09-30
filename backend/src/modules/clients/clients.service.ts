@@ -253,12 +253,19 @@ export class ClientsService {
       tenantId,
       visiveis.map((x) => x.vinculo.serialNumber),
     );
+    // Quando o coletor perguntou à Apple pela última vez (ciclo de 20 min ou
+    // "Atualizar TAG"). É o que separa "ninguém viu a TAG" de "ninguém
+    // perguntou": sem isso, "vista há 58 min" parecia coleta parada.
+    const consulta = await this.prisma.$queryRaw<Array<{ max: Date | null }>>(Prisma.sql`
+      SELECT max(received_at) AS max FROM tag_positions WHERE tenant_id = ${tenantId}::uuid`);
+    const redeConsultadaEm = consulta[0]?.max ?? null;
     // A TAG de carro que também tem rastreador vem junto (dono, 24/09: "tem que
     // aparecer no mapa para a gente rastrear"), marcada `comRastreador` — o
     // Mapa a deixa fora do total de "Todos", que segue igual a Clientes Ativos.
     return visiveis.map((x) => ({
       ...tagNoMapa(x, pos.get(x.vinculo.serialNumber)),
       comRastreador: placasComVeiculo.has(x.vinculo.plate),
+      redeConsultadaEm,
     }));
   }
 

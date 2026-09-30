@@ -422,10 +422,10 @@ export default function EstoquePage() {
           <SignalHigh className="h-3.5 w-3.5 text-brand-orange-500" />
           Mostrando <strong className="text-foreground">{totalFiltrado}</strong>{' '}
           {conexaoFilter === 'online'
-            ? 'rastreadores falando com o servidor agora'
+            ? 'rastreadores vivos (falaram com o servidor nos últimos 3 dias)'
             : conexaoFilter === 'offline'
-              ? 'rastreadores calados'
-              : 'rastreadores falando sem posição confiável'}
+              ? 'rastreadores sem contato há mais de 3 dias, ou que nunca falaram'
+              : 'rastreadores falando agora, sem posição confiável'}
           <button
             type="button"
             onClick={() => setConexaoFilter('')}
@@ -807,7 +807,10 @@ function ConnDot({ estado }: { estado?: { conhecido: boolean; comunicando: boole
   }
   if (!estado.comunicando) {
     return (
-      <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" title="Desconectado" />
+      <span
+        className="h-2 w-2 shrink-0 rounded-full bg-red-400"
+        title="Sem contato há mais de 3 dias"
+      />
     );
   }
   if (!estado.gpsOk) {
@@ -823,9 +826,9 @@ function ConnDot({ estado }: { estado?: { conhecido: boolean; comunicando: boole
 }
 
 /**
- * Ligado ou desligado, no mesmo formato do selo de Status: ONLINE é quem está
- * falando com o servidor GPS agora (na tomada ou na bateria), OFFLINE o resto —
- * inclusive o que nunca foi ligado.
+ * Vivo ou perdido, no mesmo formato do selo de Status: ONLINE é quem falou com
+ * o servidor GPS nos últimos 3 dias (o GT06/J16 cala quando o carro desliga e
+ * volta sozinho), OFFLINE é quem passou disso — ou nunca foi ligado.
  */
 function BadgeConexao({ estado }: { estado?: StockConnectivityItem }) {
   if (!estado) return <span className="text-xs text-muted-foreground">—</span>;
@@ -833,7 +836,13 @@ function BadgeConexao({ estado }: { estado?: StockConnectivityItem }) {
     return (
       <Badge
         className="text-xs border bg-brand-green-500/15 text-brand-green-600 border-brand-green-500/30"
-        title={estado.gpsOk ? 'Ligado e rastreável' : 'Ligado, mas ainda sem sinal de GPS'}
+        title={
+          estado.gpsOk
+            ? 'Ligado e rastreável'
+            : estado.lastUpdate
+              ? `Ligado — falou pela última vez ${haQuantoTempo(estado.lastUpdate)}`
+              : 'Ligado, mas ainda sem sinal de GPS'
+        }
       >
         ONLINE
       </Badge>
@@ -844,8 +853,8 @@ function BadgeConexao({ estado }: { estado?: StockConnectivityItem }) {
       className="text-xs border bg-red-500/15 text-red-400 border-red-500/30"
       title={
         estado.lastUpdate
-          ? `Desligado — falou pela última vez ${haQuantoTempo(estado.lastUpdate)}`
-          : 'Desligado — nunca falou com o servidor GPS'
+          ? `Sem contato há mais de 3 dias — falou pela última vez ${haQuantoTempo(estado.lastUpdate)}`
+          : 'Nunca falou com o servidor GPS'
       }
     >
       OFFLINE

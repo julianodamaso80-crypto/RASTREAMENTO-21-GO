@@ -129,11 +129,23 @@ export const STATUS_LABELS: Record<DisplayStatus, string> = {
 
 // Orientação ao usuário quando há defeito (rastreador sem comunicação).
 export const STATUS_HINTS: Partial<Record<DisplayStatus, string>> = {
-  offline: 'Favor entrar em contato com a central',
+  offline: 'Sem contato há mais de 3 dias — favor entrar em contato com a central',
 };
 
-// Tempo em ms para considerar um dispositivo offline
-export const OFFLINE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutos
+/**
+ * Depois disso o rastreador é dado como PERDIDO ("GPS com defeito"): defeito,
+ * arrancado ou sem chip. Antes disso ele só está dormindo — o GT06/J16 cala
+ * quando o carro desliga e volta sozinho quando a chave gira.
+ *
+ * Era 10 min, e isso pintava de vermelho 30% da frota (1.200 de 3.982) a
+ * qualquer hora do dia: carro parado na garagem virava "defeito". Medido no
+ * Traccar em 30/09/2026 (7 dias): 97% dos rastreadores vivos calam por mais
+ * de 1 h, 86% por mais de 6 h, 46% por mais de 12 h; silêncio de 48–72 h
+ * ainda aconteceu em 176 aparelhos saudáveis, acima de 72 h em 54. Os 32 sem
+ * posição há 7 dias eram os únicos perdidos de verdade. Mesma régua do
+ * backend (`SEM_CONTATO_MS` em device-health.service.ts).
+ */
+export const OFFLINE_THRESHOLD_MS = 72 * 60 * 60 * 1000; // 3 dias
 
 // Acima desse gap entre AGORA e a última posição GPS real, o veículo é
 // tratado como 'stopped' mesmo se o último speed > 0 — rastreadores

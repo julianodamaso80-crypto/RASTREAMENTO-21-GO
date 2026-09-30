@@ -20,6 +20,11 @@ export interface TagNoMapa {
   /** Quando a TAG foi vista pela última vez (ISO). */
   seenAt: string | null;
   /**
+   * Quando o coletor perguntou à rede Find My pela última vez (ISO), por
+   * qualquer TAG. Separa "ninguém viu a TAG" de "ninguém perguntou".
+   */
+  redeConsultadaEm?: string | null;
+  /**
    * O carro também tem rastreador nosso. A TAG aparece na aba TAG e na busca,
    * mas fica fora do total de "Todos" — o carro já conta pelo rastreador.
    */

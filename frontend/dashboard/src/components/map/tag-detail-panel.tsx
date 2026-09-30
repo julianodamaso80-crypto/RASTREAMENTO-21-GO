@@ -8,6 +8,7 @@ import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { Button } from '@/components/ui/button';
 import { stockApi } from '@/lib/api';
 import { COR_TAG } from '@/components/vehicles/tag-list-item';
+import { mensagemDaConsulta } from '@/components/ble-tags/mensagem-consulta-tag';
 import type { TagNoMapa } from '@/types/tag-map';
 
 /**
@@ -68,12 +69,9 @@ export function TagDetailPanel({
       const e = await lerEstado();
       if (e && !e.pendente) {
         clearInterval(t);
-        if (e.avistamentosNovos && e.avistamentosNovos > 0) {
-          toast.success(`${e.avistamentosNovos} avistamento(s) novo(s) desta TAG.`);
-          onAtualizou();
-        } else {
-          toast.info('Nenhum avistamento novo: ninguém passou perto da TAG desde a última vez.');
-        }
+        const msg = mensagemDaConsulta(e, tag.seenAt);
+        toast[msg.tipo](msg.texto);
+        if (e.avistamentosNovos && e.avistamentosNovos > 0) onAtualizou();
       }
     }, 10_000);
     return () => clearInterval(t);
@@ -117,6 +115,9 @@ export function TagDetailPanel({
           {tag.model && <p className="truncate text-xs text-muted-foreground">{tag.model}</p>}
           <p className="mt-1 text-xs text-muted-foreground">
             {tag.seenAt ? `vista ${formatRelativeTime(tag.seenAt)}` : 'nunca foi vista pela rede'}
+            {/* "Vista há 58 min" sozinho parecia coleta parada. Com a hora da
+                última consulta o operador sabe: perguntamos, e ninguém viu. */}
+            {tag.redeConsultadaEm && ` · rede consultada ${formatRelativeTime(tag.redeConsultadaEm)}`}
           </p>
           {temPosicao && (
             <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">

@@ -7,6 +7,7 @@ import { cn, formatRelativeTime } from '@/lib/utils';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { Button } from '@/components/ui/button';
 import { stockApi } from '@/lib/api';
+import { mensagemDaConsulta } from '@/components/ble-tags/mensagem-consulta-tag';
 import type { StockMapPoint } from '@/types/stock';
 
 /**
@@ -69,16 +70,9 @@ export function StockMapDetailTag({ ponto, onClose, onAssociar, onAtualizou }: P
       const e = await lerEstado();
       if (e && !e.pendente) {
         clearInterval(t);
-        if (e.avistamentosNovos && e.avistamentosNovos > 0) {
-          toast.success(
-            `${e.avistamentosNovos} avistamento(s) novo(s) desta TAG.`,
-          );
-          onAtualizou();
-        } else {
-          toast.info(
-            'Nenhum avistamento novo: ninguém passou perto da TAG desde a última vez.',
-          );
-        }
+        const msg = mensagemDaConsulta(e, ponto.fixTime);
+        toast[msg.tipo](msg.texto);
+        if (e.avistamentosNovos && e.avistamentosNovos > 0) onAtualizou();
       }
     }, 10_000);
     return () => clearInterval(t);

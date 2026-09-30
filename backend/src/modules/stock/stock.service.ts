@@ -27,6 +27,7 @@ import {
 } from '../hinova/sga-status';
 import { decidirTipoVeiculo } from '../hinova/tipo-veiculo';
 import { estadoAtualizacaoTag } from './tag-atualizacao';
+import { ultimasPosicoes } from '../clients/clients-tags';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
@@ -484,33 +485,7 @@ export class StockService {
     const seriais = itens.filter((i) => i.kind === 'TAG').map((i) => i.imei);
     if (seriais.length === 0) return itens;
 
-    const linhas = await this.prisma.$queryRaw<
-      Array<{
-        serial_number: string;
-        latitude: number;
-        longitude: number;
-        accuracy_m: number | null;
-        seen_at: Date;
-      }>
-    >(Prisma.sql`
-      SELECT DISTINCT ON (serial_number)
-             serial_number, latitude, longitude, accuracy_m, seen_at
-        FROM tag_positions
-       WHERE tenant_id = ${tenantId}::uuid
-         AND serial_number IN (${Prisma.join(seriais)})
-       ORDER BY serial_number, seen_at DESC`);
-
-    const porSerial = new Map(
-      linhas.map((l) => [
-        l.serial_number,
-        {
-          lat: l.latitude,
-          lng: l.longitude,
-          accuracyM: l.accuracy_m,
-          seenAt: l.seen_at,
-        },
-      ]),
-    );
+    const porSerial = await ultimasPosicoes(this.prisma, tenantId, seriais);
     return itens.map((i) =>
       i.kind === 'TAG'
         ? { ...i, tagPosition: porSerial.get(i.imei) ?? null }
@@ -562,7 +537,7 @@ export class StockService {
   }
 
   async estadoAtualizacaoTagPorSerie(serialNumber: string, tenantId: string) {
-    return this.estadoDoPedido((await this.tagPorSerie(serialNumber, tenantId)).ultima);
+    return this.estadoDoPedido(await this.tagPorSerie(serialNumber, tenantId), tenantId);
   }
 
   /**
@@ -610,18 +585,45 @@ export class StockService {
 
   /** Estado da última solicitação — a tela usa para o contador e o resultado. */
   async estadoAtualizacaoTagDoEstoque(id: string, tenantId: string) {
-    return this.estadoDoPedido((await this.tagDoEstoque(id, tenantId)).ultima);
+    return this.estadoDoPedido(await this.tagDoEstoque(id, tenantId), tenantId);
   }
 
-  private estadoDoPedido(
-    ultima: { requestedAt: Date; doneAt: Date | null; positionsFound: number | null } | null,
+  /**
+   * Além de "quantos avistamentos vieram", diz QUANDO foi o mais recente deles.
+   *
+   * A Apple devolve os últimos 7 dias a cada consulta; "8 novos" podem ser
+   * oito pontos antigos que ainda não tínhamos — e aí a tela não muda nada,
+   * embora a mensagem prometa novidade (dono, 30/09/2026: "apareceu 8
+   * avistamentos mas nada foi mostrado"). Com o carimbo, a tela consegue dizer
+   * "a rede não viu a TAG desde 14:06" em vez de contar pontos.
+   */
+  private async estadoDoPedido(
+    {
+      item,
+      ultima,
+    }: {
+      item: { imei: string };
+      ultima: { requestedAt: Date; doneAt: Date | null; positionsFound: number | null } | null;
+    },
+    tenantId: string,
   ) {
     const estado = estadoAtualizacaoTag(ultima?.requestedAt ?? null);
+    let avistamentoMaisRecenteEm: Date | null = null;
+    if (ultima?.doneAt) {
+      const linhas = await this.prisma.$queryRaw<Array<{ max: Date | null }>>(Prisma.sql`
+        SELECT max(seen_at) AS max
+          FROM tag_positions
+         WHERE tenant_id = ${tenantId}::uuid
+           AND serial_number = ${item.imei}
+           AND received_at > ${ultima.requestedAt}`);
+      avistamentoMaisRecenteEm = linhas[0]?.max ?? null;
+    }
     return {
       pendente: Boolean(ultima && !ultima.doneAt),
       solicitadoEm: ultima?.requestedAt ?? null,
       concluidoEm: ultima?.doneAt ?? null,
       avistamentosNovos: ultima?.positionsFound ?? null,
+      avistamentoMaisRecenteEm,
       disponivelEm: estado.disponivelEm,
       segundosRestantes: estado.segundosRestantes,
     };
