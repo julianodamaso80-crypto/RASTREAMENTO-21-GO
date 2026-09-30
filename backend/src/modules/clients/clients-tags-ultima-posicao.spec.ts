@@ -1,4 +1,4 @@
-import { ultimasPosicoes } from './clients-tags';
+import { seriaisComPosicao, ultimasPosicoes } from './clients-tags';
 
 /**
  * A última posição de cada TAG tem que sair do índice, não de uma varredura.
@@ -52,5 +52,20 @@ describe('ultimasPosicoes — uma busca por TAG no índice', () => {
     const pos = await ultimasPosicoes(prisma as never, TENANT, []);
     expect(pos.size).toBe(0);
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe('seriaisComPosicao — "quem já foi vista" também sai do índice', () => {
+  it('usa EXISTS por número, nunca DISTINCT sobre a tabela inteira', async () => {
+    // Medido em produção em 30/09/2026: `SELECT DISTINCT serial_number … IN (4,5 mil)`
+    // virava Parallel Seq Scan em 5,1 M linhas (1,2 s quente); EXISTS: 0,14 s.
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ serial_number: '808092605075440' }]),
+    };
+    const r = await seriaisComPosicao(prisma as never, TENANT, ['808092605075440', '1']);
+    expect([...r]).toEqual(['808092605075440']);
+    const sql = sqlEnviado(prisma.$queryRaw);
+    expect(sql).toMatch(/EXISTS/i);
+    expect(sql).not.toMatch(/DISTINCT/i);
   });
 });

@@ -54,15 +54,22 @@ export function vinculoAparece(
 }
 
 /** Seriais que têm ao menos uma posição da nossa coleta. */
-async function seriaisComPosicao(
+export async function seriaisComPosicao(
   prisma: PrismaService,
   tenantId: string,
   seriais: string[],
 ): Promise<Set<string>> {
   if (seriais.length === 0) return new Set();
+  // EXISTS por número, não `SELECT DISTINCT serial_number … IN (…)`: com 4,5 mil
+  // números o planner escolhia varrer a tabela inteira (5,1 M linhas, 1,2 s
+  // com cache quente; bem mais fria). Uma sondagem no índice por número: 0,14 s.
   const linhas = await prisma.$queryRaw<Array<{ serial_number: string }>>(Prisma.sql`
-    SELECT DISTINCT serial_number FROM tag_positions
-     WHERE tenant_id = ${tenantId}::uuid AND serial_number IN (${Prisma.join(seriais)})`);
+    SELECT s.serial_number
+      FROM unnest(${[...new Set(seriais)]}::text[]) AS s(serial_number)
+     WHERE EXISTS (
+       SELECT 1 FROM tag_positions tp
+        WHERE tp.tenant_id = ${tenantId}::uuid
+          AND tp.serial_number = s.serial_number)`);
   return new Set(linhas.map((l) => l.serial_number));
 }
 
