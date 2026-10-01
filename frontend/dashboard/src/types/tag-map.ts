@@ -29,6 +29,8 @@ export interface TagNoMapa {
    * mas fica fora do total de "Todos" — o carro já conta pelo rastreador.
    */
   comRastreador?: boolean;
+  /** Outras TAGs do mesmo carro: o ponto é um só, a busca acha por qualquer uma. */
+  outrosSeriais?: string[];
 }
 
 /** Os perfis que enxergam TAG — espelho de `PERFIS_QUE_VEEM_TAG` no backend. */

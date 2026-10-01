@@ -31,5 +31,6 @@ export function tagCasaBusca(tag: TagNoMapa, termo: string): boolean {
   if (tag.associateName.toLowerCase().includes(t.toLowerCase())) return true;
   // Termo com letra nunca vira busca numérica (mesma regra do backend).
   const digitos = t.replace(/\D/g, '');
-  return !/[A-Za-z]/.test(t) && digitos.length >= 3 && tag.serialNumber.includes(digitos);
+  if (/[A-Za-z]/.test(t) || digitos.length < 3) return false;
+  return [tag.serialNumber, ...(tag.outrosSeriais ?? [])].some((sn) => sn.includes(digitos));
 }

@@ -264,6 +264,9 @@ export class ClientsService {
     // Mapa a deixa fora do total de "Todos", que segue igual a Clientes Ativos.
     return visiveis.map((x) => ({
       ...tagNoMapa(x, pos.get(x.vinculo.serialNumber)),
+      // Carro com duas TAGs é um ponto só; a busca tem que achar pelos dois
+      // números, como em Clientes Ativos (`casaBusca`).
+      outrosSeriais: x.outrosSeriais,
       comRastreador: placasComVeiculo.has(x.vinculo.plate),
       redeConsultadaEm,
     }));

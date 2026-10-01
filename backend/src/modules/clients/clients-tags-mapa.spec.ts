@@ -90,6 +90,7 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       longitude: -43.3,
       accuracyM: 40,
       seenAt: AGORA,
+      outrosSeriais: [],
       comRastreador: false,
       // O mock de $queryRaw devolve posições também para o max(received_at);
       // sem coluna `max` a data da consulta vira null — e a tela lida com isso.
@@ -143,5 +144,25 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
     ]);
     const s = new ClientsService(prisma as never);
     expect((await s.tagsNoMapa(TENANT)).map((t) => t.plate)).toEqual(['CAR1A11']);
+  });
+});
+
+describe('tagsNoMapa — carro com duas TAGs', () => {
+  // Caso real (01/10/2026): HACAALB38V3F08189 tinha 808092604042300 e
+  // 808092604086968. O mapa carregava só a do card, e buscar a outra pelo
+  // número dava "Nenhum veículo encontrado" — enquanto o Estoque dizia
+  // "Vinculado". Clientes Ativos já acha pelos dois; o mapa tem que achar igual.
+  it('carrega os outros números do mesmo carro para a busca achar por qualquer um', async () => {
+    const prisma = montarPrisma();
+    prisma.tagLink.findMany.mockResolvedValue([
+      { ...LINK_CARRO, origin: 'ESTOQUE', verdict: 'AGUARDANDO_PROVA' },
+      { ...LINK_CARRO, id: 'l3', serialNumber: '808092604086968', origin: 'ESTOQUE', verdict: 'AGUARDANDO_PROVA' },
+    ]);
+    const s = new ClientsService(prisma as never);
+    const r = await s.tagsNoMapa(TENANT);
+
+    expect(r).toHaveLength(1);
+    expect(r[0].serialNumber).toBe(LINK_CARRO.serialNumber);
+    expect(r[0].outrosSeriais).toEqual(['808092604086968']);
   });
 });
