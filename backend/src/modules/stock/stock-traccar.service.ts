@@ -44,6 +44,12 @@ const CHAVE_SKIP_LISTA = 'filter.skipAttributes';
  */
 const CHAVE_SKIP_LIMITE = 'filter.skipLimit';
 const ATRIBUTO_IGNICAO = 'ignition';
+/**
+ * Só IMEI entra sozinho no estoque. É o mesmo filtro do
+ * `database.registerUnknown.regex` do Traccar: barra o OsmAnd de demonstração
+ * e qualquer identificador que não seja rastreador.
+ */
+const IMEI_RE = /^\d{15}$/;
 
 @Injectable()
 export class StockTraccarService {
@@ -228,6 +234,125 @@ export class StockTraccarService {
     } catch (erro) {
       this.logger.warn(
         `Destravar ignição do estoque conectado falhou: ${
+          erro instanceof Error ? erro.message : erro
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Adota no estoque o rastreador que apontou pro servidor sem ninguém
+   * cadastrar.
+   *
+   * Em 02/10/2026 um lote de 813 J16 chegou de fábrica configurado pro
+   * `gps1.trackgo.site`. Ficou dias batendo na porta: o Traccar descartava
+   * tudo por não conhecer o IMEI, e não registra desconhecido no log, então
+   * ninguém via. Só apareceram quando alguém importou a planilha à mão.
+   *
+   * Com `database.registerUnknown` ligado no Traccar, o device nasce lá no
+   * primeiro pacote. Aqui fecha o ciclo: todo device que a plataforma não
+   * conhece (nem estoque, nem veículo, nem rastreador vinculado) vira item de
+   * estoque, com o device já vinculado, pronto pra validar e associar no SGA.
+   *
+   * O estoque é consultado inteiro (inclusive apagados: item removido de
+   * propósito não volta sozinho); veículos e rastreadores só pelos candidatos.
+   */
+  async adotarDesconhecidos(): Promise<number> {
+    const devices = await this.traccar.getDevices();
+    const candidatos = devices.filter((d) => IMEI_RE.test(d.uniqueId));
+    if (candidatos.length === 0) return 0;
+
+    const noEstoque = new Set(
+      (await this.prisma.stockItem.findMany({ select: { imei: true } })).map(
+        (i) => i.imei,
+      ),
+    );
+    const novos = candidatos.filter((d) => !noEstoque.has(d.uniqueId));
+    if (novos.length === 0) return 0;
+
+    const imeis = novos.map((d) => d.uniqueId);
+    const [veiculos, rastreadores, tenants] = await Promise.all([
+      this.prisma.vehicle.findMany({
+        where: { uniqueId: { in: imeis } },
+        select: { uniqueId: true },
+      }),
+      this.prisma.device.findMany({
+        where: { imei: { in: imeis } },
+        select: { imei: true },
+      }),
+      this.prisma.tenant.findMany({
+        where: { deletedAt: null },
+        select: { id: true },
+        take: 2,
+      }),
+    ]);
+
+    const conhecidos = new Set([
+      ...veiculos.map((v) => v.uniqueId),
+      ...rastreadores.map((r) => r.imei),
+    ]);
+    const adotar = novos.filter((d) => !conhecidos.has(d.uniqueId));
+    if (adotar.length === 0) return 0;
+
+    // Com uma empresa só não há dúvida de quem é. Com duas, adotar às cegas
+    // colocaria o rastreador no estoque errado.
+    if (tenants.length !== 1) {
+      this.logger.warn(
+        `Adoção de rastreador desconhecido: ${tenants.length} empresas ativas, ` +
+          `não dá pra saber de quem é. ${adotar.length} ignorado(s).`,
+      );
+      return 0;
+    }
+
+    const quando = new Date().toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    let ok = 0;
+    for (const d of adotar) {
+      try {
+        await this.prisma.stockItem.create({
+          data: {
+            tenantId: tenants[0].id,
+            imei: d.uniqueId,
+            status: 'ATIVO',
+            server: 'gps1',
+            traccarDeviceId: d.id,
+            notes: `Entrou sozinho em ${quando}`,
+          },
+        });
+        ok++;
+      } catch (erro) {
+        this.logger.warn(
+          `Adoção de ${d.uniqueId} no estoque falhou: ${
+            erro instanceof Error ? erro.message : erro
+          }`,
+        );
+      }
+    }
+    if (ok > 0) {
+      this.logger.log(
+        `Estoque adotou ${ok} rastreador(es) que apontaram pro servidor sem cadastro: ` +
+          adotar
+            .slice(0, 20)
+            .map((d) => d.uniqueId)
+            .join(', '),
+      );
+    }
+    return ok;
+  }
+
+  @Interval(60 * 1000)
+  async cronAdotarDesconhecidos(): Promise<void> {
+    try {
+      await this.adotarDesconhecidos();
+    } catch (erro) {
+      this.logger.warn(
+        `Adoção de rastreadores desconhecidos falhou: ${
           erro instanceof Error ? erro.message : erro
         }`,
       );
