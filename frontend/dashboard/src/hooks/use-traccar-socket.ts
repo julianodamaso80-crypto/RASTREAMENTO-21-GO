@@ -9,6 +9,8 @@ import type { BleSightingEvent } from '@/types/ble-tag';
 interface UseTraccarSocketOptions {
   token: string | null;
   onPositionUpdate?: (position: TraccarPosition) => void;
+  /** Lote de 1 s do backend (`positions:batch`) — é assim que o painel recebe posição hoje. */
+  onPositionsBatch?: (positions: TraccarPosition[]) => void;
   onDeviceUpdate?: (device: TraccarDevice) => void;
   onAlert?: (alert: Alert) => void;
   onBleSighting?: (event: BleSightingEvent) => void;
@@ -17,6 +19,7 @@ interface UseTraccarSocketOptions {
 export function useTraccarSocket({
   token,
   onPositionUpdate,
+  onPositionsBatch,
   onDeviceUpdate,
   onAlert,
   onBleSighting,
@@ -54,6 +57,10 @@ export function useTraccarSocket({
 
     socket.on('position:update', (data: TraccarPosition) => {
       onPositionUpdate?.(data);
+    });
+
+    socket.on('positions:batch', (data: TraccarPosition[]) => {
+      if (Array.isArray(data) && data.length > 0) onPositionsBatch?.(data);
     });
 
     socket.on('device:update', (data: TraccarDevice) => {

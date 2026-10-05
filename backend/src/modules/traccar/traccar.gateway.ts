@@ -48,6 +48,8 @@ export class TraccarGateway
   // Ver `flushLastConnection()`.
   private respiros = new Map<number, Date>();
   private readonly FLUSH_LAST_CONNECTION_MS = 60_000;
+  // Posições aprovadas desde o último lote, por tenant. Ver `flushPositionsBatch()`.
+  private lotePorTenant = new Map<string, TraccarWsMessage['positions']>();
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
   private readonly WS_BACKOFF_MIN_MS = 2_000;
@@ -266,6 +268,22 @@ export class TraccarGateway
   }
 
   /**
+   * Entrega ao painel, uma vez por segundo, tudo o que chegou de cada tenant.
+   * Um frame por socket por segundo em vez de um por posição; o painel aplica
+   * o lote num único estado. Quem ainda roda a versão antiga do painel segue
+   * atualizando pelo polling de 8 s do tracking-context.
+   */
+  @Interval(1_000)
+  flushPositionsBatch() {
+    if (this.lotePorTenant.size === 0) return;
+    const lotes = this.lotePorTenant;
+    this.lotePorTenant = new Map();
+    for (const [tenantId, positions] of lotes) {
+      this.server.to(`tenant:${tenantId}`).emit('positions:batch', positions);
+    }
+  }
+
+  /**
    * Contabiliza posição descartada por qualidade. Log agregado (1x por minuto
    * por device+motivo) — um rastreador sem GPS gera dezenas de posições ruins
    * por minuto e logar uma a uma afogaria o resto.
@@ -367,9 +385,13 @@ export class TraccarGateway
 
         const tenantId = this.deviceTenantMap.get(position.deviceId);
         if (tenantId) {
-          this.server
-            .to(`tenant:${tenantId}`)
-            .emit('position:update', position);
+          // Painel recebe em lote (`positions:batch`, 1x por segundo), não
+          // uma posição por vez: ~42 posições/s para 15 sockets da sala eram
+          // ~620 frames/s e 15% da CPU do backend (05/10/2026). O app do
+          // associado continua recebendo `position:update` logo abaixo.
+          const lote = this.lotePorTenant.get(tenantId);
+          if (lote) lote.push(position);
+          else this.lotePorTenant.set(tenantId, [position]);
 
           // Processar alertas + persistir histórico em paralelo (sem bloquear emit)
           const vehicleId = this.deviceVehicleMap.get(position.deviceId);

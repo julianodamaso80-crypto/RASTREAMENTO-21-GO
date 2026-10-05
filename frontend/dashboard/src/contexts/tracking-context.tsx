@@ -299,6 +299,16 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Lote de 1 s: um estado novo para todas as posições do lote, e não um
+  // render por posição.
+  const handlePositionsBatch = useCallback((positions: TraccarPosition[]) => {
+    setPositionMap((prev) => {
+      const next = new Map(prev);
+      for (const position of positions) next.set(position.deviceId, position);
+      return next;
+    });
+  }, []);
+
   const handleDeviceUpdate = useCallback((device: TraccarDevice) => {
     setDeviceMap((prev) => {
       const next = new Map(prev);
@@ -337,6 +347,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const { isConnected } = useTraccarSocket({
     token,
     onPositionUpdate: handlePositionUpdate,
+    onPositionsBatch: handlePositionsBatch,
     onDeviceUpdate: handleDeviceUpdate,
     onAlert: handleAlert,
     onBleSighting: handleBleSighting,
