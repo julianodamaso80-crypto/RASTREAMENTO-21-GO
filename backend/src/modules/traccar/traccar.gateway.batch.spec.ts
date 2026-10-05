@@ -78,6 +78,24 @@ describe('TraccarGateway — posições em lote para o painel', () => {
     expect(emit.mock.calls.filter((c) => c[0] === 'positions:batch')).toHaveLength(1);
   });
 
+  it('device:update do tenant também vai em lote; o do associado continua na hora', () => {
+    const { gateway, interno, to, emit } = montar();
+    (interno as unknown as { handleTraccarMessage: (m: { devices?: unknown[] }) => void }).handleTraccarMessage({
+      devices: [{ id: 1, status: 'online' }, { id: 2, status: 'online' }],
+    });
+
+    expect(to).not.toHaveBeenCalledWith('tenant:tenant-a');
+    expect(emit).toHaveBeenCalledWith('device:update', expect.objectContaining({ id: 2 }));
+
+    gateway.flushPositionsBatch();
+
+    expect(to).toHaveBeenCalledWith('tenant:tenant-a');
+    const lotes = emit.mock.calls.filter((c) => c[0] === 'devices:batch');
+    expect(lotes).toHaveLength(1);
+    expect((lotes[0][1] as Array<{ id: number }>).map((d) => d.id)).toEqual([1, 2]);
+    expect(emit).not.toHaveBeenCalledWith('device:update', expect.objectContaining({ id: 1 }));
+  });
+
   it('posição reprovada pela qualidade não entra no lote', () => {
     const { gateway, interno, emit } = montar();
     interno.handleTraccarMessage({ positions: [{ ...posicaoBoa(1), valid: false }] });

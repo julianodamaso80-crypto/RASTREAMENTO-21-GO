@@ -317,6 +317,14 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const handleDevicesBatch = useCallback((devices: TraccarDevice[]) => {
+    setDeviceMap((prev) => {
+      const next = new Map(prev);
+      for (const device of devices) next.set(device.id, device);
+      return next;
+    });
+  }, []);
+
   const handleAlert = useCallback((alert: Alert) => {
     setAlerts((prev) => [alert, ...prev].slice(0, 100));
     setUnreadCount((prev) => prev + 1);
@@ -349,6 +357,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     onPositionUpdate: handlePositionUpdate,
     onPositionsBatch: handlePositionsBatch,
     onDeviceUpdate: handleDeviceUpdate,
+    onDevicesBatch: handleDevicesBatch,
     onAlert: handleAlert,
     onBleSighting: handleBleSighting,
   });

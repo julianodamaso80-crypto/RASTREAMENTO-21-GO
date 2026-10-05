@@ -48,8 +48,10 @@ export class TraccarGateway
   // Ver `flushLastConnection()`.
   private respiros = new Map<number, Date>();
   private readonly FLUSH_LAST_CONNECTION_MS = 60_000;
-  // Posições aprovadas desde o último lote, por tenant. Ver `flushPositionsBatch()`.
+  // Posições aprovadas e devices atualizados desde o último lote, por tenant.
+  // Ver `flushPositionsBatch()`.
   private lotePorTenant = new Map<string, TraccarWsMessage['positions']>();
+  private loteDevicesPorTenant = new Map<string, TraccarWsMessage['devices']>();
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
   private readonly WS_BACKOFF_MIN_MS = 2_000;
@@ -275,11 +277,21 @@ export class TraccarGateway
    */
   @Interval(1_000)
   flushPositionsBatch() {
-    if (this.lotePorTenant.size === 0) return;
-    const lotes = this.lotePorTenant;
-    this.lotePorTenant = new Map();
-    for (const [tenantId, positions] of lotes) {
-      this.server.to(`tenant:${tenantId}`).emit('positions:batch', positions);
+    if (this.lotePorTenant.size > 0) {
+      const lotes = this.lotePorTenant;
+      this.lotePorTenant = new Map();
+      for (const [tenantId, positions] of lotes) {
+        this.server.to(`tenant:${tenantId}`).emit('positions:batch', positions);
+      }
+    }
+    // `device:update` chegava ainda mais (80/s medidos em 05/10/2026): o
+    // Traccar reemite o device a cada mensagem do rastreador, com GPS ou sem.
+    if (this.loteDevicesPorTenant.size > 0) {
+      const lotes = this.loteDevicesPorTenant;
+      this.loteDevicesPorTenant = new Map();
+      for (const [tenantId, devices] of lotes) {
+        this.server.to(`tenant:${tenantId}`).emit('devices:batch', devices);
+      }
     }
   }
 
@@ -423,7 +435,9 @@ export class TraccarGateway
       for (const device of data.devices) {
         const tenantId = this.deviceTenantMap.get(device.id);
         if (tenantId) {
-          this.server.to(`tenant:${tenantId}`).emit('device:update', device);
+          const lote = this.loteDevicesPorTenant.get(tenantId);
+          if (lote) lote.push(device);
+          else this.loteDevicesPorTenant.set(tenantId, [device]);
         }
 
         const associateId = this.deviceAssociateMap.get(device.id);

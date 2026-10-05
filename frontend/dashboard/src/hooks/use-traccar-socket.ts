@@ -12,6 +12,8 @@ interface UseTraccarSocketOptions {
   /** Lote de 1 s do backend (`positions:batch`) — é assim que o painel recebe posição hoje. */
   onPositionsBatch?: (positions: TraccarPosition[]) => void;
   onDeviceUpdate?: (device: TraccarDevice) => void;
+  /** Lote de 1 s do backend (`devices:batch`). */
+  onDevicesBatch?: (devices: TraccarDevice[]) => void;
   onAlert?: (alert: Alert) => void;
   onBleSighting?: (event: BleSightingEvent) => void;
 }
@@ -21,6 +23,7 @@ export function useTraccarSocket({
   onPositionUpdate,
   onPositionsBatch,
   onDeviceUpdate,
+  onDevicesBatch,
   onAlert,
   onBleSighting,
 }: UseTraccarSocketOptions) {
@@ -65,6 +68,10 @@ export function useTraccarSocket({
 
     socket.on('device:update', (data: TraccarDevice) => {
       onDeviceUpdate?.(data);
+    });
+
+    socket.on('devices:batch', (data: TraccarDevice[]) => {
+      if (Array.isArray(data) && data.length > 0) onDevicesBatch?.(data);
     });
 
     socket.on('alert:new', (data: Alert) => {
