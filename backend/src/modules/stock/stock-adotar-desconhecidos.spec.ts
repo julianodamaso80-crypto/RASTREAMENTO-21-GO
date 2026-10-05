@@ -25,13 +25,17 @@ type ItemCriado = {
   notes: string;
 };
 
-function device(uniqueId: string, id = 900) {
+function device(
+  uniqueId: string,
+  id = 900,
+  lastUpdate: string | null = '2026-10-02T16:36:00.000Z',
+) {
   return {
     id,
     name: uniqueId,
     uniqueId,
     status: 'online',
-    lastUpdate: '2026-10-02T16:36:00.000Z',
+    lastUpdate: lastUpdate as string,
     positionId: 1,
     groupId: 0,
     phone: '',
@@ -49,8 +53,22 @@ function servico(opts: {
   veiculos?: string[];
   rastreadores?: string[];
   tenants?: string[];
+  /** ids de device que o Traccar registrou sozinho (sem vínculo com o usuário). */
+  semVinculo?: number[];
 }) {
-  const traccar = { getDevices: jest.fn().mockResolvedValue(opts.devices) };
+  const semVinculo = new Set(opts.semVinculo ?? []);
+  const traccar = {
+    getDevices: jest
+      .fn()
+      .mockImplementation((o?: { all?: boolean }) =>
+        Promise.resolve(
+          o?.all
+            ? opts.devices
+            : opts.devices.filter((d) => !semVinculo.has(d.id)),
+        ),
+      ),
+    linkDeviceToSessionUser: jest.fn().mockResolvedValue(undefined),
+  };
   const prisma = {
     stockItem: {
       findMany: jest
@@ -83,7 +101,7 @@ function servico(opts: {
     traccar as never,
     {} as never,
   );
-  return { s, prisma };
+  return { s, prisma, traccar };
 }
 
 describe('StockTraccarService.adotarDesconhecidos', () => {
@@ -164,5 +182,35 @@ describe('StockTraccarService.adotarDesconhecidos', () => {
         where: expect.objectContaining({ imei: { in: ['867689065682520'] } }),
       }),
     );
+  });
+
+  it('não adota IMEI pré-cadastrado que nunca falou com o servidor', async () => {
+    // Em 02/10 a primeira rodada adotou 606 IMEIs cadastrados para migração
+    // que nunca tinham apontado pra cá. Só entra quem já conectou.
+    const { s, prisma } = servico({
+      devices: [device('867689065682520', 6082, null)],
+    });
+
+    expect(await s.adotarDesconhecidos()).toBe(0);
+    expect(prisma.stockItem.create).not.toHaveBeenCalled();
+  });
+
+  it('vincula ao usuário do backend o device que o Traccar registrou sozinho', async () => {
+    // Device auto-registrado nasce sem vínculo e some de /devices e /positions.
+    // Entre 02 e 05/10 foram 1.002 assim, invisíveis para conectividade e
+    // alertas — e nenhum adotado, porque a listagem sem `all` não os trazia.
+    const { s, prisma, traccar } = servico({
+      devices: [device('867689065682520', 6082), device('867689066954035', 1)],
+      estoque: ['867689066954035'],
+      semVinculo: [6082],
+    });
+
+    const adotados = await s.adotarDesconhecidos();
+
+    expect(traccar.getDevices).toHaveBeenCalledWith({ all: true });
+    expect(traccar.linkDeviceToSessionUser).toHaveBeenCalledTimes(1);
+    expect(traccar.linkDeviceToSessionUser).toHaveBeenCalledWith(6082);
+    expect(adotados).toBe(1);
+    expect(prisma.stockItem.create).toHaveBeenCalledTimes(1);
   });
 });

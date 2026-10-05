@@ -7,6 +7,8 @@ export class TraccarService implements OnModuleInit {
   private readonly logger = new Logger(TraccarService.name);
   private client: AxiosInstance;
   private sessionCookie: string | null = null;
+  /** Id do usuário da sessão no Traccar — dono dos vínculos user↔device. */
+  private sessionUserId: number | null = null;
   private readonly apiUrl: string;
   private readonly adminEmail: string;
   private readonly adminPassword: string;
@@ -51,6 +53,9 @@ export class TraccarService implements OnModuleInit {
     const response = await this.client.post('/session', params, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
+
+    const id = Number((response.data as { id?: unknown } | undefined)?.id);
+    this.sessionUserId = Number.isFinite(id) && id > 0 ? id : null;
 
     const setCookie = response.headers['set-cookie'];
     if (setCookie) {
@@ -99,9 +104,17 @@ export class TraccarService implements OnModuleInit {
 
   // === Devices ===
 
-  async getDevices(): Promise<TraccarDevice[]> {
+  /**
+   * Sem `all`, o Traccar devolve só os devices VINCULADOS ao usuário da sessão
+   * — mesmo para admin. Device que o próprio Traccar registra
+   * (`database.registerUnknown`) nasce sem vínculo e fica invisível aqui;
+   * `all: true` (só admin) lista a frota inteira.
+   */
+  async getDevices(opts?: { all?: boolean }): Promise<TraccarDevice[]> {
     return this.withRetry(async () => {
-      const { data } = await this.client.get('/devices');
+      const { data } = await this.client.get(
+        opts?.all ? '/devices?all=true' : '/devices',
+      );
       return data;
     });
   }
@@ -348,6 +361,24 @@ export class TraccarService implements OnModuleInit {
   ): Promise<void> {
     return this.withRetry(async () => {
       await this.client.post('/permissions', { deviceId, geofenceId });
+    });
+  }
+
+  /**
+   * Vincula o device ao usuário da sessão. Sem o vínculo, `/devices` e
+   * `/positions` (sem `all`) não enxergam o aparelho — é o caso de todo device
+   * que o Traccar registrou sozinho.
+   */
+  async linkDeviceToSessionUser(deviceId: number): Promise<void> {
+    return this.withRetry(async () => {
+      if (!this.sessionUserId) await this.createSession();
+      if (!this.sessionUserId) {
+        throw new Error('Sessão do Traccar sem id de usuário');
+      }
+      await this.client.post('/permissions', {
+        userId: this.sessionUserId,
+        deviceId,
+      });
     });
   }
 

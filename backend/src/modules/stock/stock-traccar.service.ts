@@ -256,10 +256,44 @@ export class StockTraccarService {
    *
    * O estoque é consultado inteiro (inclusive apagados: item removido de
    * propósito não volta sozinho); veículos e rastreadores só pelos candidatos.
+   *
+   * Duas lições de 02–05/10/2026: (1) device que o Traccar registra sozinho
+   * nasce SEM vínculo com o usuário do backend e some de `/devices` e
+   * `/positions` — por isso a lista vem com `all` e cada órfão é vinculado
+   * aqui, senão conectividade e alertas não o enxergam; (2) só entra no
+   * estoque quem JÁ FALOU com o servidor (`lastUpdate`): IMEI pré-cadastrado
+   * para migração ainda não apontou pra cá, e na primeira rodada 606 deles
+   * viraram estoque por engano.
    */
   async adotarDesconhecidos(): Promise<number> {
-    const devices = await this.traccar.getDevices();
-    const candidatos = devices.filter((d) => IMEI_RE.test(d.uniqueId));
+    const [todos, vinculados] = await Promise.all([
+      this.traccar.getDevices({ all: true }),
+      this.traccar.getDevices(),
+    ]);
+    const comVinculo = new Set(vinculados.map((d) => d.id));
+    const orfaos = todos.filter((d) => !comVinculo.has(d.id));
+    for (let i = 0; i < orfaos.length; i += StockTraccarService.CONCORRENCIA) {
+      await Promise.all(
+        orfaos.slice(i, i + StockTraccarService.CONCORRENCIA).map((d) =>
+          this.traccar.linkDeviceToSessionUser(d.id).catch((erro) => {
+            this.logger.warn(
+              `Vínculo do device ${d.uniqueId} ao usuário falhou: ${
+                erro instanceof Error ? erro.message : erro
+              }`,
+            );
+          }),
+        ),
+      );
+    }
+    if (orfaos.length > 0) {
+      this.logger.log(
+        `Servidor GPS: ${orfaos.length} device(s) sem vínculo vinculado(s) ao usuário do backend.`,
+      );
+    }
+
+    const candidatos = todos.filter(
+      (d) => IMEI_RE.test(d.uniqueId) && Boolean(d.lastUpdate),
+    );
     if (candidatos.length === 0) return 0;
 
     const noEstoque = new Set(
