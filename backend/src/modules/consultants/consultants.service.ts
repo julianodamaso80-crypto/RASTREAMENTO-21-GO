@@ -1,8 +1,14 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { coletaCompleta, paraLinha, type UsuarioPower } from './consultants.mapper';
+import {
+  coletaCompleta,
+  paraLinha,
+  type LinhaConsultor,
+  type UsuarioPower,
+} from './consultants.mapper';
 import { PowerPanelClient } from './power-panel.client';
 
 export interface SyncStatus {
@@ -93,15 +99,7 @@ export class ConsultantsService implements OnModuleInit {
       const unicos = [...new Map(usuarios.map((u) => [u.id, u])).values()];
       for (let i = 0; i < unicos.length; i += LOTE_GRAVACAO) {
         const lote = unicos.slice(i, i + LOTE_GRAVACAO).map((u) => paraLinha(u, tenantId));
-        await this.prisma.$transaction(
-          lote.map((linha) =>
-            this.prisma.consultant.upsert({
-              where: { tenantId_powerId: { tenantId, powerId: linha.powerId } },
-              create: { ...linha, syncedAt: inicio },
-              update: { ...linha, syncedAt: inicio, deletedAt: null },
-            }),
-          ),
-        );
+        await this.gravarLote(tenantId, lote, inicio);
       }
 
       if (coletaCompleta(unicos.length, anunciados)) {
@@ -163,6 +161,77 @@ export class ConsultantsService implements OnModuleInit {
       this.prisma.consultant.aggregate({ where: { tenantId }, _max: { syncedAt: true } }),
     ]);
     return { items, lastSyncAt: ultima._max.syncedAt, syncing: this.status.syncing };
+  }
+
+  /**
+   * Um INSERT ... ON CONFLICT por lote, com as colunas em arrays.
+   *
+   * Antes era `$transaction` com 250 `upsert` do Prisma. O Prisma 7 compila um
+   * plano para cada lote e guarda no cache (chave de 728 mil caracteres,
+   * 3,4 MB cada, até 1.000 entradas): a cada 30 min entravam 18 planos novos,
+   * o heap chegava a 4 GB e o backend caía — medido em 05/10/2026. A mesma
+   * transação também estourava os 5 s de limite e a sincronização falhava.
+   * SQL cru não passa pelo cache de planos e grava os 250 numa ida só.
+   *
+   * Texto opcional viaja como '' e vira NULL no banco (`texto()` do mapper já
+   * transforma vazio em null, então nada se perde); data e inteiro opcionais
+   * viajam como texto e são convertidos no SQL pelo mesmo motivo.
+   */
+  private async gravarLote(tenantId: string, lote: LinhaConsultor[], inicio: Date): Promise<void> {
+    if (lote.length === 0) return;
+    const txt = (v: string | null) => v ?? '';
+    const data = (v: Date | null) => (v ? v.toISOString() : '');
+    const inteiro = (v: number | null) => (v == null ? '' : String(v));
+
+    await this.prisma.$executeRaw(Prisma.sql`
+      INSERT INTO consultants (
+        id, tenant_id, power_id, name, nickname, email, document, phone, mobile,
+        office, office_label, branch, cooperative, permission_group, manager_name,
+        active, status_label, power_created_at, last_access_at, blocked_at,
+        synced_at, created_at, updated_at, deleted_at
+      )
+      SELECT gen_random_uuid(), ${tenantId}::uuid, r.power_id, r.name,
+             NULLIF(r.nickname, ''), NULLIF(r.email, ''), NULLIF(r.document, ''),
+             NULLIF(r.phone, ''), NULLIF(r.mobile, ''),
+             NULLIF(r.office, '')::int, NULLIF(r.office_label, ''), NULLIF(r.branch, ''),
+             NULLIF(r.cooperative, ''), NULLIF(r.permission_group, ''), NULLIF(r.manager_name, ''),
+             r.active, NULLIF(r.status_label, ''),
+             NULLIF(r.power_created_at, '')::timestamptz, NULLIF(r.last_access_at, '')::timestamptz,
+             NULLIF(r.blocked_at, '')::timestamptz,
+             ${inicio}, now(), now(), NULL
+        FROM unnest(
+          ${lote.map((l) => l.powerId)}::int[],
+          ${lote.map((l) => l.name)}::text[],
+          ${lote.map((l) => txt(l.nickname))}::text[],
+          ${lote.map((l) => txt(l.email))}::text[],
+          ${lote.map((l) => txt(l.document))}::text[],
+          ${lote.map((l) => txt(l.phone))}::text[],
+          ${lote.map((l) => txt(l.mobile))}::text[],
+          ${lote.map((l) => inteiro(l.office))}::text[],
+          ${lote.map((l) => txt(l.officeLabel))}::text[],
+          ${lote.map((l) => txt(l.branch))}::text[],
+          ${lote.map((l) => txt(l.cooperative))}::text[],
+          ${lote.map((l) => txt(l.permissionGroup))}::text[],
+          ${lote.map((l) => txt(l.managerName))}::text[],
+          ${lote.map((l) => l.active)}::boolean[],
+          ${lote.map((l) => txt(l.statusLabel))}::text[],
+          ${lote.map((l) => data(l.powerCreatedAt))}::text[],
+          ${lote.map((l) => data(l.lastAccessAt))}::text[],
+          ${lote.map((l) => data(l.blockedAt))}::text[]
+        ) AS r(
+          power_id, name, nickname, email, document, phone, mobile, office, office_label,
+          branch, cooperative, permission_group, manager_name, active, status_label,
+          power_created_at, last_access_at, blocked_at
+        )
+      ON CONFLICT (tenant_id, power_id) DO UPDATE SET
+        name = EXCLUDED.name, nickname = EXCLUDED.nickname, email = EXCLUDED.email,
+        document = EXCLUDED.document, phone = EXCLUDED.phone, mobile = EXCLUDED.mobile,
+        office = EXCLUDED.office, office_label = EXCLUDED.office_label, branch = EXCLUDED.branch,
+        cooperative = EXCLUDED.cooperative, permission_group = EXCLUDED.permission_group,
+        manager_name = EXCLUDED.manager_name, active = EXCLUDED.active,
+        status_label = EXCLUDED.status_label, power_created_at = EXCLUDED.power_created_at,
+        last_access_at = EXCLUDED.last_access_at, blocked_at = EXCLUDED.blocked_at,
+        synced_at = EXCLUDED.synced_at, updated_at = now(), deleted_at = NULL`);
   }
 
   private async tenantPrincipal(): Promise<string | null> {

@@ -82,6 +82,10 @@ export class AlertsCron {
 
       const now = Date.now();
       const dedupSince = new Date(now - this.DEDUP_WINDOW_MS);
+      const comAlertaRecente = await this.vehiclesComAlertaRecente(
+        AlertType.OFFLINE,
+        dedupSince,
+      );
       let createdCount = 0;
 
       for (const v of vehicles) {
@@ -96,15 +100,7 @@ export class AlertsCron {
         if (offlineFor < offlineThresholdMs) continue;
 
         // Já tem alerta OFFLINE recente? Pula.
-        const recent = await this.prisma.alert.findFirst({
-          where: {
-            vehicleId: v.id,
-            type: AlertType.OFFLINE,
-            createdAt: { gte: dedupSince },
-          },
-          select: { id: true },
-        });
-        if (recent) continue;
+        if (comAlertaRecente.has(v.id)) continue;
 
         await this.alertsService.notifyOffline(v.id, v.tenantId, lastUpdate);
         createdCount++;
@@ -170,6 +166,10 @@ export class AlertsCron {
 
       const now = Date.now();
       const dedupSince = new Date(now - this.DEDUP_WINDOW_MS);
+      const comAlertaRecente = await this.vehiclesComAlertaRecente(
+        AlertType.GPS_SILENT,
+        dedupSince,
+      );
       let createdCount = 0;
 
       for (const v of vehicles) {
@@ -208,15 +208,7 @@ export class AlertsCron {
           lastIgnition === true || (lastIgnition == null && lastSpeed > 1);
         if (!wasInUse) continue;
 
-        const recent = await this.prisma.alert.findFirst({
-          where: {
-            vehicleId: v.id,
-            type: AlertType.GPS_SILENT,
-            createdAt: { gte: dedupSince },
-          },
-          select: { id: true },
-        });
-        if (recent) continue;
+        if (comAlertaRecente.has(v.id)) continue;
 
         await this.alertsService.notifyGpsSilent(
           v.id,
@@ -237,5 +229,25 @@ export class AlertsCron {
         `Erro inesperado em detectGpsSilent: ${err instanceof Error ? err.message : err}`,
       );
     }
+  }
+
+  /**
+   * Veículos que já receberam alerta deste tipo dentro da janela de dedup.
+   *
+   * Uma consulta por rodada, e não um `findFirst` por veículo: com ~1.400
+   * veículos offline eram 1.400 consultas por minuto só para perguntar "já
+   * avisei?" (medido em 05/10/2026). A forma da consulta é fixa — sem lista
+   * de ids — para não criar uma entrada nova no cache de planos do Prisma a
+   * cada tamanho de frota.
+   */
+  private async vehiclesComAlertaRecente(
+    type: AlertType,
+    desde: Date,
+  ): Promise<Set<string>> {
+    const recentes = await this.prisma.alert.findMany({
+      where: { type, createdAt: { gte: desde } },
+      select: { vehicleId: true },
+    });
+    return new Set(recentes.map((a) => a.vehicleId));
   }
 }

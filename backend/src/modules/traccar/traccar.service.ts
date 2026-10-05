@@ -12,6 +12,16 @@ export class TraccarService implements OnModuleInit {
   private readonly apiUrl: string;
   private readonly adminEmail: string;
   private readonly adminPassword: string;
+  /**
+   * A frota inteira do Traccar (`/devices` 2 MB, `/positions` 3 MB, ~450 ms
+   * cada) era baixada ~30 vezes por minuto: painel a cada 8 s por aba, dois
+   * crons por minuto, estoque, mapas (05/10/2026). Quem pede a mesma lista
+   * dentro de 2 s recebe a mesma resposta, e chamadas simultâneas esperam
+   * a mesma requisição em vez de abrir outra. Só vale para a lista completa:
+   * consulta por device ou por período continua indo ao Traccar.
+   */
+  private static readonly FROTA_CACHE_MS = 2_000;
+  private frotaCache = new Map<string, { at: number; promise: Promise<unknown> }>();
 
   constructor(private configService: ConfigService) {
     this.apiUrl = this.configService.get<string>('traccar.apiUrl')!;
@@ -111,12 +121,13 @@ export class TraccarService implements OnModuleInit {
    * `all: true` (só admin) lista a frota inteira.
    */
   async getDevices(opts?: { all?: boolean }): Promise<TraccarDevice[]> {
-    return this.withRetry(async () => {
-      const { data } = await this.client.get(
-        opts?.all ? '/devices?all=true' : '/devices',
-      );
-      return data;
-    });
+    const rota = opts?.all ? '/devices?all=true' : '/devices';
+    return this.frotaCompartilhada(rota, () =>
+      this.withRetry(async () => {
+        const { data } = await this.client.get(rota);
+        return data as TraccarDevice[];
+      }),
+    );
   }
 
   async getDevice(id: number): Promise<TraccarDevice> {
@@ -192,14 +203,36 @@ export class TraccarService implements OnModuleInit {
     from?: string,
     to?: string,
   ): Promise<TraccarPosition[]> {
-    return this.withRetry(async () => {
-      const params: Record<string, string | number> = {};
-      if (deviceId) params.deviceId = deviceId;
-      if (from) params.from = from;
-      if (to) params.to = to;
-      const { data } = await this.client.get('/positions', { params });
-      return data;
+    const buscar = () =>
+      this.withRetry(async () => {
+        const params: Record<string, string | number> = {};
+        if (deviceId) params.deviceId = deviceId;
+        if (from) params.from = from;
+        if (to) params.to = to;
+        const { data } = await this.client.get('/positions', { params });
+        return data as TraccarPosition[];
+      });
+    if (deviceId || from || to) return buscar();
+    return this.frotaCompartilhada('/positions', buscar);
+  }
+
+  /**
+   * Quem pede a lista completa dentro de 2 s recebe a mesma resposta, e
+   * chamadas simultâneas esperam a mesma requisição em vez de abrir outra.
+   * Falha não fica guardada: a próxima chamada tenta de novo na hora.
+   */
+  private frotaCompartilhada<T>(chave: string, buscar: () => Promise<T>): Promise<T> {
+    const agora = Date.now();
+    const emCache = this.frotaCache.get(chave);
+    if (emCache && agora - emCache.at < TraccarService.FROTA_CACHE_MS) {
+      return emCache.promise as Promise<T>;
+    }
+    const promise = buscar().catch((erro: unknown) => {
+      if (this.frotaCache.get(chave)?.promise === promise) this.frotaCache.delete(chave);
+      throw erro;
     });
+    this.frotaCache.set(chave, { at: agora, promise });
+    return promise;
   }
 
   async getReportSummary(
