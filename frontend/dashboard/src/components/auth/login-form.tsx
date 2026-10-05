@@ -10,9 +10,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
+import { associateApi } from '@/lib/associate-api';
+
+// Igual ao app: CPF/CNPJ entra como associado, e-mail entra como time interno.
+const soDigitos = (v: string) => v.replace(/\D/g, '');
+const ehDocumento = (v: string) =>
+  /^[\d.\-/\s]+$/.test(v) && [11, 14].includes(soDigitos(v).length);
 
 const loginSchema = z.object({
-  email: z.string().email({ message: 'Email inválido' }),
+  email: z
+    .string()
+    .trim()
+    .refine((v) => ehDocumento(v) || z.string().email().safeParse(v).success, {
+      message: 'Informe seu CPF ou e-mail',
+    }),
   password: z.string().min(6, { message: 'Senha deve ter ao menos 6 caracteres' }),
 });
 
@@ -35,13 +46,19 @@ export function LoginForm() {
   const onSubmit = async (values: LoginFormValues) => {
     setSubmitting(true);
     try {
+      if (ehDocumento(values.email)) {
+        await associateApi.login(soDigitos(values.email), values.password);
+        window.location.href = '/meus-veiculos';
+        return;
+      }
       await login(values.email, values.password);
       window.location.href = '/dashboard';
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
       const status = e.response?.status;
       let message = e.response?.data?.message || e.message || 'Erro desconhecido';
-      if (status === 401) message = 'Email ou senha incorretos';
+      if (status === 401 && ehDocumento(values.email)) message = e.response?.data?.message || 'CPF ou senha inválidos';
+      else if (status === 401) message = 'Email ou senha incorretos';
       else if (status === 429) message = 'Muitas tentativas. Aguarde alguns minutos.';
       else if (status && status >= 500) message = 'Servidor indisponível. Tente novamente.';
       toast.error(message);
@@ -53,13 +70,13 @@ export function LoginForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       <div className="space-y-2">
         <label htmlFor="email" className="text-sm font-medium text-slate-700">
-          Email
+          CPF ou e-mail
         </label>
         <Input
           id="email"
-          type="email"
-          autoComplete="email"
-          placeholder="seu@email.com"
+          type="text"
+          autoComplete="username"
+          placeholder="CPF ou seu@email.com"
           aria-invalid={!!errors.email}
           className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
           {...register('email')}
