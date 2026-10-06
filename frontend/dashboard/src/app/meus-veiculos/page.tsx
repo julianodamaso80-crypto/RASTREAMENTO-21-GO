@@ -31,7 +31,7 @@ function quando(iso: string | null | undefined) {
   });
 }
 
-/** Primeiro acesso: a senha ainda é o CPF e precisa ser trocada, como no app. */
+/** Primeiro acesso: a senha ainda é o CPF/CNPJ e precisa ser trocada, como no app. */
 function TrocarSenha({ onPronto }: { onPronto: () => void }) {
   const [atual, setAtual] = useState('');
   const [nova, setNova] = useState('');
@@ -59,10 +59,10 @@ function TrocarSenha({ onPronto }: { onPronto: () => void }) {
     <div className="mx-auto max-w-sm px-4 pt-16">
       <h1 className="text-xl font-bold">Crie sua senha</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        No primeiro acesso a senha é o seu CPF. Escolha uma senha nova para continuar.
+        No primeiro acesso a senha é o seu CPF ou CNPJ. Escolha uma senha nova para continuar.
       </p>
       <form onSubmit={salvar} className="mt-6 space-y-3">
-        <Input type="password" placeholder="Senha atual (seu CPF)" value={atual} onChange={(e) => setAtual(e.target.value)} />
+        <Input type="password" placeholder="Senha atual (seu CPF ou CNPJ)" value={atual} onChange={(e) => setAtual(e.target.value)} />
         <Input type="password" placeholder="Nova senha" value={nova} onChange={(e) => setNova(e.target.value)} />
         <Input type="password" placeholder="Repita a nova senha" value={confirma} onChange={(e) => setConfirma(e.target.value)} />
         <Button type="submit" disabled={salvando} className="w-full">
