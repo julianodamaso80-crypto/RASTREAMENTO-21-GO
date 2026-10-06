@@ -82,6 +82,7 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
     expect(semRastreador[0]).toEqual({
       id: 'tag-l1',
       serialNumber: LINK_MOTO.serialNumber,
+      installLocation: null,
       plate: 'MOTO2B22',
       associateName: 'DONO MOTO2B22',
       model: 'HONDA CG 160',
@@ -91,6 +92,7 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       accuracyM: 40,
       seenAt: AGORA,
       outrosSeriais: [],
+      outrasTags: [],
       comRastreador: false,
       // O mock de $queryRaw devolve posições também para o max(received_at);
       // sem coluna `max` a data da consulta vira null — e a tela lida com isso.
@@ -164,5 +166,32 @@ describe('tagsNoMapa — carro com duas TAGs', () => {
     expect(r).toHaveLength(1);
     expect(r[0].serialNumber).toBe(LINK_CARRO.serialNumber);
     expect(r[0].outrosSeriais).toEqual(['808092604086968']);
+  });
+
+  // Dono, 06/10/2026: o painel da TAG tem que mostrar o IMEI e o local de
+  // instalação, como o do rastreador. UFJ3J07 tem duas TAGs, uma no carpete do
+  // pedal do freio e outra no pé do carona: as duas têm que aparecer.
+  it('traz o local de instalação da TAG do ponto e das outras do mesmo carro', async () => {
+    const prisma = montarPrisma();
+    const principal = {
+      ...LINK_CARRO,
+      origin: 'ESTOQUE',
+      verdict: 'AGUARDANDO_PROVA',
+      installLocation: 'Dentro Do Carpete, Pedal Do Freio',
+    };
+    const outra = {
+      ...principal,
+      id: 'l3',
+      serialNumber: '808092604157355',
+      installLocation: 'Dentro Do Carpete, Pé Do Carona',
+    };
+    prisma.tagLink.findMany.mockResolvedValue([principal, outra]);
+    const s = new ClientsService(prisma as never);
+    const r = await s.tagsNoMapa(TENANT);
+
+    expect(r[0].installLocation).toBe('Dentro Do Carpete, Pedal Do Freio');
+    expect(r[0].outrasTags).toEqual([
+      { serialNumber: '808092604157355', installLocation: 'Dentro Do Carpete, Pé Do Carona' },
+    ]);
   });
 });

@@ -383,6 +383,7 @@ export function tagNoMapa(
   return {
     id: card.id,
     serialNumber: x.vinculo.serialNumber,
+    installLocation: x.vinculo.installLocation ?? null,
     plate: card.plate,
     associateName: card.associate.name,
     model: card.model,

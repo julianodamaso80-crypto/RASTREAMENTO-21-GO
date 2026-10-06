@@ -179,7 +179,7 @@ export function AssetCard({
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <Financeiro asset={asset} />
-          <Acesso bloqueado={asset.appAccessBlocked} />
+          <Acesso bloqueado={asset.appAccessBlocked} soTag={!!asset.soTag} />
         </div>
       </div>
 
@@ -333,7 +333,15 @@ function Financeiro({ asset }: { asset: ClientAsset }) {
   );
 }
 
-function Acesso({ bloqueado }: { bloqueado: boolean }) {
+function Acesso({ bloqueado, soTag }: { bloqueado: boolean; soTag: boolean }) {
+  // "Acesso liberado" num veículo só com TAG era falso: o app não mostra TAG.
+  if (soTag) {
+    return (
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        <Lock className="h-3.5 w-3.5" /> Fora do app (só TAG)
+      </span>
+    );
+  }
   return bloqueado ? (
     <span className="flex items-center gap-1.5 font-medium text-red-400">
       <Lock className="h-3.5 w-3.5" /> Acesso bloqueado

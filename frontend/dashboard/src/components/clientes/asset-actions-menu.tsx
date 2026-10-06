@@ -53,6 +53,10 @@ export function AssetActionsMenu({
   redefinindoSenha: boolean;
 }) {
   const inadimplente = asset.financialStatus === 'INADIMPLENTE';
+  // Veículo só com TAG não existe como veículo nosso nem aparece no app do
+  // associado (o app só lista veículo com rastreador). Não há acesso, bloqueio,
+  // financeiro ou titularidade para mudar aqui: o clique dava erro.
+  const soTag = !!asset.soTag;
 
   return (
     <DropdownMenu>
@@ -84,7 +88,14 @@ export function AssetActionsMenu({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={onAlterarFinanceiro}>
+        {soTag && (
+          <p className="px-2 py-1.5 text-xs leading-snug text-muted-foreground">
+            Só TAG: este veículo não aparece no app do cliente, então não há
+            acesso para bloquear. As ações abaixo valem quando ele tiver
+            rastreador.
+          </p>
+        )}
+        <DropdownMenuItem onClick={onAlterarFinanceiro} disabled={soTag}>
           {inadimplente ? (
             <>
               <ThumbsUp className="h-4 w-4" /> Marcar como Em dia
@@ -95,7 +106,7 @@ export function AssetActionsMenu({
             </>
           )}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onAlterarAcesso}>
+        <DropdownMenuItem onClick={onAlterarAcesso} disabled={soTag}>
           {asset.appAccessBlocked ? (
             <>
               <Unlock className="h-4 w-4" /> Liberar acesso do cliente
@@ -107,7 +118,7 @@ export function AssetActionsMenu({
           )}
         </DropdownMenuItem>
         {podeLiberarBloqueador && (
-          <DropdownMenuItem onClick={onAlterarBloqueador}>
+          <DropdownMenuItem onClick={onAlterarBloqueador} disabled={soTag}>
             {asset.blockerAccessAllowed ? (
               <>
                 <ShieldOff className="h-4 w-4" /> Retirar acesso ao bloqueador
@@ -119,12 +130,12 @@ export function AssetActionsMenu({
             )}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={onTrocarTitularidade}>
+        <DropdownMenuItem onClick={onTrocarTitularidade} disabled={soTag}>
           <UserRoundCog className="h-4 w-4" /> Troca de titularidade
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={onRedefinirSenha}
-          disabled={!asset.associate || redefinindoSenha}
+          disabled={soTag || !asset.associate || redefinindoSenha}
         >
           {redefinindoSenha ? (
             <Loader2 className="h-4 w-4 animate-spin" />

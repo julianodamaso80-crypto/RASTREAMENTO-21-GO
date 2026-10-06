@@ -9,6 +9,8 @@ export interface TagNoMapa {
   /** `tag-<id do vínculo>` — o mesmo id do card em Clientes Ativos. */
   id: string;
   serialNumber: string;
+  /** Onde a TAG foi escondida no veículo (segredo interno, como no rastreador). */
+  installLocation?: string | null;
   plate: string;
   associateName: string;
   model: string | null;
@@ -31,6 +33,8 @@ export interface TagNoMapa {
   comRastreador?: boolean;
   /** Outras TAGs do mesmo carro: o ponto é um só, a busca acha por qualquer uma. */
   outrosSeriais?: string[];
+  /** As mesmas outras TAGs, com o local de cada uma, para o painel. */
+  outrasTags?: Array<{ serialNumber: string; installLocation: string | null }>;
 }
 
 /** Os perfis que enxergam TAG — espelho de `PERFIS_QUE_VEEM_TAG` no backend. */

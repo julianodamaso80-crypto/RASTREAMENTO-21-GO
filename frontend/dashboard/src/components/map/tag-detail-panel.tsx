@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { stockApi } from '@/lib/api';
 import { COR_TAG } from '@/components/vehicles/tag-list-item';
 import { mensagemDaConsulta } from '@/components/ble-tags/mensagem-consulta-tag';
+import { useAuth } from '@/contexts/auth-context';
+import { canSeeInstallLocation } from '@/lib/manageable-routes';
 import type { TagNoMapa } from '@/types/tag-map';
 
 /**
@@ -40,6 +42,15 @@ export function TagDetailPanel({
     tag.longitude,
   );
   const temPosicao = tag.latitude !== null && tag.longitude !== null;
+  // Mesma régua do painel do rastreador: o esconderijo é só do time que
+  // atende e instala.
+  const { user } = useAuth();
+  const mostraLocal = canSeeInstallLocation(user?.role);
+  // Carro com duas TAGs: a do ponto primeiro, depois as outras.
+  const tags = [
+    { serialNumber: tag.serialNumber, installLocation: tag.installLocation ?? null },
+    ...(tag.outrasTags ?? []),
+  ];
 
   const lerEstado = useCallback(async () => {
     try {
@@ -171,10 +182,6 @@ export function TagDetailPanel({
               {tag.latitude?.toFixed(5)}, {tag.longitude?.toFixed(5)}
             </span>
           </div>
-          <div className="flex items-baseline justify-between gap-3 py-1">
-            <span className="text-muted-foreground">Número da TAG</span>
-            <span className="font-mono font-medium">{tag.serialNumber}</span>
-          </div>
         </div>
       ) : (
         <p className="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
@@ -182,6 +189,29 @@ export function TagDetailPanel({
           vez que um iPhone com Bluetooth ligado passar perto do veículo.
         </p>
       )}
+
+      {/* IMEI e esconderijo, como no painel do rastreador: é com eles que o
+          time acha a TAG no carro. Aparecem mesmo sem posição. */}
+      <div className="rounded-lg border px-3 py-2 text-xs">
+        {tags.map((t, i) => (
+          <div key={t.serialNumber} className={cn(i > 0 && 'mt-1 border-t pt-1')}>
+            <div className="flex items-baseline justify-between gap-3 py-1">
+              <span className="text-muted-foreground">
+                {tags.length > 1 ? `IMEI da TAG ${i + 1}` : 'IMEI da TAG'}
+              </span>
+              <span className="font-mono font-medium">{t.serialNumber}</span>
+            </div>
+            {mostraLocal && (
+              <div className="flex items-baseline justify-between gap-3 py-1">
+                <span className="shrink-0 text-muted-foreground">Local de instalação</span>
+                <span className="text-right font-medium">
+                  {t.installLocation?.trim() || 'Não informado'}
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         A TAG não informa ignição, velocidade nem bloqueio, e a posição é sempre a da

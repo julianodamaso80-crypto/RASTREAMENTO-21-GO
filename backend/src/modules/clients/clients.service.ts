@@ -259,6 +259,19 @@ export class ClientsService {
     const consulta = await this.prisma.$queryRaw<Array<{ max: Date | null }>>(Prisma.sql`
       SELECT max(received_at) AS max FROM tag_positions WHERE tenant_id = ${tenantId}::uuid`);
     const redeConsultadaEm = consulta[0]?.max ?? null;
+    // Carro com duas TAGs: cada uma fica escondida num lugar diferente, e o
+    // painel do Mapa mostra o número e o local das duas.
+    const outros = visiveis.flatMap((x) => x.outrosSeriais);
+    const localDe = new Map(
+      outros.length === 0
+        ? []
+        : (
+            await this.prisma.tagLink.findMany({
+              where: { tenantId, deletedAt: null, serialNumber: { in: outros } },
+              select: { serialNumber: true, installLocation: true },
+            })
+          ).map((l) => [l.serialNumber, l.installLocation ?? null] as const),
+    );
     // A TAG de carro que também tem rastreador vem junto (dono, 24/09: "tem que
     // aparecer no mapa para a gente rastrear"), marcada `comRastreador` — o
     // Mapa a deixa fora do total de "Todos", que segue igual a Clientes Ativos.
@@ -267,6 +280,10 @@ export class ClientsService {
       // Carro com duas TAGs é um ponto só; a busca tem que achar pelos dois
       // números, como em Clientes Ativos (`casaBusca`).
       outrosSeriais: x.outrosSeriais,
+      outrasTags: x.outrosSeriais.map((serialNumber) => ({
+        serialNumber,
+        installLocation: localDe.get(serialNumber) ?? null,
+      })),
       comRastreador: placasComVeiculo.has(x.vinculo.plate),
       redeConsultadaEm,
     }));
