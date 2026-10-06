@@ -219,9 +219,10 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
 }
 
 /**
- * `visiveis`: a lista da tela (régua do dono). `ocultos`: TAG de carro ATIVO que
- * a régua esconde (sem posição ainda ou divergente) — fora da lista, mas a busca
- * tem que achar: nenhuma TAG de cliente ativo pode ficar impossível de localizar.
+ * `visiveis`: a lista da tela (régua do dono). `ocultos`: TAG que a régua
+ * esconde (sem posição ainda, divergente ou associado fora de ATIVO) — fora da
+ * lista, mas a busca tem que achar: nenhuma TAG vinculada pode ficar sem caminho
+ * para ser localizada ou desvinculada.
  */
 export async function vinculosDaTela(prisma: PrismaService, tenantId: string) {
   const vinculos: VinculoTag[] = await prisma.tagLink.findMany({
@@ -309,7 +310,9 @@ export function separarVinculos<T extends ItemVinculo>(itens: T[], comPosicao: S
 
   const semCard: T[] = [];
   for (const x of itens) {
-    if (aparecem.has(x) || x.sga?.situationLabel !== 'ATIVO') continue;
+    // Fora de ATIVO (cancelou, inadimplente, sem SGA) nunca entra na lista,
+    // mas fica achável pela busca: é ali que se desvincula a TAG para reusar.
+    if (aparecem.has(x)) continue;
     const card = cardDoVeiculo.get(chaveDoVeiculo(x));
     if (card) card.outrosSeriais.push(x.vinculo.serialNumber);
     else semCard.push(x);

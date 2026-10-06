@@ -137,10 +137,14 @@ describe('separarVinculos — toda TAG de carro ATIVO cai em algum card', () => 
     expect(r.ocultos.map((v) => v.vinculo.serialNumber).sort()).toEqual(['B', 'C']);
   });
 
-  it('associado fora de ATIVO não entra em nenhuma das duas', () => {
-    const r = separarVinculos([x('A', { sit: 'INATIVO' })], new Set(['A']));
+  // Dono, 06/10/2026: "associado que cancelou, quero voltar com a TAG e
+  // desvincular". Fora de ATIVO o card sumia e, com ele, o botão "Desvincular
+  // TAG": 273 TAGs de inativos ficaram presas. Fora da lista, mas a busca acha.
+  it('associado fora de ATIVO ou sem SGA não entra na lista, mas a busca acha', () => {
+    const semSga = { ...x('C'), sga: null };
+    const r = separarVinculos([x('A', { sit: 'INATIVO' }), x('B', { sit: 'INADIMPLENTE' }), semSga], new Set(['A']));
     expect(r.visiveis).toEqual([]);
-    expect(r.ocultos).toEqual([]);
+    expect(r.ocultos.map((v) => v.vinculo.serialNumber).sort()).toEqual(['A', 'B', 'C']);
   });
 
   it('segunda TAG do mesmo carro vira número extra do card, não some', () => {
