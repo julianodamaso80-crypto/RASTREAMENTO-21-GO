@@ -80,7 +80,7 @@ export class DevicesService {
         },
         skip: (page - 1) * perPage,
         take: perPage,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
       this.deviceModel.count({ where }),
     ]);

@@ -188,7 +188,9 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
               {' · '}
               {vehicle.positionTime
                 ? `GPS ${formatRelativeTime(vehicle.positionTime)}`
-                : `sem GPS · heartbeat ${formatRelativeTime(vehicle.lastUpdate)}`}
+                : vehicle.lastUpdate
+                  ? `sem GPS · heartbeat ${formatRelativeTime(vehicle.lastUpdate)}`
+                  : 'rastreador nunca comunicou com o nosso servidor'}
               {/* Rastreador dormindo (carro desligado) não é defeito, mas o
                   operador precisa ver há quanto tempo ele calou. */}
               {vehicle.positionTime &&

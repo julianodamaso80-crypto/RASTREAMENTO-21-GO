@@ -120,7 +120,7 @@ export class ClientsService {
         this.prisma.vehicle.count({ where }),
         this.prisma.vehicle.findMany({
           where,
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           skip: (page - 1) * perPage,
           take: perPage,
           include: {
@@ -182,7 +182,7 @@ export class ClientsService {
       takeVeiculos > 0
         ? await this.prisma.vehicle.findMany({
             where,
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             skip: skipVeiculos,
             take: takeVeiculos,
             include: {

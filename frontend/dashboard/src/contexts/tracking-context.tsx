@@ -375,7 +375,10 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       // sem GPS novo). `positionTime` = quando o GPS efetivamente mexeu.
       // Os dois divergem quando o rastreador para de mandar posições mas continua
       // online — caso típico de carro parado com ignição ligada em GT06/Concox.
-      const lastUpdate = device?.lastUpdate || position?.serverTime || vehicle.updatedAt;
+      // Sem fallback para `vehicle.updatedAt`: rastreador que nunca falou com o
+      // nosso servidor (migração da Rede ainda não pegou) aparecia como
+      // "desligada há 4h" — a hora era a do cadastro, não de contato nenhum.
+      const lastUpdate = device?.lastUpdate || position?.serverTime || '';
       const positionTime = position?.fixTime || position?.deviceTime || position?.serverTime || null;
       const deviceStatus = device?.status || 'offline';
       const ignition = (position?.attributes?.ignition as boolean) ?? false;

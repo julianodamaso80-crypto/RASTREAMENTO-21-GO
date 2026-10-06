@@ -37,6 +37,7 @@ export function formatSpeed(knots: number): string {
 
 export function formatRelativeTime(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
+  if (!Number.isFinite(diff)) return 'nunca comunicou';
   const seconds = Math.floor(diff / 1000);
   if (seconds < 60) return 'agora';
   const minutes = Math.floor(seconds / 60);

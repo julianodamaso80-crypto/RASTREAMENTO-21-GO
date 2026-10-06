@@ -91,7 +91,7 @@ export class VehiclesService {
         },
         skip: (page - 1) * perPage,
         take: perPage,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
       this.prisma.vehicle.count({ where }),
     ]);
@@ -155,7 +155,7 @@ export class VehiclesService {
         },
         skip: (page - 1) * perPage,
         take: perPage,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
       this.prisma.vehicle.count({ where }),
     ]);
