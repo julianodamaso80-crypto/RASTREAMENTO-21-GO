@@ -109,6 +109,35 @@
   --sidebar-ring: #f2911d;
 }
 
+/* Tema escuro — só tons da paleta oficial: Azul 700/600/500 nas superfícies
+   (fundo < card < realce), branco no texto, Laranja 500 nos CTAs. Sidebar,
+   header e barra de status já são Azul Institucional nos dois temas. */
+.dark {
+  color-scheme: dark;
+  --background: #1f2d63;
+  --foreground: #ffffff;
+  --card: #243573;
+  --card-foreground: #ffffff;
+  --popover: #243573;
+  --popover-foreground: #ffffff;
+  --primary: #f2911d;
+  --primary-foreground: #ffffff;
+  --secondary: #293c82;
+  --secondary-foreground: #ffffff;
+  --muted: #293c82;
+  --muted-foreground: rgba(255, 255, 255, 0.7);
+  --accent: #293c82;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --border: rgba(111, 129, 191, 0.3);
+  --input: rgba(111, 129, 191, 0.3);
+  --ring: #f2911d;
+  --chart-3: #6f81bf;
+  --chart-5: #6f81bf;
+  --sidebar: #293c82;
+  --sidebar-accent: #1f2d63;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -208,4 +237,35 @@
 .maplibregl-ctrl-attrib.maplibregl-compact {
   background: rgba(255, 255, 255, 0.75) !important;
   min-height: 24px;
+}
+
+/* Tema escuro nas peças que o Tailwind não alcança */
+.dark .glass {
+  background-color: rgba(36, 53, 115, 0.85);
+  border-color: rgba(111, 129, 191, 0.3);
+}
+.dark .glass-light {
+  background-color: rgba(41, 60, 130, 0.85);
+  border-color: rgba(111, 129, 191, 0.25);
+}
+.dark .maplibregl-popup-content {
+  background-color: rgba(36, 53, 115, 0.95) !important;
+  border-color: rgba(111, 129, 191, 0.3) !important;
+  color: #ffffff !important;
+}
+.dark .maplibregl-popup-tip {
+  border-top-color: rgba(36, 53, 115, 0.95) !important;
+}
+.dark .maplibregl-popup-close-button {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+.dark .maplibregl-ctrl-group {
+  background: rgba(36, 53, 115, 0.95) !important;
+  border-color: rgba(111, 129, 191, 0.3) !important;
+}
+.dark .maplibregl-ctrl-group button {
+  filter: invert(1);
+}
+.dark .maplibregl-ctrl-attrib.maplibregl-compact {
+  background: rgba(36, 53, 115, 0.8) !important;
 }

@@ -14,17 +14,17 @@ export default function LoginPage() {
             </svg>
           </div>
           <div>
-            <div className="text-lg font-extrabold tracking-tight text-slate-900">
+            <div className="text-lg font-extrabold tracking-tight text-foreground">
               21<span style={{ color: '#f2911d' }}>Go!</span>
             </div>
-            <div className="text-[10px] font-semibold tracking-[0.15em] text-slate-500 uppercase">Proteção Veicular</div>
+            <div className="text-[10px] font-semibold tracking-[0.15em] text-muted-foreground uppercase">Proteção Veicular</div>
           </div>
         </div>
       </div>
 
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Entrar na plataforma</h1>
-        <p className="mt-2 text-sm text-slate-500">
+        <h1 className="text-2xl font-bold text-foreground">Entrar na plataforma</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           Acesse o painel de gestão da sua frota.
         </p>
       </div>

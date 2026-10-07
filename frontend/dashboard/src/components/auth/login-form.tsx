@@ -72,7 +72,7 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
       <div className="space-y-2">
-        <label htmlFor="email" className="text-sm font-medium text-slate-700">
+        <label htmlFor="email" className="text-sm font-medium text-foreground">
           CPF, CNPJ ou e-mail
         </label>
         <Input
@@ -81,7 +81,7 @@ export function LoginForm() {
           autoComplete="username"
           placeholder="CPF, CNPJ ou seu@email.com"
           aria-invalid={!!errors.email}
-          className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
+          className="bg-background border-input focus:border-brand-orange-500 text-foreground"
           {...register('email')}
         />
         {errors.email && (
@@ -91,7 +91,7 @@ export function LoginForm() {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label htmlFor="password" className="text-sm font-medium text-slate-700">
+          <label htmlFor="password" className="text-sm font-medium text-foreground">
             Senha
           </label>
           <Link
@@ -108,7 +108,7 @@ export function LoginForm() {
             autoComplete="current-password"
             placeholder="••••••••"
             aria-invalid={!!errors.password}
-            className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900 pr-10"
+            className="bg-background border-input focus:border-brand-orange-500 text-foreground pr-10"
             {...register('password')}
           />
           <button
@@ -117,7 +117,7 @@ export function LoginForm() {
             aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
             aria-pressed={showPassword}
             tabIndex={-1}
-            className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none focus-visible:text-brand-orange-500"
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:text-brand-orange-500"
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>

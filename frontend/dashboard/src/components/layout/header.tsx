@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { useAuth } from '@/contexts/auth-context';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -35,6 +36,7 @@ export function Header() {
 
       <div className="flex items-center gap-2 shrink-0">
         <AssistantDrawer />
+        <ThemeToggle />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-lg hover:bg-white/5 transition-colors">

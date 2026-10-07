@@ -36,10 +36,10 @@ function BrandHeader() {
           </svg>
         </div>
         <div>
-          <div className="text-lg font-extrabold tracking-tight text-slate-900">
+          <div className="text-lg font-extrabold tracking-tight text-foreground">
             21<span style={{ color: '#f2911d' }}>Go!</span>
           </div>
-          <div className="text-[10px] font-semibold tracking-[0.15em] text-slate-500 uppercase">Proteção Veicular</div>
+          <div className="text-[10px] font-semibold tracking-[0.15em] text-muted-foreground uppercase">Proteção Veicular</div>
         </div>
       </div>
     </div>
@@ -89,8 +89,8 @@ function ResetPasswordInner() {
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-red-50 border border-red-200 mb-6">
           <AlertTriangle className="h-6 w-6 text-red-600" />
         </div>
-        <h1 className="text-2xl font-bold text-slate-900">Link inválido</h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <h1 className="text-2xl font-bold text-foreground">Link inválido</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           Este link de redefinição não é válido ou está incompleto. Solicite um novo pela página
           de recuperação.
         </p>
@@ -112,8 +112,8 @@ function ResetPasswordInner() {
         <div className="flex items-center justify-center w-12 h-12 rounded-xl mb-6" style={{ background: 'rgba(199,211,1,0.15)', border: '1px solid rgba(199,211,1,0.3)' }}>
           <CheckCircle2 className="h-6 w-6" style={{ color: '#9fab01' }} />
         </div>
-        <h1 className="text-2xl font-bold text-slate-900">Senha redefinida!</h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <h1 className="text-2xl font-bold text-foreground">Senha redefinida!</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           Sua nova senha está ativa. Você será redirecionado para o login em instantes.
         </p>
         <Link
@@ -135,14 +135,14 @@ function ResetPasswordInner() {
         <KeyRound className="h-6 w-6" style={{ color: '#f2911d' }} />
       </div>
 
-      <h1 className="text-2xl font-bold text-slate-900">Defina sua nova senha</h1>
-      <p className="mt-2 text-sm text-slate-600">
+      <h1 className="text-2xl font-bold text-foreground">Defina sua nova senha</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
         Escolha uma senha com pelo menos 8 caracteres.
       </p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5" noValidate>
         <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium text-slate-700">
+          <label htmlFor="password" className="text-sm font-medium text-foreground">
             Nova senha
           </label>
           <Input
@@ -152,14 +152,14 @@ function ResetPasswordInner() {
             autoFocus
             placeholder="••••••••"
             aria-invalid={!!errors.password}
-            className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
+            className="bg-background border-input focus:border-brand-orange-500 text-foreground"
             {...register('password')}
           />
           {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="confirm" className="text-sm font-medium text-slate-700">
+          <label htmlFor="confirm" className="text-sm font-medium text-foreground">
             Confirme a senha
           </label>
           <Input
@@ -168,7 +168,7 @@ function ResetPasswordInner() {
             autoComplete="new-password"
             placeholder="••••••••"
             aria-invalid={!!errors.confirm}
-            className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
+            className="bg-background border-input focus:border-brand-orange-500 text-foreground"
             {...register('confirm')}
           />
           {errors.confirm && <p className="text-xs text-red-600">{errors.confirm.message}</p>}
@@ -192,7 +192,7 @@ function ResetPasswordInner() {
 
       <Link
         href="/login"
-        className="mt-6 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+        className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         Cancelar
@@ -203,7 +203,7 @@ function ResetPasswordInner() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="text-sm text-slate-500">Carregando...</div>}>
+    <Suspense fallback={<div className="text-sm text-muted-foreground">Carregando...</div>}>
       <ResetPasswordInner />
     </Suspense>
   );

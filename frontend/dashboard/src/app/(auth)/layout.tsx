@@ -3,9 +3,9 @@ import { Activity, MapPin, Shield, Zap } from 'lucide-react';
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-white">
+    <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       {/* Form panel (esquerda) — fundo claro */}
-      <div className="flex items-center justify-center px-4 py-8 lg:px-12 bg-white">
+      <div className="flex items-center justify-center px-4 py-8 lg:px-12 bg-background">
         <div className="w-full max-w-md">{children}</div>
       </div>
 

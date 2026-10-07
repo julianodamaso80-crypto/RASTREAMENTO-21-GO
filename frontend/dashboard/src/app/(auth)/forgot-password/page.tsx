@@ -42,10 +42,10 @@ function BrandHeader() {
           </svg>
         </div>
         <div>
-          <div className="text-lg font-extrabold tracking-tight text-slate-900">
+          <div className="text-lg font-extrabold tracking-tight text-foreground">
             21<span style={{ color: '#f2911d' }}>Go!</span>
           </div>
-          <div className="text-[10px] font-semibold tracking-[0.15em] text-slate-500 uppercase">Proteção Veicular</div>
+          <div className="text-[10px] font-semibold tracking-[0.15em] text-muted-foreground uppercase">Proteção Veicular</div>
         </div>
       </div>
     </div>
@@ -121,16 +121,16 @@ export default function ForgotPasswordPage() {
           <ShieldCheck className="h-6 w-6" style={{ color: '#9fab01' }} />
         </div>
 
-        <h1 className="text-2xl font-bold text-slate-900">Digite o código</h1>
-        <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+        <h1 className="text-2xl font-bold text-foreground">Digite o código</h1>
+        <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
           Enviamos um código de 6 números para o WhatsApp{' '}
-          <span className="text-slate-900 font-medium">{enviadoPara ?? 'cadastrado'}</span>.
+          <span className="text-foreground font-medium">{enviadoPara ?? 'cadastrado'}</span>.
           Ele vale 15 minutos.
         </p>
 
         <form onSubmit={formCodigo.handleSubmit(salvarSenha)} className="mt-8 space-y-5" noValidate>
           <div className="space-y-2">
-            <label htmlFor="code" className="text-sm font-medium text-slate-700">
+            <label htmlFor="code" className="text-sm font-medium text-foreground">
               Código
             </label>
             <Input
@@ -141,7 +141,7 @@ export default function ForgotPasswordPage() {
               maxLength={6}
               placeholder="000000"
               aria-invalid={!!formCodigo.formState.errors.code}
-              className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900 text-center text-2xl tracking-[0.4em]"
+              className="bg-background border-input focus:border-brand-orange-500 text-foreground text-center text-2xl tracking-[0.4em]"
               {...formCodigo.register('code')}
             />
             {formCodigo.formState.errors.code && (
@@ -150,7 +150,7 @@ export default function ForgotPasswordPage() {
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="newPassword" className="text-sm font-medium text-slate-700">
+            <label htmlFor="newPassword" className="text-sm font-medium text-foreground">
               Nova senha
             </label>
             <Input
@@ -159,7 +159,7 @@ export default function ForgotPasswordPage() {
               autoComplete="new-password"
               placeholder="Mínimo de 6 caracteres"
               aria-invalid={!!formCodigo.formState.errors.newPassword}
-              className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
+              className="bg-background border-input focus:border-brand-orange-500 text-foreground"
               {...formCodigo.register('newPassword')}
             />
             {formCodigo.formState.errors.newPassword && (
@@ -195,14 +195,14 @@ export default function ForgotPasswordPage() {
         <MessageCircle className="h-6 w-6" style={{ color: '#f2911d' }} />
       </div>
 
-      <h1 className="text-2xl font-bold text-slate-900">Esqueceu sua senha?</h1>
-      <p className="mt-2 text-sm text-slate-600">
+      <h1 className="text-2xl font-bold text-foreground">Esqueceu sua senha?</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
         Digite o seu WhatsApp cadastrado e enviaremos um código nele.
       </p>
 
       <form onSubmit={formWhatsapp.handleSubmit(pedirCodigo)} className="mt-8 space-y-5" noValidate>
         <div className="space-y-2">
-          <label htmlFor="phone" className="text-sm font-medium text-slate-700">
+          <label htmlFor="phone" className="text-sm font-medium text-foreground">
             WhatsApp com DDD
           </label>
           <Input
@@ -213,7 +213,7 @@ export default function ForgotPasswordPage() {
             autoFocus
             placeholder="(21) 99999-8888"
             aria-invalid={!!formWhatsapp.formState.errors.phone}
-            className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
+            className="bg-background border-input focus:border-brand-orange-500 text-foreground"
             {...formWhatsapp.register('phone')}
           />
           {formWhatsapp.formState.errors.phone && (

@@ -73,7 +73,7 @@ export function VerificarWhatsappDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-background p-6 shadow-xl">
         <div
           className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl"
           style={{
@@ -94,12 +94,12 @@ export function VerificarWhatsappDialog({
           )}
         </div>
 
-        <h2 className="text-xl font-bold text-slate-900">
+        <h2 className="text-xl font-bold text-foreground">
           {etapa === 'numero'
             ? 'Cadastre seu WhatsApp'
             : 'Confirme o código'}
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {etapa === 'numero' ? (
             <>
               {nome ? `${nome}, ` : ''}é por ele que você recupera a senha se
@@ -108,7 +108,7 @@ export function VerificarWhatsappDialog({
           ) : (
             <>
               Enviamos 6 números para{' '}
-              <span className="font-medium text-slate-900">
+              <span className="font-medium text-foreground">
                 {enviadoPara ?? 'o seu WhatsApp'}
               </span>
               . O código vale 15 minutos.
@@ -160,7 +160,7 @@ export function VerificarWhatsappDialog({
             <button
               type="button"
               onClick={() => setEtapa('numero')}
-              className="w-full text-center text-sm text-slate-500 hover:text-slate-700"
+              className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
             >
               Digitei o número errado
             </button>
@@ -171,7 +171,7 @@ export function VerificarWhatsappDialog({
           <button
             type="button"
             onClick={onSair}
-            className="mt-5 w-full text-center text-xs text-slate-400 hover:text-slate-600"
+            className="mt-5 w-full text-center text-xs text-muted-foreground hover:text-foreground"
           >
             Sair da conta
           </button>
