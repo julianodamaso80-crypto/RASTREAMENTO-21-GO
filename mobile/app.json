@@ -2,7 +2,7 @@
   "expo": {
     "name": "21 Tracker Rastreamento",
     "slug": "r21go-cliente",
-    "version": "1.6.2",
+    "version": "1.6.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "r21go",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.r21go.client",
-      "buildNumber": "41",
+      "buildNumber": "42",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDisplayName": "21 Tracker"
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.r21go.client",
-      "versionCode": 12,
+      "versionCode": 13,
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
