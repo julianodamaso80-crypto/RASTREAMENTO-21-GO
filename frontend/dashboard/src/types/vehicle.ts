@@ -2,22 +2,25 @@ export type VehicleStatus = 'ACTIVE' | 'INACTIVE' | 'DEFAULTING' | 'BLOCKED';
 /** Tipo do veículo — define o desenho usado no mapa (carro x moto). */
 export type VehicleType = 'CAR' | 'MOTORCYCLE';
 /**
- * Sinal visual no mapa e na lista. 3 estados que o dono entende:
+ * Estado da comunicação do rastreador — a MESMA régua e os mesmos nomes da
+ * RedeVeiculos (lidos no mapa /rastreamento/v2/ deles em 07/10/2026):
  *
- *  ignition_on  — rastreador OK (comunicando) + motor LIGADO   → VERDE   "Carro/Moto ligado"
- *  ignition_off — rastreador OK (comunicando) + motor DESLIGADO → LARANJA "Carro/Moto desligado"
- *  offline      — rastreador parou de comunicar (não marca mais
- *                 localização, defeito técnico)                 → VERMELHO "GPS com defeito" + central
- *  alert        — veículo BLOQUEADO (operação ativa)            → vermelho intenso
+ *  online   — comunicou há até 30 min                    → verde    "ONLINE"
+ *  sem_resp — comunicou há 30–60 min                     → amarelo  "S/RESP"
+ *  sem_gps  — comunicando, mas sem nenhuma posição GPS   → preto    "S/GPS"
+ *  sleep    — moto calada há menos de 2 dias             → azul     "SLEEP"
+ *  offline  — o resto                                    → laranja  "OFFLINE"
+ *  alert    — veículo BLOQUEADO                          → vermelho "Bloqueado"
  *
- * Carro parado e desligado NÃO é defeito — o rastreador dorme (GT06/J16 cala
- * quando a chave desliga) e acorda sozinho. Só vira "GPS com defeito" quando
- * o rastreador some por mais de 3 dias (OFFLINE_THRESHOLD_MS): perdido,
- * arrancado ou quebrado.
+ * Nunca "defeito" e nunca "ligue para a central": carro parado na garagem
+ * aparece OFFLINE com "Última atualização há X", que é fato, não diagnóstico.
+ * Ignição e movimento são informação à parte (`ignition`, `moving`).
  */
 export type DisplayStatus =
-  | 'ignition_on'
-  | 'ignition_off'
+  | 'online'
+  | 'sem_resp'
+  | 'sem_gps'
+  | 'sleep'
   | 'offline'
   | 'alert';
 
@@ -75,5 +78,7 @@ export interface VehicleWithTracking extends Vehicle {
   deviceStatus: string;
   displayStatus: DisplayStatus;
   ignition: boolean;
+  /** Andando agora: GPS recente (STALE_POSITION_MS) e velocidade acima do ruído. */
+  moving: boolean;
   satellites: number;
 }

@@ -1,9 +1,8 @@
 'use client';
 
-import { cn, formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
-import { STATUS_COLORS, STATUS_HINTS } from '@/lib/constants';
+import { cn, formatSpeed, getVehicleStatusLabel, ultimaAtualizacao } from '@/lib/utils';
+import { STATUS_COLORS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
-import { Phone } from 'lucide-react';
 import { useTracking } from '@/contexts/tracking-context';
 import { SelectionCheckbox } from '@/components/map/selection-checkbox';
 import type { VehicleWithTracking } from '@/types/vehicle';
@@ -18,11 +17,7 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
   // operador precisa reconhecer os 4 na lista, não nenhum.
   const isSelected = selectedIds.includes(vehicle.id);
   const color = STATUS_COLORS[vehicle.displayStatus];
-  const statusHint = STATUS_HINTS[vehicle.displayStatus];
-  const statusLabel = getVehicleStatusLabel(
-    vehicle.displayStatus,
-    vehicle.vehicleType,
-  );
+  const statusLabel = getVehicleStatusLabel(vehicle.displayStatus);
 
   return (
     <div
@@ -78,21 +73,15 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
           {vehicle.brand} {vehicle.model} · {vehicle.color}
         </span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0 && (
+          {vehicle.moving && (
             <span className="text-emerald-400">{formatSpeed(vehicle.speed)}</span>
           )}
-          <span>{formatRelativeTime(vehicle.positionTime ?? vehicle.lastUpdate)}</span>
         </div>
       </div>
-      {statusHint && (
-        <div
-          className="flex items-center gap-1 mt-1 ml-4 text-[11px] font-medium"
-          style={{ color }}
-        >
-          <Phone className="h-3 w-3 shrink-0" />
-          {statusHint}
-        </div>
-      )}
+      {/* Como no card da Rede: fato, sem diagnóstico. */}
+      <div className="mt-0.5 ml-4 text-[11px] text-muted-foreground">
+        {ultimaAtualizacao(vehicle.lastUpdate)}
+      </div>
       </button>
     </div>
   );

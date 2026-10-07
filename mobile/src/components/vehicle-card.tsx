@@ -13,20 +13,17 @@ import { AppApi, Vehicle } from '@/lib/api';
 import { blockState, BLOCK_LABEL } from '@/lib/vehicle-visual';
 import { useAddress } from '@/lib/geocode';
 import { timeAgo, compass, formatDateTime } from '@/lib/format';
+import { estadoRede, ignicaoRede, ultimaAtualizacao } from '@/lib/estado-rede';
 import { colors, radii } from '@/lib/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-/** Status derivado da POSIÇÃO GPS real (nunca do heartbeat de conexão). */
-function statusOf(v: Vehicle): { color: string; label: string; icon: IconName } {
-  const bloqueio = blockState(v);
-  if (bloqueio === 'BLOQUEADO') return { color: colors.red, label: BLOCK_LABEL.BLOQUEADO, icon: 'lock-closed' };
-  const p = v.position;
-  if (!p) return { color: colors.textFaint, label: 'Sem sinal', icon: 'help-circle' };
-  if (p.motion) return { color: colors.green, label: 'Em movimento', icon: 'navigate' };
-  if (p.ignition === true) return { color: colors.amber, label: 'Ligado · parado', icon: 'flash' };
-  if (p.ignition === false) return { color: colors.red, label: 'Desligado', icon: 'power' };
-  return { color: colors.amber, label: 'Em repouso', icon: 'moon' };
+/** Ícone do círculo do cabeçalho; a cor é a do estado da Rede. */
+function iconeDe(v: Vehicle, conectado: boolean): IconName {
+  if (blockState(v) === 'BLOQUEADO') return 'lock-closed';
+  if (!conectado) return 'cloud-offline';
+  if (v.position?.motion) return 'navigate';
+  return v.position?.ignition ? 'flash' : 'power';
 }
 
 /** Célula da grade de telemetria (ícone + valor + rótulo). */
@@ -72,8 +69,11 @@ export function VehicleCard({
   const comandadoBloqueio = vehicle.status === 'BLOCKED';
   const p = vehicle.position;
   const address = useAddress(p?.latitude, p?.longitude);
-  const st = statusOf(vehicle);
-  const online = vehicle.connection?.status === 'online';
+  // Selo e cores da Rede: ONLINE, S/RESP, S/GPS, SLEEP, OFFLINE.
+  const estado = estadoRede(vehicle);
+  const bloqueado = bloqueio === 'BLOQUEADO';
+  const corCirculo = bloqueado ? colors.red : estado.color;
+  const ignicao = ignicaoRede(estado, p?.ignition);
   const ativo = [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'Veículo';
   const lowVolt = p?.voltage != null && p.voltage > 0 && p.voltage < 11.8;
 
@@ -142,18 +142,19 @@ export function VehicleCard({
     <View style={[styles.card, selected && styles.cardSelected]}>
       {/* Cabeçalho: status + placa + conexão */}
       <TouchableOpacity style={styles.header} onPress={onFocus} activeOpacity={0.85}>
-        <View style={[styles.badge, { backgroundColor: st.color }]}>
-          <Ionicons name={st.icon} size={16} color={colors.white} />
+        <View style={[styles.badge, { backgroundColor: corCirculo }]}>
+          <Ionicons name={iconeDe(vehicle, estado.conectado)} size={16} color={colors.white} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.plate}>{vehicle.plate}</Text>
-          <Text style={styles.sub}>{ativo} · {st.label}</Text>
-        </View>
-        <View style={[styles.conn, { backgroundColor: online ? '#dcfce7' : '#f1f5f9' }]}>
-          <View style={[styles.connDot, { backgroundColor: online ? colors.green : colors.textFaint }]} />
-          <Text style={[styles.connText, { color: online ? colors.green : colors.textMuted }]}>
-            {online ? 'ONLINE' : 'OFFLINE'}
+          <Text style={styles.sub}>
+            {ativo}
+            {bloqueado ? ` · ${BLOCK_LABEL.BLOQUEADO}` : ''}
           </Text>
+          <Text style={styles.ultima}>{ultimaAtualizacao(vehicle.connection?.lastUpdate)}</Text>
+        </View>
+        <View style={[styles.conn, { backgroundColor: estado.color }]}>
+          <Text style={styles.connText}>{estado.label}</Text>
         </View>
       </TouchableOpacity>
 
@@ -207,10 +208,10 @@ export function VehicleCard({
             <Cell
               icon="key"
               label="Ignição"
-              value={p.ignition === true ? 'Ligada' : p.ignition === false ? 'Desligada' : '—'}
-              tint={p.ignition ? colors.green : colors.orange}
+              value={ignicao}
+              tint={ignicao === 'Ligada' ? colors.green : ignicao === 'Desligada' ? colors.orange : colors.textFaint}
             />
-            <Cell icon="speedometer-outline" label="Velocidade" value={`${Math.round(p.speed)} km/h`} />
+            <Cell icon="speedometer-outline" label="Velocidade" value={`${estado.key === 'offline' ? 0 : Math.round(p.speed)} km/h`} />
             <Cell
               icon="flash-outline"
               label="Voltagem"
@@ -276,8 +277,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 9, paddingVertical: 4, borderRadius: radii.pill,
   },
-  connDot: { width: 7, height: 7, borderRadius: 4 },
-  connText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  connText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, color: colors.white },
+  ultima: { fontSize: 11.5, color: colors.textMuted, marginTop: 1 },
   addrRow: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 6,
     marginTop: 12, paddingTop: 12,

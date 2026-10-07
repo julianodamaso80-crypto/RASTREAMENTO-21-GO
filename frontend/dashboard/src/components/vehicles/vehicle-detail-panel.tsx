@@ -10,7 +10,6 @@ import {
   Power,
   Lock,
   Unlock,
-  Phone,
   Wrench,
   Pencil,
   Check,
@@ -25,8 +24,8 @@ import { Badge } from '@/components/ui/badge';
 import { useTracking } from '@/contexts/tracking-context';
 import { useAuth } from '@/contexts/auth-context';
 import { canBlockVehicle, canSeeInstallLocation } from '@/lib/manageable-routes';
-import { cn, maskCPF, formatCpfCnpj, formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
-import { STATUS_COLORS, STATUS_HINTS } from '@/lib/constants';
+import { cn, maskCPF, formatCpfCnpj, formatSpeed, getVehicleStatusLabel, ignicaoTexto, ultimaAtualizacao } from '@/lib/utils';
+import { STATUS_COLORS } from '@/lib/constants';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
 import { BlockConfirmModal } from './block-confirm-modal';
 import Link from 'next/link';
@@ -66,17 +65,11 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   if (!vehicle) return null;
 
   const color = STATUS_COLORS[vehicle.displayStatus];
-  const statusHint = STATUS_HINTS[vehicle.displayStatus];
-  // "Carro/Moto ligado(a)" | "...desligado(a)" | "GPS com defeito".
-  const statusLabel = getVehicleStatusLabel(
-    vehicle.displayStatus,
-    vehicle.vehicleType,
-  );
+  // ONLINE | S/RESP | S/GPS | SLEEP | OFFLINE — os nomes da Rede.
+  const statusLabel = getVehicleStatusLabel(vehicle.displayStatus);
   const isBlocked = vehicle.status === 'BLOCKED';
-  // "Movendo de verdade" = motor ligado + speed > 0 + GPS fresh.
-  // displayStatus sozinho não diz isso porque ele é sobre IGNIÇÃO agora.
-  const isActuallyMoving =
-    vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0;
+  // "Movendo de verdade" = conectado + GPS fresco + velocidade.
+  const isActuallyMoving = vehicle.moving;
   // Os dois endereços aqui são da MESMA coordenada que aparece logo abaixo
   // deles na tela, e é isso que os torna intercambiáveis: `reverseAddress` só
   // sai do hook carimbado com a coordenada pedida, e `vehicle.address` vem do
@@ -184,28 +177,9 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
               {isActuallyMoving && ` · ${formatSpeed(vehicle.speed)}`}
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              {isActuallyMoving ? 'em movimento' : 'parado'}
-              {' · '}
-              {vehicle.positionTime
-                ? `GPS ${formatRelativeTime(vehicle.positionTime)}`
-                : vehicle.lastUpdate
-                  ? `sem GPS · heartbeat ${formatRelativeTime(vehicle.lastUpdate)}`
-                  : 'rastreador nunca comunicou com o nosso servidor'}
-              {/* Rastreador dormindo (carro desligado) não é defeito, mas o
-                  operador precisa ver há quanto tempo ele calou. */}
-              {vehicle.positionTime &&
-                Date.now() - new Date(vehicle.lastUpdate).getTime() > 10 * 60 * 1000 &&
-                ` · rastreador calado ${formatRelativeTime(vehicle.lastUpdate)}`}
+              {/* Como no card da Rede: fato, sem diagnóstico. */}
+              {ultimaAtualizacao(vehicle.lastUpdate)}
             </div>
-            {statusHint && (
-              <div
-                className="text-xs font-semibold mt-1.5 flex items-center gap-1"
-                style={{ color }}
-              >
-                <Phone className="h-3 w-3 shrink-0" />
-                {statusHint}
-              </div>
-            )}
           </div>
         </div>
 
@@ -401,7 +375,7 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
               <Power className={cn('h-4 w-4', vehicle.ignition ? 'text-brand-green-500' : 'text-gray-500')} />
               <div>
                 <p className="text-xs text-muted-foreground">Ignição</p>
-                <p className="font-bold text-sm">{vehicle.ignition ? 'Ligada' : 'Desligada'}</p>
+                <p className="font-bold text-sm">{ignicaoTexto(vehicle.displayStatus, vehicle.ignition)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 bg-muted/20 rounded-lg p-2.5">

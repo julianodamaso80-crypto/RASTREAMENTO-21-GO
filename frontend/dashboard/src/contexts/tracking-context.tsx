@@ -19,14 +19,20 @@ import { tagCasaBusca, tagsDaAba, type FiltroDoMapa } from '@/lib/tags-no-mapa';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import { useTraccarSocket } from '@/hooks/use-traccar-socket';
-import { getDisplayStatus } from '@/lib/utils';
+import { getDisplayStatus, estaAndando, estaConectado } from '@/lib/utils';
 import { matchesVehicleSearch } from '@/lib/vehicle-search';
 
 interface StatusCounts {
   total: number;
-  ignition_on: number;
-  ignition_off: number;
+  /** Como na Rede, "Online" soma os S/RESP (ainda conectados). */
+  online: number;
+  sem_resp: number;
   offline: number;
+  sleep: number;
+  sem_gps: number;
+  /** Ignição ligada com o rastreador conectado. */
+  ignicao: number;
+  movimento: number;
   alert: number;
   /** Veículos que só têm TAG (sem rastreador). Também entram no `total`. */
   tag: number;
@@ -362,6 +368,15 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     onBleSighting: handleBleSighting,
   });
 
+  // O status depende do relógio (30 min, 60 min, 2 dias sem contato): sem
+  // este tique, rastreador que parou de falar ficaria ONLINE até chegar outro
+  // evento qualquer.
+  const [relogio, setRelogio] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRelogio((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   // Merge vehicles + devices + positions
   const vehicles = useMemo<VehicleWithTracking[]>(() => {
     const result: VehicleWithTracking[] = [];
@@ -382,18 +397,21 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       const positionTime = position?.fixTime || position?.deviceTime || position?.serverTime || null;
       const deviceStatus = device?.status || 'offline';
       const ignition = (position?.attributes?.ignition as boolean) ?? false;
-      const displayStatus = getDisplayStatus(
-        deviceStatus,
-        speed,
+      const vehicleType = vehicle.vehicleType ?? 'CAR';
+      const displayStatus = getDisplayStatus({
         lastUpdate,
-        vehicle.status,
-        positionTime,
-        ignition,
-      );
+        positionTime: position ? positionTime : null,
+        latitude: position?.latitude ?? 0,
+        longitude: position?.longitude ?? 0,
+        vehicleStatus: vehicle.status,
+        vehicleType,
+      });
+      // Como na Rede: desconectado não informa velocidade nem movimento.
+      const moving = estaConectado(displayStatus) && estaAndando(speed, positionTime);
 
       result.push({
         ...vehicle,
-        vehicleType: vehicle.vehicleType ?? 'CAR',
+        vehicleType,
         latitude: position?.latitude ?? 0,
         longitude: position?.longitude ?? 0,
         speed,
@@ -404,11 +422,13 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         deviceStatus,
         displayStatus,
         ignition,
+        moving,
         satellites: (position?.attributes?.sat as number) ?? 0,
       });
     });
     return result;
-  }, [vehicleMap, deviceMap, positionMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- relogio só força o recálculo
+  }, [vehicleMap, deviceMap, positionMap, relogio]);
 
   // Filtros
   //
@@ -423,7 +443,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const filteredVehicles = useMemo(() => {
     if (statusFilter === 'all') return searchedVehicles;
     if (statusFilter === 'tag') return [];
-    return searchedVehicles.filter((v) => v.displayStatus === statusFilter);
+    return searchedVehicles.filter((v) => casaFiltro(v, statusFilter));
   }, [searchedVehicles, statusFilter]);
 
   const searchedTags = useMemo(
@@ -439,15 +459,19 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const statusCounts = useMemo<StatusCounts>(() => {
     const counts: StatusCounts = {
       total: 0,
-      ignition_on: 0,
-      ignition_off: 0,
+      online: 0,
+      sem_resp: 0,
       offline: 0,
+      sleep: 0,
+      sem_gps: 0,
+      ignicao: 0,
+      movimento: 0,
       alert: 0,
       tag: 0,
     };
     searchedVehicles.forEach((v) => {
       counts.total++;
-      counts[v.displayStatus]++;
+      for (const f of ABAS_CONTADAS) if (casaFiltro(v, f)) counts[f]++;
     });
     // "Todos" = veículos com rastreador + veículos só com TAG — o mesmo total
     // de Clientes Ativos.
@@ -531,4 +555,33 @@ export function useTracking() {
   const ctx = useContext(TrackingContext);
   if (!ctx) throw new Error('useTracking must be used within TrackingProvider');
   return ctx;
+}
+
+const ABAS_CONTADAS = [
+  'online',
+  'sem_resp',
+  'offline',
+  'sleep',
+  'sem_gps',
+  'ignicao',
+  'movimento',
+  'alert',
+] as const;
+
+/** O veículo entra na aba? Mesma composição do filtro de status da Rede. */
+function casaFiltro(v: VehicleWithTracking, filtro: FiltroDoMapa): boolean {
+  switch (filtro) {
+    case 'all':
+      return true;
+    case 'tag':
+      return false;
+    case 'online':
+      return v.displayStatus === 'online' || v.displayStatus === 'sem_resp';
+    case 'ignicao':
+      return estaConectado(v.displayStatus) && v.ignition;
+    case 'movimento':
+      return v.moving;
+    default:
+      return v.displayStatus === filtro;
+  }
 }

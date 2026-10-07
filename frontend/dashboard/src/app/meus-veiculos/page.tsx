@@ -7,7 +7,14 @@ import { Car, Loader2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { BASEMAPS, MAP_CENTER } from '@/lib/constants';
+import { BASEMAPS, MAP_CENTER, STATUS_COLORS } from '@/lib/constants';
+import {
+  getDisplayStatus,
+  getVehicleStatusLabel,
+  ignicaoTexto,
+  ultimaAtualizacao,
+} from '@/lib/utils';
+import type { DisplayStatus } from '@/types/vehicle';
 import {
   associateApi,
   type AssociateMe,
@@ -28,6 +35,18 @@ function quando(iso: string | null | undefined) {
     month: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+  });
+}
+
+/** Estado da comunicação com a régua da RedeVeiculos (ONLINE, OFFLINE...). */
+function estadoDe(v: AssociateVehicle): DisplayStatus {
+  return getDisplayStatus({
+    lastUpdate: v.connection?.lastUpdate ?? '',
+    positionTime: v.position?.fixTime ?? null,
+    latitude: v.position?.latitude ?? 0,
+    longitude: v.position?.longitude ?? 0,
+    vehicleStatus: v.status ?? 'ACTIVE',
+    vehicleType: v.vehicleType ?? 'CAR',
   });
 }
 
@@ -109,7 +128,7 @@ function Mapa({
     marcadores.current.forEach((mk) => mk.remove());
     const comPosicao = veiculos.filter((v) => v.position);
     marcadores.current = comPosicao.map((v) =>
-      new maplibregl.Marker({ color: '#f2911d' })
+      new maplibregl.Marker({ color: STATUS_COLORS[estadoDe(v)] })
         .setLngLat([v.position!.longitude, v.position!.latitude])
         .setPopup(new maplibregl.Popup({ offset: 24 }).setText(v.plate))
         .addTo(m),
@@ -197,7 +216,8 @@ export default function MeusVeiculosPage() {
             <div className="p-4 text-sm text-muted-foreground">Nenhum veículo encontrado.</div>
           ) : (
             veiculos.map((v) => {
-              const online = v.connection?.status === 'online';
+              const estado = estadoDe(v);
+              const cor = STATUS_COLORS[estado];
               return (
                 <button
                   key={v.id}
@@ -210,8 +230,12 @@ export default function MeusVeiculosPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold">{v.plate}</span>
-                      <span className={`text-xs font-medium ${online ? 'text-green-600' : 'text-slate-500'}`}>
-                        {online ? 'Online' : 'Offline'}
+                      {/* Selo colorido como o da Rede: ONLINE, S/RESP, S/GPS, SLEEP, OFFLINE. */}
+                      <span
+                        className="rounded px-1.5 text-[10px] font-bold tracking-wide text-white"
+                        style={{ backgroundColor: cor }}
+                      >
+                        {getVehicleStatusLabel(estado)}
                       </span>
                     </div>
                     <div className="truncate text-xs text-muted-foreground">
@@ -221,12 +245,16 @@ export default function MeusVeiculosPage() {
                       <>
                         <div className="mt-1 truncate text-xs">{v.position.address || 'Endereço indisponível'}</div>
                         <div className="text-xs text-muted-foreground">
-                          {v.position.ignition ? 'Ligado' : 'Desligado'} · {Math.round(v.position.speed)} km/h · {quando(v.position.fixTime)}
+                          Ignição {ignicaoTexto(estado, v.position.ignition === true)} ·{' '}
+                          {estado === 'offline' ? 0 : Math.round(v.position.speed)} km/h · GPS {quando(v.position.fixTime)}
                         </div>
                       </>
                     ) : (
                       <div className="mt-1 text-xs text-muted-foreground">Sem posição ainda</div>
                     )}
+                    <div className="text-xs text-muted-foreground">
+                      {ultimaAtualizacao(v.connection?.lastUpdate ?? '')}
+                    </div>
                   </div>
                 </button>
               );

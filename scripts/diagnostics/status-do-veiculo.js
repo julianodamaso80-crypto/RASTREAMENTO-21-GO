@@ -1,14 +1,22 @@
 /**
- * Teste de regressão: carro desligado NUNCA vira "GPS com defeito".
+ * Teste de regressão: o status do veículo segue a régua da RedeVeiculos.
  *
- * Regra do dono (30/09/2026): "GPS desligado só é quando não está vinculado a
- * nenhum veículo, você perdeu o GPS ou defeito — nunca porque o veículo só
- * está desligado". O GT06/J16 cala quando a chave desliga (97% dos
- * rastreadores vivos ficam mudos por mais de 1 h em qualquer janela de 2 dias,
- * medido no Traccar em 30/09/2026) e volta sozinho quando ela gira.
+ * Pedido do dono (07/10/2026): "faça identico da rede". Associado lia
+ * "GPS com defeito · favor entrar em contato com a central" num carro só
+ * parado e ligava para a empresa. A Rede nunca diz defeito: mostra o estado da
+ * comunicação (ONLINE, S/RESP, S/GPS, SLEEP, OFFLINE) e "Última atualização há X".
  *
- * Roda a função de verdade (`getDisplayStatus`, transpilada com esbuild) nos
- * cenários que doeram em produção.
+ * Régua lida no código e nos dados da Rede em 07/10/2026
+ * (`colorIconAtivoGPSAndSinal` do mapa /rastreamento/v2/):
+ *  - comunicou há até 30 min, com GPS              → ONLINE   verde
+ *  - comunicou há 30–60 min                        → S/RESP   amarelo
+ *  - comunicando (até 60 min) mas sem posição GPS  → S/GPS    preto
+ *  - moto calada há menos de 2 dias                → SLEEP    azul
+ *  - o resto                                       → OFFLINE  laranja
+ * Carro parado continua ONLINE enquanto o rastreador manda sinal de vida,
+ * mesmo com o GPS parado há dias (na Rede: GPS de 67 h, contato agora = ONLINE).
+ *
+ * Roda a função de verdade (`getDisplayStatus`, transpilada com esbuild).
  *
  * Rodar:  node scripts/diagnostics/status-do-veiculo.js
  */
@@ -24,12 +32,12 @@ const FONTE = path.join(DASH, 'src/lib/utils.ts');
 const esbuild = require(path.join(RAIZ, 'node_modules', 'esbuild'));
 
 let falhou = false;
-function checar(nome, condicao, detalhe) {
-  if (condicao) {
+function checar(nome, obtido, esperado) {
+  if (obtido === esperado) {
     console.log('  ok   ' + nome);
   } else {
     falhou = true;
-    console.error('  X    ' + nome + (detalhe ? ' -> ' + detalhe : ''));
+    console.error('  X    ' + nome + ' -> veio ' + obtido + ', esperado ' + esperado);
   }
 }
 
@@ -42,63 +50,52 @@ esbuild.buildSync({
   alias: { '@': path.join(DASH, 'src') },
   outfile: saida,
 });
-const { getDisplayStatus } = require(saida);
+const { getDisplayStatus, getVehicleStatusLabel } = require(saida);
 
-const AGORA = Date.parse('2026-09-30T15:00:00Z');
+const AGORA = Date.parse('2026-10-07T15:00:00Z');
 const antes = (ms) => new Date(AGORA - ms).toISOString();
-const H = 3600_000;
+const MIN = 60_000;
+const H = 60 * MIN;
 const realNow = Date.now;
 Date.now = () => AGORA;
 
-console.log('\n########## status do veículo');
+/** Veículo com posição GPS válida, contato e GPS nas idades pedidas. */
+function st({ contato, gps = contato, tipo = 'CAR', status = 'ACTIVE', semPosicao = false }) {
+  return getDisplayStatus({
+    lastUpdate: contato == null ? '' : antes(contato),
+    positionTime: semPosicao ? null : antes(gps),
+    latitude: semPosicao ? 0 : -22.95,
+    longitude: semPosicao ? 0 : -43.68,
+    vehicleStatus: status,
+    vehicleType: tipo,
+  });
+}
 
-// Carro desligado há 5 h: o rastreador calou junto com a chave. É LARANJA.
-checar(
-  'parado há 5 h com rastreador calado = Desligado (laranja)',
-  getDisplayStatus('unknown', 0, antes(5 * H), 'ACTIVE', antes(5 * H)) === 'ignition_off',
-  getDisplayStatus('unknown', 0, antes(5 * H), 'ACTIVE', antes(5 * H)),
-);
+console.log('\n########## status do veículo (régua da Rede)');
 
-// Fim de semana inteiro na garagem: 60 h calado ainda é carro parado.
+checar('contato agora, GPS agora = ONLINE', st({ contato: MIN }), 'online');
 checar(
-  'calado há 60 h (fim de semana) = Desligado, não defeito',
-  getDisplayStatus('unknown', 0, antes(60 * H), 'ACTIVE', antes(60 * H)) === 'ignition_off',
+  'carro parado: contato agora, GPS de 67 h = ONLINE (igual à Rede)',
+  st({ contato: 2 * MIN, gps: 67 * H }),
+  'online',
 );
+checar('contato há 29 min = ONLINE', st({ contato: 29 * MIN }), 'online');
+checar('contato há 48 min = S/RESP', st({ contato: 48 * MIN }), 'sem_resp');
+checar('contato há 61 min = OFFLINE', st({ contato: 61 * MIN }), 'offline');
+checar('carro calado há 6 dias = OFFLINE, não defeito', st({ contato: 6 * 24 * H }), 'offline');
+checar('falando agora sem nenhuma posição GPS = S/GPS', st({ contato: MIN, semPosicao: true }), 'sem_gps');
+checar('moto calada há 10 h = SLEEP', st({ contato: 10 * H, tipo: 'MOTORCYCLE' }), 'sleep');
+checar('moto calada há 3 dias = OFFLINE', st({ contato: 3 * 24 * H, tipo: 'MOTORCYCLE' }), 'offline');
+checar('carro calado há 10 h = OFFLINE (sleep é só moto)', st({ contato: 10 * H }), 'offline');
+checar('sem data de contato = OFFLINE', st({ contato: null }), 'offline');
+checar('bloqueado continua Bloqueado', st({ contato: MIN, status: 'BLOCKED' }), 'alert');
 
-// Passou de 3 dias: perdeu, arrancaram ou quebrou. Aí sim é VERMELHO.
-checar(
-  'calado há 4 dias = GPS com defeito (vermelho)',
-  getDisplayStatus('unknown', 0, antes(4 * 24 * H), 'ACTIVE', antes(4 * 24 * H)) === 'offline',
-);
-
-// O Traccar diz "offline" toda vez que a conexão TCP fecha — o GT06 fecha e
-// reabre o tempo todo. Contato de 1 min atrás é rastreador vivo.
-checar(
-  'Traccar "offline" com contato há 1 min NÃO é defeito',
-  getDisplayStatus('offline', 0, antes(60_000), 'ACTIVE', antes(60_000)) === 'ignition_off',
-);
-
-// Volta automática: assim que o rastreador fala de novo, o status muda sozinho.
-checar(
-  'rastreador voltou a falar agora, andando = Ligado (verde)',
-  getDisplayStatus('online', 20, antes(5_000), 'ACTIVE', antes(5_000)) === 'ignition_on',
-);
-
-// Velocidade congelada numa posição velha continua sendo "parado".
-checar(
-  'posição de 30 min com 6 km/h congelado = Desligado',
-  getDisplayStatus('online', 3.2, antes(30_000), 'ACTIVE', antes(30 * 60_000)) === 'ignition_off',
-);
-
-checar(
-  'bloqueado manda em tudo',
-  getDisplayStatus('online', 20, antes(5_000), 'BLOCKED', antes(5_000)) === 'alert',
-);
-
-checar(
-  'sem data de contato nenhuma = defeito (não finge que está vivo)',
-  getDisplayStatus('unknown', 0, 'sem-data', 'ACTIVE', null) === 'offline',
-);
+console.log('\n########## rótulos (os mesmos da Rede)');
+checar('online', getVehicleStatusLabel('online'), 'ONLINE');
+checar('sem_resp', getVehicleStatusLabel('sem_resp'), 'S/RESP');
+checar('sem_gps', getVehicleStatusLabel('sem_gps'), 'S/GPS');
+checar('sleep', getVehicleStatusLabel('sleep'), 'SLEEP');
+checar('offline', getVehicleStatusLabel('offline'), 'OFFLINE');
 
 Date.now = realNow;
 try {

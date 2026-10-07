@@ -1,11 +1,22 @@
 import type { TagNoMapa } from '@/types/tag-map';
 
 /** Filtro da aba: todos, um estado do rastreador, ou só as TAGs. */
-export type FiltroDoMapa = 'all' | 'tag' | 'ignition_on' | 'ignition_off' | 'offline' | 'alert';
+/** Abas do mapa — as mesmas do filtro de status da Rede, mais Bloqueado e TAG. */
+export type FiltroDoMapa =
+  | 'all'
+  | 'tag'
+  | 'online'
+  | 'sem_resp'
+  | 'offline'
+  | 'sleep'
+  | 'sem_gps'
+  | 'ignicao'
+  | 'movimento'
+  | 'alert';
 
 /**
  * A TAG entra no "Todos" e na aba "TAG". Nas abas de estado do rastreador
- * (Ligado, Desligado, GPS com defeito, Bloqueado) ela NÃO entra: a TAG não
+ * (Online, Offline, Sem sinal GPS, Bloqueado...) ela NÃO entra: a TAG não
  * mede nada disso, e pôr uma TAG em "Desligado" seria afirmar o que ninguém
  * mediu.
  */

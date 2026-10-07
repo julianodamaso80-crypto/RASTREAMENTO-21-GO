@@ -6,9 +6,14 @@ import type { FiltroDoMapa } from '@/lib/tags-no-mapa';
 
 const filters: { key: FiltroDoMapa; label: string }[] = [
   { key: 'all', label: 'Todos' },
-  { key: 'ignition_on', label: 'Ligado' },
-  { key: 'ignition_off', label: 'Desligado' },
-  { key: 'offline', label: 'GPS com defeito' },
+  // Mesmos nomes e mesma ordem do filtro de status da RedeVeiculos.
+  { key: 'online', label: 'Online' },
+  { key: 'sem_resp', label: 'Sem resposta' },
+  { key: 'offline', label: 'Offline' },
+  { key: 'sleep', label: 'Modo sleep' },
+  { key: 'sem_gps', label: 'Sem sinal GPS' },
+  { key: 'ignicao', label: 'Ignição ligada' },
+  { key: 'movimento', label: 'Em movimento' },
   { key: 'alert', label: 'Bloqueado' },
   // Veículos que só têm TAG. Só aparece para quem enxerga TAG (time interno).
   { key: 'tag', label: 'TAG' },

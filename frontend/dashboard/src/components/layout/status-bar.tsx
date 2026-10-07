@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { useTracking } from '@/contexts/tracking-context';
+import { STATUS_COLORS } from '@/lib/constants';
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? 'v2.4.1';
 
@@ -17,20 +18,20 @@ export function StatusBar() {
           <strong className="text-slate-100 tabular-nums">{statusCounts.total}</strong>
         </span>
         <span>
-          Ligados:{' '}
-          <strong className="text-emerald-400 tabular-nums">
-            {statusCounts.ignition_on}
+          Online:{' '}
+          <strong className="tabular-nums" style={{ color: STATUS_COLORS.online }}>
+            {statusCounts.online}
           </strong>
         </span>
         <span>
-          Desligados:{' '}
-          <strong className="text-red-400 tabular-nums">
-            {statusCounts.ignition_off}
+          Offline:{' '}
+          <strong className="tabular-nums" style={{ color: STATUS_COLORS.offline }}>
+            {statusCounts.offline}
           </strong>
         </span>
-        <span>
-          GPS com defeito:{' '}
-          <strong className="text-red-400 tabular-nums">{statusCounts.offline}</strong>
+        <span className="hidden sm:inline">
+          Sem sinal GPS:{' '}
+          <strong className="text-slate-100 tabular-nums">{statusCounts.sem_gps}</strong>
         </span>
         <span className="hidden sm:inline">
           Bloqueados:{' '}

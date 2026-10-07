@@ -1,6 +1,7 @@
 import { ImageSourcePropType } from 'react-native';
 import { Vehicle, VehicleType, Position } from './api';
 import { colors } from './theme';
+import { estadoRede } from './estado-rede';
 
 /**
  * Desenho realista (vista de cima) por tipo — os MESMOS PNGs do dashboard web
@@ -51,17 +52,14 @@ export interface VehicleStatus {
 }
 
 /**
- * Status derivado da POSIÇÃO GPS real (nunca do heartbeat de conexão) —
- * mesma regra de segurança do dashboard: verde em movimento, âmbar ligado
- * parado, vermelho desligado, cinza sem sinal.
+ * Anel do marcador: cor e nome do estado da comunicação, com a régua da
+ * RedeVeiculos (ONLINE, S/RESP, S/GPS, SLEEP, OFFLINE — ver estado-rede.ts).
+ * Pulsa só andando de verdade, e só com o rastreador conectado.
  */
 export function vehicleStatus(v: Vehicle): VehicleStatus {
   const bloqueio = blockState(v);
   if (bloqueio === 'BLOQUEADO') return { color: colors.red, label: BLOCK_LABEL.BLOQUEADO, moving: false };
+  const estado = estadoRede(v);
   const p: Position | null = v.position;
-  if (!p) return { color: colors.textFaint, label: 'Sem sinal', moving: false };
-  if (p.motion) return { color: colors.green, label: 'Em movimento', moving: true };
-  if (p.ignition === true) return { color: colors.amber, label: 'Ligado · parado', moving: false };
-  if (p.ignition === false) return { color: colors.red, label: 'Desligado', moving: false };
-  return { color: colors.amber, label: 'Em repouso', moving: false };
+  return { color: estado.color, label: estado.label, moving: estado.conectado && !!p?.motion };
 }

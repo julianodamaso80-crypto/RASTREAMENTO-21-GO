@@ -9,7 +9,7 @@ import { VehicleDetailPanel } from '@/components/vehicles/vehicle-detail-panel';
 import { SelectionListPanel } from '@/components/map/selection-list-panel';
 import { TagDetailPanel } from '@/components/map/tag-detail-panel';
 import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
-import { formatSpeed, formatRelativeTime, getVehicleStatusLabel } from '@/lib/utils';
+import { formatSpeed, getVehicleStatusLabel, ultimaAtualizacao } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { STATUS_COLORS } from '@/lib/constants';
 import type { MapContainerRef } from '@/components/map/map-container';
@@ -363,15 +363,14 @@ export default function MapaPage() {
             <SelectionListPanel
               linhas={marcados.map((v) => {
                 const geo = enderecos.get(v.id);
-                const movendo =
-                  v.displayStatus === 'ignition_on' && v.speed > 0;
+                const movendo = v.moving;
                 return {
                   id: v.id,
                   titulo: v.plate,
                   estado: [
-                    getVehicleStatusLabel(v.displayStatus, v.vehicleType),
+                    getVehicleStatusLabel(v.displayStatus),
                     movendo ? formatSpeed(v.speed) : null,
-                    formatRelativeTime(v.positionTime ?? v.lastUpdate),
+                    ultimaAtualizacao(v.lastUpdate),
                   ]
                     .filter(Boolean)
                     .join(' · '),

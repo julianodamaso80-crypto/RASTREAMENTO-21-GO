@@ -18,7 +18,13 @@ import {
   VEHICLE_ICONS,
   type BasemapId,
 } from '@/lib/constants';
-import { formatSpeed, formatRelativeTime } from '@/lib/utils';
+import {
+  formatSpeed,
+  formatRelativeTime,
+  getVehicleStatusLabel,
+  ignicaoTexto,
+  ultimaAtualizacao,
+} from '@/lib/utils';
 import { resolveSatelliteStyle, type SatelliteProvider } from '@/lib/basemap';
 import { mapApi } from '@/lib/api';
 import type { VehicleWithTracking } from '@/types/vehicle';
@@ -102,17 +108,20 @@ function distanciaMetros(a: [number, number], b: [number, number]): number {
 }
 
 /**
- * Texto do estado que vai na etiqueta do veículo selecionado.
- *
- * Com o rastreador mudo a ignição guardada é a da última posição recebida —
- * afirmar "desligado" ali seria dar como fato um dado velho.
+ * Selo do estado (ONLINE, OFFLINE...) como a etiqueta colorida da Rede:
+ * fundo na cor do estado e texto branco — preto (S/GPS) também fica legível.
+ */
+function seloEstado(vehicle: VehicleWithTracking, color: string): string {
+  return `<span style="display:inline-block;padding:0 6px;border-radius:4px;background:${color};color:#fff;font-size:10px;font-weight:700;letter-spacing:0.4px;">${getVehicleStatusLabel(vehicle.displayStatus)}</span>`;
+}
+
+/**
+ * Linha abaixo do selo: ignição só com o rastreador conectado (a guardada de
+ * um rastreador mudo é velha); calado, o que vale é há quanto tempo.
  */
 function rotuloEstado(vehicle: VehicleWithTracking): string {
-  if (vehicle.displayStatus === 'offline') return 'Sem sinal do rastreador';
-  const ignicao = vehicle.ignition ? 'Ignição ligada' : 'Ignição desligada';
-  return vehicle.displayStatus === 'alert'
-    ? `Bloqueado · ${ignicao}`
-    : ignicao;
+  const ignicao = ignicaoTexto(vehicle.displayStatus, vehicle.ignition);
+  return ignicao === '--' ? ultimaAtualizacao(vehicle.lastUpdate) : `Ignição ${ignicao.toLowerCase()}`;
 }
 
 /**
@@ -415,8 +424,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         const color = STATUS_COLORS[vehicle.displayStatus];
         // Pulse só quando carro REALMENTE está se movendo (motor ligado +
         // velocidade > 0). Não pulsa só por ignição ligada parado.
-        const isMoving =
-          vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0;
+        const isMoving = vehicle.moving;
 
         // Desenho REALISTA do veículo (carro/moto vista de cima) girando na
         // direção real, com anel colorido por status pra leitura rápida e
@@ -442,12 +450,9 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         tooltip.style.cssText =
           'display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);padding:6px 10px;background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.15);border-radius:6px;white-space:nowrap;font-size:12px;color:#e2e8f0;z-index:10;pointer-events:none;margin-bottom:6px;backdrop-filter:blur(8px);';
         const tooltipSpeed = isMoving ? formatSpeed(vehicle.speed) : '0 km/h';
-        const tooltipTime = formatRelativeTime(
-          vehicle.positionTime ?? vehicle.lastUpdate,
-        );
         tooltip.innerHTML = `
-          <div style="font-weight:600;color:${color}">${vehicle.plate}</div>
-          <div>${tooltipSpeed} · GPS ${tooltipTime}</div>
+          <div style="font-weight:600;">${vehicle.plate} ${seloEstado(vehicle, color)}</div>
+          <div>${tooltipSpeed} · ${ultimaAtualizacao(vehicle.lastUpdate)}</div>
         `;
         el.appendChild(tooltip);
 
@@ -461,9 +466,8 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
             ordem === null
               ? `
             <div style="font-weight:700;letter-spacing:0.6px;">${vehicle.plate}</div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:4px;color:${color};font-weight:600;">
-              <span style="width:6px;height:6px;border-radius:50%;background:${color};"></span>${rotuloEstado(vehicle)}
-            </div>
+            <div style="margin-top:2px;">${seloEstado(vehicle, color)}</div>
+            <div style="color:#cbd5e1;">${rotuloEstado(vehicle)}</div>
           `
               : `
             <div style="display:flex;align-items:center;gap:5px;font-weight:700;letter-spacing:0.6px;">
@@ -609,8 +613,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
 
         const existing = markersRef.current.get(vehicle.id);
         const lngLat: [number, number] = [vehicle.longitude, vehicle.latitude];
-        const isMoving =
-          vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0;
+        const isMoving = vehicle.moving;
         const selecionado = selectedIds?.includes(vehicle.id) ?? false;
         const ordem = ordemPorId.get(vehicle.id) ?? null;
         // chave do "visual": só muda quando precisa redesenhar (cor/ícone/
@@ -619,7 +622,9 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         // ligada" depois do motorista desligar o carro.
         // A ordem entra na chave: marcar/desmarcar um vizinho renumera os
         // outros, e sem isso a etiqueta continuaria mostrando o número velho.
-        const vkey = `${vehicle.displayStatus}|${vehicle.vehicleType}|${isMoving}|${selecionado}|${ordem}|${vehicle.ignition}`;
+        // O selecionado mostra "Última atualização há X" na etiqueta: o texto
+        // entra na chave para a etiqueta não congelar.
+        const vkey = `${vehicle.displayStatus}|${vehicle.vehicleType}|${isMoving}|${selecionado}|${ordem}|${vehicle.ignition}|${selecionado ? ultimaAtualizacao(vehicle.lastUpdate) : ''}`;
 
         if (existing) {
           const el = existing.getElement();

@@ -40,6 +40,8 @@ export interface AssociateVehicle {
   model: string | null;
   color: string | null;
   year: number | null;
+  vehicleType?: 'CAR' | 'MOTORCYCLE' | null;
+  status?: string;
   position: AssociatePosition | null;
   connection: { status: string; lastUpdate: string | null } | null;
 }

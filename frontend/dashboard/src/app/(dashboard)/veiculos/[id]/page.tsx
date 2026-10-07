@@ -35,7 +35,7 @@ import { BlockConfirmModal } from '@/components/vehicles/block-confirm-modal';
 import { useTracking } from '@/contexts/tracking-context';
 import { useAuth } from '@/contexts/auth-context';
 import { canBlockVehicle } from '@/lib/manageable-routes';
-import { formatRelativeTime, formatSpeed } from '@/lib/utils';
+import { formatRelativeTime, formatSpeed, ignicaoTexto } from '@/lib/utils';
 
 export default function VehicleCockpitPage() {
   const params = useParams();
@@ -270,7 +270,7 @@ function OverviewTab({ vehicle, vehicleId }: { vehicle: VehicleWithTracking; veh
             <div>
               <span className="text-muted-foreground text-xs">Velocidade</span>
               <p className="font-semibold">
-                {vehicle.displayStatus === 'ignition_on' && vehicle.speed > 0
+                {vehicle.moving
                   ? formatSpeed(vehicle.speed)
                   : '0 km/h'}
               </p>
@@ -279,7 +279,7 @@ function OverviewTab({ vehicle, vehicleId }: { vehicle: VehicleWithTracking; veh
               <span className="text-muted-foreground text-xs">Ignição</span>
               <p className="font-semibold flex items-center gap-1">
                 <Power className={`h-3.5 w-3.5 ${vehicle.ignition ? 'text-emerald-500' : 'text-gray-500'}`} />
-                {vehicle.ignition ? 'Ligada' : 'Desligada'}
+                {ignicaoTexto(vehicle.displayStatus, vehicle.ignition)}
               </p>
             </div>
             <div>

@@ -1,7 +1,13 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import type { DisplayStatus } from '@/types/vehicle';
-import { OFFLINE_THRESHOLD_MS, STALE_POSITION_MS } from './constants';
+import type { DisplayStatus, VehicleType } from '@/types/vehicle';
+import {
+  ONLINE_ATE_MS,
+  SEM_RESP_ATE_MS,
+  SLEEP_MOTO_ATE_MS,
+  STALE_POSITION_MS,
+  STATUS_LABELS,
+} from './constants';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -48,6 +54,31 @@ export function formatRelativeTime(isoDate: string): string {
   return `há ${days}d`;
 }
 
+/**
+ * "Última atualização há 6 dias" — o texto do card da RedeVeiculos, que usa
+ * `moment().fromNow()` em pt-br. Mesmos degraus do moment.
+ */
+export function ultimaAtualizacao(isoDate: string): string {
+  const s = (Date.now() - new Date(isoDate).getTime()) / 1000;
+  if (!Number.isFinite(s)) return 'Última atualização não informada';
+  const m = s / 60;
+  const h = m / 60;
+  const d = h / 24;
+  let txt: string;
+  if (s < 45) txt = 'há poucos segundos';
+  else if (s < 90) txt = 'há um minuto';
+  else if (m < 45) txt = `há ${Math.round(m)} minutos`;
+  else if (m < 90) txt = 'há uma hora';
+  else if (h < 22) txt = `há ${Math.round(h)} horas`;
+  else if (h < 36) txt = 'há um dia';
+  else if (d < 26) txt = `há ${Math.round(d)} dias`;
+  else if (d < 45) txt = 'há um mês';
+  else if (d < 320) txt = `há ${Math.round(d / 30.4)} meses`;
+  else if (d < 548) txt = 'há um ano';
+  else txt = `há ${Math.round(d / 365)} anos`;
+  return `Última atualização ${txt}`;
+}
+
 const SP_TZ = 'America/Sao_Paulo';
 
 /**
@@ -84,75 +115,66 @@ export function formatTimeOnlyBR(isoDate: string): string {
 }
 
 /**
- * Calcula o status visível do veículo — 3 estados que o dono entende:
+ * Estado da comunicação do rastreador, com a régua da RedeVeiculos
+ * (`colorIconAtivoGPSAndSinal` do mapa deles, lido em 07/10/2026):
  *
- *  alert        — VehicleStatus=BLOCKED (bloqueado manualmente)
- *  offline      — rastreador PERDIDO: sem contato há mais de 3 dias
- *                 (OFFLINE_THRESHOLD_MS)                  → "GPS com defeito", VERMELHO
- *  ignition_on  — motor em FUNCIONAMENTO (rodando/andando) → VERDE,   "Ligado"
- *  ignition_off — parado/motor desligado, INCLUSIVE com o rastreador dormindo
- *                 há horas                                → LARANJA, "Desligado"
+ *  alert    — VehicleStatus=BLOCKED
+ *  sem_gps  — comunicou há até 60 min, mas não há posição GPS nenhuma
+ *  online   — comunicou há até 30 min
+ *  sem_resp — comunicou há 30–60 min
+ *  sleep    — moto calada há menos de 2 dias
+ *  offline  — o resto
  *
- * Regra do dono (30/09/2026): "GPS com defeito" só quando o rastreador foi
- * perdido, quebrou ou está sem veículo — NUNCA porque o carro está desligado.
- * O GT06/J16 cala quando a chave desliga e volta sozinho quando ela gira; o
- * status sai deste cálculo a cada atualização, então a volta é automática,
- * sem ninguém precisar mexer. O `status` do Traccar ("offline" = a conexão
- * TCP fechou) não entra: o aparelho fecha e reabre a conexão o tempo todo.
- *
- * "Ligado" = carro EM MOVIMENTO de verdade. Dois sinais juntos, porque nenhum
- * sozinho basta:
- *  - velocidade > 0 na última posição, E
- *  - a posição GPS é RECENTE (atualizou agora há pouco).
- * O segundo é crucial: rastreadores Concox/GT06 PARAM de mandar GPS quando o
- * carro fica parado, congelando a última posição com a velocidade antiga (ex.:
- * fica "6 km/h" travado por horas no mesmo lugar). Sem checar a idade da
- * posição, carro parado aparecia "em movimento" — exatamente o bug reportado.
- * Posição velha = carro parado = "desligado" (laranja). Rastreador sem
- * comunicação (heartbeat parado) = "GPS com defeito" (vermelho).
+ * "Comunicou" é o último sinal de vida do rastreador (Traccar `lastUpdate`,
+ * que anda com heartbeat), não a última posição GPS: carro parado mandando
+ * heartbeat continua ONLINE, como na Rede. O `status` do Traccar não entra —
+ * ele diz "offline" toda vez que a conexão TCP fecha e o GT06 fecha e reabre o
+ * tempo todo.
  */
-const MOVING_KNOTS = 1; // ~1.8 km/h — acima disso é movimento real (evita drift)
-export function getDisplayStatus(
-  _deviceStatus: string,
-  speed: number,
-  lastUpdate: string,
-  vehicleStatus: string,
-  positionTime: string | null = null,
-  _ignition: boolean = false,
-): DisplayStatus {
-  if (vehicleStatus === 'BLOCKED') return 'alert';
-  const now = Date.now();
-  // rastreador perdido (sem contato há dias) = GPS com defeito
-  const contatoAgeMs = now - new Date(lastUpdate).getTime();
-  if (!Number.isFinite(contatoAgeMs) || contatoAgeMs > OFFLINE_THRESHOLD_MS) {
-    return 'offline';
+export function getDisplayStatus(v: {
+  lastUpdate: string;
+  positionTime: string | null;
+  latitude: number;
+  longitude: number;
+  vehicleStatus: string;
+  vehicleType: VehicleType;
+}): DisplayStatus {
+  if (v.vehicleStatus === 'BLOCKED') return 'alert';
+  const contatoAgeMs = Date.now() - new Date(v.lastUpdate).getTime();
+  if (!Number.isFinite(contatoAgeMs)) return 'offline';
+  if (contatoAgeMs <= SEM_RESP_ATE_MS) {
+    const temPosicao = !!v.positionTime && !(v.latitude === 0 && v.longitude === 0);
+    if (!temPosicao) return 'sem_gps';
+    return contatoAgeMs <= ONLINE_ATE_MS ? 'online' : 'sem_resp';
   }
-  const positionAge = positionTime
-    ? now - new Date(positionTime).getTime()
-    : Infinity;
-  // em movimento SÓ se o GPS está atualizando (posição fresca) E com velocidade.
-  // Posição velha = parado (velocidade congelada não conta).
-  const moving = positionAge < STALE_POSITION_MS && speed > MOVING_KNOTS;
-  return moving ? 'ignition_on' : 'ignition_off';
+  if (v.vehicleType === 'MOTORCYCLE' && contatoAgeMs < SLEEP_MOTO_ATE_MS) return 'sleep';
+  return 'offline';
+}
+
+/** Rastreador falando com o servidor agora (na Rede: `status_sinal` = R). */
+export function estaConectado(status: DisplayStatus): boolean {
+  return status === 'online' || status === 'sem_resp' || status === 'sem_gps';
 }
 
 /**
- * Label do status para um veículo específico, com o tipo (carro/moto) e
- * concordância de gênero. Usado no painel e na lista.
+ * Em movimento SÓ se o GPS está atualizando (posição fresca) E com velocidade.
+ * Concox/GT06 param de mandar GPS quando o carro fica parado, congelando a
+ * última velocidade ("6 km/h" travado por horas): posição velha = parado.
  */
-export function getVehicleStatusLabel(
-  status: DisplayStatus,
-  vehicleType: 'CAR' | 'MOTORCYCLE',
-): string {
-  const moto = vehicleType === 'MOTORCYCLE';
-  switch (status) {
-    case 'ignition_on':
-      return moto ? 'Moto ligada' : 'Carro ligado';
-    case 'ignition_off':
-      return moto ? 'Moto desligada' : 'Carro desligado';
-    case 'offline':
-      return 'GPS com defeito';
-    case 'alert':
-      return 'Bloqueado';
-  }
+const MOVING_KNOTS = 1; // ~1.8 km/h — acima disso é movimento real (evita drift)
+export function estaAndando(speed: number, positionTime: string | null): boolean {
+  if (!positionTime) return false;
+  const positionAge = Date.now() - new Date(positionTime).getTime();
+  return positionAge < STALE_POSITION_MS && speed > MOVING_KNOTS;
+}
+
+/** Selo do status, com os mesmos nomes da Rede (ONLINE, OFFLINE, ...). */
+export function getVehicleStatusLabel(status: DisplayStatus): string {
+  return STATUS_LABELS[status];
+}
+
+/** Ignição como a Rede mostra: só quando o rastreador está conectado. */
+export function ignicaoTexto(status: DisplayStatus, ignition: boolean): string {
+  if (!estaConectado(status)) return '--';
+  return ignition ? 'Ligada' : 'Desligada';
 }

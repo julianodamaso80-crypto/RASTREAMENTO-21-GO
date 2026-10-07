@@ -111,41 +111,36 @@ export const VEHICLE_ICONS: Record<VehicleType, string> = {
   MOTORCYCLE: '/markers/moto-top.png',
 };
 
+// Cores e nomes iguais aos da RedeVeiculos (colorIconAtivoGPSAndSinal e
+// tagStatusConnection do mapa deles, lidos em 07/10/2026).
 export const STATUS_COLORS: Record<DisplayStatus, string> = {
-  ignition_on: '#22c55e',  // green-500   — ligado
-  ignition_off: '#f97316', // orange-500  — desligado (parado normal)
-  offline: '#ef4444',      // red-500     — GPS com defeito (rastreador sem comunicação)
-  alert: '#dc2626',        // red-600     — BLOQUEADO
+  online: '#1BCF28',
+  sem_resp: '#F5BE11',
+  sem_gps: '#000000',
+  sleep: '#3ABAF4',
+  offline: '#E04006',
+  alert: '#dc2626', // BLOQUEADO
 };
 
-// Labels genéricos (abas de filtro / barra). Para o card de um veículo
-// específico, usar getVehicleStatusLabel() (com Carro/Moto e gênero).
 export const STATUS_LABELS: Record<DisplayStatus, string> = {
-  ignition_on: 'Ligado',
-  ignition_off: 'Desligado',
-  offline: 'GPS com defeito',
+  online: 'ONLINE',
+  sem_resp: 'S/RESP',
+  sem_gps: 'S/GPS',
+  sleep: 'SLEEP',
+  offline: 'OFFLINE',
   alert: 'Bloqueado',
 };
 
-// Orientação ao usuário quando há defeito (rastreador sem comunicação).
-export const STATUS_HINTS: Partial<Record<DisplayStatus, string>> = {
-  offline: 'Sem contato há mais de 3 dias — favor entrar em contato com a central',
-};
-
 /**
- * Depois disso o rastreador é dado como PERDIDO ("GPS com defeito"): defeito,
- * arrancado ou sem chip. Antes disso ele só está dormindo — o GT06/J16 cala
- * quando o carro desliga e volta sozinho quando a chave gira.
- *
- * Era 10 min, e isso pintava de vermelho 30% da frota (1.200 de 3.982) a
- * qualquer hora do dia: carro parado na garagem virava "defeito". Medido no
- * Traccar em 30/09/2026 (7 dias): 97% dos rastreadores vivos calam por mais
- * de 1 h, 86% por mais de 6 h, 46% por mais de 12 h; silêncio de 48–72 h
- * ainda aconteceu em 176 aparelhos saudáveis, acima de 72 h em 54. Os 32 sem
- * posição há 7 dias eram os únicos perdidos de verdade. Mesma régua do
- * backend (`SEM_CONTATO_MS` em device-health.service.ts).
+ * Régua da Rede para a comunicação do rastreador (último sinal de vida, não
+ * a última posição GPS). Medido na Rede em 07/10/2026: 24 min ainda ONLINE,
+ * 48 min S/RESP, 3 h OFFLINE; carro parado com GPS de 67 h e contato agora
+ * segue ONLINE.
  */
-export const OFFLINE_THRESHOLD_MS = 72 * 60 * 60 * 1000; // 3 dias
+export const ONLINE_ATE_MS = 30 * 60 * 1000;
+export const SEM_RESP_ATE_MS = 60 * 60 * 1000;
+/** Moto calada há menos disso é "SLEEP" (na Rede vale para MOTO e JETSKI). */
+export const SLEEP_MOTO_ATE_MS = 2 * 24 * 60 * 60 * 1000;
 
 // Acima desse gap entre AGORA e a última posição GPS real, o veículo é
 // tratado como 'stopped' mesmo se o último speed > 0 — rastreadores
