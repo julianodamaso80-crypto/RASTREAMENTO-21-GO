@@ -55,7 +55,8 @@ export function AssetActionsMenu({
   const inadimplente = asset.financialStatus === 'INADIMPLENTE';
   // Veículo só com TAG não existe como veículo nosso nem aparece no app do
   // associado (o app só lista veículo com rastreador). Não há acesso, bloqueio,
-  // financeiro ou titularidade para mudar aqui: o clique dava erro.
+  // ou financeiro para mudar aqui: o clique dava erro. A titularidade vale: o
+  // dono da TAG mora no vínculo e muda por rota própria.
   const soTag = !!asset.soTag;
 
   return (
@@ -91,8 +92,8 @@ export function AssetActionsMenu({
         {soTag && (
           <p className="px-2 py-1.5 text-xs leading-snug text-muted-foreground">
             Só TAG: este veículo não aparece no app do cliente, então não há
-            acesso para bloquear. As ações abaixo valem quando ele tiver
-            rastreador.
+            acesso para bloquear. As ações abaixo, exceto a troca de
+            titularidade, valem quando ele tiver rastreador.
           </p>
         )}
         <DropdownMenuItem onClick={onAlterarFinanceiro} disabled={soTag}>
@@ -130,7 +131,7 @@ export function AssetActionsMenu({
             )}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={onTrocarTitularidade} disabled={soTag}>
+        <DropdownMenuItem onClick={onTrocarTitularidade}>
           <UserRoundCog className="h-4 w-4" /> Troca de titularidade
         </DropdownMenuItem>
         <DropdownMenuItem

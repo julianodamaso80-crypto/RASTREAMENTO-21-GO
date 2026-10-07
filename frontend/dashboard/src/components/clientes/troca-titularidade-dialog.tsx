@@ -170,8 +170,10 @@ export function TrocaTitularidadeDialog({
           <DialogDescription>
             O veículo <span className="font-semibold">{alvo?.plate}</span>
             {alvo?.donoAtual ? ` de ${alvo.donoAtual}` : ''} passa para o
-            associado que o SGA devolver para a placa. O rastreador continua
-            instalado.
+            associado que o SGA devolver para a placa.{' '}
+            {alvo?.vehicleId.startsWith('tag-')
+              ? 'A TAG continua instalada.'
+              : 'O rastreador continua instalado.'}
           </DialogDescription>
         </DialogHeader>
 

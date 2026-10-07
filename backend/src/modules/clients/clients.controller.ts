@@ -196,6 +196,29 @@ export class ClientsController {
     );
   }
 
+  /** Mesma troca para quem só tem TAG: o dono mora no vínculo, não num Vehicle. */
+  @Post('tag-links/:linkId/transfer-ownership')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Troca de titularidade de TAG sem rastreador: passa o vínculo para o associado que o SGA devolve para a placa',
+  })
+  transferTagOwnership(
+    @Param('linkId', ParseUUIDPipe) linkId: string,
+    @Body() dto: TransferOwnershipDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const liberadorAdmin =
+      req.user.role === Role.SUPER_ADMIN || req.user.role === Role.ADMIN;
+    return this.ownershipTransfer.transferTag(
+      req.tenantId,
+      linkId,
+      dto,
+      liberadorAdmin,
+    );
+  }
+
   @Get()
   @ApiOperation({ summary: 'Lista clientes ativos agrupados por associado' })
   findActive(
