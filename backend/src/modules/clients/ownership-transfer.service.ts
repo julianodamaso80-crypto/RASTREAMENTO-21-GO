@@ -188,4 +188,109 @@ export class OwnershipTransferService {
       to: { id: result.associate.id, name: result.associate.name, cpf },
     };
   }
+
+  /**
+   * Troca de titularidade de quem só tem TAG: não existe Vehicle nem Associate
+   * nosso (TAG é segredo interno), então o dono mora no próprio vínculo. A
+   * mesma consulta e régua do rastreador; só o destino da gravação muda.
+   */
+  async transferTag(
+    tenantId: string,
+    linkId: string,
+    dto: { placa: string; allowInactive?: boolean },
+    liberadorAdmin: boolean,
+  ) {
+    const link = await this.prisma.tagLink.findFirst({
+      where: { id: linkId, tenantId, deletedAt: null },
+      select: {
+        id: true,
+        plate: true,
+        chassi: true,
+        hinovaVehicleCode: true,
+        associateName: true,
+        associateCpf: true,
+      },
+    });
+    if (!link) throw new NotFoundException('TAG vinculada não encontrada.');
+
+    const lookup = await this.stock.lookupSga(tenantId, dto.placa);
+    if (!lookup.encontrado) {
+      throw new UnprocessableEntityException(
+        lookup.motivo || 'Placa não encontrada no SGA.',
+      );
+    }
+    const bloqueio = StockService.motivoDeBloqueio(lookup, dto.placa);
+    if (bloqueio) {
+      if (!dto.allowInactive) {
+        throw new UnprocessableEntityException(
+          `${bloqueio} — troca bloqueada. ` +
+            'Só um administrador pode liberar a troca assim mesmo.',
+        );
+      }
+      if (!liberadorAdmin) {
+        throw new ForbiddenException(
+          `${bloqueio}. Somente um administrador pode liberar a troca assim mesmo.`,
+        );
+      }
+    }
+    if (!lookup.cliente.cpf) {
+      throw new UnprocessableEntityException(
+        'SGA não retornou o CPF do cliente para esta placa.',
+      );
+    }
+
+    const placa = (lookup.veiculo.placa || dto.placa)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    const cpf = lookup.cliente.cpf.replace(/\D/g, '');
+
+    // Placa de outro carro com rastreador nosso: a TAG passaria a aparecer
+    // como selo daquele veículo. Para mover a TAG, desvincula e vincula de novo.
+    if (placa !== link.plate) {
+      const outro = await this.prisma.vehicle.findFirst({
+        where: { tenantId, plate: placa, deletedAt: null },
+        select: { id: true },
+      });
+      if (outro) {
+        throw new UnprocessableEntityException(
+          `A placa ${placa} já é outro ativo desta empresa. ` +
+            'Para mover a TAG, desvincule e vincule de novo.',
+        );
+      }
+    }
+
+    if (link.associateCpf && link.associateCpf.replace(/\D/g, '') === cpf) {
+      throw new UnprocessableEntityException(
+        `O SGA devolve o mesmo titular (${link.associateName ?? cpf}) para esta placa. Nada a trocar.`,
+      );
+    }
+
+    // Tenant no where mesmo com o id já checado acima: regra do multi-tenant.
+    await this.prisma.tagLink.updateMany({
+      where: { id: link.id, tenantId, deletedAt: null },
+      data: {
+        plate: placa,
+        chassi: lookup.veiculo.chassi ?? link.chassi,
+        hinovaVehicleCode: lookup.veiculo.codigoVeiculo ?? link.hinovaVehicleCode,
+        associateName: lookup.cliente.nome ?? link.associateName,
+        associateCpf: cpf,
+      },
+    });
+
+    this.logger.warn(
+      `Troca de titularidade (TAG): ${placa} saiu de ${link.associateName ?? 'ninguém'} ` +
+        `(${link.associateCpf ?? '—'}) para ${lookup.cliente.nome ?? cpf} (${cpf})` +
+        (bloqueio ? ` — liberado por ADMIN: ${bloqueio}` : '') +
+        '.',
+    );
+
+    return {
+      vehicleId: `tag-${link.id}`,
+      plate: placa,
+      from: link.associateName
+        ? { id: '', name: link.associateName, cpf: link.associateCpf ?? '' }
+        : null,
+      to: { id: '', name: lookup.cliente.nome ?? 'Associado (SGA)', cpf },
+    };
+  }
 }

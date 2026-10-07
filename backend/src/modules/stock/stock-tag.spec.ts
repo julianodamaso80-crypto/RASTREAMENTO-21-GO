@@ -99,6 +99,7 @@ describe('Estoque — TAG no Associar (SGA)', () => {
           hinovaVehicleCode: '20842',
           associateName: 'KAIO FERREIRA STENCK',
           associateCpf: '12345678901',
+          installLocation: 'painel',
           origin: 'ESTOQUE',
           createdById: 'user-1',
         }),

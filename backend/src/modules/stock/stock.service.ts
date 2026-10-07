@@ -861,6 +861,8 @@ export class StockService {
           hinovaVehicleCode: lookup.veiculo.codigoVeiculo ?? null,
           associateName: lookup.cliente.nome ?? null,
           associateCpf: lookup.cliente.cpf?.replace(/\D/g, '') ?? null,
+          // Coluna que o painel e a busca leem; o `evidence` abaixo é só prova.
+          installLocation: dto.installLocation?.trim() || null,
           origin: 'ESTOQUE',
           verdict: 'AGUARDANDO_PROVA',
           evidence: {

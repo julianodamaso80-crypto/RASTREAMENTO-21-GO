@@ -991,8 +991,12 @@ export const clientsApi = {
     vehicleId: string,
     payload: { placa: string; allowInactive?: boolean },
   ): Promise<TransferOwnershipResult> => {
+    // Card "só TAG" tem id `tag-<vínculo>` e não é um Vehicle.
+    const url = vehicleId.startsWith('tag-')
+      ? `/clients/tag-links/${vehicleId.slice(4)}/transfer-ownership`
+      : `/clients/assets/${vehicleId}/transfer-ownership`;
     const res = await api.post<ApiResponse<TransferOwnershipResult>>(
-      `/clients/assets/${vehicleId}/transfer-ownership`,
+      url,
       payload,
     );
     return res.data.data;
