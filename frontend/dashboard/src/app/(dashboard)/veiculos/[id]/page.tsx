@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -25,12 +25,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { vehiclesApi, alertsApi, analyticsApi, maintenanceApi, type VehicleScore, type MaintenancePlan } from '@/lib/api';
+import { vehiclesApi, alertsApi, analyticsApi, maintenanceApi, reportsApi, geocodeApi, type VehicleScore, type MaintenancePlan } from '@/lib/api';
 import { ALERT_TYPE_LABELS, ALERT_TYPE_COLORS, type Alert } from '@/types/alert';
 import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
 import { BehaviorCard } from '@/components/vehicles/behavior-card';
 import { TelemetryCharts } from '@/components/vehicles/telemetry-charts';
 import { TripReplay } from '@/components/vehicles/trip-replay';
+import { HistoricoDoDia } from '@/components/historico/historico-do-dia';
 import { BlockConfirmModal } from '@/components/vehicles/block-confirm-modal';
 import { useTracking } from '@/contexts/tracking-context';
 import { useAuth } from '@/contexts/auth-context';
@@ -226,7 +227,7 @@ export default function VehicleCockpitPage() {
               <TelemetryCharts vehicleId={vehicleId} />
             </TabsContent>
             <TabsContent value="history">
-              <HistoryTab vehicleId={vehicleId} />
+              <HistoryTab vehicleId={vehicleId} deviceId={vehicle.traccarDeviceId ?? null} />
             </TabsContent>
             <TabsContent value="score">
               <ScoreTab vehicleId={vehicleId} />
@@ -392,11 +393,32 @@ function AlertsTab({ vehicleId }: { vehicleId: string }) {
   );
 }
 
-function HistoryTab({ vehicleId }: { vehicleId: string }) {
+function HistoryTab({ vehicleId, deviceId }: { vehicleId: string; deviceId: number | null }) {
   const [from] = useState(() => new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
   const [to] = useState(() => new Date().toISOString());
+  const carregar = useCallback(
+    (dia: string) => reportsApi.getJourney(deviceId as number, dia),
+    [deviceId],
+  );
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {deviceId ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Viagens e históricos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <HistoricoDoDia
+              carregar={carregar}
+              diasMax={90}
+              resolverEndereco={geocodeApi.reverse}
+              nomeArquivo={`historico-${vehicleId}`}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <p className="text-sm text-muted-foreground">Este veículo ainda não tem rastreador vinculado.</p>
+      )}
       <TripReplay vehicleId={vehicleId} from={from} to={to} />
     </div>
   );

@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Car, Loader2, LogOut } from 'lucide-react';
+import { Car, History, Loader2, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { HistoricoDoDia } from '@/components/historico/historico-do-dia';
 import { BASEMAPS, MAP_CENTER, STATUS_COLORS } from '@/lib/constants';
 import {
   getDisplayStatus,
@@ -157,6 +159,7 @@ export default function MeusVeiculosPage() {
   const [me, setMe] = useState<AssociateMe | null>(null);
   const [veiculos, setVeiculos] = useState<AssociateVehicle[] | null>(null);
   const [selecionado, setSelecionado] = useState<string | null>(null);
+  const [historicoDe, setHistoricoDe] = useState<AssociateVehicle | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -255,6 +258,17 @@ export default function MeusVeiculosPage() {
                     <div className="text-xs text-muted-foreground">
                       {ultimaAtualizacao(v.connection?.lastUpdate ?? '')}
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 h-7"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHistoricoDe(v);
+                      }}
+                    >
+                      <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
+                    </Button>
                   </div>
                 </button>
               );
@@ -265,6 +279,21 @@ export default function MeusVeiculosPage() {
           <Mapa veiculos={veiculos ?? []} selecionado={selecionado} />
         </main>
       </div>
+
+      <Dialog open={!!historicoDe} onOpenChange={(aberto) => !aberto && setHistoricoDe(null)}>
+        <DialogContent className="max-h-[92dvh] w-[96vw] max-w-4xl overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Histórico · {historicoDe?.plate}</DialogTitle>
+          </DialogHeader>
+          {historicoDe && (
+            <HistoricoDoDia
+              carregar={(dia) => associateApi.journey(historicoDe.id, dia)}
+              diasMax={31}
+              nomeArquivo={`historico-${historicoDe.plate}`}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
