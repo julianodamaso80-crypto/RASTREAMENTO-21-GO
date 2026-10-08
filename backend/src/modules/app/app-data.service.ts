@@ -20,7 +20,7 @@ const KNOTS_TO_KMH = 1.852;
 /** Mesmo teto da Rede para quem não é administrador. */
 const JANELA_HISTORICO_ASSOCIADO_DIAS = 31;
 
-interface DiaDoHistorico {
+export interface DiaDoHistorico {
   date: string;
   trips: (JourneyTrip & {
     startAddress: string | null;
