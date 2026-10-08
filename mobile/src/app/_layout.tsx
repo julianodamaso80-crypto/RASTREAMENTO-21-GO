@@ -117,6 +117,14 @@ export default function RootLayout() {
             headerTintColor: colors.navy,
           }}
         />
+        <Stack.Screen
+          name="vehicle/journey/[id]"
+          options={{
+            headerShown: true,
+            title: 'Histórico',
+            headerTintColor: colors.navy,
+          }}
+        />
       </Stack>
     </GestureHandlerRootView>
   );

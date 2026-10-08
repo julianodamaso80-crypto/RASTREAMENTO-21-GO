@@ -263,8 +263,8 @@ export default function MapScreen() {
               onChanged={load}
               onHistory={() =>
                 router.push({
-                  pathname: '/vehicle/[id]',
-                  params: { id: current.id, plate: current.plate, type: current.vehicleType },
+                  pathname: '/vehicle/journey/[id]',
+                  params: { id: current.id, plate: current.plate },
                 })
               }
             />

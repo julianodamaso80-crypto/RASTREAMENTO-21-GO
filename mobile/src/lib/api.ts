@@ -110,6 +110,36 @@ export interface Trip {
   maxSpeed: number;
 }
 
+export interface JourneyPoint {
+  time: string;
+  lat: number;
+  lng: number;
+  speed: number;
+  ignition: boolean | null;
+}
+
+export interface JourneyTrip {
+  startTime: string;
+  endTime: string;
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  startAddress: string | null;
+  endAddress: string | null;
+  distanceKm: number;
+  durationMin: number;
+  maxSpeed: number;
+  avgSpeed: number;
+  stopAfterMin: number | null;
+  path: JourneyPoint[];
+}
+
+export interface JourneyDay {
+  date: string;
+  trips: JourneyTrip[];
+}
+
 export interface Alert {
   id: string;
   type: string;
@@ -205,6 +235,11 @@ export const AppApi = {
   trips: (vehicleId: string, from: string, to: string) =>
     api
       .get<Trip[]>(`/app/vehicles/${vehicleId}/trips`, { params: { from, to } })
+      .then((r) => r.data),
+
+  journey: (vehicleId: string, date: string) =>
+    api
+      .get<JourneyDay>(`/app/vehicles/${vehicleId}/journey`, { params: { date } })
       .then((r) => r.data),
 
   alerts: (limit = 50) =>
