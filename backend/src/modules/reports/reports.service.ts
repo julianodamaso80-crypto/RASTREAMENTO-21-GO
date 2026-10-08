@@ -4,6 +4,12 @@ import {
   type TraccarPosition,
 } from '../traccar/traccar.service';
 import * as ExcelJS from 'exceljs';
+import {
+  buildJourney,
+  diaEmBrasilia,
+  validarDiaDoHistorico,
+  type JourneyTrip,
+} from './journey';
 
 export interface Trip {
   startTime: string;
@@ -131,6 +137,18 @@ export class ReportsService {
     }
 
     return trips;
+  }
+
+  /** Viagens de um dia civil de Brasília, cada uma com o trajeto. */
+  async getJourney(
+    deviceId: number,
+    date: string,
+    maxDias = 90,
+  ): Promise<{ date: string; trips: JourneyTrip[] }> {
+    validarDiaDoHistorico(date, maxDias);
+    const { from, to } = diaEmBrasilia(date);
+    const positions = await this.getPositions(deviceId, from, to);
+    return { date, trips: buildJourney(positions) };
   }
 
   async getStops(deviceId: number, from: string, to: string): Promise<Stop[]> {

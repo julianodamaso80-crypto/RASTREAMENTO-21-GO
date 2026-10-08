@@ -87,6 +87,20 @@ export class AppDataController {
     return this.service.getTrips(associateId, tenantId, vehicleId, from, to);
   }
 
+  @Get('vehicles/:id/journey')
+  @ApiOperation({
+    summary: 'Viagens do dia com trajeto (Histórico do app e da web)',
+  })
+  @ApiQuery({ name: 'date', required: true, description: 'Dia AAAA-MM-DD (Brasília)' })
+  async getJourney(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id') vehicleId: string,
+    @Query('date') date: string,
+  ) {
+    return this.service.getJourney(associateId, tenantId, vehicleId, date);
+  }
+
   @Get('alerts')
   @ApiOperation({ summary: 'Alertas dos veículos do associado' })
   @ApiQuery({ name: 'limit', required: false, description: 'Máx 100 (default 50)' })

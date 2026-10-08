@@ -13,8 +13,20 @@ import {
 } from '../traccar/traccar.service';
 import { ReportsService, type Trip } from '../reports/reports.service';
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
+import { validarDiaDoHistorico, type JourneyTrip } from '../reports/journey';
 
 const KNOTS_TO_KMH = 1.852;
+
+/** Mesmo teto da Rede para quem não é administrador. */
+const JANELA_HISTORICO_ASSOCIADO_DIAS = 31;
+
+interface DiaDoHistorico {
+  date: string;
+  trips: (JourneyTrip & {
+    startAddress: string | null;
+    endAddress: string | null;
+  })[];
+}
 
 // Alertas que NUNCA vão pro app do associado. Duas famílias:
 //
@@ -310,6 +322,52 @@ export class AppDataService {
         maxSpeed: t.maxSpeed,
       }))
       .sort((a, b) => b.startTime.localeCompare(a.startTime));
+  }
+
+  /**
+   * Histórico de um dia, no molde do "Viagens e históricos" da Rede: viagens
+   * do dia com o trajeto de cada uma e o tempo de parada entre elas. Teto de
+   * 31 dias, o mesmo da Rede para quem não é administrador.
+   */
+  async getJourney(
+    associateId: string,
+    tenantId: string,
+    vehicleId: string,
+    date: string,
+  ): Promise<DiaDoHistorico> {
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: { id: vehicleId, associateId, tenantId, deletedAt: null },
+      select: { traccarDeviceId: true },
+    });
+    if (!vehicle) {
+      throw new NotFoundException('Veículo não encontrado');
+    }
+    validarDiaDoHistorico(date, JANELA_HISTORICO_ASSOCIADO_DIAS);
+    if (!vehicle.traccarDeviceId) {
+      return { date, trips: [] };
+    }
+
+    const journey = await this.reports.getJourney(
+      vehicle.traccarDeviceId,
+      date,
+      JANELA_HISTORICO_ASSOCIADO_DIAS,
+    );
+    if (journey.trips.length === 0) return { date: journey.date, trips: [] };
+
+    const enderecos = await this.geocode.lookupCached(
+      journey.trips.flatMap((t) => [
+        { latitude: t.startLat, longitude: t.startLng },
+        { latitude: t.endLat, longitude: t.endLng },
+      ]),
+    );
+    return {
+      date: journey.date,
+      trips: journey.trips.map((t) => ({
+        ...t,
+        startAddress: this.endereco(enderecos, t.startLat, t.startLng),
+        endAddress: this.endereco(enderecos, t.endLat, t.endLng),
+      })),
+    };
   }
 
   /**

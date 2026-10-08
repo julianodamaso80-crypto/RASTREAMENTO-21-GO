@@ -37,3 +37,14 @@ export class ExportQueryDto extends ReportQueryDto {
   @IsEnum(['xlsx', 'csv'])
   format: string = 'xlsx';
 }
+
+export class JourneyQueryDto {
+  @ApiProperty({ description: 'ID do dispositivo Traccar' })
+  @IsInt()
+  @Type(() => Number)
+  deviceId: number;
+
+  @ApiProperty({ description: 'Dia (AAAA-MM-DD, Brasília)', example: '2026-10-08' })
+  @IsString()
+  date: string;
+}

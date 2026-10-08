@@ -11,7 +11,11 @@ import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequireRoute } from '../../common/decorators';
 import { ReportsService } from './reports.service';
-import { ReportQueryDto, ExportQueryDto } from './dto/report-query.dto';
+import {
+  ReportQueryDto,
+  ExportQueryDto,
+  JourneyQueryDto,
+} from './dto/report-query.dto';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -57,6 +61,16 @@ export class ReportsController {
   ) {
     await this.validateDevice(query.deviceId, req.tenantId);
     return this.reportsService.getTrips(query.deviceId, query.from, query.to);
+  }
+
+  @Get('journey')
+  @ApiOperation({ summary: 'Viagens do dia com trajeto (histórico por dia)' })
+  async getJourney(
+    @Query() query: JourneyQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.validateDevice(query.deviceId, req.tenantId);
+    return this.reportsService.getJourney(query.deviceId, query.date);
   }
 
   @Get('stops')
