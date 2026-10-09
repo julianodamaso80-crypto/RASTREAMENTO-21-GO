@@ -222,10 +222,18 @@ export default function MeusVeiculosPage() {
               const estado = estadoDe(v);
               const cor = STATUS_COLORS[estado];
               return (
-                <button
+                <div
                   key={v.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelecionado(v.id)}
-                  className={`flex w-full gap-3 border-b px-4 py-3 text-left hover:bg-muted/50 ${
+                  onKeyDown={(e) => {
+                    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      setSelecionado(v.id);
+                    }
+                  }}
+                  className={`flex w-full cursor-pointer gap-3 border-b px-4 py-3 text-left hover:bg-muted/50 ${
                     selecionado === v.id ? 'bg-muted' : ''
                   }`}
                 >
@@ -270,7 +278,7 @@ export default function MeusVeiculosPage() {
                       <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
                     </Button>
                   </div>
-                </button>
+                </div>
               );
             })
           )}
