@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import type { TipoRelatorio } from '@/lib/historico';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -31,7 +32,7 @@ import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
 import { BehaviorCard } from '@/components/vehicles/behavior-card';
 import { TelemetryCharts } from '@/components/vehicles/telemetry-charts';
 import { TripReplay } from '@/components/vehicles/trip-replay';
-import { HistoricoDoDia } from '@/components/historico/historico-do-dia';
+import { HistoricoDoVeiculo } from '@/components/historico/historico-do-veiculo';
 import { BlockConfirmModal } from '@/components/vehicles/block-confirm-modal';
 import { useTracking } from '@/contexts/tracking-context';
 import { useAuth } from '@/contexts/auth-context';
@@ -400,6 +401,11 @@ function HistoryTab({ vehicleId, deviceId }: { vehicleId: string; deviceId: numb
     (dia: string) => reportsApi.getJourney(deviceId as number, dia),
     [deviceId],
   );
+  const carregarRelatorio = useCallback(
+    (from: string, to: string, tipo: TipoRelatorio) =>
+      reportsApi.getHistoryReport(deviceId as number, from, to, tipo),
+    [deviceId],
+  );
   return (
     <div className="space-y-6">
       {deviceId ? (
@@ -408,9 +414,11 @@ function HistoryTab({ vehicleId, deviceId }: { vehicleId: string; deviceId: numb
             <CardTitle className="text-base">Viagens e históricos</CardTitle>
           </CardHeader>
           <CardContent>
-            <HistoricoDoDia
-              carregar={carregar}
-              diasMax={90}
+            <HistoricoDoVeiculo
+              carregarDia={carregar}
+              carregarRelatorio={carregarRelatorio}
+              diasViagens={90}
+              diasConsulta={90}
               resolverEndereco={geocodeApi.reverse}
               nomeArquivo={`historico-${vehicleId}`}
             />

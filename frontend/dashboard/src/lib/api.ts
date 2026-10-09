@@ -24,7 +24,7 @@ import type {
   MaintenanceReason,
 } from '@/types/appointment';
 import type { GoogleTileSource } from '@/types/map';
-import type { JornadaDoDia } from '@/lib/historico';
+import type { JornadaDoDia, RelatorioHistorico, TipoRelatorio } from '@/lib/historico';
 import type {
   ConsultantOption,
   FinancialEntry,
@@ -474,6 +474,17 @@ export const reportsApi = {
   getJourney: async (deviceId: number, date: string): Promise<JornadaDoDia> => {
     const res = await api.get<ApiResponse<JornadaDoDia>>('/reports/journey', {
       params: { deviceId, date },
+    });
+    return res.data.data;
+  },
+  getHistoryReport: async (
+    deviceId: number,
+    from: string,
+    to: string,
+    type: TipoRelatorio,
+  ): Promise<RelatorioHistorico> => {
+    const res = await api.get<ApiResponse<RelatorioHistorico>>('/reports/history-report', {
+      params: { deviceId, from, to, type },
     });
     return res.data.data;
   },

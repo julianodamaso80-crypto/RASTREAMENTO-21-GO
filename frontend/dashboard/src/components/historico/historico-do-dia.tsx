@@ -14,6 +14,7 @@ import {
   kmLegivel,
   viagensParaCsv,
   type JornadaDoDia,
+  type PontoDaViagem,
   type ViagemDoDia,
 } from '@/lib/historico';
 
@@ -244,7 +245,7 @@ export function HistoricoDoDia({ carregar, diasMax, resolverEndereco, nomeArquiv
   );
 }
 
-function TrajetoNoMapa({ viagem }: { viagem?: ViagemDoDia }) {
+export function TrajetoNoMapa({ viagem }: { viagem?: { path: PontoDaViagem[] } }) {
   const box = useRef<HTMLDivElement>(null);
   const mapa = useRef<maplibregl.Map | null>(null);
   const marcas = useRef<maplibregl.Marker[]>([]);

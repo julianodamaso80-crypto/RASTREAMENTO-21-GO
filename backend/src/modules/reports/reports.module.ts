@@ -2,9 +2,10 @@ import { Module } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { ReportsController } from './reports.controller';
 import { TraccarModule } from '../traccar/traccar.module';
+import { GeocodingModule } from '../geocoding/geocoding.module';
 
 @Module({
-  imports: [TraccarModule],
+  imports: [TraccarModule, GeocodingModule],
   controllers: [ReportsController],
   providers: [ReportsService],
   // O app do associado reusa o mesmo motor de viagens do painel — regra de

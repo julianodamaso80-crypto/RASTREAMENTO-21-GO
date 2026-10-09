@@ -101,6 +101,22 @@ export class AppDataController {
     return this.service.getJourney(associateId, tenantId, vehicleId, date);
   }
 
+  @Get('vehicles/:id/history-report')
+  @ApiOperation({ summary: 'Histórico por período: básico, avançado ou consolidado' })
+  @ApiQuery({ name: 'from', required: true, description: 'Início (ISO 8601)' })
+  @ApiQuery({ name: 'to', required: true, description: 'Fim (ISO 8601)' })
+  @ApiQuery({ name: 'type', required: true, description: 'basico | avancado | consolidado' })
+  async getHistoryReport(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id') vehicleId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('type') type: string,
+  ) {
+    return this.service.getHistoryReport(associateId, tenantId, vehicleId, from, to, type);
+  }
+
   @Get('alerts')
   @ApiOperation({ summary: 'Alertas dos veículos do associado' })
   @ApiQuery({ name: 'limit', required: false, description: 'Máx 100 (default 50)' })

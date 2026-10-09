@@ -11,10 +11,12 @@ import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequireRoute } from '../../common/decorators';
 import { ReportsService } from './reports.service';
+import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 import {
   ReportQueryDto,
   ExportQueryDto,
   JourneyQueryDto,
+  HistoryReportQueryDto,
 } from './dto/report-query.dto';
 
 interface AuthenticatedRequest {
@@ -29,6 +31,7 @@ export class ReportsController {
   constructor(
     private reportsService: ReportsService,
     private prisma: PrismaService,
+    private geocode: ReverseGeocodeService,
   ) {}
 
   private async validateDevice(deviceId: number, tenantId: string) {
@@ -71,6 +74,40 @@ export class ReportsController {
   ) {
     await this.validateDevice(query.deviceId, req.tenantId);
     return this.reportsService.getJourney(query.deviceId, query.date);
+  }
+
+  @Get('history-report')
+  @ApiOperation({ summary: 'Histórico por período (básico, avançado, consolidado)' })
+  async getHistoryReport(
+    @Query() query: HistoryReportQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const vehicle = await this.validateDevice(query.deviceId, req.tenantId);
+    const report = await this.reportsService.getHistoryReport(
+      query.deviceId,
+      query.from,
+      query.to,
+      query.type,
+    );
+    const pontos = [...report.rows, ...report.days];
+    const enderecos = pontos.length
+      ? await this.geocode.lookupCached(
+          pontos.map((p) => ({ latitude: p.lat, longitude: p.lng })),
+        )
+      : new Map<string, string>();
+    const endereco = (lat: number, lng: number) => {
+      const chave = this.geocode.chave({ latitude: lat, longitude: lng });
+      return (chave && enderecos.get(chave)) || null;
+    };
+    return {
+      plate: vehicle.plate,
+      from: query.from,
+      to: query.to,
+      type: query.type,
+      totals: report.totals,
+      rows: report.rows.map((r) => ({ ...r, address: endereco(r.lat, r.lng) })),
+      days: report.days.map((d) => ({ ...d, address: endereco(d.lat, d.lng) })),
+    };
   }
 
   @Get('stops')

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   TraccarService,
   type TraccarPosition,
@@ -10,6 +10,14 @@ import {
   validarDiaDoHistorico,
   type JourneyTrip,
 } from './journey';
+import {
+  buildHistoryReport,
+  validarPeriodo,
+  type RelatorioDeHistorico,
+  type TipoRelatorio,
+} from './history-report';
+
+const MAX_LINHAS_RELATORIO = 20000;
 
 export interface Trip {
   startTime: string;
@@ -149,6 +157,61 @@ export class ReportsService {
     const { from, to } = diaEmBrasilia(date);
     const positions = await this.getPositions(deviceId, from, to);
     return { date, trips: buildJourney(positions) };
+  }
+
+  /**
+   * Aba "Consultar": posições (básico/avançado) ou um registro por dia
+   * (consolidado). O consolidado busca dia a dia para não carregar 31 dias de
+   * posições na memória de uma vez.
+   */
+  async getHistoryReport(
+    deviceId: number,
+    from: string,
+    to: string,
+    tipo: string,
+    maxDias = 90,
+  ): Promise<RelatorioDeHistorico> {
+    validarPeriodo(from, to, tipo, maxDias);
+    const t = tipo as TipoRelatorio;
+    const ini = Date.parse(from);
+    const fim = Date.parse(to);
+    const DIA = 24 * 3600_000;
+    if (t !== 'consolidado' || fim - ini <= DIA) {
+      const r = buildHistoryReport(await this.getPositions(deviceId, from, to), t);
+      if (r.rows.length > MAX_LINHAS_RELATORIO) {
+        throw new BadRequestException(
+          'Registros demais para exibir. Reduza o período ou use o Consolidado.',
+        );
+      }
+      return r;
+    }
+    const total: RelatorioDeHistorico = {
+      totals: { distanceKm: 0, ignitionOnMin: 0, ignitionOffMin: 0 },
+      rows: [],
+      days: [],
+    };
+    for (let inicio = ini; inicio < fim; inicio += DIA) {
+      const fatia = Math.min(inicio + DIA, fim);
+      const r = buildHistoryReport(
+        await this.getPositions(
+          deviceId,
+          new Date(inicio).toISOString(),
+          new Date(fatia).toISOString(),
+        ),
+        t,
+      );
+      total.totals.distanceKm += r.totals.distanceKm;
+      total.totals.ignitionOnMin += r.totals.ignitionOnMin;
+      total.totals.ignitionOffMin += r.totals.ignitionOffMin;
+      for (const d of r.days) {
+        const igual = total.days.find((x) => x.date === d.date);
+        if (!igual) total.days.push(d);
+        else if (d.maxSpeed > igual.maxSpeed) Object.assign(igual, d);
+      }
+    }
+    total.totals.distanceKm = Math.round(total.totals.distanceKm * 100) / 100;
+    total.days.sort((a, b) => a.date.localeCompare(b.date));
+    return total;
   }
 
   async getStops(deviceId: number, from: string, to: string): Promise<Stop[]> {

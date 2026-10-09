@@ -67,3 +67,81 @@ export function viagensParaCsv(v: ViagemDoDia): string {
   );
   return '﻿' + ['Data/Hora;Latitude;Longitude;Velocidade (km/h);Ignição', ...linhas].join('\n');
 }
+
+export type TipoRelatorio = 'basico' | 'avancado' | 'consolidado';
+
+export interface LinhaRelatorio {
+  time: string;
+  lat: number;
+  lng: number;
+  speed: number;
+  ignition: boolean | null;
+  event: string | null;
+  distanceM: number | null;
+  address: string | null;
+  gprs?: string;
+  gps?: string;
+  direction?: string;
+}
+
+export interface DiaRelatorio {
+  date: string;
+  maxSpeed: number;
+  lat: number;
+  lng: number;
+  address: string | null;
+}
+
+export interface RelatorioHistorico {
+  plate: string;
+  from: string;
+  to: string;
+  type: TipoRelatorio;
+  totals: { distanceKm: number; ignitionOnMin: number; ignitionOffMin: number };
+  rows: LinhaRelatorio[];
+  days: DiaRelatorio[];
+}
+
+/** Valor de <input type="datetime-local"> (hora do navegador) a partir de um instante. */
+export function paraCampoLocal(instante: number): string {
+  const d = new Date(instante);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+export function dataHoraLocal(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
+export function distanciaDaLinha(m: number | null, kmh: number): string {
+  if (m === null) return '—';
+  if (m === 0 && kmh === 0) return 'Parado';
+  return m >= 1000 ? `${(m / 1000).toFixed(2).replace('.', ',')} km` : `${m} m`;
+}
+
+/** CSV do relatório (Excel abre com acento por causa do BOM). */
+export function relatorioParaCsv(r: RelatorioHistorico): string {
+  if (r.type === 'consolidado') {
+    const linhas = r.days.map((d) =>
+      [d.date.split('-').reverse().join('/'), d.maxSpeed, `"${d.address ?? ''}"`].join(';'),
+    );
+    return '\ufeff' + ['Data;Velocidade máxima (km/h);Endereço', ...linhas].join('\n');
+  }
+  const avancado = r.type === 'avancado';
+  const cab = ['Data/Hora', ...(avancado ? ['GPRS', 'GPS'] : []), 'Latitude', 'Longitude', 'Endereço', 'Km/h', 'Ignição', 'Evento', 'Distância', ...(avancado ? ['Direção'] : [])];
+  const linhas = r.rows.map((l) =>
+    [
+      dataHoraLocal(l.time),
+      ...(avancado ? [l.gprs ? dataHoraLocal(l.gprs) : '', l.gps ? dataHoraLocal(l.gps) : ''] : []),
+      l.lat,
+      l.lng,
+      `"${l.address ?? ''}"`,
+      l.speed,
+      l.ignition === null ? '' : l.ignition ? 'Ligado' : 'Desligado',
+      l.event ?? '',
+      distanciaDaLinha(l.distanceM, l.speed),
+      ...(avancado ? [l.direction ?? ''] : []),
+    ].join(';'),
+  );
+  return '\ufeff' + [cab.join(';'), ...linhas].join('\n');
+}

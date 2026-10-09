@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { JornadaDoDia } from '@/lib/historico';
+import type { JornadaDoDia, RelatorioHistorico, TipoRelatorio } from '@/lib/historico';
 
 /**
  * Client do associado na web. Usa as mesmas rotas /app/* do app Android e
@@ -78,6 +78,17 @@ export const associateApi = {
   vehicles: async (): Promise<AssociateVehicle[]> => {
     const res = await http.get('/app/vehicles');
     return unwrap<AssociateVehicle[]>(res.data);
+  },
+  historyReport: async (
+    vehicleId: string,
+    from: string,
+    to: string,
+    type: TipoRelatorio,
+  ): Promise<RelatorioHistorico> => {
+    const res = await http.get(`/app/vehicles/${vehicleId}/history-report`, {
+      params: { from, to, type },
+    });
+    return unwrap<RelatorioHistorico>(res.data);
   },
   journey: async (vehicleId: string, date: string): Promise<JornadaDoDia> => {
     const res = await http.get(`/app/vehicles/${vehicleId}/journey`, { params: { date } });

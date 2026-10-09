@@ -48,3 +48,9 @@ export class JourneyQueryDto {
   @IsString()
   date: string;
 }
+
+export class HistoryReportQueryDto extends ReportQueryDto {
+  @ApiProperty({ enum: ['basico', 'avancado', 'consolidado'] })
+  @IsString()
+  type: string;
+}

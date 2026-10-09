@@ -100,3 +100,65 @@ describe('AppDataService.getJourney', () => {
     expect(trips[0].distanceKm).toBe(3.02);
   });
 });
+
+describe('AppDataService.getHistoryReport', () => {
+  function com(opts: { veiculo?: any; relatorio?: any } = {}) {
+    const prisma: any = {
+      vehicle: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue(
+            opts.veiculo === undefined
+              ? { traccarDeviceId: 895, plate: 'ABC1D23' }
+              : opts.veiculo,
+          ),
+      },
+    };
+    const reports: any = {
+      getHistoryReport: jest.fn().mockResolvedValue(
+        opts.relatorio ?? {
+          totals: { distanceKm: 3, ignitionOnMin: 20, ignitionOffMin: 10 },
+          rows: [
+            { time: '2026-10-08T12:00:00Z', lat: -22.9, lng: -43.2, speed: 0, ignition: false, event: null, distanceM: null },
+          ],
+          days: [],
+        },
+      ),
+    };
+    const geocode: any = {
+      chave: (c: { latitude: number; longitude: number }) =>
+        `${c.latitude.toFixed(4)},${c.longitude.toFixed(4)}`,
+      lookupCached: jest
+        .fn()
+        .mockResolvedValue(new Map([['-22.9000,-43.2000', 'Rua A, 1 · Centro']])),
+    };
+    jest.spyOn(Date, 'now').mockReturnValue(HOJE);
+    return { service: new AppDataService(prisma, {} as any, reports, geocode), reports };
+  }
+
+  const de = '2026-10-08T03:00:00Z';
+  const ate = '2026-10-08T15:00:00Z';
+
+  it('recusa veículo de outro associado', async () => {
+    const { service } = com({ veiculo: null });
+    await expect(
+      service.getHistoryReport('a1', 't1', 'v-alheio', de, ate, 'basico'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('recusa período além de 31 dias', async () => {
+    const { service } = com();
+    await expect(
+      service.getHistoryReport('a1', 't1', 'v1', '2026-08-01T00:00:00Z', '2026-08-02T00:00:00Z', 'basico'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('entrega placa, totais e endereço — sem IMEI nem id de rastreador', async () => {
+    const { service } = com();
+    const r: any = await service.getHistoryReport('a1', 't1', 'v1', de, ate, 'basico');
+    expect(r.plate).toBe('ABC1D23');
+    expect(r.rows[0].address).toBe('Rua A, 1 · Centro');
+    expect(r.totals.distanceKm).toBe(3);
+    expect(JSON.stringify(r)).not.toMatch(/imei|traccarDeviceId|895/i);
+  });
+});

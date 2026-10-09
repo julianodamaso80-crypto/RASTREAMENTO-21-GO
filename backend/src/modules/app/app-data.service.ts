@@ -14,6 +14,7 @@ import {
 import { ReportsService, type Trip } from '../reports/reports.service';
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 import { validarDiaDoHistorico, type JourneyTrip } from '../reports/journey';
+import { validarPeriodo } from '../reports/history-report';
 
 const KNOTS_TO_KMH = 1.852;
 
@@ -366,6 +367,64 @@ export class AppDataService {
         ...t,
         startAddress: this.endereco(enderecos, t.startLat, t.startLng),
         endAddress: this.endereco(enderecos, t.endLat, t.endLng),
+      })),
+    };
+  }
+
+  /**
+   * Aba "Consultar" do histórico: período livre até 31 dias, nos três tipos da
+   * Rede. Sem IMEI nem dado interno na resposta, só placa e o que o carro fez.
+   */
+  async getHistoryReport(
+    associateId: string,
+    tenantId: string,
+    vehicleId: string,
+    from: string,
+    to: string,
+    type: string,
+  ) {
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: { id: vehicleId, associateId, tenantId, deletedAt: null },
+      select: { traccarDeviceId: true, plate: true },
+    });
+    if (!vehicle) {
+      throw new NotFoundException('Veículo não encontrado');
+    }
+    validarPeriodo(from, to, type, JANELA_HISTORICO_ASSOCIADO_DIAS);
+    const vazio = {
+      totals: { distanceKm: 0, ignitionOnMin: 0, ignitionOffMin: 0 },
+      rows: [] as { lat: number; lng: number }[],
+      days: [] as { lat: number; lng: number }[],
+    };
+    const report = vehicle.traccarDeviceId
+      ? await this.reports.getHistoryReport(
+          vehicle.traccarDeviceId,
+          from,
+          to,
+          type,
+          JANELA_HISTORICO_ASSOCIADO_DIAS,
+        )
+      : vazio;
+
+    const pontos = [...report.rows, ...report.days];
+    const enderecos = pontos.length
+      ? await this.geocode.lookupCached(
+          pontos.map((p) => ({ latitude: p.lat, longitude: p.lng })),
+        )
+      : new Map<string, string>();
+    return {
+      plate: vehicle.plate,
+      from,
+      to,
+      type,
+      totals: report.totals,
+      rows: report.rows.map((r) => ({
+        ...r,
+        address: this.endereco(enderecos, r.lat, r.lng),
+      })),
+      days: report.days.map((d) => ({
+        ...d,
+        address: this.endereco(enderecos, d.lat, d.lng),
       })),
     };
   }

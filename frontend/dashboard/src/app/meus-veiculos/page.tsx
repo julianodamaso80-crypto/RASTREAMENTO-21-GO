@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { HistoricoDoDia } from '@/components/historico/historico-do-dia';
+import { HistoricoDoVeiculo } from '@/components/historico/historico-do-veiculo';
 import { BASEMAPS, MAP_CENTER, STATUS_COLORS } from '@/lib/constants';
 import {
   getDisplayStatus,
@@ -286,9 +286,13 @@ export default function MeusVeiculosPage() {
             <DialogTitle>Histórico · {historicoDe?.plate}</DialogTitle>
           </DialogHeader>
           {historicoDe && (
-            <HistoricoDoDia
-              carregar={(dia) => associateApi.journey(historicoDe.id, dia)}
-              diasMax={31}
+            <HistoricoDoVeiculo
+              carregarDia={(dia) => associateApi.journey(historicoDe.id, dia)}
+              carregarRelatorio={(from, to, tipo) =>
+                associateApi.historyReport(historicoDe.id, from, to, tipo)
+              }
+              diasViagens={30}
+              diasConsulta={31}
               nomeArquivo={`historico-${historicoDe.plate}`}
             />
           )}
