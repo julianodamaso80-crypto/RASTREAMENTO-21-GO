@@ -54,6 +54,10 @@ export class InstallationPendingsService implements OnModuleInit {
   /** Espaçamento entre páginas pra não bater no rate limit do SGA (406). */
   private static readonly PAUSA_ENTRE_PAGINAS_MS = 2500;
 
+  /** Quantas vezes rechecar uma página vazia no meio da varredura, e de quanto em quanto tempo. */
+  private static readonly RECHECAGENS_PAGINA_VAZIA = 4;
+  private static readonly PAUSA_RECHECAGEM_MS = 15_000;
+
   /**
    * Limite da transação que regrava a fila. Medido em produção: 9.167 ms para
    * 8.449 linhas. O default do Prisma é 5.000 ms — folga nenhuma. 120s cobre a
@@ -800,10 +804,25 @@ export class InstallationPendingsService implements OnModuleInit {
   ): Promise<T[]> {
     const todos: T[] = [];
     for (let pagina = 0; pagina < InstallationPendingsService.MAX_PAGINAS; pagina++) {
-      const lote = await buscar(
-        pagina * InstallationPendingsService.LOTE,
-        InstallationPendingsService.LOTE,
-      );
+      const offset = pagina * InstallationPendingsService.LOTE;
+      let lote = await buscar(offset, InstallationPendingsService.LOTE);
+      // Em 09/10/2026 o SGA devolveu vazia a página do offset 20.000 nas duas
+      // listagens ao mesmo tempo (tinha 30.478 veículos e 26.495 associados) e
+      // a varredura leu "fim da lista": a fila caiu de 11.091 para 3.199 e a
+      // trava barrou o sync. Vazia depois de página cheia só vale como fim se
+      // continuar vazia ao rechecar.
+      for (
+        let r = 0;
+        r < InstallationPendingsService.RECHECAGENS_PAGINA_VAZIA &&
+        pagina > 0 &&
+        lote.length === 0;
+        r++
+      ) {
+        await new Promise((res) =>
+          setTimeout(res, InstallationPendingsService.PAUSA_RECHECAGEM_MS),
+        );
+        lote =await buscar(offset, InstallationPendingsService.LOTE);
+      }
       todos.push(...lote);
       if (lote.length < InstallationPendingsService.LOTE) break;
       // Pausa entre páginas. Medido ao vivo 2026-07-23: bater página após página

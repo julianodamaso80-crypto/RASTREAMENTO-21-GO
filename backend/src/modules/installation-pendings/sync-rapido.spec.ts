@@ -62,8 +62,10 @@ function servicoDeTeste(opts: {
       ordem.push(`veiculos:${offset}:inicio`);
       await new Promise((r) => setTimeout(r, 30));
       ordem.push(`veiculos:${offset}:fim`);
-      if (offset >= limite * 2) return [];
-      const pagina = Array.from({ length: limite }, (_, i) => ({
+      // Terceira página curta (1 linha) em vez de vazia: vazia depois de página
+      // cheia é rechecada pela varredura e a espera real estoura o teste.
+      const tamanho = offset >= limite * 2 ? 1 : limite;
+      const pagina = Array.from({ length: tamanho }, (_, i) => ({
         codigo_veiculo: String(offset + i),
         codigo_associado: 'A1',
         placa: `RJA1A${offset + i}`,
@@ -77,8 +79,7 @@ function servicoDeTeste(opts: {
       ordem.push(`associados:${offset}:inicio`);
       await new Promise((r) => setTimeout(r, 30));
       ordem.push(`associados:${offset}:fim`);
-      if (offset >= limite * 2) return [];
-      return Array.from({ length: limite }, () => ({
+      return Array.from({ length: offset >= limite * 2 ? 1 : limite }, () => ({
         codigo_associado: 'A1',
         cidade: 'Rio',
         cep: '20000000',
