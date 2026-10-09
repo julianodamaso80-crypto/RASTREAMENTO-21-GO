@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Car, History, Loader2, LogOut } from 'lucide-react';
+import { Car, History, Loader2, Lock, LockOpen, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +51,21 @@ function estadoDe(v: AssociateVehicle): DisplayStatus {
     vehicleType: v.vehicleType ?? 'CAR',
   });
 }
+
+/** Mesma regra do app: quem manda é o relé informado pelo rastreador; sem a informação vale o que o sistema gravou. */
+function estadoBloqueio(v: AssociateVehicle): 'BLOQUEADO' | 'BLOQUEIO_PENDENTE' | 'DESBLOQUEIO_PENDENTE' | null {
+  const doRastreador = v.position?.blocked ?? null;
+  const comandado = v.status === 'BLOCKED';
+  if (doRastreador === true) return comandado ? 'BLOQUEADO' : 'DESBLOQUEIO_PENDENTE';
+  if (doRastreador === false) return comandado ? 'BLOQUEIO_PENDENTE' : null;
+  return comandado ? 'BLOQUEADO' : null;
+}
+
+const ROTULO_BLOQUEIO = {
+  BLOQUEADO: 'Bloqueado',
+  BLOQUEIO_PENDENTE: 'Bloqueio enviado, aguardando o rastreador',
+  DESBLOQUEIO_PENDENTE: 'Desbloqueio enviado, aguardando o rastreador',
+};
 
 /** Primeiro acesso: a senha ainda é o CPF/CNPJ e precisa ser trocada, como no app. */
 function TrocarSenha({ onPronto }: { onPronto: () => void }) {
@@ -160,6 +175,7 @@ export default function MeusVeiculosPage() {
   const [veiculos, setVeiculos] = useState<AssociateVehicle[] | null>(null);
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [historicoDe, setHistoricoDe] = useState<AssociateVehicle | null>(null);
+  const [enviandoBloqueio, setEnviandoBloqueio] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -168,6 +184,35 @@ export default function MeusVeiculosPage() {
       if ((err as { response?: { status?: number } }).response?.status === 401) sair();
     }
   }, []);
+
+  async function alternarBloqueio(v: AssociateVehicle) {
+    const bloquear = v.status !== 'BLOCKED';
+    const ok = window.confirm(
+      bloquear
+        ? `Bloquear o veículo ${v.plate}? Ele vai parar de funcionar. Se estiver em movimento, pode desligar no meio da via.`
+        : `Desbloquear o veículo ${v.plate}? Ele volta a funcionar normalmente.`,
+    );
+    if (!ok) return;
+    setEnviandoBloqueio(v.id);
+    try {
+      const r = await associateApi.setBlocked(v.id, bloquear);
+      toast.success(
+        r.queued
+          ? `O rastreador está sem conexão agora. O veículo será ${bloquear ? 'bloqueado' : 'desbloqueado'} assim que ele se comunicar.`
+          : `${bloquear ? 'Bloqueio' : 'Desbloqueio'} enviado. A confirmação aparece aqui em alguns minutos.`,
+      );
+      await carregar();
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      toast.error(
+        status === 403
+          ? 'O bloqueio não está liberado para este veículo. Fale com a 21 Go.'
+          : 'Não conseguimos enviar o comando agora. Tente de novo em instantes.',
+      );
+    } finally {
+      setEnviandoBloqueio(null);
+    }
+  }
 
   useEffect(() => {
     if (!associateApi.getToken()) {
@@ -266,17 +311,45 @@ export default function MeusVeiculosPage() {
                     <div className="text-xs text-muted-foreground">
                       {ultimaAtualizacao(v.connection?.lastUpdate ?? '')}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 h-7"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setHistoricoDe(v);
-                      }}
-                    >
-                      <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
-                    </Button>
+                    {estadoBloqueio(v) ? (
+                      <div className="mt-1 text-xs font-semibold text-amber-600">
+                        {ROTULO_BLOQUEIO[estadoBloqueio(v)!]}
+                      </div>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHistoricoDe(v);
+                        }}
+                      >
+                        <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
+                      </Button>
+                      {v.blockerAccessAllowed ? (
+                        <Button
+                          variant={v.status === 'BLOCKED' ? 'outline' : 'destructive'}
+                          size="sm"
+                          className="h-7"
+                          disabled={enviandoBloqueio === v.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            alternarBloqueio(v);
+                          }}
+                        >
+                          {enviandoBloqueio === v.id ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : v.status === 'BLOCKED' ? (
+                            <LockOpen className="mr-1.5 h-3.5 w-3.5" />
+                          ) : (
+                            <Lock className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          {v.status === 'BLOCKED' ? 'Desbloquear veículo' : 'Bloquear veículo'}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               );

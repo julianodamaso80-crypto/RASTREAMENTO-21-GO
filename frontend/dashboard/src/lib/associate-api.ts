@@ -32,6 +32,8 @@ export interface AssociatePosition {
   address: string | null;
   fixTime: string;
   ignition: boolean | null;
+  /** Relé de bloqueio como o PRÓPRIO rastreador informa; null = pacote sem a informação. */
+  blocked?: boolean | null;
 }
 
 export interface AssociateVehicle {
@@ -43,6 +45,8 @@ export interface AssociateVehicle {
   year: number | null;
   vehicleType?: 'CAR' | 'MOTORCYCLE' | null;
   status?: string;
+  /** Liberação feita pelo admin em Clientes Ativos; sem ela o botão nem aparece. */
+  blockerAccessAllowed?: boolean;
   position: AssociatePosition | null;
   connection: { status: string; lastUpdate: string | null } | null;
 }
@@ -78,6 +82,10 @@ export const associateApi = {
   vehicles: async (): Promise<AssociateVehicle[]> => {
     const res = await http.get('/app/vehicles');
     return unwrap<AssociateVehicle[]>(res.data);
+  },
+  setBlocked: async (vehicleId: string, block: boolean): Promise<{ queued: boolean }> => {
+    const res = await http.post(`/app/vehicles/${vehicleId}/${block ? 'block' : 'unblock'}`);
+    return unwrap<{ queued: boolean }>(res.data);
   },
   historyReport: async (
     vehicleId: string,
