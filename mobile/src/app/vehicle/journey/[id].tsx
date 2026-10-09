@@ -12,6 +12,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppApi, JourneyDay, JourneyTrip } from '@/lib/api';
 import { colors, radii } from '@/lib/theme';
+import { HistoricoConsultar } from '@/components/historico-consultar';
 
 const DIAS = 31;
 
@@ -58,6 +59,7 @@ export default function VehicleJourneyScreen() {
   const [erro, setErro] = useState(false);
   const [escolhida, setEscolhida] = useState(0);
   const [detalhes, setDetalhes] = useState(false);
+  const [aba, setAba] = useState<'viagens' | 'consultar'>('viagens');
   const mapa = useRef<MapView>(null);
 
   useEffect(() => {
@@ -107,6 +109,22 @@ export default function VehicleJourneyScreen() {
     <View style={styles.root}>
       <Stack.Screen options={{ title: plate ? String(plate) : 'Histórico' }} />
 
+      <View style={styles.abas}>
+        {(['viagens', 'consultar'] as const).map((a) => (
+          <TouchableOpacity key={a} onPress={() => setAba(a)} style={[styles.aba, aba === a && styles.abaOn]}>
+            <Text style={[styles.abaText, aba === a && styles.abaTextOn]}>
+              {a === 'viagens' ? 'Viagens' : 'Consultar'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {aba === 'consultar' ? (
+        <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
+          <HistoricoConsultar vehicleId={String(id)} />
+        </ScrollView>
+      ) : (
+      <>
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dias}>
           {dias.map((d, i) => (
@@ -209,12 +227,19 @@ export default function VehicleJourneyScreen() {
           </View>
         )}
       </ScrollView>
+      </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  abas: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card },
+  aba: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  abaOn: { borderBottomColor: colors.orange },
+  abaText: { color: colors.textMuted, fontWeight: '600', fontSize: 14 },
+  abaTextOn: { color: colors.text },
   dias: { padding: 10, gap: 8 },
   chip: {
     paddingHorizontal: 14,

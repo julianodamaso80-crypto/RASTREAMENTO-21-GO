@@ -140,6 +140,40 @@ export interface JourneyDay {
   trips: JourneyTrip[];
 }
 
+export type HistoryReportType = 'basico' | 'avancado' | 'consolidado';
+
+export interface HistoryReportRow {
+  time: string;
+  lat: number;
+  lng: number;
+  speed: number;
+  ignition: boolean | null;
+  event: string | null;
+  distanceM: number | null;
+  address: string | null;
+  gprs?: string;
+  gps?: string;
+  direction?: string;
+}
+
+export interface HistoryReportDay {
+  date: string;
+  maxSpeed: number;
+  lat: number;
+  lng: number;
+  address: string | null;
+}
+
+export interface HistoryReport {
+  plate: string;
+  from: string;
+  to: string;
+  type: HistoryReportType;
+  totals: { distanceKm: number; ignitionOnMin: number; ignitionOffMin: number };
+  rows: HistoryReportRow[];
+  days: HistoryReportDay[];
+}
+
 export interface Alert {
   id: string;
   type: string;
@@ -235,6 +269,13 @@ export const AppApi = {
   trips: (vehicleId: string, from: string, to: string) =>
     api
       .get<Trip[]>(`/app/vehicles/${vehicleId}/trips`, { params: { from, to } })
+      .then((r) => r.data),
+
+  historyReport: (vehicleId: string, from: string, to: string, type: HistoryReportType) =>
+    api
+      .get<HistoryReport>(`/app/vehicles/${vehicleId}/history-report`, {
+        params: { from, to, type },
+      })
       .then((r) => r.data),
 
   journey: (vehicleId: string, date: string) =>
