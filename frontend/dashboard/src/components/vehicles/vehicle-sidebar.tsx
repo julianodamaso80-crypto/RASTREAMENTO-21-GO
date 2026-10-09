@@ -13,9 +13,18 @@ import { useState, useEffect } from 'react';
 /** TAGs mostradas por vez: são milhares, e cada linha é um nó na tela. */
 const TAGS_POR_VEZ = 200;
 
+/**
+ * Veículos mostrados por vez. Medido em produção (09/10/2026): os ~6,7 mil
+ * veículos desenhados de uma vez davam 95 mil nós só na lista e travavam a
+ * thread principal por 15 s a cada carga do mapa. A busca e os filtros agem
+ * sobre a lista inteira — só o que é desenhado é limitado.
+ */
+const VEICULOS_POR_VEZ = 200;
+
 export function VehicleSidebar() {
   const { filteredVehicles, filteredTags, searchQuery, setSearchQuery, isLoading } = useTracking();
   const [tagsVisiveis, setTagsVisiveis] = useState(TAGS_POR_VEZ);
+  const [veiculosVisiveis, setVeiculosVisiveis] = useState(VEICULOS_POR_VEZ);
   // Nasce com a busca que já está valendo (ex.: o IMEI digitado na barra do
   // topo). Começar vazio zerava o filtro assim que o mapa montava, e o
   // operador via a lista inteira de volta com o termo ainda escrito em cima.
@@ -58,9 +67,18 @@ export function VehicleSidebar() {
           </div>
         ) : (
           <div className="space-y-1 p-2">
-            {filteredVehicles.map((vehicle) => (
+            {filteredVehicles.slice(0, veiculosVisiveis).map((vehicle) => (
               <VehicleListItem key={vehicle.id} vehicle={vehicle} />
             ))}
+            {filteredVehicles.length > veiculosVisiveis && (
+              <button
+                type="button"
+                onClick={() => setVeiculosVisiveis((n) => n + VEICULOS_POR_VEZ)}
+                className="w-full rounded-lg py-2 text-xs font-medium text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+              >
+                Mostrar mais veículos ({filteredVehicles.length - veiculosVisiveis} restantes)
+              </button>
+            )}
             {filteredTags.slice(0, tagsVisiveis).map((tag) => (
               <TagListItem key={tag.id} tag={tag} />
             ))}
