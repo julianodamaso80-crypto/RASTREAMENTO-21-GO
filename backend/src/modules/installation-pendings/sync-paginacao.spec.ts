@@ -75,6 +75,35 @@ describe('paginação do sync do SGA', () => {
     expect(veiculos.offsets).toEqual([0, 5000, 10000, 15000, 20000, 25000]);
   }, 60_000);
 
+  it('não toma por fim da lista uma página vazia transitória do SGA', async () => {
+    // 09/10/2026: o SGA devolveu vazia a página do offset 20.000 e a varredura
+    // parou em 20.000 dos 26.449, derrubando a fila de 11.091 para 3.199.
+    const real = paginador(26449);
+    let falhou = false;
+    const buscar = jest.fn((offset: number, limite: number) => {
+      if (offset === 20000 && !falhou) {
+        falhou = true;
+        return Promise.resolve([]);
+      }
+      return real.fn(offset, limite);
+    });
+    const service = new InstallationPendingsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    const todos = await (
+      service as unknown as {
+        varrer: (b: typeof buscar) => Promise<unknown[]>;
+      }
+    ).varrer(buscar);
+
+    expect(todos).toHaveLength(26449);
+  }, 60_000);
+
   it('varre os 10.984 inativos do espelho em 3 páginas, não em 11', async () => {
     // Só a situação 2 tem volume; as outras respondem uma página curta.
     const porSituacao: Record<number, number> = {
