@@ -627,3 +627,43 @@ describe('formato fixo da busca no cache — vazamento de memória de 21/09', ()
     expect(textos[0]).toBe(textos[1]);
   });
 });
+
+describe('lookupLote — endereço de histórico exportado', () => {
+  const cfg = configFake({ 'geocoder.baseUrl': 'http://geocoder:3000', 'geocoder.apiKey': 'k' });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('resolve na hora o que não está em cache e repete o mesmo ponto uma vez só', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(respostaOk({ road: 'Rua Piraquara', city: 'Rio de Janeiro', state: 'Rio de Janeiro' }));
+    const servico = new ReverseGeocodeService(prismaFakeVazio(), cfg);
+    const a = { latitude: -22.9, longitude: -43.2 };
+
+    const mapa = await servico.lookupLote([a, a, { latitude: -22.8, longitude: -43.1 }]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mapa.get(servico.chave(a) as string)).toBe('Rua Piraquara, Rio de Janeiro - RJ');
+  });
+
+  it('respeita o teto de pontos e devolve o resto sem endereço', async () => {
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(respostaOk({ road: 'Rua A', city: 'Rio de Janeiro', state: 'Rio de Janeiro' }));
+    const servico = new ReverseGeocodeService(prismaFakeVazio(), cfg);
+    const pontos = [1, 2, 3].map((i) => ({ latitude: -22 - i, longitude: -43 }));
+
+    const mapa = await servico.lookupLote(pontos, { max: 2 });
+
+    expect(mapa.size).toBe(2);
+  });
+
+  it('enderecarPontos devolve address null quando o geocoder não acha nada', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(respostaOk({}));
+    const servico = new ReverseGeocodeService(prismaFakeVazio(), cfg);
+
+    const [p] = await servico.enderecarPontos([{ lat: -22.9, lng: -43.2 }]);
+
+    expect(p.address).toBeNull();
+  });
+});

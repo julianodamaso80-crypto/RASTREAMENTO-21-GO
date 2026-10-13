@@ -368,7 +368,7 @@ export default function MeusVeiculosPage() {
           </DialogHeader>
           {historicoDe && (
             <HistoricoDoVeiculo
-              carregarDia={(dia) => associateApi.journey(historicoDe.id, dia)}
+              carregarDia={(dia, comEnderecos) => associateApi.journey(historicoDe.id, dia, comEnderecos)}
               carregarRelatorio={(from, to, tipo) =>
                 associateApi.historyReport(historicoDe.id, from, to, tipo)
               }

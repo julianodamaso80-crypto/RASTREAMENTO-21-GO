@@ -216,6 +216,59 @@ export class ReverseGeocodeService {
     }
   }
 
+  /**
+   * Endereço de uma lista de pontos, resolvendo AGORA o que não está em cache.
+   *
+   * Existe para o histórico do associado e do painel, que vira planilha: ali o
+   * `lookupCached` deixava a coluna Endereço em branco em todo ponto novo (ele
+   * só enfileira e a tela recarrega depois, coisa que um arquivo baixado não
+   * faz). Segura a requisição, mas com teto de pontos e de tempo — o que passar
+   * do teto volta sem endereço em vez de pendurar o pedido.
+   *
+   * Tolerância de 5 m como em `lookupCached`: o endereço é do ponto, não de um
+   * vizinho. Sem enfileirar: quem resolve é o laço daqui.
+   */
+  async lookupLote(
+    coordenadas: Coordenada[],
+    { max = 1_500, prazoMs = 25_000, paralelo = 8 } = {},
+  ): Promise<Map<string, string>> {
+    const achados = await this.lookupCached(
+      coordenadas,
+      ReverseGeocodeService.TOLERANCIA_M,
+      false,
+    );
+    const faltam = new Map<string, Coordenada>();
+    for (const coord of coordenadas) {
+      const chave = this.chave(coord);
+      if (chave && !achados.has(chave) && !faltam.has(chave)) faltam.set(chave, coord);
+    }
+    const pendentes = [...faltam.entries()].slice(0, max);
+    const limite = Date.now() + prazoMs;
+    let proximo = 0;
+    const trabalhador = async () => {
+      while (proximo < pendentes.length && Date.now() < limite) {
+        const [chave, coord] = pendentes[proximo++];
+        const endereco = await this.resolver(coord);
+        if (endereco) achados.set(chave, endereco);
+      }
+    };
+    await Promise.all(Array.from({ length: paralelo }, trabalhador));
+    return achados;
+  }
+
+  /** `lookupLote` aplicado a pontos `{ lat, lng }`, devolvendo-os com `address`. */
+  async enderecarPontos<T extends { lat: number; lng: number }>(
+    pontos: T[],
+  ): Promise<(T & { address: string | null })[]> {
+    const enderecos = await this.lookupLote(
+      pontos.map((p) => ({ latitude: p.lat, longitude: p.lng })),
+    );
+    return pontos.map((p) => {
+      const chave = this.chave({ latitude: p.lat, longitude: p.lng });
+      return { ...p, address: (chave && enderecos.get(chave)) || null };
+    });
+  }
+
   /** Chave do cache pra uma coordenada crua — quem chama usa pra ler o Map. */
   chave(coord: Coordenada): string | null {
     const { latitude, longitude } = this.arredondar(coord);

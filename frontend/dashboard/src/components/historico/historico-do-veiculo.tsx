@@ -6,7 +6,7 @@ import { HistoricoConsultar } from '@/components/historico/historico-consultar';
 import type { JornadaDoDia, RelatorioHistorico, TipoRelatorio } from '@/lib/historico';
 
 interface Props {
-  carregarDia: (dia: string) => Promise<JornadaDoDia>;
+  carregarDia: (dia: string, comEnderecos?: boolean) => Promise<JornadaDoDia>;
   carregarRelatorio: (from: string, to: string, tipo: TipoRelatorio) => Promise<RelatorioHistorico>;
   diasViagens: number;
   diasConsulta: number;

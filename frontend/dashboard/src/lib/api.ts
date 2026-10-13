@@ -471,9 +471,9 @@ export const reportsApi = {
     });
     return res.data.data;
   },
-  getJourney: async (deviceId: number, date: string): Promise<JornadaDoDia> => {
+  getJourney: async (deviceId: number, date: string, enderecos = false): Promise<JornadaDoDia> => {
     const res = await api.get<ApiResponse<JornadaDoDia>>('/reports/journey', {
-      params: { deviceId, date },
+      params: { deviceId, date, ...(enderecos ? { enderecos: '1' } : {}) },
     });
     return res.data.data;
   },

@@ -98,8 +98,10 @@ export const associateApi = {
     });
     return unwrap<RelatorioHistorico>(res.data);
   },
-  journey: async (vehicleId: string, date: string): Promise<JornadaDoDia> => {
-    const res = await http.get(`/app/vehicles/${vehicleId}/journey`, { params: { date } });
+  journey: async (vehicleId: string, date: string, enderecos = false): Promise<JornadaDoDia> => {
+    const res = await http.get(`/app/vehicles/${vehicleId}/journey`, {
+      params: { date, ...(enderecos ? { enderecos: '1' } : {}) },
+    });
     return unwrap<JornadaDoDia>(res.data);
   },
 };

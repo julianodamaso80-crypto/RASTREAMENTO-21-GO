@@ -47,6 +47,11 @@ export class JourneyQueryDto {
   @ApiProperty({ description: 'Dia (AAAA-MM-DD, Brasília)', example: '2026-10-08' })
   @IsString()
   date: string;
+
+  @ApiPropertyOptional({ description: '"1" devolve o endereço de cada ponto do trajeto (exportação)' })
+  @IsOptional()
+  @IsString()
+  enderecos?: string;
 }
 
 export class HistoryReportQueryDto extends ReportQueryDto {

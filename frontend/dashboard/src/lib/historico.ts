@@ -4,6 +4,8 @@ export interface PontoDaViagem {
   lng: number;
   speed: number;
   ignition: boolean | null;
+  /** Só vem quando o dia é pedido com endereços (exportação). */
+  address?: string | null;
 }
 
 export interface ViagemDoDia {
@@ -61,11 +63,12 @@ export function viagensParaCsv(v: ViagemDoDia): string {
       new Date(p.time).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       p.lat,
       p.lng,
+      `"${(p.address ?? '').replace(/"/g, '""')}"`,
       p.speed,
       p.ignition === null ? '' : p.ignition ? 'Ligada' : 'Desligada',
     ].join(';'),
   );
-  return '﻿' + ['Data/Hora;Latitude;Longitude;Velocidade (km/h);Ignição', ...linhas].join('\n');
+  return '﻿' + ['Data/Hora;Latitude;Longitude;Endereço;Velocidade (km/h);Ignição', ...linhas].join('\n');
 }
 
 export type TipoRelatorio = 'basico' | 'avancado' | 'consolidado';

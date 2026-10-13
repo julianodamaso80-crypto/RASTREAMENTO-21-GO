@@ -97,8 +97,9 @@ export class AppDataController {
     @CurrentAssociate('tenantId') tenantId: string,
     @Param('id') vehicleId: string,
     @Query('date') date: string,
+    @Query('enderecos') enderecos?: string,
   ) {
-    return this.service.getJourney(associateId, tenantId, vehicleId, date);
+    return this.service.getJourney(associateId, tenantId, vehicleId, date, enderecos === '1');
   }
 
   @Get('vehicles/:id/history-report')

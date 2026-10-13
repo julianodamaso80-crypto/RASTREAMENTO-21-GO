@@ -398,7 +398,8 @@ function HistoryTab({ vehicleId, deviceId }: { vehicleId: string; deviceId: numb
   const [from] = useState(() => new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
   const [to] = useState(() => new Date().toISOString());
   const carregar = useCallback(
-    (dia: string) => reportsApi.getJourney(deviceId as number, dia),
+    (dia: string, comEnderecos?: boolean) =>
+      reportsApi.getJourney(deviceId as number, dia, comEnderecos),
     [deviceId],
   );
   const carregarRelatorio = useCallback(

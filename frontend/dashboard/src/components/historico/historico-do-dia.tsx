@@ -19,8 +19,8 @@ import {
 } from '@/lib/historico';
 
 interface Props {
-  /** Busca as viagens de um dia (AAAA-MM-DD, Brasília). */
-  carregar: (dia: string) => Promise<JornadaDoDia>;
+  /** Busca as viagens de um dia (AAAA-MM-DD, Brasília). Com `comEnderecos`, cada ponto vem com a rua. */
+  carregar: (dia: string, comEnderecos?: boolean) => Promise<JornadaDoDia>;
   /** Quantos dias para trás o seletor deixa escolher. */
   diasMax: number;
   /** Quando a viagem não traz endereço, resolve pela coordenada. */
@@ -45,6 +45,7 @@ export function HistoricoDoDia({ carregar, diasMax, resolverEndereco, nomeArquiv
   const [carregando, setCarregando] = useState(false);
   const [escolhida, setEscolhida] = useState(0);
   const [detalhes, setDetalhes] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [enderecos, setEnderecos] = useState<Record<string, string>>({});
   // A tela pai re-renderiza (atualização periódica); a função não pode virar dependência.
   const carregarRef = useRef(carregar);
@@ -110,15 +111,26 @@ export function HistoricoDoDia({ carregar, diasMax, resolverEndereco, nomeArquiv
     );
   };
 
-  function exportar() {
+  async function exportar() {
     if (!viagem) return;
-    const blob = new Blob([viagensParaCsv(viagem)], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${nomeArquivo}-${dia}-viagem${escolhida + 1}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setExportando(true);
+    try {
+      // A tela mostra só começo e fim da viagem; a planilha leva a rua de cada
+      // ponto, então rebusca o dia pedindo os endereços ao backend.
+      const completa = await carregarRef.current(dia, true);
+      const alvo = completa.trips.find((t) => t.startTime === viagem.startTime) ?? viagem;
+      const blob = new Blob([viagensParaCsv(alvo)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${nomeArquivo}-${dia}-viagem${escolhida + 1}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErro('Não foi possível gerar a planilha agora. Tente de novo.');
+    } finally {
+      setExportando(false);
+    }
   }
 
   return (
@@ -198,8 +210,13 @@ export function HistoricoDoDia({ carregar, diasMax, resolverEndereco, nomeArquiv
         <div className="rounded-md border p-3 text-sm">
           <div className="flex items-center justify-between">
             <span className="font-medium">Informações da viagem</span>
-            <Button variant="ghost" size="sm" onClick={exportar}>
-              <Download className="mr-2 h-4 w-4" /> Exportar viagem
+            <Button variant="ghost" size="sm" onClick={exportar} disabled={exportando}>
+              {exportando ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Exportar viagem
             </Button>
           </div>
           <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2">

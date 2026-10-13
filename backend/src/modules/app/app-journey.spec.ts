@@ -128,7 +128,7 @@ describe('AppDataService.getHistoryReport', () => {
     const geocode: any = {
       chave: (c: { latitude: number; longitude: number }) =>
         `${c.latitude.toFixed(4)},${c.longitude.toFixed(4)}`,
-      lookupCached: jest
+      lookupLote: jest
         .fn()
         .mockResolvedValue(new Map([['-22.9000,-43.2000', 'Rua A, 1 · Centro']])),
     };

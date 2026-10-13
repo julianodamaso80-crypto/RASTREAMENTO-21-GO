@@ -73,7 +73,13 @@ export class ReportsController {
     @Req() req: AuthenticatedRequest,
   ) {
     await this.validateDevice(query.deviceId, req.tenantId);
-    return this.reportsService.getJourney(query.deviceId, query.date);
+    const jornada = await this.reportsService.getJourney(query.deviceId, query.date);
+    if (query.enderecos !== '1') return jornada;
+    const trips: typeof jornada.trips = [];
+    for (const t of jornada.trips) {
+      trips.push({ ...t, path: await this.geocode.enderecarPontos(t.path) });
+    }
+    return { ...jornada, trips };
   }
 
   @Get('history-report')
@@ -91,7 +97,7 @@ export class ReportsController {
     );
     const pontos = [...report.rows, ...report.days];
     const enderecos = pontos.length
-      ? await this.geocode.lookupCached(
+      ? await this.geocode.lookupLote(
           pontos.map((p) => ({ latitude: p.lat, longitude: p.lng })),
         )
       : new Map<string, string>();

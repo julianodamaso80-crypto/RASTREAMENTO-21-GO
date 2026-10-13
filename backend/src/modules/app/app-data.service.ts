@@ -13,7 +13,7 @@ import {
 } from '../traccar/traccar.service';
 import { ReportsService, type Trip } from '../reports/reports.service';
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
-import { validarDiaDoHistorico, type JourneyTrip } from '../reports/journey';
+import { validarDiaDoHistorico, type JourneyPoint, type JourneyTrip } from '../reports/journey';
 import { validarPeriodo } from '../reports/history-report';
 
 const KNOTS_TO_KMH = 1.852;
@@ -335,6 +335,7 @@ export class AppDataService {
     tenantId: string,
     vehicleId: string,
     date: string,
+    comEnderecos = false,
   ): Promise<DiaDoHistorico> {
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: vehicleId, associateId, tenantId, deletedAt: null },
@@ -361,9 +362,17 @@ export class AppDataService {
         { latitude: t.endLat, longitude: t.endLng },
       ]),
     );
+    const trips: (JourneyTrip & { path: JourneyPoint[] })[] = [];
+    for (const t of journey.trips) {
+      // Em sequência: cada viagem já abre o seu próprio lote no geocoder.
+      trips.push({
+        ...t,
+        path: comEnderecos ? await this.geocode.enderecarPontos(t.path) : t.path,
+      });
+    }
     return {
       date: journey.date,
-      trips: journey.trips.map((t) => ({
+      trips: trips.map((t) => ({
         ...t,
         startAddress: this.endereco(enderecos, t.startLat, t.startLng),
         endAddress: this.endereco(enderecos, t.endLat, t.endLng),
@@ -408,7 +417,7 @@ export class AppDataService {
 
     const pontos = [...report.rows, ...report.days];
     const enderecos = pontos.length
-      ? await this.geocode.lookupCached(
+      ? await this.geocode.lookupLote(
           pontos.map((p) => ({ latitude: p.lat, longitude: p.lng })),
         )
       : new Map<string, string>();
