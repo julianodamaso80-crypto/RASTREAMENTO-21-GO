@@ -10,6 +10,7 @@ import {
 } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import Supercluster from 'supercluster';
 import {
   MAP_CENTER,
   MAP_ZOOM,
@@ -76,6 +77,34 @@ const FONTE_TAGS = 'tags-clientes';
 const CAMADA_TAGS = 'tags-clientes-pontos';
 const FONTE_PRECISAO = 'tag-precisao';
 
+/** A partir do zoom seguinte a este, todo veículo aparece sozinho. */
+const CLUSTER_MAX_ZOOM = 16;
+type PropsPonto = { id: string };
+type PontoVeiculo = Supercluster.PointFeature<PropsPonto>;
+
+/** Círculo com a quantidade de veículos agrupados; clicar abre o grupo. */
+function pintarCluster(el: HTMLElement, total: number) {
+  if (el.dataset.total === String(total)) return;
+  el.dataset.total = String(total);
+  const tamanho = total < 10 ? 36 : total < 100 ? 44 : 52;
+  el.style.width = `${tamanho}px`;
+  el.style.height = `${tamanho}px`;
+  el.textContent = total >= 1000 ? `${Math.floor(total / 1000)}k` : String(total);
+}
+
+function criarElementoCluster(total: number, aoClicar: () => void): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'vehicle-cluster';
+  el.style.cssText =
+    'cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(15,23,42,0.92);color:#fff;font-size:13px;font-weight:700;border:3px solid #f97316;box-shadow:0 2px 8px rgba(0,0,0,0.55);';
+  pintarCluster(el, total);
+  el.onclick = (e) => {
+    e.stopPropagation();
+    aoClicar();
+  };
+  return el;
+}
+
 /** Círculo de `raioM` metros em volta do ponto — a precisão real da TAG. */
 function circuloEmMetros(lng: number, lat: number, raioM: number): [number, number][] {
   const pontos: [number, number][] = [];
@@ -131,9 +160,9 @@ function rotuloEstado(vehicle: VehicleWithTracking): string {
  * apresentava bugs de sincronização (DOM marker não aparecia até pan/zoom
  * manual) e a base de veículos hoje é pequena (≤100 ativos).
  *
- * Quando passar de ~500 ativos, adicionar clustering com a lib
- * `supercluster` (melhor controle que o cluster nativo), mantendo este
- * componente como fallback pra clientes individuais (visão CLIENT).
+ * Desde 13/10/2026 (9.165 veículos, 6.684 com posição) o que vai pro DOM é
+ * decidido pelo `supercluster`: só o que está na tela, agrupado em círculos
+ * com a contagem quando o zoom não separa. Os marcados nunca entram em grupo.
  */
 const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
   function MapContainer(
@@ -169,6 +198,13 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     // continuar afirmando um destino que o marcador já não ocupava, e a guarda
     // de "coordenada repetida" então travava o marcador no lugar errado.
     const destinosRef = useRef<Map<string, [number, number]>>(new Map());
+    // Índice de clusters da frota (sem os marcados) e os marcadores de grupo
+    // que estão na tela, por id de cluster.
+    const clusterIndexRef = useRef<Supercluster<PropsPonto> | null>(null);
+    const clusterMarkersRef = useRef<Map<number, maplibregl.Marker>>(new Map());
+    const veiculosPorIdRef = useRef<Map<string, VehicleWithTracking>>(new Map());
+    const selectedIdsRef = useRef<string[]>([]);
+    const desenharRef = useRef<(() => void) | null>(null);
     const [basemap, setBasemap] = useState<BasemapId>('streets');
     // Só preenchido quando o satélite ativo é o do Google — dispara a
     // atribuição obrigatória (logo + copyright do viewport).
@@ -274,6 +310,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
 
       mapRef.current = map;
       map.once('load', () => onReadyRef.current?.());
+      map.on('moveend', () => desenharRef.current?.());
 
       // Clique na TAG. Registrado por id de camada: continua valendo depois de
       // trocar o estilo, quando a camada é recolocada com o mesmo id.
@@ -291,6 +328,8 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       return () => {
         markersRef.current.forEach((m) => m.remove());
         markersRef.current.clear();
+        clusterMarkersRef.current.forEach((m) => m.remove());
+        clusterMarkersRef.current.clear();
         map.remove();
         mapRef.current = null;
       };
@@ -592,22 +631,104 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     }, []);
 
     // ─────────────────────────────────────────────────────────────────
-    // Sincroniza markers com a lista de vehicles
+    // Agrupa a frota em clusters e só materializa o que está na tela.
+    //
+    // Medido em produção em 13/10/2026 com 9.165 veículos: 6.684 marcadores
+    // DOM, 59 mil nós, thread principal travada 14,5 s a cada 10 s parado e
+    // 37 s para a busca lateral responder. Cada marcador DOM é um nó que o
+    // MapLibre reposiciona a cada frame e que o efeito abaixo visita a cada
+    // segundo. O índice (supercluster) decide, para o zoom e o enquadramento
+    // atuais, o que vira cluster e o que aparece sozinho; o resto não existe
+    // no DOM. Os marcados ficam sempre de fora do índice: têm etiqueta,
+    // seguimento e animação, e não podem sumir dentro de um círculo.
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
+      const selecionados = new Set(selectedIds ?? []);
+      const porId = new Map<string, VehicleWithTracking>();
+      const pontos: PontoVeiculo[] = [];
+      for (const vehicle of vehicles) {
+        if (!vehicle.latitude || !vehicle.longitude) continue;
+        porId.set(vehicle.id, vehicle);
+        if (selecionados.has(vehicle.id)) continue;
+        pontos.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [vehicle.longitude, vehicle.latitude] },
+          properties: { id: vehicle.id },
+        });
+      }
+      veiculosPorIdRef.current = porId;
+      selectedIdsRef.current = selectedIds ?? [];
+      const indice = new Supercluster<PropsPonto>({ radius: 60, maxZoom: CLUSTER_MAX_ZOOM });
+      indice.load(pontos);
+      clusterIndexRef.current = indice;
+      desenharRef.current?.();
+    }, [vehicles, selectedIds]);
+
+    const desenhar = useCallback(() => {
       const map = mapRef.current;
-      if (!map) return;
+      const indice = clusterIndexRef.current;
+      if (!map || !indice) return;
+
+      const selectedIds = selectedIdsRef.current;
+      const porId = veiculosPorIdRef.current;
+
+      // Enquadramento com folga de meia tela para cada lado: um pan curto não
+      // faz marcador nascer na borda.
+      const b = map.getBounds();
+      const dLng = (b.getEast() - b.getWest()) / 2;
+      const dLat = (b.getNorth() - b.getSouth()) / 2;
+      const zoom = Math.floor(map.getZoom());
+      const visiveis = indice.getClusters(
+        [b.getWest() - dLng, b.getSouth() - dLat, b.getEast() + dLng, b.getNorth() + dLat],
+        zoom,
+      );
+
+      const paraDesenhar: VehicleWithTracking[] = [];
+      const clustersAtuais = new Set<number>();
+      for (const f of visiveis) {
+        if ('cluster' in f.properties && f.properties.cluster) {
+          const clusterId = f.properties.cluster_id;
+          clustersAtuais.add(clusterId);
+          const [lng, lat] = f.geometry.coordinates;
+          const total = f.properties.point_count;
+          const existente = clusterMarkersRef.current.get(clusterId);
+          if (existente) {
+            existente.setLngLat([lng, lat]);
+            pintarCluster(existente.getElement(), total);
+          } else {
+            const el = criarElementoCluster(total, () => {
+              const alvo = Math.min(indice.getClusterExpansionZoom(clusterId), CLUSTER_MAX_ZOOM + 2);
+              map.easeTo({ center: [lng, lat], zoom: alvo, duration: 500 });
+            });
+            const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
+            clusterMarkersRef.current.set(clusterId, marker);
+          }
+        } else {
+          const v = porId.get(f.properties.id);
+          if (v) paraDesenhar.push(v);
+        }
+      }
+      clusterMarkersRef.current.forEach((marker, id) => {
+        if (!clustersAtuais.has(id)) {
+          marker.remove();
+          clusterMarkersRef.current.delete(id);
+        }
+      });
+      for (const id of selectedIds) {
+        const v = porId.get(id);
+        if (v) paraDesenhar.push(v);
+      }
 
       const currentIds = new Set<string>();
       // Ordem em que cada marcado entrou — é o número da etiqueta e o da linha
       // no painel. `null` quando há um só: aí a etiqueta volta a ser a de
       // sempre (placa + estado da ignição), sem número pra decorar.
       const ordemPorId = new Map<string, number>();
-      if (selectedIds && selectedIds.length > 1) {
+      if (selectedIds.length > 1) {
         selectedIds.forEach((id, i) => ordemPorId.set(id, i + 1));
       }
 
-      for (const vehicle of vehicles) {
+      for (const vehicle of paraDesenhar) {
         if (!vehicle.latitude || !vehicle.longitude) continue;
         currentIds.add(vehicle.id);
 
@@ -691,13 +812,14 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
           destinosRef.current.delete(id);
         }
       });
-    }, [
-      vehicles,
-      selectedIds,
-      createMarkerElement,
-      pintarMarcador,
-      animarMarcador,
-    ]);
+    }, [createMarkerElement, pintarMarcador, animarMarcador]);
+
+    // Pan e zoom redesenham pelo `moveend` registrado na criação do mapa; a
+    // ref é o que ele chama, para não recriar o mapa a cada renderização.
+    useEffect(() => {
+      desenharRef.current = desenhar;
+      desenhar();
+    }, [desenhar]);
 
     // ─────────────────────────────────────────────────────────────────
     // TAGs: camada de círculos + o círculo de precisão da selecionada.
