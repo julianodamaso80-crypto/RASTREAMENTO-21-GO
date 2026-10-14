@@ -1,11 +1,14 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
   BadRequestException,
+  ConflictException,
   GoneException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 import { ReportsService } from './reports.service';
@@ -14,8 +17,11 @@ import { gerarHistoricoPdf } from './history-report.pdf';
 
 /** Quanto tempo o link sem login continua abrindo o PDF. */
 export const VALIDADE_LINK_DIAS = 90;
-/** Acima disso o PDF passa de ~330 páginas; melhor reduzir o período. */
-const MAX_LINHAS_PDF = 10_000;
+/**
+ * Teto de linhas por PDF. O pdfkit monta tudo na thread única do backend:
+ * painel até ~330 páginas, app até ~100 (associado não precisa de mais).
+ */
+const MAX_LINHAS_PDF = { PAINEL: 10_000, APP: 3_000 } as const;
 
 export interface Solicitante {
   origem: 'PAINEL' | 'APP';
@@ -71,6 +77,10 @@ export function numeroDoDocumento(id: string): string {
 
 @Injectable()
 export class HistoryRequestsService {
+  private readonly logger = new Logger(HistoryRequestsService.name);
+  /** Veículos com PDF sendo gerado agora: um por vez, clique repetido não empilha. */
+  private readonly emAndamento = new Set<string>();
+
   constructor(
     private prisma: PrismaService,
     private reports: ReportsService,
@@ -134,6 +144,35 @@ export class HistoryRequestsService {
     if (!vehicle.traccarDeviceId) {
       throw new BadRequestException('Este veículo ainda não tem rastreador vinculado.');
     }
+    if (this.emAndamento.has(vehicle.id)) {
+      throw new ConflictException('Já existe um PDF sendo gerado para este veículo. Aguarde.');
+    }
+    this.emAndamento.add(vehicle.id);
+    try {
+      return await this.gerar(params, { ...vehicle, traccarDeviceId: vehicle.traccarDeviceId });
+    } finally {
+      this.emAndamento.delete(vehicle.id);
+    }
+  }
+
+  private async gerar(
+    params: {
+      tenantId: string;
+      from: string;
+      to: string;
+      type: string;
+      maxDias: number;
+      solicitante: Solicitante;
+    },
+    vehicle: {
+      id: string;
+      plate: string;
+      brand: string | null;
+      model: string | null;
+      traccarDeviceId: number;
+      associate: { name: string } | null;
+    },
+  ) {
 
     const report = await this.reports.getHistoryReport(
       vehicle.traccarDeviceId,
@@ -142,7 +181,7 @@ export class HistoryRequestsService {
       params.type,
       params.maxDias,
     );
-    if (report.rows.length > MAX_LINHAS_PDF) {
+    if (report.rows.length > MAX_LINHAS_PDF[params.solicitante.origem]) {
       throw new BadRequestException(
         'Registros demais para um PDF. Reduza o período ou use o Consolidado.',
       );
@@ -199,6 +238,19 @@ export class HistoryRequestsService {
     return this.paraTela(criado, params.solicitante.origem === 'PAINEL');
   }
 
+  /**
+   * Link vencido não abre mais; o arquivo só ocuparia disco (o droplet vive
+   * no limite). Esvazia o PDF e mantém a linha como registro do pedido.
+   */
+  @Cron('0 30 3 * * *', { timeZone: 'America/Sao_Paulo' })
+  async esvaziarVencidos(): Promise<void> {
+    const r = await this.prisma.historyReportRequest.updateMany({
+      where: { expiresAt: { lt: new Date() }, pdfSize: { gt: 0 } },
+      data: { pdf: new Uint8Array(0), pdfSize: 0 },
+    });
+    if (r.count) this.logger.log(`PDFs de histórico vencidos esvaziados: ${r.count}`);
+  }
+
   /** Painel: tudo que foi gerado para o veículo, pelo painel e pelo app. */
   async listarDoVeiculo(tenantId: string, vehicleId: string) {
     const itens = await this.prisma.historyReportRequest.findMany({
@@ -225,9 +277,10 @@ export class HistoryRequestsService {
   async pdfDoPainel(tenantId: string, id: string) {
     const r = await this.prisma.historyReportRequest.findFirst({
       where: { id, tenantId },
-      select: { pdf: true, plate: true, from: true },
+      select: { pdf: true, plate: true, from: true, pdfSize: true },
     });
     if (!r) throw new NotFoundException('Histórico não encontrado');
+    if (!r.pdfSize) throw new GoneException('Este histórico expirou. Gere um novo.');
     return { pdf: Buffer.from(r.pdf), nome: nomeDoArquivo(r.plate, r.from) };
   }
 
@@ -235,9 +288,10 @@ export class HistoryRequestsService {
     exigirAssociado(tenantId, associateId);
     const r = await this.prisma.historyReportRequest.findFirst({
       where: { id, tenantId, requestedByAssociateId: associateId },
-      select: { pdf: true, plate: true, from: true },
+      select: { pdf: true, plate: true, from: true, pdfSize: true },
     });
     if (!r) throw new NotFoundException('Histórico não encontrado');
+    if (!r.pdfSize) throw new GoneException('Este histórico expirou. Gere um novo.');
     return { pdf: Buffer.from(r.pdf), nome: nomeDoArquivo(r.plate, r.from) };
   }
 

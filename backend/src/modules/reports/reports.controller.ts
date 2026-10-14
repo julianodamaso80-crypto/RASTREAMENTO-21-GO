@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Post,
   Query,
@@ -144,10 +145,10 @@ export class ReportsController {
   @Get('history-requests')
   @ApiOperation({ summary: 'Históricos em PDF já gerados para o veículo' })
   async listHistoryRequests(
-    @Query('deviceId') deviceId: string,
+    @Query('deviceId', ParseIntPipe) deviceId: number,
     @Req() req: AuthenticatedRequest,
   ) {
-    const vehicle = await this.validateDevice(Number(deviceId), req.tenantId);
+    const vehicle = await this.validateDevice(deviceId, req.tenantId);
     return this.historyRequests.listarDoVeiculo(req.tenantId, vehicle.id);
   }
 

@@ -78,13 +78,16 @@ export function HistoricoConsultar({ carregar, diasMax, nomeArquivo, pdf, aoGera
     }
   }
 
-  async function gerarPdf() {
+  /** Sem argumento usa os campos; o botão ao lado do resultado passa o período exibido. */
+  async function gerarPdf(periodo?: { from: string; to: string; tipo: TipoRelatorio }) {
     if (!pdf) return;
     setGerando(true);
     setErro(null);
     setGerado(null);
     try {
-      const item = await pdf.gerar(new Date(inicio).toISOString(), new Date(fim).toISOString(), tipo);
+      const item = periodo
+        ? await pdf.gerar(periodo.from, periodo.to, periodo.tipo)
+        : await pdf.gerar(new Date(inicio).toISOString(), new Date(fim).toISOString(), tipo);
       setGerado(item);
       aoGerarPdf?.(item);
     } catch (e: unknown) {
@@ -182,7 +185,7 @@ export function HistoricoConsultar({ carregar, diasMax, nomeArquivo, pdf, aoGera
           Buscar
         </Button>
         {pdf && (
-          <Button size="sm" variant="outline" onClick={gerarPdf} disabled={gerando || !inicio || !fim}>
+          <Button size="sm" variant="outline" onClick={() => gerarPdf()} disabled={gerando || !inicio || !fim}>
             {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
             {gerando ? 'Gerando PDF…' : 'Gerar PDF'}
           </Button>
@@ -217,7 +220,11 @@ export function HistoricoConsultar({ carregar, diasMax, nomeArquivo, pdf, aoGera
               <Download className="mr-2 h-4 w-4" /> Excel
             </Button>
             {pdf ? (
-              <Button size="sm" onClick={gerarPdf} disabled={gerando}>
+              <Button
+                size="sm"
+                onClick={() => gerarPdf({ from: relatorio.from, to: relatorio.to, tipo: relatorio.type })}
+                disabled={gerando}
+              >
                 {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
                 {gerando ? 'Gerando PDF…' : 'PDF com link'}
               </Button>

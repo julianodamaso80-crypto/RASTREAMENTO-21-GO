@@ -1,4 +1,9 @@
-import { GoneException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  GoneException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { HistoryRequestsService, linkPublico } from './history-requests.service';
 import { gerarHistoricoPdf, linkDoMapa } from './history-report.pdf';
 
@@ -160,6 +165,41 @@ describe('HistoryRequestsService', () => {
     expect(data.expiresAt.getTime() - data.createdAt.getTime()).toBe(90 * 24 * 3600_000);
     expect(item.url).toBe(linkPublico(data.shareToken));
     expect(item.requestedByName).toBe('Operador');
+  });
+});
+
+describe('HistoryRequestsService — um PDF por veículo por vez', () => {
+  it('segundo pedido do mesmo veículo enquanto o primeiro gera recebe 409', async () => {
+    const { s, prisma, reports } = servico();
+    prisma.vehicle.findFirst.mockResolvedValue({
+      id: 'v1',
+      plate: 'ABC1D23',
+      brand: null,
+      model: null,
+      traccarDeviceId: 7,
+      associate: null,
+    });
+    let liberar!: () => void;
+    const original = reports.getHistoryReport.getMockImplementation()!;
+    reports.getHistoryReport.mockImplementationOnce(
+      (...a: unknown[]) => new Promise((ok) => (liberar = () => ok(original(...a)))),
+    );
+    prisma.historyReportRequest.create.mockImplementation(async ({ data }) => data);
+    const p = {
+      tenantId: 't1',
+      vehicleId: 'v1',
+      from: '2026-10-13T00:00:00Z',
+      to: '2026-10-13T23:59:00Z',
+      type: 'basico',
+      maxDias: 90,
+      solicitante: { origem: 'PAINEL' as const },
+    };
+    const primeiro = s.criar(p);
+    await new Promise((r) => setImmediate(r));
+    await expect(s.criar(p)).rejects.toBeInstanceOf(ConflictException);
+    liberar();
+    await expect(primeiro).resolves.toBeDefined();
+    await expect(s.criar(p)).resolves.toBeDefined();
   });
 });
 
