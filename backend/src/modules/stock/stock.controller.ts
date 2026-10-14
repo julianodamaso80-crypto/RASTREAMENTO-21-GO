@@ -37,6 +37,9 @@ interface AuthenticatedRequest {
 @ApiTags('Estoque')
 @ApiBearerAuth()
 @RequireRoute('estoque')
+// Piso para as rotas sem @Roles próprio: CLIENT (dono de veículo) não vê o estoque do tenant.
+@UseGuards(RolesGuard)
+@Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
 @Controller('stock')
 export class StockController {
   constructor(private stockService: StockService) {}

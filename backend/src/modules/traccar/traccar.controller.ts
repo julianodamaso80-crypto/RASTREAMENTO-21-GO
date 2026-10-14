@@ -6,6 +6,7 @@ import {
   Query,
   Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -14,6 +15,9 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
+import { Role } from '.prisma/client';
+import { Roles } from '../../common/decorators';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { TraccarService } from './traccar.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FrotaPainelService, etagCasa } from './frota-painel.service';
@@ -25,6 +29,9 @@ interface AuthenticatedRequest {
 
 @ApiTags('Traccar')
 @ApiBearerAuth()
+// CLIENT (dono de veículo) não vê a frota do tenant.
+@UseGuards(RolesGuard)
+@Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
 @Controller('traccar')
 export class TraccarController {
   constructor(
