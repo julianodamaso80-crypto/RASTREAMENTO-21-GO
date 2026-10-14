@@ -2,11 +2,14 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 
+const TRACCAR_URL_MAX_BYTES = 8_000;
+
 @Injectable()
 export class TraccarService implements OnModuleInit {
   private readonly logger = new Logger(TraccarService.name);
   private client: AxiosInstance;
   private sessionCookie: string | null = null;
+  private ultimoAvisoResumoGrande = 0;
   /** Id do usuário da sessão no Traccar — dono dos vínculos user↔device. */
   private sessionUserId: number | null = null;
   private readonly apiUrl: string;
@@ -89,6 +92,16 @@ export class TraccarService implements OnModuleInit {
           this.logger.warn('Sessão Traccar expirada, re-autenticando...');
           await this.createSession();
           continue;
+        }
+
+        // 4xx (fora o 401 acima) é erro do pedido, não transitório: repetir só
+        // gasta tempo (414 em 22 ms virava +3 s de espera no painel).
+        const status = axiosError.response?.status;
+        if (status !== undefined && status >= 400 && status < 500) {
+          this.logger.warn(
+            `Traccar respondeu ${status} (sem retry): ${(error as { config?: { url?: string } }).config?.url?.split('?')[0] ?? 'rota desconhecida'}`,
+          );
+          throw error;
         }
 
         if (attempt === retries) throw error;
@@ -316,12 +329,26 @@ export class TraccarService implements OnModuleInit {
     to: string,
   ): Promise<TraccarReportSummary[]> {
     if (deviceIds.length === 0) return [];
+    const params = new URLSearchParams();
+    for (const id of deviceIds) params.append('deviceId', String(id));
+    params.append('from', from);
+    params.append('to', to);
+    params.append('daily', 'false');
+    // O Traccar (Jetty) recusa URL acima de ~8 KB com 414. Com a frota inteira
+    // (~7.200 ids, ~100 KB) o pedido nunca passa; km/top veículos ficam
+    // indisponíveis para frotas grandes até uma versão fatiada ser aprovada
+    // (decisão do dono — fatiamento NÃO implementado).
+    if (params.toString().length > TRACCAR_URL_MAX_BYTES) {
+      const agora = Date.now();
+      if (agora - this.ultimoAvisoResumoGrande > 60_000) {
+        this.ultimoAvisoResumoGrande = agora;
+        this.logger.warn(
+          `Frota grande demais para o relatório-resumo do Traccar (${deviceIds.length} devices); retornando vazio`,
+        );
+      }
+      return [];
+    }
     return this.withRetry(async () => {
-      const params = new URLSearchParams();
-      for (const id of deviceIds) params.append('deviceId', String(id));
-      params.append('from', from);
-      params.append('to', to);
-      params.append('daily', 'false');
       const { data } = await this.client.get(
         `/reports/summary?${params.toString()}`,
         {
