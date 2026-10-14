@@ -154,6 +154,13 @@ export class TraccarGateway
             client.disconnect();
             return;
           }
+          // CLIENT (dono de veículo) não pode receber a frota inteira do tenant.
+          if (payload.role === 'CLIENT') {
+            this.logger.debug(
+              `CLIENT conectado sem sala do tenant: ${payload.sub}`,
+            );
+            return;
+          }
           client.join(`tenant:${tenantId}`);
           client.data.tenantId = tenantId;
           client.data.userId = payload.sub;
@@ -546,6 +553,7 @@ interface HandshakePayload {
   tenantId?: string;
   email?: string;
   name?: string;
+  role?: string;
 }
 
 /** Atributos que o painel pode aplicar sem coordenada confiável. */

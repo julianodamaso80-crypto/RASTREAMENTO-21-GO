@@ -19,6 +19,7 @@ interface TokenFalso {
   tenantId?: string;
   email?: string;
   name?: string;
+  role?: string;
   /** Segredo com que este token foi "assinado" — o verify falso confere. */
   assinadoCom: string;
 }
@@ -113,6 +114,17 @@ describe('TraccarGateway — roteamento dos mundos no handshake', () => {
     expect(client.join).toHaveBeenCalledWith('tenant:t1');
     expect(client.data.tenantId).toBe('t1');
     expect(client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('CLIENT do painel conecta mas não entra na sala do tenant; OPERATOR entra', async () => {
+    const c = montar({ type: 'user', sub: 'c1', tenantId: 't1', role: 'CLIENT', assinadoCom: SEGREDO_INTERNO });
+    await c.gateway.handleConnection(c.client as any);
+    expect(c.client.join).not.toHaveBeenCalled();
+    expect(c.client.disconnect).not.toHaveBeenCalled();
+
+    const o = montar({ type: 'user', sub: 'o1', tenantId: 't1', role: 'OPERATOR', assinadoCom: SEGREDO_INTERNO });
+    await o.gateway.handleConnection(o.client as any);
+    expect(o.client.join).toHaveBeenCalledWith('tenant:t1');
   });
 
   it('token de técnico é desconectado e não entra em sala nenhuma', async () => {
