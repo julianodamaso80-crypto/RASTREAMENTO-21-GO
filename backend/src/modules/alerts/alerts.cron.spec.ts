@@ -227,6 +227,19 @@ describe('AlertsCron.detectOffline com ALERTS_DEDUP_EPISODIO', () => {
       expect(alerts.notifyOffline.mock.calls.map((c) => c[0])).toEqual(['novo']);
     }),
   );
+
+  it(
+    'ligada: o último alerta ignora alerta apagado (soft delete), como a extensão do Prisma',
+    comFlag('1', async () => {
+      const { cron, prisma } = montarEpisodio([{ id: 'v1', deviceId: 1, contatoMin: 35, ultimoAlertaMin: 34 }]);
+      await cron.detectOffline();
+      const sql = (prisma.$queryRaw.mock.calls[0][0] as { strings: string[] }).strings
+        .join('?')
+        .replace(/\s+/g, ' ');
+      // Dentro do LATERAL, antes do ORDER BY: alerta apagado não vale como último.
+      expect(sql).toMatch(/CROSS JOIN LATERAL \( SELECT created_at FROM alerts WHERE .*AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1 \)/);
+    }),
+  );
 });
 
 describe('AlertsCron.detectGpsSilent com ALERTS_DEDUP_EPISODIO', () => {

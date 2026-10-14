@@ -359,6 +359,7 @@ export class AlertsCron {
            WHERE vehicle_id = v.id
              AND type = ${type}::"AlertType"
              AND tenant_id = ANY(${[...new Set(tenantIds)]}::uuid[])
+             AND deleted_at IS NULL
            ORDER BY created_at DESC
            LIMIT 1
         ) a`);
