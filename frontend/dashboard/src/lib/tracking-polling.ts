@@ -151,3 +151,8 @@ export function aplicarAtributos(
   }
   return resultado ?? anterior;
 }
+
+/** CLIENT recebe 403 em /traccar/*; os veículos dele vêm de /vehicles/mine. */
+export function devePedirFrotaHttp(role: string | undefined): boolean {
+  return role !== 'CLIENT';
+}

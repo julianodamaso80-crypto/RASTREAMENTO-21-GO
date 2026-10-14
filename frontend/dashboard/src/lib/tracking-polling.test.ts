@@ -2,6 +2,7 @@ import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import {
   aplicarAtributos,
   decidirPolling,
+  devePedirFrotaHttp,
   mesclarDevices,
   mesclarPosicoes,
   POLL_MS,
@@ -286,5 +287,14 @@ describe('aplicarAtributos', () => {
   it('lote sem nada aplicável devolve o mesmo Map (sem render à toa)', () => {
     const prev = new Map([[1, pos(1, T0)]]);
     expect(aplicarAtributos(prev, [{ deviceId: 9, serverTime: T1, attributes: { ignition: true } }])).toBe(prev);
+  });
+});
+
+describe('devePedirFrotaHttp', () => {
+  it('CLIENT não pede /traccar/*; os demais papéis pedem', () => {
+    expect(devePedirFrotaHttp('CLIENT')).toBe(false);
+    for (const r of ['SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'VIEWER', undefined]) {
+      expect(devePedirFrotaHttp(r)).toBe(true);
+    }
   });
 });

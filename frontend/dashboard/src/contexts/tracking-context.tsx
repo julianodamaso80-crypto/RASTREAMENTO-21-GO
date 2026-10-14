@@ -29,6 +29,7 @@ import {
   POLL_MS,
   aplicarAtributos,
   decidirPolling,
+  devePedirFrotaHttp,
   mesclarDevices,
   mesclarPosicoes,
 } from '@/lib/tracking-polling';
@@ -185,14 +186,15 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadData() {
       try {
+        const pedeFrota = devePedirFrotaHttp(user?.role);
         // `allSettled`, não `all`. Com `all`, UMA chamada lenta segurava as
         // outras quatro e o painel inteiro ficava em branco — foi o que os
         // usuários viram em 22/09/2026. Aqui cada pedaço que chega é usado, e
         // o que falhou só deixa a sua própria parte vazia: a tela SEMPRE abre.
         const [vehiclesR, devicesR, positionsR, alertsR, unreadR] = await Promise.allSettled([
           loadAllVehicles(),
-          traccarApi.getDevices(),
-          traccarApi.getPositions(),
+          pedeFrota ? traccarApi.getDevices() : Promise.resolve([] as TraccarDevice[]),
+          pedeFrota ? traccarApi.getPositions() : Promise.resolve([] as TraccarPosition[]),
           alertsApi.getAll({ perPage: 50 }),
           alertsApi.getUnreadCount(),
         ]);
@@ -249,7 +251,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       }
     }
     loadData();
-  }, [loadAllVehicles]);
+  }, [loadAllVehicles, user?.role]);
 
   // Polling de GARANTIA. O WebSocket dá updates instantâneos, mas se ele cair,
   // não reconectar, ou o backend não emitir `position:update` (ex.: device fora
@@ -303,7 +305,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         ultimosVehiclesEm: ultimosVehiclesEmRef.current,
       });
       const forcar = forcarCompletoRef.current;
-      const buscarFrota = decisao.frota || forcar;
+      const buscarFrota = devePedirFrotaHttp(user?.role) && (decisao.frota || forcar);
       const buscarVehicles = decisao.vehicles || forcar;
       if (!buscarFrota && !buscarVehicles) return;
       forcarCompletoRef.current = false;
@@ -346,7 +348,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       clearInterval(id);
       document.removeEventListener('visibilitychange', aoVoltar);
     };
-  }, [token, loadAllVehicles]);
+  }, [token, loadAllVehicles, user?.role]);
 
   // O que chegou enquanto o socket estava fora se perdeu: recarrega tudo. No
   // legado o tique de 8 s já cobre isso, e o comportamento fica o de hoje.
