@@ -123,10 +123,15 @@ export class InstallationPendingsService implements OnModuleInit {
   }
 
   async stats(tenantId: string, days: number): Promise<PendingStats> {
-    const rows = await this.prisma.installationPending.findMany({
+    // Agregado no banco: trazer as 11 mil linhas para contar e somar no Node
+    // custava a cada troca de filtro (medido em 14/10/2026).
+    const grupos = await this.prisma.installationPending.groupBy({
+      by: ['pendingType'],
       where: { tenantId, contractDate: { gte: this.dataCorte(days) } },
-      select: { pendingType: true, protectedValue: true },
+      _count: { _all: true },
+      _sum: { protectedValue: true },
     });
+    const porTipo = (tipo: string) => grupos.find((g) => g.pendingType === tipo);
 
     const ultimoSync = await this.prisma.installationPending.findFirst({
       where: { tenantId },
@@ -135,10 +140,10 @@ export class InstallationPendingsService implements OnModuleInit {
     });
 
     return {
-      total: rows.length,
-      tracker: rows.filter((r) => r.pendingType === 'TRACKER').length,
-      tag: rows.filter((r) => r.pendingType === 'TAG').length,
-      exposedValue: rows.reduce((soma, r) => soma + Number(r.protectedValue), 0),
+      total: grupos.reduce((n, g) => n + g._count._all, 0),
+      tracker: porTipo('TRACKER')?._count._all ?? 0,
+      tag: porTipo('TAG')?._count._all ?? 0,
+      exposedValue: grupos.reduce((soma, g) => soma + Number(g._sum.protectedValue ?? 0), 0),
       lastSyncAt: ultimoSync?.syncedAt.toISOString() ?? null,
       syncing: this.syncing,
     };
