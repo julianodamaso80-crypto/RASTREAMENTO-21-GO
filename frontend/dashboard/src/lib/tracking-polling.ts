@@ -105,6 +105,14 @@ export interface AtributosItem {
   attributes: Record<string, unknown>;
 }
 
+/**
+ * Posição exibida depois de um `attrs:batch`. O horário dos atributos fica num
+ * campo à parte (fora do contrato do Traccar): se sobrescrevesse `serverTime`,
+ * `mesclarPosicoes` passaria a recusar um snapshot REST com fix mais novo que o
+ * socket perdeu, e o carro ficaria parado na coordenada velha.
+ */
+export type PosicaoComAtributos = TraccarPosition & { attributesServerTime?: string };
+
 const ATRIBUTOS_LISTA_BRANCA = [
   'ignition',
   'power',
@@ -120,8 +128,9 @@ const ATRIBUTOS_LISTA_BRANCA = [
 
 /**
  * Aplica ignição/energia/bloqueio de pacotes sem fix sobre a posição exibida.
- * Coordenada, fix, velocidade e rumo ficam os da última posição aprovada; item
- * mais velho que ela é ignorado; device sem posição não ganha entrada.
+ * Coordenada, fix, velocidade, rumo e `serverTime` ficam os da última posição
+ * aprovada; item mais velho que ela (ou que os atributos já aplicados) é
+ * ignorado; device sem posição não ganha entrada.
  */
 export function aplicarAtributos(
   anterior: Map<number, TraccarPosition>,
@@ -130,11 +139,15 @@ export function aplicarAtributos(
   let resultado: Map<number, TraccarPosition> | null = null;
   for (const item of lote) {
     const mapa: Map<number, TraccarPosition> = resultado ?? anterior;
-    const atual = mapa.get(item.deviceId);
+    const atual: PosicaoComAtributos | undefined = mapa.get(item.deviceId);
     if (!atual) continue;
-    const a = instante(atual.serverTime);
     const n = instante(item.serverTime);
-    if (Number.isNaN(n) || (!Number.isNaN(a) && a > n)) continue;
+    if (Number.isNaN(n)) continue;
+    const maisVelho = [atual.serverTime, atual.attributesServerTime].some((v) => {
+      const a = instante(v);
+      return !Number.isNaN(a) && a > n;
+    });
+    if (maisVelho) continue;
 
     const filtrados: Record<string, unknown> = {};
     for (const chave of ATRIBUTOS_LISTA_BRANCA) {
@@ -143,11 +156,12 @@ export function aplicarAtributos(
     if (Object.keys(filtrados).length === 0) continue;
 
     if (!resultado) resultado = new Map(anterior);
-    resultado.set(item.deviceId, {
+    const nova: PosicaoComAtributos = {
       ...atual,
-      serverTime: item.serverTime,
+      attributesServerTime: item.serverTime,
       attributes: { ...atual.attributes, ...filtrados },
-    });
+    };
+    resultado.set(item.deviceId, nova);
   }
   return resultado ?? anterior;
 }

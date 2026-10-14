@@ -10,6 +10,7 @@ import {
   SOCKET_MUDO_MS,
   VEHICLES_MS,
   type EstadoPolling,
+  type PosicaoComAtributos,
 } from './tracking-polling';
 
 const AGORA = 1_000_000_000;
@@ -236,7 +237,9 @@ describe('aplicarAtributos', () => {
     const depois = r.get(1)!;
     expect(depois).not.toBe(antes);
     expect(depois.attributes).toEqual({ ignition: true, odometer: 5 });
-    expect(depois.serverTime).toBe(T1);
+    // serverTime continua o da posição; o horário dos atributos vai à parte.
+    expect(depois.serverTime).toBe(T0);
+    expect((depois as PosicaoComAtributos).attributesServerTime).toBe(T1);
     expect(depois.latitude).toBe(antes.latitude);
     expect(depois.longitude).toBe(antes.longitude);
     expect(depois.fixTime).toBe(antes.fixTime);
@@ -281,7 +284,33 @@ describe('aplicarAtributos', () => {
       { deviceId: 1, serverTime: T1, attributes: { ignition: false } },
     ]);
     expect(r.get(1)!.attributes.ignition).toBe(false);
-    expect(r.get(1)!.serverTime).toBe(T1);
+    expect((r.get(1) as PosicaoComAtributos).attributesServerTime).toBe(T1);
+  });
+
+  it('atributo mais velho que o último atributo aplicado é ignorado', () => {
+    const prev = new Map([[1, pos(1, T0, { attributes: {} })]]);
+    const um = aplicarAtributos(prev, [{ deviceId: 1, serverTime: T1, attributes: { ignition: true } }]);
+    const dois = aplicarAtributos(um, [
+      { deviceId: 1, serverTime: '2026-10-14T12:00:05.000Z', attributes: { ignition: false } },
+    ]);
+    expect(dois).toBe(um);
+    expect(dois.get(1)!.attributes.ignition).toBe(true);
+  });
+
+  it('snapshot REST com fix mais novo vence a posição exibida com atributos mais novos', () => {
+    // fix exibido T1 < fix do REST T2 < atributos T3 (o socket perdeu a posição T2).
+    const P1 = '2026-10-14T12:00:01.000Z';
+    const P2 = '2026-10-14T12:00:02.000Z';
+    const A3 = '2026-10-14T12:00:03.000Z';
+    const prev = new Map([[1, pos(1, P1, { latitude: -22.9, attributes: { ignition: false } })]]);
+    const exibida = aplicarAtributos(prev, [{ deviceId: 1, serverTime: A3, attributes: { ignition: true } }]);
+    const rest = pos(1, P2, { id: 2, latitude: -22.8, attributes: { ignition: false } });
+    const r = mesclarPosicoes(exibida, [rest]);
+    expect(r.get(1)).toBe(rest);
+    expect(r.get(1)!.latitude).toBe(-22.8);
+    // Os atributos de T3 não são reaplicados sobre o REST: o próximo attrs:batch
+    // (ou a próxima posição do socket) traz o estado atual da ignição.
+    expect(r.get(1)!.attributes.ignition).toBe(false);
   });
 
   it('lote sem nada aplicável devolve o mesmo Map (sem render à toa)', () => {
