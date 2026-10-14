@@ -38,7 +38,9 @@ describe('CacheCompartilhado', () => {
 
   it('chaves diferentes montam separadamente', async () => {
     const cache = new CacheCompartilhado<string>(OPCOES);
-    const montar = jest.fn((chave: string) => Promise.resolve(`valor-${chave}`));
+    const montar = jest.fn((chave: string) =>
+      Promise.resolve(`valor-${chave}`),
+    );
 
     const [a, b] = await Promise.all([
       cache.obter('t1', 10_000, () => montar('t1')),
@@ -141,7 +143,10 @@ describe('CacheCompartilhado', () => {
   });
 
   it('estouro de timeoutMs rejeita e a chamada seguinte monta de novo', async () => {
-    const cache = new CacheCompartilhado<string>({ maxEntradas: 50, timeoutMs: 1_000 });
+    const cache = new CacheCompartilhado<string>({
+      maxEntradas: 50,
+      timeoutMs: 1_000,
+    });
     const travada = adiada<string>();
 
     const esperando = cache.obter('t1', 10_000, () => travada.promessa);
@@ -159,7 +164,10 @@ describe('CacheCompartilhado', () => {
   });
 
   it('maxEntradas: 2 com 3 chaves despeja a menos recente', async () => {
-    const cache = new CacheCompartilhado<string>({ maxEntradas: 2, timeoutMs: 30_000 });
+    const cache = new CacheCompartilhado<string>({
+      maxEntradas: 2,
+      timeoutMs: 30_000,
+    });
     const montar = jest.fn((c: string) => Promise.resolve(c));
 
     await cache.obter('a', 10_000, () => montar('a'));

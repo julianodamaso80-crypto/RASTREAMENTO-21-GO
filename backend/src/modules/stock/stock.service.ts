@@ -1802,7 +1802,9 @@ export class StockService {
             const batch = l.sn.slice(0, 6);
             const chave = { macAddress: l.mac, privateKey: l.privateKey, hashedAdvKey: l.hashedAdvKey, batch };
             await this.prisma.tagKey.upsert({
-              where: { tenantId_serialNumber: { tenantId, serialNumber: l.sn } },
+              where: {
+                tenantId_serialNumber: { tenantId, serialNumber: l.sn },
+              },
               create: { tenantId, serialNumber: l.sn, ...chave },
               update: chave,
             });

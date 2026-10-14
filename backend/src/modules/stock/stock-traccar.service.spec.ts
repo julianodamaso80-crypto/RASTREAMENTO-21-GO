@@ -180,7 +180,11 @@ describe('StockTraccarService.mapPoints — cache por tenant', () => {
 
     await s.mapPoints('t1');
     await s.mapPoints('t2');
-    await s.ensureDevice({ id: 'item-1', imei: ITEM.imei, traccarDeviceId: null });
+    await s.ensureDevice({
+      id: 'item-1',
+      imei: ITEM.imei,
+      traccarDeviceId: null,
+    });
     await s.mapPoints('t1');
     await s.mapPoints('t2');
 
@@ -200,7 +204,11 @@ describe('StockTraccarService.mapPoints — cache por tenant', () => {
       const r = await s.mapPoints('t1');
       expect(traccar.getDevices).toHaveBeenCalledTimes(3);
 
-      expect(Object.keys(r).sort()).toEqual(['geradoEm', 'indisponivel', 'pontos']);
+      expect(Object.keys(r).sort()).toEqual([
+        'geradoEm',
+        'indisponivel',
+        'pontos',
+      ]);
       expect(r.geradoEm).toBe(new Date(AGORA).toISOString());
       expect(r.indisponivel).toBe(false);
       expect(r.pontos).toEqual([
@@ -227,7 +235,7 @@ describe('StockTraccarService.mapPoints — cache por tenant', () => {
           velocidade: 0,
           direcao: 90,
           volts: 12.6,
-          faixaEnergia: expect.any(String),
+          faixaEnergia: 'ok',
           satelites: 9,
           bateriaInterna: 80,
           bloqueado: false,
