@@ -54,6 +54,7 @@ import type {
 } from '@/types/stock';
 import { useBuscaDaUrl } from '@/lib/use-busca-url';
 import { haQuantoTempo } from '@/components/stock/stock-format';
+import { ITENS_POR_VEZ, janelaDaLista } from '@/lib/stock-list-window';
 
 // Cor do badge por status (case-insensitive, com fallback neutro).
 function statusColor(status: string | null): string {
@@ -112,6 +113,15 @@ export default function EstoquePage() {
     const t = setTimeout(() => setBuscaDebounced(search), 400);
     return () => clearTimeout(t);
   }, [search]);
+  // Só as linhas desenhadas são limitadas (3.797 <tr> travavam 2,9 s); busca,
+  // contagens e seleção seguem sobre `items`. Filtro novo recomeça a janela.
+  const [visiveis, setVisiveis] = useState(ITENS_POR_VEZ);
+  const chaveDosFiltros = `${buscaDebounced}|${statusFilter}|${assignmentFilter}|${conexaoFilter}|${tipoFilter}`;
+  const [chaveVista, setChaveVista] = useState(chaveDosFiltros);
+  if (chaveVista !== chaveDosFiltros) {
+    setChaveVista(chaveDosFiltros);
+    setVisiveis(ITENS_POR_VEZ);
+  }
   const ultimaCarga = useRef(0);
 
   const loadStock = useCallback(async () => {
@@ -528,7 +538,7 @@ export default function EstoquePage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {janelaDaLista(items, visiveis).itens.map((item) => (
                 <tr
                   key={item.id}
                   className={cn(
@@ -670,6 +680,16 @@ export default function EstoquePage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {janelaDaLista(items, visiveis).restantes > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisiveis((n) => n + ITENS_POR_VEZ)}
+          className="w-full rounded-lg py-2 text-xs font-medium text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+        >
+          Mostrar mais equipamentos ({janelaDaLista(items, visiveis).restantes} restantes)
+        </button>
       )}
 
       {items.length < totalFiltrado && (
