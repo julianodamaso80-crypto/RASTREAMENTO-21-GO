@@ -2,6 +2,7 @@ import { Prisma, Role } from '.prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { decidirTipoVeiculo } from '../hinova/tipo-veiculo';
 import { assessComms } from './asset-comms';
+import { CacheCompartilhado } from '../../common/cache/cache-compartilhado';
 
 /**
  * TAG em Clientes Ativos — spec 2026-09-16 §9.
@@ -143,6 +144,49 @@ export function casaBusca(
   return false;
 }
 
+/**
+ * Cache dos dados de TAG por tenant. As telas (Clientes a cada 30 s, tags-map a
+ * cada 60 s, ~10 abas) recalculavam o mesmo resultado; a posição vem do Find My
+ * com minutos de atraso, então 30 s de idade não aparece para o usuário.
+ * Singleton de módulo: são funções soltas, não um provider, e há uma réplica só.
+ * Os resultados são só lidos pelos chamadores (nenhum muta Map/array devolvido).
+ * `TAGS_CACHE_MS=0` desliga.
+ */
+export const TAGS_CACHE_MS = 30_000;
+const cachePosicoes = new CacheCompartilhado<Map<string, PosicaoTag>>({ maxEntradas: 200, timeoutMs: 30_000 });
+const cacheVinculos = new CacheCompartilhado<Awaited<ReturnType<typeof montarVinculosDaTela>>>({
+  maxEntradas: 50,
+  timeoutMs: 30_000,
+});
+const geracoes = new Map<string, number>();
+
+function ttlDoCache(): number {
+  const bruto = process.env.TAGS_CACHE_MS;
+  if (bruto === undefined || bruto === '') return TAGS_CACHE_MS;
+  const n = Number(bruto);
+  return Number.isFinite(n) && n >= 0 ? n : TAGS_CACHE_MS;
+}
+
+/** Só para testes: specs que reusam o mesmo tenant com dados diferentes chamam no beforeEach. */
+export function limparCacheDeTags(): void {
+  geracoes.clear();
+  cachePosicoes.limpar();
+  cacheVinculos.limpar();
+}
+
+const geracaoDe = (tenantId: string) => geracoes.get(tenantId) ?? 0;
+
+function djb2(texto: string): string {
+  let h = 5381;
+  for (let i = 0; i < texto.length; i++) h = ((h << 5) + h + texto.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/** Chamar depois de escrita que muda vínculo ou posição de TAG. A geração nova abandona as entradas antigas (saem por TTL/LRU). */
+export function invalidarCacheDeTags(tenantId: string): void {
+  geracoes.set(tenantId, geracaoDe(tenantId) + 1);
+}
+
 export interface PosicaoTag {
   lat: number;
   lng: number;
@@ -157,6 +201,20 @@ export async function ultimasPosicoes(
   seriais: string[],
 ): Promise<Map<string, PosicaoTag>> {
   if (seriais.length === 0) return new Map();
+  const ttl = ttlDoCache();
+  if (ttl === 0) return consultarUltimasPosicoes(prisma, tenantId, seriais);
+  const unicos = [...new Set(seriais)].sort();
+  const juntos = unicos.join(',');
+  // Chave: tenant + geração + nº de seriais + hash djb2 do conjunto ordenado.
+  const chave = `pos:${tenantId}:${geracaoDe(tenantId)}:${unicos.length}:${djb2(juntos)}:${juntos.length}`;
+  return cachePosicoes.obter(chave, ttl, () => consultarUltimasPosicoes(prisma, tenantId, unicos));
+}
+
+async function consultarUltimasPosicoes(
+  prisma: PrismaService,
+  tenantId: string,
+  seriais: string[],
+): Promise<Map<string, PosicaoTag>> {
   // Uma busca por número no índice (tenant, número, seen_at DESC), e não
   // DISTINCT ON: o Postgres não sabe "pular" no índice, então o DISTINCT ON
   // varria os 5,1 milhões de avistamentos inteiros a cada chamada — 8,9 s
@@ -225,6 +283,14 @@ export async function vinculosVisiveis(prisma: PrismaService, tenantId: string) 
  * para ser localizada ou desvinculada.
  */
 export async function vinculosDaTela(prisma: PrismaService, tenantId: string) {
+  const ttl = ttlDoCache();
+  if (ttl === 0) return montarVinculosDaTela(prisma, tenantId);
+  return cacheVinculos.obter(`vinculos:${tenantId}:${geracaoDe(tenantId)}`, ttl, () =>
+    montarVinculosDaTela(prisma, tenantId),
+  );
+}
+
+async function montarVinculosDaTela(prisma: PrismaService, tenantId: string) {
   const vinculos: VinculoTag[] = await prisma.tagLink.findMany({
     where: { tenantId, deletedAt: null },
     select: {

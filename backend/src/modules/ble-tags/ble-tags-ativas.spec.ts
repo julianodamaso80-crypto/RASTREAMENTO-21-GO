@@ -1,4 +1,5 @@
 import { BleTagsService } from './ble-tags.service';
+import { limparCacheDeTags } from '../clients/clients-tags';
 
 /**
  * "TAG ativa" é a régua do dono: vinculada a um veículo e em uso.
@@ -56,7 +57,10 @@ const linhaSga = (over: any = {}) => ({
   ...over,
 });
 
+beforeEach(() => limparCacheDeTags());
+
 describe('BleTagsService.findActive', () => {
+
   it('só conta quem tem TAG no SGA e está com cliente ATIVO', async () => {
     const { service, findManyArgs } = montar();
 

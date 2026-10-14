@@ -1,4 +1,5 @@
 import { ClientsService } from './clients.service';
+import { limparCacheDeTags } from './clients-tags';
 
 /**
  * TAG no Mapa — pedido do dono (21/09/2026): "as tags também têm que estar em
@@ -72,7 +73,10 @@ function montarPrisma() {
   };
 }
 
+beforeEach(() => limparCacheDeTags());
+
 describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
+
   it('devolve cada TAG sem rastreador com a última posição e a precisão', async () => {
     const s = new ClientsService(montarPrisma() as never);
     const r = await s.tagsNoMapa(TENANT);

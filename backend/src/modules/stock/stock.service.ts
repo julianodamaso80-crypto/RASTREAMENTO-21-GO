@@ -28,7 +28,7 @@ import {
 } from '../hinova/sga-status';
 import { decidirTipoVeiculo } from '../hinova/tipo-veiculo';
 import { estadoAtualizacaoTag } from './tag-atualizacao';
-import { ultimasPosicoes } from '../clients/clients-tags';
+import { invalidarCacheDeTags, ultimasPosicoes } from '../clients/clients-tags';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
@@ -580,6 +580,7 @@ export class StockService {
       data: { tenantId, serialNumber: item.imei, requestedById: userId ?? null },
       select: { id: true, requestedAt: true },
     });
+    invalidarCacheDeTags(tenantId);
     this.logger.log(`Atualizar TAG ${item.imei} solicitado (pedido ${pedido.id}).`);
     return {
       pendente: true,
@@ -916,6 +917,7 @@ export class StockService {
       });
     });
     this.stockTraccar.invalidarMapa(tenantId);
+    invalidarCacheDeTags(tenantId);
 
     this.logger.log(`TAG ${item.imei} vinculada à placa ${placa} pelo estoque.`);
     return { tag: true, placa, associado: lookup.cliente.nome ?? null };
@@ -963,6 +965,7 @@ export class StockService {
       }
     });
     this.stockTraccar.invalidarMapa(tenantId);
+    invalidarCacheDeTags(tenantId);
 
     const placa = vinculos[0].plate;
     this.logger.log(`TAG ${serialNumber} desvinculada da placa ${placa} — voltou ao estoque.`);

@@ -73,6 +73,12 @@ export class CacheCompartilhado<T> {
     this.emVoo.delete(chave);
   }
 
+  /** Esquece tudo (entradas e montagens em voo seguem até terminar, mas não são reaproveitadas). */
+  limpar(): void {
+    this.entradas.clear();
+    this.emVoo.clear();
+  }
+
   tamanho(): number {
     return this.entradas.size;
   }

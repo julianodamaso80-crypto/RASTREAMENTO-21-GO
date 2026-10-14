@@ -1,4 +1,5 @@
 import { ClientsService } from './clients.service';
+import { limparCacheDeTags } from './clients-tags';
 
 /**
  * Fiação do findAssets com TAG — e o contrato de sigilo: quando o chamador não
@@ -73,7 +74,10 @@ function montarPrisma() {
   };
 }
 
+beforeEach(() => limparCacheDeTags());
+
 describe('findAssets — TAG só para o time interno', () => {
+
   it('verTags=false devolve a lista antiga, sem TAG e sem card de só-TAG', async () => {
     const prisma = montarPrisma();
     const s = new ClientsService(prisma as never);
