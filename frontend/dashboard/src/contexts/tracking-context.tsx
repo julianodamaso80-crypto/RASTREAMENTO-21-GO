@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { usePathname } from 'next/navigation';
-import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
+import type { IgnicaoLeitura, Vehicle, VehicleWithTracking } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
 import type { BleTag, BleSightingEvent } from '@/types/ble-tag';
@@ -97,6 +97,19 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [vehicleMap, setVehicleMap] = useState<Map<string, Vehicle>>(new Map());
   const [deviceMap, setDeviceMap] = useState<Map<number, TraccarDevice>>(new Map());
   const [positionMap, setPositionMap] = useState<Map<number, TraccarPosition>>(new Map());
+  // Última leitura REAL da chave por device. Vários rastreadores mandam o
+  // "estou vivo" sem o campo `ignition`; tratar essa ausência como desligada
+  // mostrava "Desligada" num carro que tinha acabado de andar ligado.
+  const ultimaIgnicao = useRef<Map<number, IgnicaoLeitura>>(new Map());
+  const lembrarIgnicao = useCallback((positions: Iterable<TraccarPosition>) => {
+    for (const p of positions) {
+      const valor = p.attributes?.ignition;
+      if (typeof valor !== 'boolean') continue;
+      const antes = ultimaIgnicao.current.get(p.deviceId);
+      if (antes && antes.em > p.serverTime) continue;
+      ultimaIgnicao.current.set(p.deviceId, { ligada: valor, em: p.serverTime });
+    }
+  }, []);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -204,6 +217,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         const pMap = new Map<number, TraccarPosition>();
         if (positionsR.status === 'fulfilled') {
           positionsR.value.forEach((p) => pMap.set(p.deviceId, p));
+          lembrarIgnicao(positionsR.value);
         }
 
         setVehicleMap(vMap);
@@ -240,7 +254,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       }
     }
     loadData();
-  }, [loadAllVehicles]);
+  }, [loadAllVehicles, lembrarIgnicao]);
 
   // Polling de GARANTIA. O WebSocket dá updates instantâneos, mas se ele cair,
   // não reconectar, ou o backend não emitir `position:update` (ex.: device fora
@@ -276,6 +290,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         ]);
         if (cancelled) return;
         setDeviceMap(new Map(devices.map((d) => [d.id, d])));
+        lembrarIgnicao(positions);
         setPositionMap(new Map(positions.map((p) => [p.deviceId, p])));
         if (vehiclesList) {
           setVehicleMap(new Map(vehiclesList.map((v) => [v.id, v])));
@@ -296,26 +311,28 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       clearInterval(id);
       document.removeEventListener('visibilitychange', aoVoltar);
     };
-  }, [token, loadAllVehicles]);
+  }, [token, loadAllVehicles, lembrarIgnicao]);
 
   // WebSocket
   const handlePositionUpdate = useCallback((position: TraccarPosition) => {
+    lembrarIgnicao([position]);
     setPositionMap((prev) => {
       const next = new Map(prev);
       next.set(position.deviceId, position);
       return next;
     });
-  }, []);
+  }, [lembrarIgnicao]);
 
   // Lote de 1 s: um estado novo para todas as posições do lote, e não um
   // render por posição.
   const handlePositionsBatch = useCallback((positions: TraccarPosition[]) => {
+    lembrarIgnicao(positions);
     setPositionMap((prev) => {
       const next = new Map(prev);
       for (const position of positions) next.set(position.deviceId, position);
       return next;
     });
-  }, []);
+  }, [lembrarIgnicao]);
 
   const handleDeviceUpdate = useCallback((device: TraccarDevice) => {
     setDeviceMap((prev) => {
@@ -398,7 +415,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       const lastUpdate = device?.lastUpdate || position?.serverTime || '';
       const positionTime = position?.fixTime || position?.deviceTime || position?.serverTime || null;
       const deviceStatus = device?.status || 'offline';
-      const ignition = (position?.attributes?.ignition as boolean) ?? false;
+      const ignicaoLeitura = deviceId ? ultimaIgnicao.current.get(deviceId) ?? null : null;
+      const ignition = ignicaoLeitura?.ligada ?? false;
       const vehicleType = vehicle.vehicleType ?? 'CAR';
       const displayStatus = getDisplayStatus({
         lastUpdate,
@@ -424,6 +442,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         deviceStatus,
         displayStatus,
         ignition,
+        ignicaoLeitura,
         moving,
         satellites: (position?.attributes?.sat as number) ?? 0,
       });

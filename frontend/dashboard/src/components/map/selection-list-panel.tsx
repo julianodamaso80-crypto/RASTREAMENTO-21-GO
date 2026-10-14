@@ -1,7 +1,14 @@
 'use client';
 
 import { ChevronRight, Crosshair, KeyRound, Loader2, MapPin, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatRelativeTime } from '@/lib/utils';
+
+/** Acima disso a linha da ignição mostra quando a leitura foi informada. */
+const LEITURA_VELHA_MS = 15 * 60 * 1000;
+
+function leituraVelha(em: string): boolean {
+  return Date.now() - new Date(em).getTime() > LEITURA_VELHA_MS;
+}
 
 export interface LinhaSelecionada {
   id: string;
@@ -18,11 +25,12 @@ export interface LinhaSelecionada {
   /** false quando o item nunca reportou posição — não entra no mapa. */
   temPosicao: boolean;
   /**
-   * Chavinha da ignição, como a Rede mostra no card: true = Ligada (verde),
-   * false = Desligada (laranja), null = sem leitura confiável ("--", cinza).
-   * Ausente = a tela não mostra a linha (o estoque já põe no `estado`).
+   * Chavinha da ignição, como a Rede mostra no card: ligada = verde,
+   * desligada = laranja, null = sem leitura real ("--", cinza). `em` é quando
+   * o rastreador informou. Ausente = a tela não mostra a linha (o estoque já
+   * põe no `estado`).
    */
-  ignicao?: boolean | null;
+  ignicao?: { ligada: boolean; em: string } | null;
 }
 
 interface Props {
@@ -133,8 +141,8 @@ export function SelectionListPanel({
                 <KeyRound
                   className={cn(
                     'h-3.5 w-3.5 shrink-0',
-                    linha.ignicao === true && 'text-emerald-500',
-                    linha.ignicao === false && 'text-orange-500',
+                    linha.ignicao?.ligada === true && 'text-emerald-500',
+                    linha.ignicao?.ligada === false && 'text-orange-500',
                     linha.ignicao === null && 'text-muted-foreground',
                   )}
                 />
@@ -142,10 +150,17 @@ export function SelectionListPanel({
                 <span className="font-semibold">
                   {linha.ignicao === null
                     ? '--'
-                    : linha.ignicao
+                    : linha.ignicao.ligada
                       ? 'Ligada'
                       : 'Desligada'}
                 </span>
+                {/* Leitura antiga diz a idade: o "estou vivo" chega sem a
+                    chave, e o operador precisa saber que é a última informada. */}
+                {linha.ignicao && leituraVelha(linha.ignicao.em) && (
+                    <span className="text-muted-foreground">
+                      · informada {formatRelativeTime(linha.ignicao.em)}
+                    </span>
+                  )}
               </div>
             )}
 

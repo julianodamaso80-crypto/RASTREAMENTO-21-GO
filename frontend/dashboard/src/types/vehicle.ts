@@ -16,6 +16,12 @@ export type VehicleType = 'CAR' | 'MOTORCYCLE';
  * aparece OFFLINE com "Última atualização há X", que é fato, não diagnóstico.
  * Ignição e movimento são informação à parte (`ignition`, `moving`).
  */
+export interface IgnicaoLeitura {
+  ligada: boolean;
+  /** serverTime da posição que trouxe a leitura. */
+  em: string;
+}
+
 export type DisplayStatus =
   | 'online'
   | 'sem_resp'
@@ -78,6 +84,8 @@ export interface VehicleWithTracking extends Vehicle {
   deviceStatus: string;
   displayStatus: DisplayStatus;
   ignition: boolean;
+  /** Última leitura real da chave (null = o rastreador ainda não informou). */
+  ignicaoLeitura: IgnicaoLeitura | null;
   /** Andando agora: GPS recente (STALE_POSITION_MS) e velocidade acima do ruído. */
   moving: boolean;
   satellites: number;
