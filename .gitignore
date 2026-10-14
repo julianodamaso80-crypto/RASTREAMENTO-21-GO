@@ -64,6 +64,11 @@ mobile/credentials.json
 # binarios das lojas (entregues fora do git)
 mobile/store/play/builds/
 
+# Medição de experiência (scripts/perf): credenciais de teste e resultados,
+# que podem ter placa, IMEI e endereço.
+.env.perf
+scripts/perf/resultados/
+
 # Capturas de reconhecimento da plataforma de origem: material de pesquisa,
 # regenerável pelo scripts/clonagem/recon-rdv.mjs e pode conter dado de cliente.
 docs/clonagem/
