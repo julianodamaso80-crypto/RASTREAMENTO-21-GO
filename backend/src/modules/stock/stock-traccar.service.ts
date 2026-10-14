@@ -99,12 +99,10 @@ export class StockTraccarService {
       const device =
         existente ?? (await this.traccar.createDevice(item.imei, item.imei));
       if (!device?.id) return null;
-      const gravado = await this.prisma.stockItem.update({
+      await this.prisma.stockItem.update({
         where: { id: item.id },
         data: { traccarDeviceId: device.id },
-        select: { tenantId: true },
       });
-      this.invalidarMapa(gravado.tenantId);
       return device.id;
     } catch (erro) {
       this.logger.warn(
@@ -192,13 +190,14 @@ export class StockTraccarService {
         // TAG não é cadastrada no servidor GPS.
         kind: 'RASTREADOR',
       },
-      select: { id: true, imei: true, traccarDeviceId: true },
+      select: { id: true, imei: true, traccarDeviceId: true, tenantId: true },
       take: limite,
       orderBy: { createdAt: 'desc' },
     });
     if (pendentes.length === 0) return 0;
 
     let ok = 0;
+    const tenantsTocados = new Set<string>();
     for (
       let i = 0;
       i < pendentes.length;
@@ -208,8 +207,14 @@ export class StockTraccarService {
       const ids = await Promise.all(
         lote.map((item) => this.ensureDevice(item)),
       );
+      ids.forEach((id, j) => {
+        if (id !== null) tenantsTocados.add(lote[j].tenantId);
+      });
       ok += ids.filter((id) => id !== null).length;
     }
+    // Uma vez por tenant ao fim do lote: invalidar por item esvaziaria o
+    // cache do mapa durante a importação inteira.
+    tenantsTocados.forEach((t) => this.invalidarMapa(t));
 
     this.logger.log(
       `Estoque no servidor GPS: ${ok}/${pendentes.length} cadastrado(s).`,

@@ -168,27 +168,63 @@ describe('StockTraccarService.mapPoints — cache por tenant', () => {
     });
   });
 
-  it('ensureDevice que grava o device no item invalida o mapa do tenant do item', async () => {
+  it('ensurePending invalida o mapa uma vez por tenant tocado, ao fim do lote', async () => {
     process.env.STOCK_MAP_CACHE_MS = '10000';
     const { s, traccar, prisma } = servico();
     Object.assign(traccar, {
       getDeviceByUniqueId: jest.fn().mockResolvedValue(DEVICE),
     });
+    const pendentes = [
+      ...Array.from({ length: 7 }, (_, i) => ({
+        id: `a${i}`,
+        imei: `86000000000010${i}`,
+        traccarDeviceId: null,
+        tenantId: 't1',
+      })),
+      {
+        id: 'b0',
+        imei: '860000000000200',
+        traccarDeviceId: null,
+        tenantId: 't2',
+      },
+    ];
+    prisma.stockItem.findMany.mockResolvedValueOnce(pendentes as never);
     Object.assign(prisma.stockItem, {
-      update: jest.fn().mockResolvedValue({ tenantId: 't1' }),
+      update: jest.fn().mockResolvedValue({}),
     });
+    const invalidar = jest.spyOn(s, 'invalidarMapa');
 
-    await s.mapPoints('t1');
-    await s.mapPoints('t2');
+    await expect(s.ensurePending()).resolves.toBe(8);
+
+    // Por item seria 8 invalidações e o cache vazio a importação inteira.
+    expect(invalidar).toHaveBeenCalledTimes(2);
+    expect(invalidar.mock.calls.map((c) => c[0]).sort()).toEqual(['t1', 't2']);
+    const ultimaGravacao = Math.max(
+      ...(prisma.stockItem as unknown as { update: jest.Mock }).update.mock
+        .invocationCallOrder,
+    );
+    expect(Math.min(...invalidar.mock.invocationCallOrder)).toBeGreaterThan(
+      ultimaGravacao,
+    );
+  });
+
+  it('ensureDevice sozinho não invalida o mapa (o mapa não lê traccarDeviceId)', async () => {
+    const { s, traccar, prisma } = servico();
+    Object.assign(traccar, {
+      getDeviceByUniqueId: jest.fn().mockResolvedValue(DEVICE),
+    });
+    Object.assign(prisma.stockItem, {
+      update: jest.fn().mockResolvedValue({}),
+    });
+    const invalidar = jest.spyOn(s, 'invalidarMapa');
+
     await s.ensureDevice({
       id: 'item-1',
       imei: ITEM.imei,
       traccarDeviceId: null,
     });
-    await s.mapPoints('t1');
-    await s.mapPoints('t2');
 
-    expect(traccar.getDevices).toHaveBeenCalledTimes(3);
+    expect(invalidar).not.toHaveBeenCalled();
   });
 
   describe('com STOCK_MAP_CACHE_MS ausente (caminho de hoje)', () => {
