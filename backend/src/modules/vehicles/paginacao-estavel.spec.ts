@@ -47,7 +47,7 @@ describe('paginação com desempate por id', () => {
 
   it('Dispositivos', async () => {
     const { prisma, lista } = prismaFalso();
-    const s = new DevicesService(prisma as never, {} as never, {} as never);
+    const s = new DevicesService(prisma as never, {} as never, {} as never, {} as never);
     await s.findAll(TENANT, { page: 2, perPage: 500 });
     expect(lista.mock.calls[0][0].orderBy).toEqual(ESTAVEL);
   });

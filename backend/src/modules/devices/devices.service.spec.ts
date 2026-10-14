@@ -40,7 +40,7 @@ describe('DevicesService - omissao da chave privada da TAG BLE (C3)', () => {
     };
     const traccarService: any = {};
     const deviceRegistry: any = { notifyDeviceChanged: jest.fn() };
-    const service = new DevicesService(prisma, traccarService, deviceRegistry);
+    const service = new DevicesService(prisma, traccarService, deviceRegistry, {} as never);
     return { service, findManyArgs, findFirstArgs, updateArgs };
   }
 

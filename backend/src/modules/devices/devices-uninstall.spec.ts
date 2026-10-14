@@ -40,8 +40,9 @@ function montar() {
     updateDevice: jest.fn().mockResolvedValue({}),
   };
   const registry: any = { notifyDeviceChanged: jest.fn() };
-  const service = new DevicesService(prisma, traccar, registry);
-  return { service, tx, traccar, registry };
+  const stockTraccar: any = { invalidarMapa: jest.fn() };
+  const service = new DevicesService(prisma, traccar, registry, stockTraccar);
+  return { service, tx, prisma, traccar, registry, stockTraccar };
 }
 
 describe('DevicesService.uninstall — o que o desvínculo precisa soltar', () => {
@@ -132,5 +133,33 @@ describe('DevicesService.uninstall — o que o desvínculo precisa soltar', () =
       // Coluna Json: zerar de verdade é `DbNull`, não o literal JSON `null`.
       validationSnapshot: Prisma.DbNull,
     });
+  });
+
+  it('invalida o mapa do estoque do tenant depois do commit do desvínculo', async () => {
+    const { service, tx, prisma, stockTraccar } = montar();
+
+    await service.uninstall('dev-1', TENANT);
+
+    // O item volta a ser elegível no /stock/map; com o cache ligado ficaria
+    // fora do mapa até o TTL vencer.
+    expect(stockTraccar.invalidarMapa).toHaveBeenCalledTimes(1);
+    expect(stockTraccar.invalidarMapa).toHaveBeenCalledWith(TENANT);
+    const fimTransacao = Math.max(
+      ...prisma.$transaction.mock.invocationCallOrder,
+      ...tx.stockItem.updateMany.mock.invocationCallOrder,
+    );
+    expect(
+      stockTraccar.invalidarMapa.mock.invocationCallOrder[0],
+    ).toBeGreaterThan(fimTransacao);
+  });
+
+  it('não invalida o mapa quando a transação do desvínculo falha', async () => {
+    const { service, prisma, stockTraccar } = montar();
+    prisma.$transaction.mockRejectedValue(new Error('deadlock'));
+
+    await expect(service.uninstall('dev-1', TENANT)).rejects.toThrow(
+      'deadlock',
+    );
+    expect(stockTraccar.invalidarMapa).not.toHaveBeenCalled();
   });
 });

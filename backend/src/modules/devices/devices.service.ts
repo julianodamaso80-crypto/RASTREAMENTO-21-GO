@@ -9,6 +9,7 @@ import { filtroBusca } from '../../common/search/termo-busca';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
+import { StockTraccarService } from '../stock/stock-traccar.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { FilterDevicesDto } from './dto/filter-devices.dto';
@@ -34,6 +35,7 @@ export class DevicesService {
     private prisma: PrismaService,
     private traccarService: TraccarService,
     private deviceRegistry: DeviceRegistryService,
+    private stockTraccar: StockTraccarService,
   ) {}
 
   async findAll(tenantId: string, filters: FilterDevicesDto) {
@@ -316,6 +318,8 @@ export class DevicesService {
         },
       });
     });
+    // O item voltou a ser elegível no mapa do estoque.
+    this.stockTraccar.invalidarMapa(tenantId);
 
     // Traccar: o device continua existindo (preserva o histórico de posições) e
     // volta ao estado de estoque — nome de novo igual ao IMEI e HABILITADO.
