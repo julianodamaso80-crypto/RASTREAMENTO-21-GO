@@ -254,7 +254,7 @@ describe('AlertsCron.detectGpsSilent com ALERTS_DEDUP_EPISODIO', () => {
 
   it(
     'desligada: janela de 30 min de hoje',
-    comFlag('0', async () => {
+    comFlag('', async () => {
       const { cron, prisma, alerts } = montarEpisodio([{ id: 'v1', deviceId: 1, contatoMin: 0, fixMin: 50, ultimoAlertaMin: 34 }]);
       prisma.alert.findMany.mockResolvedValue([]);
       await cron.detectGpsSilent();
@@ -262,4 +262,49 @@ describe('AlertsCron.detectGpsSilent com ALERTS_DEDUP_EPISODIO', () => {
       expect(alerts.notifyGpsSilent).toHaveBeenCalledTimes(1);
     }),
   );
+});
+
+describe('ALERTS_DEDUP_EPISODIO por lista de tipos', () => {
+  // Mesmo episódio já alertado há 34 min: suprime só onde o dedup por episódio está ligado.
+  const offline = [{ id: 'v1', deviceId: 1, contatoMin: 35, ultimoAlertaMin: 34 }];
+  const gps = [{ id: 'v1', deviceId: 1, contatoMin: 0, fixMin: 50, ultimoAlertaMin: 34 }];
+
+  async function rodar(flag: string | undefined) {
+    let resultado = { offlinePorEpisodio: false, gpsPorEpisodio: false };
+    await comFlag(flag, async () => {
+      const o = montarEpisodio(offline);
+      o.prisma.alert.findMany.mockResolvedValue([]);
+      await o.cron.detectOffline();
+      const g = montarEpisodio(gps);
+      g.prisma.alert.findMany.mockResolvedValue([]);
+      await g.cron.detectGpsSilent();
+      resultado = {
+        offlinePorEpisodio: o.prisma.$queryRaw.mock.calls.length === 1 && o.alerts.notifyOffline.mock.calls.length === 0,
+        gpsPorEpisodio: g.prisma.$queryRaw.mock.calls.length === 1 && g.alerts.notifyGpsSilent.mock.calls.length === 0,
+      };
+      // desligado: janela de 30 min de hoje (findMany) e alerta criado
+      if (!resultado.offlinePorEpisodio) {
+        expect(o.prisma.alert.findMany).toHaveBeenCalledTimes(1);
+        expect(o.alerts.notifyOffline).toHaveBeenCalledTimes(1);
+      }
+      if (!resultado.gpsPorEpisodio) {
+        expect(g.prisma.alert.findMany).toHaveBeenCalledTimes(1);
+        expect(g.alerts.notifyGpsSilent).toHaveBeenCalledTimes(1);
+      }
+    })();
+    return resultado;
+  }
+
+  it.each([
+    ['OFFLINE', true, false],
+    ['GPS_SILENT', false, true],
+    ['OFFLINE,GPS_SILENT', true, true],
+    [' offline , gps_silent ', true, true],
+    ['1', true, true],
+    ['true', true, true],
+    ['', false, false],
+    [undefined, false, false],
+  ])('ALERTS_DEDUP_EPISODIO=%p → OFFLINE por episódio=%p, GPS_SILENT por episódio=%p', async (flag, off, gpsOn) => {
+    expect(await rodar(flag)).toEqual({ offlinePorEpisodio: off, gpsPorEpisodio: gpsOn });
+  });
 });

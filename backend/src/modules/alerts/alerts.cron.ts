@@ -82,7 +82,7 @@ export class AlertsCron {
 
       const now = Date.now();
       const dedupSince = new Date(now - this.DEDUP_WINDOW_MS);
-      const porEpisodio = this.dedupPorEpisodio();
+      const porEpisodio = this.dedupPorEpisodio(AlertType.OFFLINE);
       const comAlertaRecente = porEpisodio
         ? null
         : await this.vehiclesComAlertaRecente(
@@ -186,7 +186,7 @@ export class AlertsCron {
 
       const now = Date.now();
       const dedupSince = new Date(now - this.DEDUP_WINDOW_MS);
-      const porEpisodio = this.dedupPorEpisodio();
+      const porEpisodio = this.dedupPorEpisodio(AlertType.GPS_SILENT);
       const comAlertaRecente = porEpisodio
         ? null
         : await this.vehiclesComAlertaRecente(
@@ -293,9 +293,16 @@ export class AlertsCron {
     return new Set(recentes.map((a) => a.vehicleId));
   }
 
-  /** ALERTS_DEDUP_EPISODIO=1 liga o dedup por episódio; desligada = janela de 30 min de hoje. */
-  private dedupPorEpisodio(): boolean {
-    return process.env.ALERTS_DEDUP_EPISODIO?.trim() === '1';
+  /**
+   * ALERTS_DEDUP_EPISODIO: lista de tipos (`OFFLINE`, `OFFLINE,GPS_SILENT`);
+   * `1`/`true` = os dois. Ausente ou vazia = janela de 30 min de hoje.
+   */
+  private dedupPorEpisodio(type: AlertType): boolean {
+    const itens = (process.env.ALERTS_DEDUP_EPISODIO ?? '')
+      .split(',')
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    return itens.includes(type) || itens.includes('1') || itens.includes('TRUE');
   }
 
   /**
