@@ -16,24 +16,34 @@ export const SOCKET_MUDO_MS = 90_000;
 export interface EstadoPolling {
   modo: ModoPolling;
   agora: number;
+  /** Ciclos executados (aba visível, sem ciclo em andamento) — o contador do legado. */
+  tique: number;
   socketConectado: boolean;
   ultimoLoteEm: number | null;
   ultimaFrotaEm: number;
   ultimosVehiclesEm: number;
 }
 
+// Meio tique de folga: o setInterval atrasa uns ms, e sem ela o prazo de 32 s
+// (ou 60 s) escorregava ora para o tique seguinte, ora não.
+const FOLGA_MS = POLL_MS / 2;
+
 export function decidirPolling(e: EstadoPolling): {
   frota: boolean;
   vehicles: boolean;
   motivo: 'legado' | 'socket-fora' | 'socket-mudo' | 'reconciliacao' | 'nada';
 } {
-  const vehicles = e.agora - e.ultimosVehiclesEm >= VEHICLES_MS;
-  if (e.modo === 'legado') return { frota: true, vehicles, motivo: 'legado' };
+  if (e.modo === 'legado') {
+    return { frota: true, vehicles: e.tique % 4 === 0, motivo: 'legado' };
+  }
+  const vehicles = e.agora - e.ultimosVehiclesEm >= VEHICLES_MS - FOLGA_MS;
   if (!e.socketConectado) return { frota: true, vehicles, motivo: 'socket-fora' };
+  // Sem nenhum lote ainda (null) nunca conta como mudo: o teto, nesse caso, é
+  // a reconciliação.
   if (e.ultimoLoteEm !== null && e.agora - e.ultimoLoteEm > SOCKET_MUDO_MS) {
     return { frota: true, vehicles, motivo: 'socket-mudo' };
   }
-  if (e.agora - e.ultimaFrotaEm >= RECONCILIA_MS) {
+  if (e.agora - e.ultimaFrotaEm >= RECONCILIA_MS - FOLGA_MS) {
     return { frota: true, vehicles, motivo: 'reconciliacao' };
   }
   return { frota: false, vehicles, motivo: 'nada' };

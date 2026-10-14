@@ -269,6 +269,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
+    let tick = 0;
     let emAndamento = false;
     // O carregamento inicial acabou de buscar tudo: os prazos contam daqui.
     ultimaFrotaEmRef.current = Date.now();
@@ -285,10 +286,12 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       const agora = Date.now();
       // A lista de veículos também precisa acompanhar: um vínculo feito no
       // estoque (outra aba ou outra rota) criava veículo que só aparecia no
-      // mapa depois de F5. A cada ~32s recarrega a lista.
+      // mapa depois de F5. A cada 4 ciclos (~32s) recarrega a lista.
+      tick++;
       const decisao = decidirPolling({
         modo: MODO_POLLING,
         agora,
+        tique: tick,
         socketConectado: socketConectadoRef.current,
         ultimoLoteEm: ultimoLoteEmRef.current,
         ultimaFrotaEm: ultimaFrotaEmRef.current,
