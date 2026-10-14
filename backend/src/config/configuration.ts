@@ -92,6 +92,15 @@ export default () => ({
       instance: process.env.EVOLUTION_INSTANCE,
     },
   },
+  // Número de disparo da 21 Go (21 98481-6000, WABA "21 Go"). Sem token e
+  // phone id o aviso automático de rastreador fica desligado.
+  whatsappDisparo: {
+    token: process.env.WHATSAPP_DISPARO_TOKEN,
+    phoneNumberId: process.env.WHATSAPP_DISPARO_PHONE_NUMBER_ID,
+    templateInstalado:
+      process.env.WHATSAPP_DISPARO_TEMPLATE_INSTALADO || 'rastreador_instalado_21go',
+    apiVersion: process.env.WHATSAPP_DISPARO_API_VERSION || 'v24.0',
+  },
   positions: {
     // Histórico de posições cresce pra sempre e enche o disco do droplet —
     // disco cheio derruba TUDO. 90 dias cobre investigação de sinistro com

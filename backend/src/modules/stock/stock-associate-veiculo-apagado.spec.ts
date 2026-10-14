@@ -50,6 +50,7 @@ type VeiculoMock = { id: string; plate: string; deletedAt: Date | null };
  * A busca por veículo vivo devolve sempre null — o cenário do bug.
  */
 function servico(apagados: VeiculoMock[]) {
+  const aviso = { avisarInstalado: jest.fn().mockResolvedValue(true) };
   const achaApagado = (where: Record<string, unknown>) => {
     if (where.deletedAt === null || where.deletedAt === undefined) return null;
     if (typeof where.plate === 'string') {
@@ -119,13 +120,14 @@ function servico(apagados: VeiculoMock[]) {
     { markStopDoneByPlate: jest.fn().mockResolvedValue(undefined) } as never,
     { persistIfRelevant: jest.fn().mockResolvedValue(undefined) } as never,
     { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
+    aviso as never,
   );
-  return { s, tx };
+  return { s, tx, aviso };
 }
 
 describe('StockService.associate — veículo apagado ainda segurando o IMEI', () => {
   it('solta o unique_id do veículo apagado e conclui o vínculo', async () => {
-    const { s, tx } = servico([
+    const { s, tx, aviso } = servico([
       { id: 'veh-morto', plate: 'RJU0F75', deletedAt: new Date() },
     ]);
 
@@ -133,6 +135,12 @@ describe('StockService.associate — veículo apagado ainda segurando o IMEI', (
       ok: true,
       placa: 'TUK6H76',
     });
+
+    // Ativou: o cliente recebe o WhatsApp de rastreador instalado, uma vez.
+    expect(aviso.avisarInstalado).toHaveBeenCalledTimes(1);
+    expect(aviso.avisarInstalado).toHaveBeenCalledWith(
+      expect.objectContaining({ placa: 'TUK6H76' }),
+    );
 
     expect(tx.vehicle.update).toHaveBeenCalledWith(
       expect.objectContaining({

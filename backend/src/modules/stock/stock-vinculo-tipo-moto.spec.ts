@@ -44,6 +44,7 @@ const DTO = {
 };
 
 function servico(tipoNoEspelho: string | null, chassi = VIVO.veiculo.chassi) {
+  const aviso = { avisarInstalado: jest.fn().mockResolvedValue(true) };
   const vivo = { ...VIVO, veiculo: { ...VIVO.veiculo, chassi } };
   const tx = {
     associate: {
@@ -95,6 +96,7 @@ function servico(tipoNoEspelho: string | null, chassi = VIVO.veiculo.chassi) {
     { markStopDoneByPlate: jest.fn().mockResolvedValue(undefined) } as never,
     { persistIfRelevant: jest.fn().mockResolvedValue(undefined) } as never,
     { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
+    aviso as never,
   );
   return { s, tx, tipoCru };
 }

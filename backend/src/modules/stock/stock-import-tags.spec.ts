@@ -49,6 +49,7 @@ function montar(existentes: { stock?: unknown[]; links?: unknown[] } = {}) {
     {} as never,
     {} as never,
     {} as never,
+    { avisarInstalado: jest.fn() } as never,
   );
   return { s, prisma, stockTraccar };
 }
