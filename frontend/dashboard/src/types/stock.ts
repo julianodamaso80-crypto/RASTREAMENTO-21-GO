@@ -138,6 +138,8 @@ export interface StockMapPoint {
 export interface StockMapResult {
   indisponivel: boolean;
   pontos: StockMapPoint[];
+  /** Quando o backend montou o payload (ISO 8601). */
+  geradoEm?: string;
 }
 
 /** Um equipamento dentro da conferência em pacote. */

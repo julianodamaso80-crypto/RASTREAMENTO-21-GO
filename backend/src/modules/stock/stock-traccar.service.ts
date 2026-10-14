@@ -17,6 +17,7 @@ import {
 } from '../traccar/device-health.service';
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 import { ultimasPosicoes } from '../clients/clients-tags';
+import { CacheCompartilhado } from '../../common/cache/cache-compartilhado';
 
 /**
  * Mantém o estoque inteiro cadastrado no servidor GPS.
@@ -64,11 +65,24 @@ export class StockTraccarService {
   private cache: { at: number; devices: DeviceSnapshot[] } | null = null;
   private static readonly CACHE_MS = 30 * 1000;
 
+  /** Mapa com Traccar fora volta a ser tentado logo: não segura o aviso por 10 s. */
+  private static readonly MAPA_DEGRADADO_MS = 3_000;
+
+  /** `STOCK_MAP_CACHE_MS`; 0 = desligado, cada chamada monta o mapa. */
+  private readonly mapaCacheMs: number;
+  private readonly mapaCache = new CacheCompartilhado<StockMapResult>({
+    maxEntradas: 50,
+    timeoutMs: 30_000,
+  });
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly traccar: TraccarService,
     private readonly geocode: ReverseGeocodeService,
-  ) {}
+  ) {
+    const ms = Number.parseInt(process.env.STOCK_MAP_CACHE_MS ?? '', 10);
+    this.mapaCacheMs = Number.isFinite(ms) && ms > 0 ? ms : 0;
+  }
 
   /**
    * Garante o device no Traccar e grava o id no item. Best-effort: devolve
@@ -519,8 +533,30 @@ export class StockTraccarService {
    * última vez há dias) — com `idadeSegundos` e `gpsConfiavel` explícitos, pra
    * tela nunca vender posição velha como atual. É o que o operador precisa pra
    * saber onde o equipamento está: pode estar com o técnico a caminho.
+   *
+   * Com `STOCK_MAP_CACHE_MS` ligado, o mapa é montado uma vez por tenant e
+   * quem pede enquanto ele está sendo montado espera a mesma montagem.
    */
   async mapPoints(tenantId: string): Promise<StockMapResult> {
+    if (this.mapaCacheMs === 0) return this.montarMapPoints(tenantId);
+    const ttl = this.mapaCacheMs;
+    return this.mapaCache.obter(
+      tenantId,
+      (r) =>
+        r.indisponivel
+          ? Math.min(ttl, StockTraccarService.MAPA_DEGRADADO_MS)
+          : ttl,
+      () => this.montarMapPoints(tenantId),
+    );
+  }
+
+  /** Chamado depois de toda escrita em `StockItem` do tenant. */
+  invalidarMapa(tenantId: string): void {
+    this.mapaCache.invalidar(tenantId);
+  }
+
+  private async montarMapPoints(tenantId: string): Promise<StockMapResult> {
+    const inicio = Date.now();
     const tags = await this.pontosDeTag(tenantId);
     const itens = await this.prisma.stockItem.findMany({
       where: {
@@ -558,7 +594,12 @@ export class StockTraccarService {
         }`,
       );
       // Servidor GPS fora não pode esconder a TAG: ela não depende dele.
-      return { indisponivel: true, pontos: tags };
+      this.logMontagem(tenantId, inicio);
+      return {
+        indisponivel: true,
+        pontos: tags,
+        geradoEm: new Date(Date.now()).toISOString(),
+      };
     }
 
     const porImei = new Map(devices.map((d) => [d.uniqueId, d]));
@@ -625,7 +666,18 @@ export class StockTraccarService {
     const todos = [...pontos, ...tags];
     await this.preencherEnderecos(todos);
 
-    return { indisponivel: false, pontos: todos };
+    this.logMontagem(tenantId, inicio);
+    return {
+      indisponivel: false,
+      pontos: todos,
+      geradoEm: new Date(Date.now()).toISOString(),
+    };
+  }
+
+  private logMontagem(tenantId: string, inicio: number): void {
+    this.logger.debug(
+      `Mapa do estoque montado (tenant ${tenantId}) em ${Date.now() - inicio} ms`,
+    );
   }
 
   /**
@@ -907,6 +959,8 @@ export interface StockMapPoint {
 export interface StockMapResult {
   indisponivel: boolean;
   pontos: StockMapPoint[];
+  /** Quando o payload foi montado (ISO 8601). Com cache, pode ser até o TTL atrás. */
+  geradoEm: string;
 }
 
 export interface StockConnectivity {
