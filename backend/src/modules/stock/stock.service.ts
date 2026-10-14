@@ -721,8 +721,9 @@ export class StockService {
   ): Promise<HinovaLookupResult> {
     // O operador acabou de ver esse resultado no diálogo; reaproveitar por 2 min
     // não mostra nada mais velho do que ele já viu e poupa a 2ª ida ao SGA
-    // (~6 s) no "Associar". Só resultado ENCONTRADO fica em cache: falha,
-    // exceção e "não encontrado" nunca são guardados. O termo é normalizado só
+    // (~6 s) no "Associar". Só resultado ENCONTRADO E ATIVO fica em cache:
+    // falha, exceção, "não encontrado" e INATIVO nunca são guardados — um
+    // bloqueio velho travaria a liberação depois que o SGA reativasse. O termo é normalizado só
     // por trim/maiúscula/sem espaços (igual ao que já existia, sem tirar hífen).
     const key = StockService.sgaLookupKey(tenantId, placaOuChassi);
     const guardado = this.sgaLookupCache.get<HinovaLookupResult>(key);
@@ -731,7 +732,7 @@ export class StockService {
       return guardado;
     }
     const resultado = await this.consultarSga(tenantId, placaOuChassi);
-    if (resultado.encontrado) {
+    if (resultado.encontrado && resultado.ativo) {
       this.sgaLookupCache.set(key, resultado, SGA_LOOKUP_CACHE_S);
     }
     return resultado;

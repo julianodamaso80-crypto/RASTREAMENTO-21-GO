@@ -136,6 +136,43 @@ describe('StockService.lookupSga — cache de 2 min', () => {
     expect(hinova).toHaveBeenCalledTimes(2);
   });
 
+  it('INATIVO não é guardado: reativado no SGA, a próxima consulta já libera', async () => {
+    const hinova = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ...ENCONTRADO('EIN4I70'),
+        ativo: false,
+        situacao: { ...ENCONTRADO('EIN4I70').situacao, descricao: 'INATIVO' },
+      })
+      .mockResolvedValueOnce(ENCONTRADO('EIN4I70'));
+    const { s } = servico(hinova);
+    await expect(s.lookupSga(T1, 'EIN4I70')).resolves.toMatchObject({
+      ativo: false,
+    });
+    await expect(s.lookupSga(T1, 'EIN4I70')).resolves.toMatchObject({
+      ativo: true,
+    });
+    expect(hinova).toHaveBeenCalledTimes(2);
+  });
+
+  it('depois de 2 min a consulta volta ao SGA', async () => {
+    const hinova = jest.fn().mockResolvedValue(ENCONTRADO('EIN4I70'));
+    const { s } = servico(hinova);
+    const t0 = Date.now();
+    const agora = jest.spyOn(Date, 'now').mockReturnValue(t0);
+    try {
+      await s.lookupSga(T1, 'EIN4I70');
+      agora.mockReturnValue(t0 + 119_000);
+      await s.lookupSga(T1, 'EIN4I70');
+      expect(hinova).toHaveBeenCalledTimes(1);
+      agora.mockReturnValue(t0 + 121_000);
+      await s.lookupSga(T1, 'EIN4I70');
+      expect(hinova).toHaveBeenCalledTimes(2);
+    } finally {
+      agora.mockRestore();
+    }
+  });
+
   it('o associate reaproveita a consulta do diálogo e, ao concluir, a próxima é ao vivo', async () => {
     const hinova = jest.fn().mockResolvedValue(ENCONTRADO('EIN4I70'));
     const { s } = servico(hinova);
