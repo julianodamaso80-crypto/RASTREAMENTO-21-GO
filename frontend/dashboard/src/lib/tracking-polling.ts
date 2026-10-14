@@ -97,3 +97,57 @@ export function mesclarDevices(
   }
   return resultado;
 }
+
+/** Item de `attrs:batch`: estado de uma posição reprovada pelo portão, sem coordenada. */
+export interface AtributosItem {
+  deviceId: number;
+  serverTime: string;
+  attributes: Record<string, unknown>;
+}
+
+const ATRIBUTOS_LISTA_BRANCA = [
+  'ignition',
+  'power',
+  'charge',
+  'blocked',
+  'batteryLevel',
+  'sat',
+  'motion',
+  'powerCut',
+  'jamming',
+  'alarm',
+] as const;
+
+/**
+ * Aplica ignição/energia/bloqueio de pacotes sem fix sobre a posição exibida.
+ * Coordenada, fix, velocidade e rumo ficam os da última posição aprovada; item
+ * mais velho que ela é ignorado; device sem posição não ganha entrada.
+ */
+export function aplicarAtributos(
+  anterior: Map<number, TraccarPosition>,
+  lote: AtributosItem[],
+): Map<number, TraccarPosition> {
+  let resultado: Map<number, TraccarPosition> | null = null;
+  for (const item of lote) {
+    const mapa: Map<number, TraccarPosition> = resultado ?? anterior;
+    const atual = mapa.get(item.deviceId);
+    if (!atual) continue;
+    const a = instante(atual.serverTime);
+    const n = instante(item.serverTime);
+    if (Number.isNaN(n) || (!Number.isNaN(a) && a > n)) continue;
+
+    const filtrados: Record<string, unknown> = {};
+    for (const chave of ATRIBUTOS_LISTA_BRANCA) {
+      if (item.attributes?.[chave] !== undefined) filtrados[chave] = item.attributes[chave];
+    }
+    if (Object.keys(filtrados).length === 0) continue;
+
+    if (!resultado) resultado = new Map(anterior);
+    resultado.set(item.deviceId, {
+      ...atual,
+      serverTime: item.serverTime,
+      attributes: { ...atual.attributes, ...filtrados },
+    });
+  }
+  return resultado ?? anterior;
+}

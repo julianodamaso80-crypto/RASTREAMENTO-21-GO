@@ -25,7 +25,9 @@ import { matchesVehicleSearch } from '@/lib/vehicle-search';
 import {
   MODO_POLLING,
   POLL_MS,
+  aplicarAtributos,
   decidirPolling,
+  type AtributosItem,
   mesclarDevices,
   mesclarPosicoes,
 } from '@/lib/tracking-polling';
@@ -394,6 +396,12 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Ignição/energia de pacote sem fix: muda atributos, nunca a coordenada.
+  const handleAttrsBatch = useCallback((itens: AtributosItem[]) => {
+    ultimoLoteEmRef.current = Date.now();
+    setPositionMap((prev) => aplicarAtributos(prev, itens));
+  }, []);
+
   const handleAlert = useCallback((alert: Alert) => {
     setAlerts((prev) => [alert, ...prev].slice(0, 100));
     setUnreadCount((prev) => prev + 1);
@@ -427,6 +435,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     onPositionsBatch: handlePositionsBatch,
     onDeviceUpdate: handleDeviceUpdate,
     onDevicesBatch: handleDevicesBatch,
+    onAttrsBatch: handleAttrsBatch,
     onAlert: handleAlert,
     onBleSighting: handleBleSighting,
     onReconnect: handleReconnect,

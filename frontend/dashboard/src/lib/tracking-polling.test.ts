@@ -1,5 +1,6 @@
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import {
+  aplicarAtributos,
   decidirPolling,
   mesclarDevices,
   mesclarPosicoes,
@@ -220,5 +221,70 @@ describe('mesclarDevices', () => {
     expect([...r.keys()]).toEqual([1, 2]);
     expect(r.get(1)).toEqual(novos[0]);
     expect(r.get(2)).toEqual(novos[1]);
+  });
+});
+
+describe('aplicarAtributos', () => {
+  const T0 = '2026-10-14T12:00:00.000Z';
+  const T1 = '2026-10-14T12:00:10.000Z';
+
+  it('mescla a ignição sem mexer em coordenada, fix, velocidade nem rumo', () => {
+    const antes = pos(1, T0, { speed: 40, course: 90, attributes: { ignition: false, odometer: 5 } });
+    const prev = new Map([[1, antes]]);
+    const r = aplicarAtributos(prev, [{ deviceId: 1, serverTime: T1, attributes: { ignition: true } }]);
+    const depois = r.get(1)!;
+    expect(depois).not.toBe(antes);
+    expect(depois.attributes).toEqual({ ignition: true, odometer: 5 });
+    expect(depois.serverTime).toBe(T1);
+    expect(depois.latitude).toBe(antes.latitude);
+    expect(depois.longitude).toBe(antes.longitude);
+    expect(depois.fixTime).toBe(antes.fixTime);
+    expect(depois.deviceTime).toBe(antes.deviceTime);
+    expect(depois.speed).toBe(40);
+    expect(depois.course).toBe(90);
+    // O objeto anterior não é mutado.
+    expect(antes.attributes).toEqual({ ignition: false, odometer: 5 });
+  });
+
+  it('item mais velho que a posição exibida é ignorado', () => {
+    const antes = pos(1, T1, { attributes: { ignition: true } });
+    const prev = new Map([[1, antes]]);
+    const r = aplicarAtributos(prev, [{ deviceId: 1, serverTime: T0, attributes: { ignition: false } }]);
+    expect(r.get(1)).toBe(antes);
+  });
+
+  it('device sem posição não ganha entrada (não há coordenada para mostrar)', () => {
+    const prev = new Map([[1, pos(1, T0)]]);
+    const r = aplicarAtributos(prev, [{ deviceId: 2, serverTime: T1, attributes: { ignition: true } }]);
+    expect(r.has(2)).toBe(false);
+    expect(r.size).toBe(1);
+  });
+
+  it('descarta chave fora da lista branca, inclusive coordenada', () => {
+    const prev = new Map([[1, pos(1, T0, { attributes: {} })]]);
+    const r = aplicarAtributos(prev, [
+      {
+        deviceId: 1,
+        serverTime: T1,
+        attributes: { ignition: true, latitude: 0, odometer: 9, power: 12.1 },
+      },
+    ]);
+    expect(r.get(1)!.attributes).toEqual({ ignition: true, power: 12.1 });
+    expect(r.get(1)!.latitude).toBe(-22.9);
+  });
+
+  it('itens do mesmo lote se aplicam em ordem', () => {
+    const prev = new Map([[1, pos(1, T0, { attributes: {} })]]);
+    const r = aplicarAtributos(prev, [
+      { deviceId: 1, serverTime: '2026-10-14T12:00:05.000Z', attributes: { ignition: true } },
+      { deviceId: 1, serverTime: T1, attributes: { ignition: false } },
+    ]);
+    expect(r.get(1)!.attributes.ignition).toBe(false);
+    expect(r.get(1)!.serverTime).toBe(T1);
+  });
+
+  it('lote sem nada aplicável devolve o mesmo Map (sem render à toa)', () => {
+    const prev = new Map([[1, pos(1, T0)]]);
+    expect(aplicarAtributos(prev, [{ deviceId: 9, serverTime: T1, attributes: { ignition: true } }])).toBe(prev);
   });
 });

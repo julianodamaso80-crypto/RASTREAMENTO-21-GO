@@ -5,6 +5,7 @@ import { io, type Socket } from 'socket.io-client';
 import type { TraccarPosition, TraccarDevice } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
 import type { BleSightingEvent } from '@/types/ble-tag';
+import type { AtributosItem } from '@/lib/tracking-polling';
 
 interface UseTraccarSocketOptions {
   token: string | null;
@@ -14,6 +15,8 @@ interface UseTraccarSocketOptions {
   onDeviceUpdate?: (device: TraccarDevice) => void;
   /** Lote de 1 s do backend (`devices:batch`). */
   onDevicesBatch?: (devices: TraccarDevice[]) => void;
+  /** Lote de 1 s (`attrs:batch`): ignição/energia de pacotes sem fix, sem coordenada. */
+  onAttrsBatch?: (itens: AtributosItem[]) => void;
   onAlert?: (alert: Alert) => void;
   onBleSighting?: (event: BleSightingEvent) => void;
   /** Reconectou depois de já ter conectado: o que passou no intervalo se perdeu. */
@@ -26,6 +29,7 @@ export function useTraccarSocket({
   onPositionsBatch,
   onDeviceUpdate,
   onDevicesBatch,
+  onAttrsBatch,
   onAlert,
   onBleSighting,
   onReconnect,
@@ -80,6 +84,10 @@ export function useTraccarSocket({
 
     socket.on('devices:batch', (data: TraccarDevice[]) => {
       if (Array.isArray(data) && data.length > 0) onDevicesBatch?.(data);
+    });
+
+    socket.on('attrs:batch', (data: AtributosItem[]) => {
+      if (Array.isArray(data) && data.length > 0) onAttrsBatch?.(data);
     });
 
     socket.on('alert:new', (data: Alert) => {
