@@ -19,6 +19,10 @@ interface Montagem<T> {
  * A "versão" de uma chave é a montagem registrada para ela: `invalidar` tira
  * o registro, e uma montagem que termina sem estar mais registrada entrega o
  * valor a quem já esperava, mas não grava. Falha e timeout não ficam guardados.
+ *
+ * Nem `invalidar` nem o timeout cancelam a montagem em voo: ela termina sozinha
+ * e o resultado é descartado. Aceito porque quem monta já tem limite próprio
+ * (o axios do Traccar corta em 30 s).
  */
 export class CacheCompartilhado<T> {
   private readonly entradas = new Map<string, Entrada<T>>();
