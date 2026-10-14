@@ -82,7 +82,7 @@ function servico(tipoNoEspelho: string | null, chassi = VIVO.veiculo.chassi) {
     { getDeviceByUniqueId: jest.fn().mockResolvedValue(null) } as never,
     { notifyDeviceChanged: jest.fn() } as never,
     {} as never,
-    {} as never,
+    { invalidarMapa: jest.fn() } as never, // stockTraccar
     {
       lookupNoEspelho: jest.fn().mockResolvedValue(null),
       removeByPlate: jest.fn().mockResolvedValue(undefined),

@@ -294,6 +294,7 @@ export class StockService {
         validationNotes: true,
       },
     });
+    this.stockTraccar.invalidarMapa(tenantId);
 
     this.logger.log(
       `Instalação ${dto.approved ? 'APROVADA' : 'REPROVADA'}: IMEI ${item.imei} por ${userName}` +
@@ -681,6 +682,7 @@ export class StockService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+    this.stockTraccar.invalidarMapa(tenantId);
     return { id };
   }
 
@@ -882,6 +884,7 @@ export class StockService {
         },
       });
     });
+    this.stockTraccar.invalidarMapa(tenantId);
 
     this.logger.log(`TAG ${item.imei} vinculada à placa ${placa} pelo estoque.`);
     return { tag: true, placa, associado: lookup.cliente.nome ?? null };
@@ -928,6 +931,7 @@ export class StockService {
         });
       }
     });
+    this.stockTraccar.invalidarMapa(tenantId);
 
     const placa = vinculos[0].plate;
     this.logger.log(`TAG ${serialNumber} desvinculada da placa ${placa} — voltou ao estoque.`);
@@ -1234,6 +1238,7 @@ export class StockService {
 
       return { associate, vehicle, device };
     });
+    this.stockTraccar.invalidarMapa(tenantId);
 
     // 5) Traccar (best-effort — não derruba o vínculo se estiver indisponível).
     let traccarDeviceId: number | null = null;
@@ -1531,6 +1536,7 @@ export class StockService {
           assignedById: userId,
         },
       });
+      this.stockTraccar.invalidarMapa(tenantId);
     }
 
     // Equipamento que saiu com técnico vai ser testado em campo: deixa a
@@ -1573,6 +1579,7 @@ export class StockService {
         assignedById: null,
       },
     });
+    this.stockTraccar.invalidarMapa(tenantId);
     return {
       ok: result.count,
       skipped: [] as Array<{ imei: string; motivo: string }>,
@@ -1672,40 +1679,45 @@ export class StockService {
 
     // Upsert por (tenantId, imei) em lotes pra não estourar o pool de conexões.
     const batchSize = 25;
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const batch = rows.slice(i, i + batchSize);
-      await Promise.all(
-        batch.map((row) =>
-          this.prisma.stockItem.upsert({
-            where: { tenantId_imei: { tenantId, imei: row.imei } },
-            create: {
-              tenantId,
-              imei: row.imei,
-              iccid: row.iccid,
-              line: row.line,
-              operator: row.operator,
-              status: row.status,
-              server: row.server,
-              registeredAt: row.registeredAt,
-              activatedAt: row.activatedAt,
-            },
-            update: {
-              iccid: row.iccid,
-              line: row.line,
-              operator: row.operator,
-              status: row.status,
-              server: row.server,
-              registeredAt: row.registeredAt,
-              activatedAt: row.activatedAt,
-              deletedAt: null, // reimportar restaura item removido
-            },
-          }),
-        ),
-      );
-      for (const row of batch) {
-        if (existingSet.has(row.imei)) updated++;
-        else imported++;
+    try {
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map((row) =>
+            this.prisma.stockItem.upsert({
+              where: { tenantId_imei: { tenantId, imei: row.imei } },
+              create: {
+                tenantId,
+                imei: row.imei,
+                iccid: row.iccid,
+                line: row.line,
+                operator: row.operator,
+                status: row.status,
+                server: row.server,
+                registeredAt: row.registeredAt,
+                activatedAt: row.activatedAt,
+              },
+              update: {
+                iccid: row.iccid,
+                line: row.line,
+                operator: row.operator,
+                status: row.status,
+                server: row.server,
+                registeredAt: row.registeredAt,
+                activatedAt: row.activatedAt,
+                deletedAt: null, // reimportar restaura item removido
+              },
+            }),
+          ),
+        );
+        for (const row of batch) {
+          if (existingSet.has(row.imei)) updated++;
+          else imported++;
+        }
       }
+    } finally {
+      // Lote que falhou no meio já deixou os anteriores gravados.
+      this.stockTraccar.invalidarMapa(tenantId);
     }
 
     this.logger.log(
@@ -1778,41 +1790,45 @@ export class StockService {
     let imported = 0;
     let updated = 0;
     const batchSize = 25;
-    for (let i = 0; i < linhas.length; i += batchSize) {
-      const lote = linhas.slice(i, i + batchSize);
-      const resultados = await Promise.all(
-        lote.map(async (l) => {
-          const item = estoquePorSerial.get(l.sn);
-          // Mesmo número já cadastrado como rastreador: não sobrescrever.
-          if (item && item.kind !== 'TAG') return 'ignorada' as const;
+    try {
+      for (let i = 0; i < linhas.length; i += batchSize) {
+        const lote = linhas.slice(i, i + batchSize);
+        const resultados = await Promise.all(
+          lote.map(async (l) => {
+            const item = estoquePorSerial.get(l.sn);
+            // Mesmo número já cadastrado como rastreador: não sobrescrever.
+            if (item && item.kind !== 'TAG') return 'ignorada' as const;
 
-          const batch = l.sn.slice(0, 6);
-          const chave = { macAddress: l.mac, privateKey: l.privateKey, hashedAdvKey: l.hashedAdvKey, batch };
-          await this.prisma.tagKey.upsert({
-            where: { tenantId_serialNumber: { tenantId, serialNumber: l.sn } },
-            create: { tenantId, serialNumber: l.sn, ...chave },
-            update: chave,
-          });
+            const batch = l.sn.slice(0, 6);
+            const chave = { macAddress: l.mac, privateKey: l.privateKey, hashedAdvKey: l.hashedAdvKey, batch };
+            await this.prisma.tagKey.upsert({
+              where: { tenantId_serialNumber: { tenantId, serialNumber: l.sn } },
+              create: { tenantId, serialNumber: l.sn, ...chave },
+              update: chave,
+            });
 
-          // Vinculada a cliente não volta pro Estoque.
-          if (jaVinculada.has(l.sn)) return 'atualizada' as const;
-          if (item) {
-            if (item.deletedAt && !item.associatedAt) {
-              await this.prisma.stockItem.update({ where: { id: item.id }, data: { deletedAt: null } });
+            // Vinculada a cliente não volta pro Estoque.
+            if (jaVinculada.has(l.sn)) return 'atualizada' as const;
+            if (item) {
+              if (item.deletedAt && !item.associatedAt) {
+                await this.prisma.stockItem.update({ where: { id: item.id }, data: { deletedAt: null } });
+              }
+              return 'atualizada' as const;
             }
-            return 'atualizada' as const;
-          }
-          await this.prisma.stockItem.create({
-            data: { tenantId, imei: l.sn, kind: 'TAG', status: 'TAG', notes: `Lote ${batch}` },
-          });
-          return 'nova' as const;
-        }),
-      );
-      for (const r of resultados) {
-        if (r === 'nova') imported++;
-        else if (r === 'atualizada') updated++;
-        else skipped++;
+            await this.prisma.stockItem.create({
+              data: { tenantId, imei: l.sn, kind: 'TAG', status: 'TAG', notes: `Lote ${batch}` },
+            });
+            return 'nova' as const;
+          }),
+        );
+        for (const r of resultados) {
+          if (r === 'nova') imported++;
+          else if (r === 'atualizada') updated++;
+          else skipped++;
+        }
       }
+    } finally {
+      this.stockTraccar.invalidarMapa(tenantId);
     }
 
     this.logger.log(

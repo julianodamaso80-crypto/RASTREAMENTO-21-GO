@@ -63,6 +63,7 @@ function montar(item: Record<string, unknown>, lookup: HinovaLookupResult = ATIV
     ensureDevice: jest.fn(),
     responderIgnicaoNaHora: jest.fn(),
     voltarAoFiltroNormal: jest.fn(),
+    invalidarMapa: jest.fn(),
     imeisComunicando: jest.fn().mockResolvedValue({ comunicando: [], semGps: [] }),
   };
   const pendencias = { lookupNoEspelho: jest.fn().mockResolvedValue(null), removeByPlate: jest.fn() };

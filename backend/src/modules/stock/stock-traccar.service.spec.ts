@@ -168,6 +168,25 @@ describe('StockTraccarService.mapPoints — cache por tenant', () => {
     });
   });
 
+  it('ensureDevice que grava o device no item invalida o mapa do tenant do item', async () => {
+    process.env.STOCK_MAP_CACHE_MS = '10000';
+    const { s, traccar, prisma } = servico();
+    Object.assign(traccar, {
+      getDeviceByUniqueId: jest.fn().mockResolvedValue(DEVICE),
+    });
+    Object.assign(prisma.stockItem, {
+      update: jest.fn().mockResolvedValue({ tenantId: 't1' }),
+    });
+
+    await s.mapPoints('t1');
+    await s.mapPoints('t2');
+    await s.ensureDevice({ id: 'item-1', imei: ITEM.imei, traccarDeviceId: null });
+    await s.mapPoints('t1');
+    await s.mapPoints('t2');
+
+    expect(traccar.getDevices).toHaveBeenCalledTimes(3);
+  });
+
   describe('com STOCK_MAP_CACHE_MS ausente (caminho de hoje)', () => {
     beforeEach(() => {
       delete process.env.STOCK_MAP_CACHE_MS;

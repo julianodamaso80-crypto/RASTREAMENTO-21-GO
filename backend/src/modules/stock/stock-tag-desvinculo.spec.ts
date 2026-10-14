@@ -31,7 +31,7 @@ function montar({
     traccar as never,
     {} as never,
     {} as never,
-    {} as never,
+    { invalidarMapa: jest.fn() } as never, // stockTraccar
     {} as never,
     {} as never,
     {} as never,

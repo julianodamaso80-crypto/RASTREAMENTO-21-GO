@@ -99,10 +99,12 @@ export class StockTraccarService {
       const device =
         existente ?? (await this.traccar.createDevice(item.imei, item.imei));
       if (!device?.id) return null;
-      await this.prisma.stockItem.update({
+      const gravado = await this.prisma.stockItem.update({
         where: { id: item.id },
         data: { traccarDeviceId: device.id },
+        select: { tenantId: true },
       });
+      this.invalidarMapa(gravado.tenantId);
       return device.id;
     } catch (erro) {
       this.logger.warn(
@@ -383,6 +385,7 @@ export class StockTraccarService {
       }
     }
     if (ok > 0) {
+      this.invalidarMapa(tenants[0].id);
       this.logger.log(
         `Estoque adotou ${ok} rastreador(es) que apontaram pro servidor sem cadastro: ` +
           adotar

@@ -127,6 +127,21 @@ describe('StockTraccarService.adotarDesconhecidos', () => {
     expect(data.notes).toMatch(/Entrou sozinho/);
   });
 
+  it('item adotado invalida o mapa do estoque do tenant; sem adoção, não', async () => {
+    const { s } = servico({ devices: [device('867689065682520', 6082)] });
+    const invalidar = jest.spyOn(s, 'invalidarMapa');
+    await s.adotarDesconhecidos();
+    expect(invalidar).toHaveBeenCalledWith(TENANT);
+
+    const nada = servico({
+      devices: [device('867689065682520', 6082)],
+      estoque: ['867689065682520'],
+    });
+    const naoInvalidar = jest.spyOn(nada.s, 'invalidarMapa');
+    await nada.s.adotarDesconhecidos();
+    expect(naoInvalidar).not.toHaveBeenCalled();
+  });
+
   it('não duplica quem já está no estoque, em veículo ou como rastreador vinculado', async () => {
     const { s, prisma } = servico({
       devices: [

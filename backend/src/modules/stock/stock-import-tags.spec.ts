@@ -33,7 +33,10 @@ function montar(existentes: { stock?: unknown[]; links?: unknown[] } = {}) {
       upsert: jest.fn(),
     },
   };
-  const stockTraccar = { ensurePending: jest.fn().mockResolvedValue(undefined) };
+  const stockTraccar = {
+    ensurePending: jest.fn().mockResolvedValue(undefined),
+    invalidarMapa: jest.fn(),
+  };
   const s = new StockService(
     prisma as never,
     {} as never,
