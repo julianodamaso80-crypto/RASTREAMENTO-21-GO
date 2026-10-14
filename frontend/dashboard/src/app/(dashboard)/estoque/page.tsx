@@ -23,6 +23,7 @@ import {
   XCircle,
   Lock,
   LockOpen,
+  Link2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatDateOnlyBR, formatRelativeTime } from '@/lib/utils';
@@ -44,6 +45,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog';
 import { AssignTechnicianDialog } from '@/components/stock/assign-technician-dialog';
+import { BulkLinkDialog } from '@/components/stock/bulk-link-dialog';
 import { InstallCheckSheet } from '@/components/stock/install-check-sheet';
 import { InstallCheckBatchSheet } from '@/components/stock/install-check-batch-sheet';
 import type {
@@ -78,6 +80,7 @@ export default function EstoquePage() {
   const [stats, setStats] = useState<StockStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [bulkLinkOpen, setBulkLinkOpen] = useState(false);
   const [search, setSearch] = useState('');
   useBuscaDaUrl(setSearch);
   const [statusFilter, setStatusFilter] = useState('');
@@ -333,25 +336,33 @@ export default function EstoquePage() {
             Rastreadores e TAGs disponíveis — associe a um cliente do SGA ou importe a planilha
           </p>
         </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          className="hidden"
-          onChange={handleFileSelected}
-        />
-        <Button
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={importing}
-        >
-          {importing ? (
-            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-          ) : (
-            <Upload className="h-4 w-4 mr-1" />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={handleFileSelected}
+          />
+          <Button
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+          >
+            {importing ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4 mr-1" />
+            )}
+            {importing ? 'Importando...' : 'Importar planilha'}
+          </Button>
+          {canManage && (
+            <Button size="sm" variant="outline" onClick={() => setBulkLinkOpen(true)}>
+              <Link2 className="h-4 w-4 mr-1" />
+              Vincular em massa
+            </Button>
           )}
-          {importing ? 'Importando...' : 'Importar planilha'}
-        </Button>
+        </div>
       </div>
 
       {/* Uma faixa só: Todos · Rastreadores · TAGs · Online · Offline · Sem GPS.
@@ -742,6 +753,13 @@ export default function EstoquePage() {
         onAssigned={() => Promise.all([loadStock(), loadStats()])}
       />
 
+      <BulkLinkDialog
+        open={bulkLinkOpen}
+        onOpenChange={setBulkLinkOpen}
+        onLinked={() => {
+          void Promise.all([loadStock(), loadStats()]);
+        }}
+      />
       <AssociateStockDialog
         item={associItem}
         open={associOpen}

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -23,6 +24,8 @@ import { Role } from '.prisma/client';
 import { Roles, RequireRoute } from '../../common/decorators';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StockService } from './stock.service';
+import { StockBulkLinkService } from './stock-bulk-link.service';
+import { BulkLinkDto } from './dto/bulk-link.dto';
 import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
 import { AssignStockDto } from './dto/assign-stock.dto';
@@ -42,7 +45,10 @@ interface AuthenticatedRequest {
 @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR, Role.VIEWER)
 @Controller('stock')
 export class StockController {
-  constructor(private stockService: StockService) {}
+  constructor(
+    private stockService: StockService,
+    private vinculoEmMassa: StockBulkLinkService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Lista o estoque de rastreadores (paginado)' })
@@ -264,6 +270,33 @@ export class StockController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.stockService.estadoAtualizacaoTagDoEstoque(id, req.tenantId);
+  }
+
+  @Post('bulk-link/read')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary:
+      'Vincular em massa, passo 1: lê planilha .xlsx ou PDF e devolve as linhas (com o erro de cada linha inválida). Não grava nada.',
+  })
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024 } }),
+  )
+  bulkLinkRead(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Envie um arquivo.');
+    return this.vinculoEmMassa.ler(file.buffer, file.originalname);
+  }
+
+  @Post('bulk-link')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({
+    summary:
+      'Vincular em massa, passo 2: vincula até 15 linhas no SGA e devolve o resultado de cada uma.',
+  })
+  bulkLink(@Body() dto: BulkLinkDto, @Req() req: AuthenticatedRequest) {
+    return this.vinculoEmMassa.vincular(req.tenantId, dto.linhas);
   }
 
   @Post(':id/associate')

@@ -57,6 +57,9 @@ import type {
   StockMapResult,
   StockTestCommandResult,
   StockBatchSignal,
+  BulkLinkLeitura,
+  BulkLinkLinha,
+  BulkLinkResultado,
 } from '@/types/stock';
 import type { ClientAsset, AssetsSummary } from '@/types/assets';
 import type { TagNoMapa } from '@/types/tag-map';
@@ -777,6 +780,20 @@ export const stockApi = {
     const res = await api.post<ApiResponse<StockImportResult>>('/stock/import', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return res.data.data;
+  },
+  bulkLinkRead: async (file: File): Promise<BulkLinkLeitura> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await api.post<ApiResponse<BulkLinkLeitura>>('/stock/bulk-link/read', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data.data;
+  },
+  bulkLink: async (
+    linhas: Array<Pick<BulkLinkLinha, 'linha' | 'placa' | 'imei' | 'tecnico' | 'local'>>,
+  ): Promise<BulkLinkResultado[]> => {
+    const res = await api.post<ApiResponse<BulkLinkResultado[]>>('/stock/bulk-link', { linhas });
     return res.data.data;
   },
   delete: async (id: string): Promise<void> => {

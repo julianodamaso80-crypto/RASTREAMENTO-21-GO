@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { StockService } from './stock.service';
 import { StockTraccarService } from './stock-traccar.service';
+import { StockBulkLinkService } from './stock-bulk-link.service';
 import { StockController } from './stock.controller';
 import { HinovaModule } from '../hinova/hinova.module';
 import { TraccarModule } from '../traccar/traccar.module';
@@ -17,7 +18,7 @@ import { FinancialModule } from '../financial/financial.module';
     FinancialModule,
   ],
   controllers: [StockController],
-  providers: [StockService, StockTraccarService],
+  providers: [StockService, StockTraccarService, StockBulkLinkService],
   exports: [StockService, StockTraccarService],
 })
 export class StockModule {}

@@ -172,6 +172,31 @@ export interface StockImportResult {
   tipo?: 'RASTREADOR' | 'TAG';
 }
 
+export interface BulkLinkLinha {
+  linha: number;
+  placa: string;
+  imei: string;
+  tecnico: string;
+  local: string;
+  /** Linha já inválida na leitura do arquivo: não vai ao SGA. */
+  erro?: string;
+}
+
+export interface BulkLinkLeitura {
+  linhas: BulkLinkLinha[];
+  erroGeral?: string;
+}
+
+export type BulkLinkStatus = 'VINCULADO' | 'JA_VINCULADO' | 'ERRO';
+
+export interface BulkLinkResultado {
+  linha: number;
+  placa: string;
+  imei: string;
+  status: BulkLinkStatus;
+  motivo?: string;
+}
+
 export interface StockStats {
   total: number;
   byStatus: Array<{ status: string; count: number }>;
