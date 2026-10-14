@@ -220,32 +220,48 @@ export class TraccarService implements OnModuleInit {
    * Última posição só dos devices pedidos. Ao contrário de `getPositions()`,
    * nunca vira consulta da frota inteira: sem id válido não chama o Traccar,
    * e o que vier fora do conjunto pedido é descartado.
+   *
+   * O `/positions` do Traccar aceita UM `deviceId` só (repetido, os demais são
+   * ignorados), mas `id` é lista. Então: devices pelos ids → `positionId` de
+   * cada um → `/positions?id=…`. Device sem `positionId` fica sem posição.
+   * Quem já buscou os devices passa a lista e evita a segunda ida.
    */
-  async getPositionsDosDevices(deviceIds: number[]): Promise<TraccarPosition[]> {
-    return this.buscarPorIds<TraccarPosition>(
+  async getPositionsDosDevices(
+    deviceIds: number[],
+    devicesJaBuscados?: TraccarDevice[],
+  ): Promise<TraccarPosition[]> {
+    const pedidos = TraccarService.idsValidos(deviceIds);
+    if (pedidos.length === 0) return [];
+    const conjunto = new Set(pedidos);
+    const devices = devicesJaBuscados ?? (await this.getDevicesPorIds(pedidos));
+    const positionIds = devices
+      .filter((d) => conjunto.has(d.id))
+      .map((d) => d.positionId);
+    const positions = await this.buscarPorIds<TraccarPosition>(
       '/positions',
-      'deviceId',
-      deviceIds,
-      (p) => p.deviceId,
+      positionIds,
+      (p) => p.id,
     );
+    return positions.filter((p) => conjunto.has(p.deviceId));
   }
 
   /** Devices pelos ids, com as mesmas garantias de `getPositionsDosDevices`. */
   async getDevicesPorIds(deviceIds: number[]): Promise<TraccarDevice[]> {
-    return this.buscarPorIds<TraccarDevice>('/devices', 'id', deviceIds, (d) => d.id);
+    return this.buscarPorIds<TraccarDevice>('/devices', deviceIds, (d) => d.id);
+  }
+
+  private static idsValidos(ids: number[]): number[] {
+    return [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
   }
 
   private static readonly IDS_POR_LOTE = 100;
 
   private async buscarPorIds<T>(
     rota: '/positions' | '/devices',
-    chave: 'deviceId' | 'id',
     ids: number[],
     idDe: (item: T) => number,
   ): Promise<T[]> {
-    const pedidos = [
-      ...new Set(ids.filter((id) => Number.isInteger(id) && id > 0)),
-    ];
+    const pedidos = TraccarService.idsValidos(ids);
     if (pedidos.length === 0) return [];
     const conjunto = new Set(pedidos);
     const resultado: T[] = [];
@@ -253,7 +269,7 @@ export class TraccarService implements OnModuleInit {
     for (let i = 0; i < pedidos.length; i += TraccarService.IDS_POR_LOTE) {
       const params = new URLSearchParams();
       for (const id of pedidos.slice(i, i + TraccarService.IDS_POR_LOTE)) {
-        params.append(chave, String(id));
+        params.append('id', String(id));
       }
       const data = await this.withRetry(async () => {
         const { data } = await this.client.get(`${rota}?${params.toString()}`);

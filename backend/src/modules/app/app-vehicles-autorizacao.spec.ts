@@ -7,6 +7,7 @@
  */
 import { UnauthorizedException } from '@nestjs/common';
 import { AppDataService } from './app-data.service';
+import { TraccarService } from '../traccar/traccar.service';
 
 type V = {
   id: string;
@@ -68,6 +69,7 @@ const pos = (deviceId: number, extra: Record<string, unknown> = {}) => ({
 });
 const dev = (id: number) => ({
   id,
+  positionId: id * 100,
   status: 'online',
   lastUpdate: '2026-10-14T12:00:05.000Z',
 });
@@ -93,8 +95,13 @@ function montar(opts: { traccarDevolveAMais?: boolean; porDevice?: boolean } = {
   const traccar = {
     getPositions: jest.fn(async () => POSICOES.filter((p) => VINCULADOS.includes(p.deviceId))),
     getDevices: jest.fn(async () => DEVICES.filter((d) => VINCULADOS.includes(d.id))),
-    getPositionsDosDevices: jest.fn(async (ids: number[]) =>
-      opts.traccarDevolveAMais ? POSICOES : POSICOES.filter((p) => ids.includes(p.deviceId)),
+    // Como o TraccarService: posição pelo positionId dos devices recebidos.
+    getPositionsDosDevices: jest.fn(async (ids: number[], devices: { positionId: number }[]) =>
+      opts.traccarDevolveAMais
+        ? POSICOES
+        : POSICOES.filter(
+            (p) => ids.includes(p.deviceId) && devices.some((d) => d.positionId === p.id),
+          ),
     ),
     getDevicesPorIds: jest.fn(async (ids: number[]) =>
       opts.traccarDevolveAMais
@@ -177,6 +184,49 @@ describe('/app/vehicles com APP_VEHICLES_POR_DEVICE ligada — autorização', (
     expect(traccar.getDevicesPorIds.mock.calls[0][0]).toEqual(
       traccar.getPositionsDosDevices.mock.calls[0][0],
     );
+    // A posição sai dos devices já buscados (positionId), sem segunda ida a /devices.
+    expect(traccar.getDevicesPorIds).toHaveBeenCalledTimes(1);
+    expect(traccar.getPositionsDosDevices.mock.calls[0][1]).toEqual(
+      await traccar.getDevicesPorIds.mock.results[0].value,
+    );
+  });
+
+  it('com o TraccarService real: lista em `id`, nenhum `deviceId`, posição para cada veículo', async () => {
+    const { findMany } = montar();
+    const real = new TraccarService({ get: () => 'http://traccar.local' } as never);
+    const urls: string[] = [];
+    jest
+      .spyOn((real as unknown as { client: { get: (u: string) => Promise<unknown> } }).client, 'get')
+      .mockImplementation(async (url: string) => {
+        urls.push(url);
+        const [rota, query = ''] = url.split('?');
+        const q = new URLSearchParams(query);
+        // Como o Traccar: `deviceId` é um só (repetido, vale o primeiro).
+        if (q.has('deviceId')) {
+          return { data: POSICOES.filter((p) => p.deviceId === Number(q.get('deviceId'))) };
+        }
+        const ids = q.getAll('id').map(Number);
+        if (rota === '/devices') return { data: DEVICES.filter((d) => ids.includes(d.id)) };
+        return { data: POSICOES.filter((p) => ids.includes(p.id)) };
+      });
+    const antes = process.env.APP_VEHICLES_POR_DEVICE;
+    process.env.APP_VEHICLES_POR_DEVICE = '1';
+    const service = new AppDataService({ vehicle: { findMany } } as any, real as any, {} as any, {} as any);
+    if (antes === undefined) delete process.env.APP_VEHICLES_POR_DEVICE;
+    else process.env.APP_VEHICLES_POR_DEVICE = antes;
+
+    const r = await service.getVehicles('A', 't1');
+    const porId = Object.fromEntries(r.map((v) => [v.id, v]));
+    expect(porId.a1.position?.latitude).toBe(pos(11).latitude);
+    expect(porId.a2.position?.latitude).toBe(pos(12).latitude);
+    expect(porId.a3.position).toBeNull();
+    expect(porId.a4.position).toBeNull();
+    for (const u of urls) expect(u).not.toContain('deviceId');
+    expect(urls.filter((u) => u.startsWith('/devices?'))).toHaveLength(1);
+    const posUrl = urls.find((u) => u.startsWith('/positions?'))!;
+    expect(
+      new URLSearchParams(posUrl.split('?')[1]).getAll('id').map(Number).sort((x, y) => x - y),
+    ).toEqual([1100, 1200, 1400]);
   });
 
   it('frota inteira do Traccar nunca é consultada', async () => {

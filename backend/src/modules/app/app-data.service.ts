@@ -223,13 +223,12 @@ export class AppDataService {
 
   /** APP_VEHICLES_POR_DEVICE ligada: só os devices do associado, nunca a frota. */
   private async posicoesEDevicesDoAssociado(deviceIds: number[]) {
-    const [positions, devices] = await Promise.all([
-      this.traccar.getPositionsDosDevices(deviceIds),
-      this.traccar.getDevicesPorIds(deviceIds),
-    ]);
+    // Os devices vêm primeiro: a posição é buscada pelo `positionId` de cada um.
+    const devices = await this.traccar.getDevicesPorIds(deviceIds);
+    const positions = await this.traccar.getPositionsDosDevices(deviceIds, devices);
     const devByDevice = new Map(devices.map((d) => [d.id, d]));
-    // `/positions` sem filtro só trazia devices vinculados ao usuário da
-    // sessão; por id o Traccar não exige vínculo. Posição só entra se o
+    // Por id o Traccar confere a permissão do usuário da sessão, mas o admin
+    // enxerga devices que não estão vinculados a ele. Posição só entra se o
     // device veio na lista, como no caminho da frota.
     const posByDevice = new Map(
       positions
