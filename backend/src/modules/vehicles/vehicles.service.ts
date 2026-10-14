@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, VehicleStatus } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
+import { DeviceRegistryService } from '../traccar/device-registry.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { FilterVehiclesDto } from './dto/filter-vehicles.dto';
@@ -22,6 +23,7 @@ export class VehiclesService {
     private prisma: PrismaService,
     private traccarService: TraccarService,
     private configService: ConfigService,
+    private deviceRegistry: DeviceRegistryService,
   ) {}
 
   /**
@@ -257,6 +259,7 @@ export class VehiclesService {
         traccarDeviceId,
       },
     });
+    this.deviceRegistry.notifyDeviceChanged(`cadastro da placa ${dto.plate}`);
 
     return vehicle;
   }
@@ -304,13 +307,18 @@ export class VehiclesService {
     // é o que o desvínculo do rastreador já faz, com o mesmo nome sintético.
     const seguraImei = /^\d{10,}$/.test(vehicle.uniqueId);
 
-    return this.prisma.vehicle.update({
+    const removido = await this.prisma.vehicle.update({
       where: { id },
       data: {
         deletedAt: new Date(),
         ...(seguraImei ? { uniqueId: `RETIRADO-${id}` } : {}),
       },
     });
+    // O rastreador deixa de pertencer a este tenant/veículo no tempo real.
+    if (vehicle.traccarDeviceId) {
+      this.deviceRegistry.notifyDeviceChanged(`exclusão da placa ${vehicle.plate}`);
+    }
+    return removido;
   }
 
   async block(id: string, tenantId: string) {

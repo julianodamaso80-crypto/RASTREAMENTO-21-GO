@@ -33,14 +33,14 @@ function prismaFalso() {
 describe('paginação com desempate por id', () => {
   it('Veículos (lista do Mapa)', async () => {
     const { prisma, lista } = prismaFalso();
-    const s = new VehiclesService(prisma as never, {} as never, {} as never);
+    const s = new VehiclesService(prisma as never, {} as never, {} as never, {} as never);
     await s.findAll(TENANT, { page: 2, perPage: 2000 });
     expect(lista.mock.calls[0][0].orderBy).toEqual(ESTAVEL);
   });
 
   it('Veículos do cliente (/vehicles/mine)', async () => {
     const { prisma, lista } = prismaFalso();
-    const s = new VehiclesService(prisma as never, {} as never, {} as never);
+    const s = new VehiclesService(prisma as never, {} as never, {} as never, {} as never);
     await s.findOwnedByUser('u1', TENANT, { page: 2, perPage: 2000 });
     expect(lista.mock.calls[0][0].orderBy).toEqual(ESTAVEL);
   });

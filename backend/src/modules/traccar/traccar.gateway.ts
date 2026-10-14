@@ -52,6 +52,11 @@ export class TraccarGateway
   // Ver `flushPositionsBatch()`.
   private lotePorTenant = new Map<string, TraccarWsMessage['positions']>();
   private loteDevicesPorTenant = new Map<string, TraccarWsMessage['devices']>();
+  // Atributos de posições reprovadas pelo portão (sem coordenada), por tenant.
+  private loteAtributosPorTenant = new Map<string, AtributosItem[]>();
+  // Debounce do refresh do mapping: N vínculos em rajada = 1 consulta.
+  private refreshAgendado: Promise<void> | null = null;
+  private readonly REFRESH_DEBOUNCE_MS = 1_000;
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
   private readonly WS_BACKOFF_MIN_MS = 2_000;
@@ -73,7 +78,7 @@ export class TraccarGateway
 
     // Instalação/retirada de rastreador atualiza o mapping na hora, em vez de
     // esperar o refresh de 2min (que deixava o carro recém-instalado invisível).
-    this.deviceRegistry.setRefresher(() => this.refreshDeviceMapping());
+    this.deviceRegistry.setRefresher(() => this.agendarRefreshMapping());
 
     // Configurar emitter de alertas para WebSocket
     this.alertsService.setEmitter((tenantId, alert) => {
@@ -224,6 +229,21 @@ export class TraccarGateway
     }
   }
 
+  /**
+   * Refresh pedido por vínculo/desvínculo. Quem chega dentro da janela entra
+   * no refresh já agendado; o atraso máximo é a própria janela (1 s).
+   */
+  agendarRefreshMapping(): Promise<void> {
+    if (this.refreshAgendado) return this.refreshAgendado;
+    this.refreshAgendado = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        this.refreshAgendado = null;
+        void this.refreshDeviceMapping().finally(resolve);
+      }, this.REFRESH_DEBOUNCE_MS);
+    });
+    return this.refreshAgendado;
+  }
+
   // Refresh periódico — evita que veículos novos cadastrados após o boot
   // fiquem invisíveis no mapping (gateway sem rota de tenant) até restart.
   // Interval em ms; aceitável para 20k devices porque a query é leve (índice em deletedAt + traccarDeviceId).
@@ -293,6 +313,56 @@ export class TraccarGateway
         this.server.to(`tenant:${tenantId}`).emit('devices:batch', devices);
       }
     }
+    if (this.loteAtributosPorTenant.size > 0) {
+      const lotes = this.loteAtributosPorTenant;
+      this.loteAtributosPorTenant = new Map();
+      for (const [tenantId, itens] of lotes) {
+        this.server.to(`tenant:${tenantId}`).emit('attrs:batch', itens);
+      }
+    }
+  }
+
+  /**
+   * Posição reprovada pelo portão ainda traz estado verdadeiro do veículo
+   * (ignição, energia, bloqueio). Vai pro painel só a lista branca — nunca
+   * latitude, longitude, velocidade ou rumo, que são justamente o que foi
+   * reprovado. O app do associado não recebe.
+   */
+  private acumularAtributos(position: {
+    deviceId: number;
+    [key: string]: unknown;
+  }) {
+    const tenantId = this.deviceTenantMap.get(position.deviceId);
+    if (!tenantId) return;
+
+    const serverTime = position.serverTime;
+    if (typeof serverTime !== 'string') return;
+    // Pacote da memória do rastreador (reenvio após ficar sem sinal): o
+    // `serverTime` é de agora, mas o estado é de horas atrás.
+    const t = Date.parse(serverTime);
+    const tDevice =
+      typeof position.deviceTime === 'string'
+        ? Date.parse(position.deviceTime)
+        : NaN;
+    if (Number.isFinite(t) && Number.isFinite(tDevice)) {
+      if (t - tDevice > ATRIBUTOS_IDADE_MAX_MS) return;
+    }
+
+    const origem = (position.attributes ?? {}) as Record<string, unknown>;
+    const attributes: Record<string, unknown> = {};
+    for (const chave of ATRIBUTOS_LISTA_BRANCA) {
+      if (origem[chave] !== undefined) attributes[chave] = origem[chave];
+    }
+    if (Object.keys(attributes).length === 0) return;
+
+    const item: AtributosItem = {
+      deviceId: position.deviceId,
+      serverTime,
+      attributes,
+    };
+    const lote = this.loteAtributosPorTenant.get(tenantId);
+    if (lote) lote.push(item);
+    else this.loteAtributosPorTenant.set(tenantId, [item]);
   }
 
   /**
@@ -392,6 +462,7 @@ export class TraccarGateway
         const quality = assessPosition(position as unknown as TraccarPosition);
         if (!quality.trustworthy) {
           this.countRejected(position.deviceId, quality.reason);
+          this.acumularAtributos(position);
           continue;
         }
 
@@ -463,6 +534,29 @@ interface HandshakePayload {
   tenantId?: string;
   email?: string;
   name?: string;
+}
+
+/** Atributos que o painel pode aplicar sem coordenada confiável. */
+const ATRIBUTOS_LISTA_BRANCA = [
+  'ignition',
+  'power',
+  'charge',
+  'blocked',
+  'batteryLevel',
+  'sat',
+  'motion',
+  'powerCut',
+  'jamming',
+  'alarm',
+] as const;
+
+/** Acima disso entre `deviceTime` e `serverTime`, o pacote é memória do rastreador. */
+const ATRIBUTOS_IDADE_MAX_MS = 5 * 60 * 1000;
+
+interface AtributosItem {
+  deviceId: number;
+  serverTime: string;
+  attributes: Record<string, unknown>;
 }
 
 interface TraccarWsMessage {

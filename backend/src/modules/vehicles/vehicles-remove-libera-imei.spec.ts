@@ -17,7 +17,7 @@ function servico(veiculo: { id: string; uniqueId: string }) {
       update: jest.fn().mockImplementation(({ data }) => ({ ...veiculo, ...data })),
     },
   };
-  const s = new VehiclesService(prisma as never, {} as never, {} as never);
+  const s = new VehiclesService(prisma as never, {} as never, {} as never, {} as never);
   return { s, prisma };
 }
 
