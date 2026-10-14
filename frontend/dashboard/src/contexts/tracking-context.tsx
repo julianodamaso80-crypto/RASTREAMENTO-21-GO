@@ -20,14 +20,15 @@ import { tagCasaBusca, tagsDaAba, type FiltroDoMapa } from '@/lib/tags-no-mapa';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import { useTraccarSocket } from '@/hooks/use-traccar-socket';
-import { getDisplayStatus, estaAndando, estaConectado } from '@/lib/utils';
+import { estaConectado } from '@/lib/utils';
+import { criarCacheLinhas } from '@/lib/vehicle-row';
+import type { LoteTempoReal } from '@/lib/coalescedor-lotes';
 import { matchesVehicleSearch } from '@/lib/vehicle-search';
 import {
   MODO_POLLING,
   POLL_MS,
   aplicarAtributos,
   decidirPolling,
-  type AtributosItem,
   mesclarDevices,
   mesclarPosicoes,
 } from '@/lib/tracking-polling';
@@ -366,17 +367,6 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Lote de 1 s: um estado novo para todas as posições do lote, e não um
-  // render por posição.
-  const handlePositionsBatch = useCallback((positions: TraccarPosition[]) => {
-    ultimoLoteEmRef.current = Date.now();
-    setPositionMap((prev) => {
-      const next = new Map(prev);
-      for (const position of positions) next.set(position.deviceId, position);
-      return next;
-    });
-  }, []);
-
   const handleDeviceUpdate = useCallback((device: TraccarDevice) => {
     setDeviceMap((prev) => {
       const next = new Map(prev);
@@ -385,21 +375,35 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // `devices:batch` sai a cada mensagem do rastreador, mesmo sem GPS: é o
-  // melhor sinal de que o elo backend↔Traccar está vivo (watchdog do socket mudo).
-  const handleDevicesBatch = useCallback((devices: TraccarDevice[]) => {
+  // `positions:batch`, `devices:batch` e `attrs:batch` do mesmo segundo chegam
+  // aqui juntos: um render só. `devices:batch` sai a cada mensagem do
+  // rastreador, mesmo sem GPS — é o melhor sinal de que o elo backend↔Traccar
+  // está vivo (watchdog do socket mudo). Atributos (ignição/energia de pacote
+  // sem fix) vêm depois das posições e nunca mexem na coordenada.
+  const handleLote = useCallback(({ positions, devices, atributos }: LoteTempoReal) => {
     ultimoLoteEmRef.current = Date.now();
-    setDeviceMap((prev) => {
-      const next = new Map(prev);
-      for (const device of devices) next.set(device.id, device);
-      return next;
-    });
-  }, []);
-
-  // Ignição/energia de pacote sem fix: muda atributos, nunca a coordenada.
-  const handleAttrsBatch = useCallback((itens: AtributosItem[]) => {
-    ultimoLoteEmRef.current = Date.now();
-    setPositionMap((prev) => aplicarAtributos(prev, itens));
+    if (process.env.NODE_ENV !== 'production') {
+      const stats = statsDev();
+      stats.lotes++;
+      stats.ultimoLoteTamanho = positions.length + devices.length + atributos.length;
+    }
+    if (positions.length > 0 || atributos.length > 0) {
+      setPositionMap((prev) => {
+        let next = prev;
+        if (positions.length > 0) {
+          next = new Map(prev);
+          for (const position of positions) next.set(position.deviceId, position);
+        }
+        return atributos.length > 0 ? aplicarAtributos(next, atributos) : next;
+      });
+    }
+    if (devices.length > 0) {
+      setDeviceMap((prev) => {
+        const next = new Map(prev);
+        for (const device of devices) next.set(device.id, device);
+        return next;
+      });
+    }
   }, []);
 
   const handleAlert = useCallback((alert: Alert) => {
@@ -432,10 +436,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const { isConnected } = useTraccarSocket({
     token,
     onPositionUpdate: handlePositionUpdate,
-    onPositionsBatch: handlePositionsBatch,
     onDeviceUpdate: handleDeviceUpdate,
-    onDevicesBatch: handleDevicesBatch,
-    onAttrsBatch: handleAttrsBatch,
+    onLote: handleLote,
     onAlert: handleAlert,
     onBleSighting: handleBleSighting,
     onReconnect: handleReconnect,
@@ -454,57 +456,22 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, []);
 
-  // Merge vehicles + devices + positions
+  // Merge vehicles + devices + positions. Só recalcula a linha de quem mudou;
+  // o `relogio` (minuto) recalcula todas, porque o status depende da hora.
+  const cacheLinhas = useRef(criarCacheLinhas());
   const vehicles = useMemo<VehicleWithTracking[]>(() => {
+    const cache = cacheLinhas.current;
+    const antes = cache.recalculos;
     const result: VehicleWithTracking[] = [];
     vehicleMap.forEach((vehicle) => {
       const deviceId = vehicle.traccarDeviceId;
       const device = deviceId ? deviceMap.get(deviceId) : undefined;
       const position = deviceId ? positionMap.get(deviceId) : undefined;
-
-      const speed = position?.speed ?? 0;
-      // `lastUpdate` = heartbeat do device (Traccar atualiza mesmo em keep-alive
-      // sem GPS novo). `positionTime` = quando o GPS efetivamente mexeu.
-      // Os dois divergem quando o rastreador para de mandar posições mas continua
-      // online — caso típico de carro parado com ignição ligada em GT06/Concox.
-      // Sem fallback para `vehicle.updatedAt`: rastreador que nunca falou com o
-      // nosso servidor (migração da Rede ainda não pegou) aparecia como
-      // "desligada há 4h" — a hora era a do cadastro, não de contato nenhum.
-      const lastUpdate = device?.lastUpdate || position?.serverTime || '';
-      const positionTime = position?.fixTime || position?.deviceTime || position?.serverTime || null;
-      const deviceStatus = device?.status || 'offline';
-      const ignition = (position?.attributes?.ignition as boolean) ?? false;
-      const vehicleType = vehicle.vehicleType ?? 'CAR';
-      const displayStatus = getDisplayStatus({
-        lastUpdate,
-        positionTime: position ? positionTime : null,
-        latitude: position?.latitude ?? 0,
-        longitude: position?.longitude ?? 0,
-        vehicleStatus: vehicle.status,
-        vehicleType,
-      });
-      // Como na Rede: desconectado não informa velocidade nem movimento.
-      const moving = estaConectado(displayStatus) && estaAndando(speed, positionTime);
-
-      result.push({
-        ...vehicle,
-        vehicleType,
-        latitude: position?.latitude ?? 0,
-        longitude: position?.longitude ?? 0,
-        speed,
-        course: position?.course ?? 0,
-        address: position?.address ?? '',
-        lastUpdate,
-        positionTime,
-        deviceStatus,
-        displayStatus,
-        ignition,
-        moving,
-        satellites: (position?.attributes?.sat as number) ?? 0,
-      });
+      result.push(cache.obter(vehicle, device, position, relogio));
     });
+    cache.podar(vehicleMap);
+    if (process.env.NODE_ENV !== 'production') statsDev().recalculos += cache.recalculos - antes;
     return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- relogio só força o recálculo
   }, [vehicleMap, deviceMap, positionMap, relogio]);
 
   // Filtros
@@ -593,39 +560,85 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     setUnreadCount(0);
   }, []);
 
+  // Sem memo, qualquer estado do Provider (ex.: o `relogio`) recriava o objeto
+  // e re-renderizava todos os consumidores.
+  const value = useMemo<TrackingContextType>(
+    () => ({
+      vehicles,
+      filteredVehicles,
+      selectedIds,
+      selectedVehicleId,
+      selectVehicle,
+      toggleVehicle,
+      searchQuery,
+      setSearchQuery,
+      statusFilter,
+      setStatusFilter,
+      statusCounts,
+      isSocketConnected: isConnected,
+      isLoading,
+      alerts,
+      unreadCount,
+      markAlertRead,
+      markAllAlertsRead,
+      bleTags,
+      refreshBleTags,
+      tags,
+      filteredTags,
+      selectedTagId,
+      selectTag,
+      refreshTags,
+      updateVehicleLocal,
+    }),
+    [
+      vehicles,
+      filteredVehicles,
+      selectedIds,
+      selectedVehicleId,
+      selectVehicle,
+      toggleVehicle,
+      searchQuery,
+      setSearchQuery,
+      statusFilter,
+      setStatusFilter,
+      statusCounts,
+      isConnected,
+      isLoading,
+      alerts,
+      unreadCount,
+      markAlertRead,
+      markAllAlertsRead,
+      bleTags,
+      refreshBleTags,
+      tags,
+      filteredTags,
+      selectedTagId,
+      selectTag,
+      refreshTags,
+      updateVehicleLocal,
+    ],
+  );
+
   return (
-    <TrackingContext.Provider
-      value={{
-        vehicles,
-        filteredVehicles,
-        selectedIds,
-        selectedVehicleId,
-        selectVehicle,
-        toggleVehicle,
-        searchQuery,
-        setSearchQuery,
-        statusFilter,
-        setStatusFilter,
-        statusCounts,
-        isSocketConnected: isConnected,
-        isLoading,
-        alerts,
-        unreadCount,
-        markAlertRead,
-        markAllAlertsRead,
-        bleTags,
-        refreshBleTags,
-        tags,
-        filteredTags,
-        selectedTagId,
-        selectTag,
-        refreshTags,
-        updateVehicleLocal,
-      }}
-    >
+    <TrackingContext.Provider value={value}>
       {children}
     </TrackingContext.Provider>
   );
+}
+
+interface TrackingStats {
+  recalculos: number;
+  lotes: number;
+  ultimoLoteTamanho: number;
+}
+
+/** Contadores para medir no navegador (`window.__trackingStats`); só fora de produção. */
+function statsDev(): TrackingStats {
+  // No SSR não há window: conta num objeto descartável.
+  if (typeof window === 'undefined') return { recalculos: 0, lotes: 0, ultimoLoteTamanho: 0 };
+  const w = window as unknown as { __trackingStats?: TrackingStats };
+  w.__trackingStats ??= { recalculos: 0, lotes: 0, ultimoLoteTamanho: 0 };
+  return w.__trackingStats;
 }
 
 export function useTracking() {
