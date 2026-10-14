@@ -13,7 +13,7 @@ import { TransformInterceptor } from '../../common/interceptors/transform.interc
  * Prova no Express de verdade (não em mock de `res`): com o etag igual o
  * navegador recebe 304 sem corpo, mesmo com o `TransformInterceptor`
  * envelopando o retorno em `{ data }`. Os guards globais não sobem aqui; um
- * middleware põe o `tenantId` que o `TenantGuard` poria.
+ * middleware põe o `tenantId` e o `user` que o `TenantGuard`/JWT poriam.
  */
 
 const veiculos: Record<string, Array<{ traccarDeviceId: number }>> = {
@@ -55,9 +55,10 @@ async function subir(flag: string | undefined) {
     logger: false,
   });
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    (req as unknown as { tenantId: string }).tenantId = String(
-      req.headers['x-tenant'],
-    );
+    const r = req as unknown as { tenantId: string; user: { role: string } };
+    r.tenantId = String(req.headers['x-tenant']);
+    // O RolesGuard de piso do controller (50cfdf8) exige um papel interno.
+    r.user = { role: 'OPERATOR' };
     next();
   });
   app.useGlobalInterceptors(new TransformInterceptor());
