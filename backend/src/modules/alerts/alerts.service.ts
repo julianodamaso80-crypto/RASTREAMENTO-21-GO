@@ -39,6 +39,10 @@ interface VehicleState {
 
 const NO_DUPLICATE_WINDOW_MS = 6 * 60 * 60 * 1000;
 
+// Tenant com 2,6 M de não lidos: contar tudo custava ~850 ms por aba aberta.
+// A UI só mostra 99+ / 999+, então basta contar até o teto.
+const UNREAD_COUNT_TETO = 1000;
+
 @Injectable()
 export class AlertsService {
   private readonly logger = new Logger(AlertsService.name);
@@ -512,8 +516,11 @@ export class AlertsService {
   }
 
   async getUnreadCount(tenantId: string) {
-    const count = await this.prisma.alert.count({ where: { tenantId, read: false } });
-    return { count };
+    const rows = await this.prisma.$queryRaw<Array<{ count: number }>>(
+      Prisma.sql`SELECT count(*)::int AS count FROM (SELECT 1 FROM alerts WHERE tenant_id = ${tenantId}::uuid AND read = false LIMIT 1000) t`,
+    );
+    const count = rows[0]?.count ?? 0;
+    return { count, capped: count >= UNREAD_COUNT_TETO };
   }
 
   async assume(id: string, tenantId: string, actor: ActorInfo) {

@@ -19,7 +19,7 @@ export default function AlertsPage() {
           <div>
             <h1 className="text-2xl font-bold">Alertas</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {unreadCount} não lido{unreadCount !== 1 ? 's' : ''}
+              {unreadCount >= 1000 ? '999+' : unreadCount} não lido{unreadCount !== 1 ? 's' : ''}
             </p>
           </div>
           {unreadCount > 0 && (
