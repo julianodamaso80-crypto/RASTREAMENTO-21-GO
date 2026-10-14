@@ -216,6 +216,56 @@ export class TraccarService implements OnModuleInit {
     return this.frotaCompartilhada('/positions', buscar);
   }
 
+  /**
+   * Última posição só dos devices pedidos. Ao contrário de `getPositions()`,
+   * nunca vira consulta da frota inteira: sem id válido não chama o Traccar,
+   * e o que vier fora do conjunto pedido é descartado.
+   */
+  async getPositionsDosDevices(deviceIds: number[]): Promise<TraccarPosition[]> {
+    return this.buscarPorIds<TraccarPosition>(
+      '/positions',
+      'deviceId',
+      deviceIds,
+      (p) => p.deviceId,
+    );
+  }
+
+  /** Devices pelos ids, com as mesmas garantias de `getPositionsDosDevices`. */
+  async getDevicesPorIds(deviceIds: number[]): Promise<TraccarDevice[]> {
+    return this.buscarPorIds<TraccarDevice>('/devices', 'id', deviceIds, (d) => d.id);
+  }
+
+  private static readonly IDS_POR_LOTE = 100;
+
+  private async buscarPorIds<T>(
+    rota: '/positions' | '/devices',
+    chave: 'deviceId' | 'id',
+    ids: number[],
+    idDe: (item: T) => number,
+  ): Promise<T[]> {
+    const pedidos = [
+      ...new Set(ids.filter((id) => Number.isInteger(id) && id > 0)),
+    ];
+    if (pedidos.length === 0) return [];
+    const conjunto = new Set(pedidos);
+    const resultado: T[] = [];
+    // Lotes com teto para a URL não estourar com associado de muitos veículos.
+    for (let i = 0; i < pedidos.length; i += TraccarService.IDS_POR_LOTE) {
+      const params = new URLSearchParams();
+      for (const id of pedidos.slice(i, i + TraccarService.IDS_POR_LOTE)) {
+        params.append(chave, String(id));
+      }
+      const data = await this.withRetry(async () => {
+        const { data } = await this.client.get(`${rota}?${params.toString()}`);
+        return data as T[];
+      });
+      for (const item of data ?? []) {
+        if (conjunto.has(idDe(item))) resultado.push(item);
+      }
+    }
+    return resultado;
+  }
+
   /** Início da busca da lista completa que o coalesce está servindo agora; `null` se não há uma vigente. */
   frotaBuscadaEm(rota: '/devices' | '/positions'): number | null {
     const emCache = this.frotaCache.get(rota);
