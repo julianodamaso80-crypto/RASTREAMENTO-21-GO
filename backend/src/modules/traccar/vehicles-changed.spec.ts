@@ -8,8 +8,8 @@ describe('DeviceRegistryService.onChanged', () => {
     registry.onChanged(cb);
     registry.notifyDeviceChanged('a');
     registry.notifyDeviceChanged('b');
-    expect(cb).toHaveBeenNthCalledWith(1, 'a');
-    expect(cb).toHaveBeenNthCalledWith(2, 'b');
+    expect(cb).toHaveBeenNthCalledWith(1, null, 'a');
+    expect(cb).toHaveBeenNthCalledWith(2, null, 'b');
   });
 
   it('ouvinte que lança não derruba a notificação', () => {
@@ -33,44 +33,60 @@ describe('TraccarGateway — vehicles:changed', () => {
       {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any,
       registry,
     );
+    // Com namespace o Nest injeta um Namespace: `adapter` direto, sem `sockets.adapter`.
     gateway.server = {
       to,
-      sockets: {
-        adapter: {
-          rooms: new Map([
-            ['tenant:a', new Set(['s1'])],
-            ['tenant:b', new Set(['s2'])],
-            ['associate:x', new Set(['s3'])],
-            ['s1', new Set(['s1'])],
-          ]),
-        },
+      sockets: new Map(),
+      adapter: {
+        rooms: new Map([
+          ['tenant:a', new Set(['s1'])],
+          ['tenant:b', new Set(['s2'])],
+          ['associate:x', new Set(['s3'])],
+          ['s1', new Set(['s1'])],
+        ]),
       },
     } as any;
     (gateway as any).registrarOuvinteVehicles();
     return { registry, to, emit };
   }
 
-  it('3 notificações em 2 s viram 1 emit por sala de tenant', () => {
+  it('3 notificações do tenant A em 2 s viram 1 emit só para tenant:a, sem motivo', () => {
     const { registry, to, emit } = montar();
-    registry.notifyDeviceChanged('um');
+    registry.notifyDeviceChanged('placa ABC1234', 'a');
     jest.advanceTimersByTime(500);
-    registry.notifyDeviceChanged('dois');
+    registry.notifyDeviceChanged('placa DEF5678', 'a');
     jest.advanceTimersByTime(500);
-    registry.notifyDeviceChanged('tres');
+    registry.notifyVehiclesChanged('a', 'imei 123');
     expect(emit).not.toHaveBeenCalled();
     jest.advanceTimersByTime(1_000);
 
+    expect(to).toHaveBeenCalledTimes(1);
+    expect(to).toHaveBeenCalledWith('tenant:a');
+    expect(emit).toHaveBeenCalledTimes(1);
+    const [evento, payload] = emit.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(evento).toBe('vehicles:changed');
+    expect(Object.keys(payload)).toEqual(['at']);
+  });
+
+  it('notificação global (null) vai para toda sala de tenant', () => {
+    const { registry, to, emit } = montar();
+    registry.notifyVehiclesChanged(null, 'reconciliação');
+    jest.advanceTimersByTime(2_000);
     expect(to).toHaveBeenCalledTimes(2);
     expect(to).toHaveBeenCalledWith('tenant:a');
     expect(to).toHaveBeenCalledWith('tenant:b');
     expect(emit).toHaveBeenCalledTimes(2);
-    expect(emit).toHaveBeenCalledWith(
-      'vehicles:changed',
-      expect.objectContaining({ motivo: expect.any(String), at: expect.stringMatching(/^\d{4}-/) }),
-    );
+  });
 
-    registry.notifyDeviceChanged('depois');
-    jest.advanceTimersByTime(2_000);
-    expect(emit).toHaveBeenCalledTimes(4);
+  it('tenants diferentes têm timers independentes', () => {
+    const { registry, to } = montar();
+    registry.notifyVehiclesChanged('a', 'x');
+    jest.advanceTimersByTime(1_500);
+    registry.notifyVehiclesChanged('b', 'y');
+    jest.advanceTimersByTime(600);
+    expect(to).toHaveBeenCalledTimes(1);
+    expect(to).toHaveBeenCalledWith('tenant:a');
+    jest.advanceTimersByTime(1_500);
+    expect(to).toHaveBeenCalledWith('tenant:b');
   });
 });

@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DeviceRegistryService } from '../traccar/device-registry.service';
 import { assessComms } from './asset-comms';
 import { BLE_DEVICE_MODELS } from '../../common/constants/ble-models';
 import { filtroBusca } from '../../common/search/termo-busca';
@@ -45,7 +46,10 @@ export interface FindAssetsParams {
  */
 @Injectable()
 export class ClientsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private deviceRegistry?: DeviceRegistryService,
+  ) {}
 
   /** Teto de itens por página — o front oferece até 500, como o concorrente. */
   private static readonly MAX_PER_PAGE = 500;
@@ -522,17 +526,20 @@ export class ClientsService {
       data: { appAccessBlocked: blocked },
       select: { id: true, plate: true, appAccessBlocked: true },
     });
+    this.deviceRegistry?.notifyVehiclesChanged(tenantId, 'acesso ao app do ativo');
     return v;
   }
 
   /** Liga ou desliga o botão de bloqueio do app do associado para UM ativo. */
   async setBlockerAccess(tenantId: string, vehicleId: string, allowed: boolean) {
     await this.assertVehicle(tenantId, vehicleId);
-    return this.prisma.vehicle.update({
+    const v = await this.prisma.vehicle.update({
       where: { id: vehicleId },
       data: { blockerAccessAllowed: allowed },
       select: { id: true, plate: true, blockerAccessAllowed: true },
     });
+    this.deviceRegistry?.notifyVehiclesChanged(tenantId, 'acesso ao bloqueador do ativo');
+    return v;
   }
 
   /**
@@ -546,7 +553,7 @@ export class ClientsService {
     status: FinancialStatus,
   ) {
     await this.assertVehicle(tenantId, vehicleId);
-    return this.prisma.vehicle.update({
+    const v = await this.prisma.vehicle.update({
       where: { id: vehicleId },
       data: { financialStatus: status, financialStatusAt: new Date() },
       select: {
@@ -556,6 +563,8 @@ export class ClientsService {
         financialStatusAt: true,
       },
     });
+    this.deviceRegistry?.notifyVehiclesChanged(tenantId, 'situação financeira do ativo');
+    return v;
   }
 
   /** Corrige quem instalou — o card e a contagem por técnico saem daqui. */

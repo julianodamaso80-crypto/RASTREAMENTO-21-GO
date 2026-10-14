@@ -259,7 +259,7 @@ export class VehiclesService {
         traccarDeviceId,
       },
     });
-    this.deviceRegistry.notifyDeviceChanged(`cadastro da placa ${dto.plate}`);
+    this.deviceRegistry.notifyDeviceChanged(`cadastro da placa ${dto.plate}`, tenantId);
 
     return vehicle;
   }
@@ -282,7 +282,7 @@ export class VehiclesService {
         associateId: dto.associateId,
       },
     });
-    this.deviceRegistry.notifyVehiclesChanged(`edição do veículo ${updated.plate}`);
+    this.deviceRegistry.notifyVehiclesChanged(tenantId, `edição do veículo ${updated.plate}`);
 
     // Atualiza nome no Traccar se placa mudou
     if (dto.plate && vehicle.traccarDeviceId) {
@@ -317,9 +317,9 @@ export class VehiclesService {
     });
     // O rastreador deixa de pertencer a este tenant/veículo no tempo real.
     if (vehicle.traccarDeviceId) {
-      this.deviceRegistry.notifyDeviceChanged(`exclusão da placa ${vehicle.plate}`);
+      this.deviceRegistry.notifyDeviceChanged(`exclusão da placa ${vehicle.plate}`, tenantId);
     } else {
-      this.deviceRegistry.notifyVehiclesChanged(`exclusão da placa ${vehicle.plate}`);
+      this.deviceRegistry.notifyVehiclesChanged(tenantId, `exclusão da placa ${vehicle.plate}`);
     }
     return removido;
   }
@@ -389,9 +389,14 @@ export class VehiclesService {
       }
     }
 
-    return this.prisma.vehicle.update({
+    const atualizado = await this.prisma.vehicle.update({
       where: { id },
       data: { status: newStatus },
     });
+    this.deviceRegistry.notifyVehiclesChanged(
+      tenantId,
+      `${op === 'block' ? 'bloqueio' : 'desbloqueio'} do veículo ${atualizado.plate}`,
+    );
+    return atualizado;
   }
 }

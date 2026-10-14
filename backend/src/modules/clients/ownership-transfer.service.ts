@@ -3,10 +3,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockService } from '../stock/stock.service';
+import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
   normalizeFinancialStatus,
   normalizeSgaStatusLabel,
@@ -29,6 +31,7 @@ export class OwnershipTransferService {
   constructor(
     private prisma: PrismaService,
     private stock: StockService,
+    @Optional() private deviceRegistry?: DeviceRegistryService,
   ) {}
 
   async transfer(
@@ -164,6 +167,8 @@ export class OwnershipTransferService {
 
       return { associate, vehicle: atualizado };
     });
+
+    this.deviceRegistry?.notifyVehiclesChanged(tenantId, 'troca de titularidade');
 
     const de = vehicle.associate
       ? `${vehicle.associate.name} (${vehicle.associate.cpf})`

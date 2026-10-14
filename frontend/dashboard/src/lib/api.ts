@@ -440,9 +440,9 @@ export const alertsApi = {
     });
     return res.data;
   },
-  getUnreadCount: async (): Promise<number> => {
-    const res = await api.get<ApiResponse<{ count: number }>>('/alerts/unread-count');
-    return res.data.data.count;
+  getUnreadCount: async (): Promise<{ count: number; capped: boolean }> => {
+    const res = await api.get<ApiResponse<{ count: number; capped?: boolean }>>('/alerts/unread-count');
+    return { count: res.data.data.count, capped: res.data.data.capped === true };
   },
   markAsRead: async (id: string): Promise<void> => {
     await api.patch(`/alerts/${id}/read`);

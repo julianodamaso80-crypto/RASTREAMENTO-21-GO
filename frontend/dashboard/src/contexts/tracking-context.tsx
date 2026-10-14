@@ -29,6 +29,7 @@ import {
   MODO_POLLING,
   POLL_MS,
   aplicarAtributos,
+  criarSequencia,
   decidirPolling,
   devePedirFrotaHttp,
   mesclarDevices,
@@ -81,6 +82,8 @@ interface TrackingContextType {
   isLoading: boolean;
   alerts: Alert[];
   unreadCount: number;
+  /** A contagem bateu no teto do backend: mostrar 999+ mesmo após marcar uma como lida. */
+  unreadCapped: boolean;
   markAlertRead: (id: string) => void;
   markAllAlertsRead: () => void;
   bleTags: BleTag[];
@@ -129,6 +132,9 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCapped, setUnreadCapped] = useState(false);
+  // Cargas da lista de veículos (inicial, poll e evento) podem se sobrepor.
+  const sequenciaVehiclesRef = useRef(criarSequencia());
   const [statusFilter, setStatusFilter] = useState<FiltroDoMapa>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [bleTags, setBleTags] = useState<BleTag[]>([]);
@@ -209,6 +215,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         // outras quatro e o painel inteiro ficava em branco — foi o que os
         // usuários viram em 22/09/2026. Aqui cada pedaço que chega é usado, e
         // o que falhou só deixa a sua própria parte vazia: a tela SEMPRE abre.
+        const seqInicial = sequenciaVehiclesRef.current.proximo();
         const [vehiclesR, devicesR, positionsR, alertsR, unreadR] = await Promise.allSettled([
           loadAllVehicles(),
           pedeFrota ? traccarApi.getDevices() : Promise.resolve([] as TraccarDevice[]),
@@ -218,7 +225,10 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         ]);
 
         if (alertsR.status === 'fulfilled') setAlerts(alertsR.value.data);
-        if (unreadR.status === 'fulfilled') setUnreadCount(unreadR.value);
+        if (unreadR.status === 'fulfilled') {
+          setUnreadCount(unreadR.value.count);
+          setUnreadCapped(unreadR.value.capped);
+        }
 
         const vMap = new Map<string, Vehicle>();
         if (vehiclesR.status === 'fulfilled') {
@@ -236,7 +246,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
           lembrarIgnicao(positionsR.value);
         }
 
-        setVehicleMap(vMap);
+        if (sequenciaVehiclesRef.current.aplicavel(seqInicial)) setVehicleMap(vMap);
         setDeviceMap(dMap);
         setPositionMap(pMap);
 
@@ -322,6 +332,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         ultimoLoteEm: ultimoLoteEmRef.current,
         ultimaFrotaEm: ultimaFrotaEmRef.current,
         ultimosVehiclesEm: ultimosVehiclesEmRef.current,
+        recebeEventos: user?.role !== 'CLIENT',
       });
       const forcar = forcarCompletoRef.current;
       const buscarFrota = devePedirFrotaHttp(user?.role) && (decisao.frota || forcar);
@@ -333,6 +344,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       if (buscarFrota) ultimaFrotaEmRef.current = agora;
       if (buscarVehicles) ultimosVehiclesEmRef.current = agora;
       emAndamento = true;
+      const seq = buscarVehicles ? sequenciaVehiclesRef.current.proximo() : 0;
       try {
         const [devices, positions, vehiclesList] = await Promise.all([
           buscarFrota ? traccarApi.getDevices() : Promise.resolve(null),
@@ -347,7 +359,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
           lembrarIgnicao(positions);
           setPositionMap((prev) => mesclarPosicoes(prev, positions));
         }
-        if (vehiclesList) {
+        if (vehiclesList && sequenciaVehiclesRef.current.aplicavel(seq)) {
           setVehicleMap(new Map(vehiclesList.map((v) => [v.id, v])));
         }
       } catch {
@@ -465,22 +477,50 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   // no fim dela. Marca ultimosVehiclesEmRef para o reload periódico não repetir.
   const ultimoReloadEventoEmRef = useRef(0);
   const reloadEventoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Aba escondida não recarrega: o aviso fica pendente e roda ao voltar.
+  const reloadEventoPendenteRef = useRef(false);
   const handleVehiclesChanged = useCallback(() => {
+    if (document.hidden) {
+      reloadEventoPendenteRef.current = true;
+      return;
+    }
     if (reloadEventoTimerRef.current) return;
     const recarregar = () => {
       reloadEventoTimerRef.current = null;
+      if (document.hidden) {
+        reloadEventoPendenteRef.current = true;
+        return;
+      }
       ultimoReloadEventoEmRef.current = Date.now();
       ultimosVehiclesEmRef.current = Date.now();
+      const seq = sequenciaVehiclesRef.current.proximo();
       loadAllVehicles()
-        .then((lista) => setVehicleMap(new Map(lista.map((v) => [v.id, v]))))
+        .then((lista) => {
+          if (sequenciaVehiclesRef.current.aplicavel(seq)) {
+            setVehicleMap(new Map(lista.map((v) => [v.id, v])));
+          }
+        })
         .catch(() => {
           // mantém os últimos dados; o reload periódico é a rede de segurança
         });
     };
-    const espera = VEHICLES_EVENTO_MIN_MS - (Date.now() - ultimoReloadEventoEmRef.current);
-    if (espera <= 0) recarregar();
-    else reloadEventoTimerRef.current = setTimeout(recarregar, espera);
+    // Jitter de 0–3 s: várias abas do escritório recebem o mesmo evento no
+    // mesmo instante e não devem bater juntas no /vehicles.
+    const espera =
+      Math.max(0, VEHICLES_EVENTO_MIN_MS - (Date.now() - ultimoReloadEventoEmRef.current)) +
+      Math.random() * 3_000;
+    reloadEventoTimerRef.current = setTimeout(recarregar, espera);
   }, [loadAllVehicles]);
+  useEffect(() => {
+    const aoVoltar = () => {
+      if (!document.hidden && reloadEventoPendenteRef.current) {
+        reloadEventoPendenteRef.current = false;
+        handleVehiclesChanged();
+      }
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => document.removeEventListener('visibilitychange', aoVoltar);
+  }, [handleVehiclesChanged]);
   useEffect(
     () => () => {
       if (reloadEventoTimerRef.current) clearTimeout(reloadEventoTimerRef.current);
@@ -633,6 +673,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     await alertsApi.markAllAsRead();
     setAlerts((prev) => prev.map((a) => ({ ...a, read: true })));
     setUnreadCount(0);
+    setUnreadCapped(false);
   }, []);
 
   // Sem memo, qualquer estado do Provider recriava o objeto
@@ -654,6 +695,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       isLoading,
       alerts,
       unreadCount,
+      unreadCapped,
       markAlertRead,
       markAllAlertsRead,
       bleTags,
@@ -681,6 +723,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       isLoading,
       alerts,
       unreadCount,
+      unreadCapped,
       markAlertRead,
       markAllAlertsRead,
       bleTags,

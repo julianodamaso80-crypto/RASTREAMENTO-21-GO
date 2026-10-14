@@ -2,6 +2,7 @@ import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import {
   aplicarAtributos,
   decidirPolling,
+  criarSequencia,
   devePedirFrotaHttp,
   mesclarDevices,
   mesclarPosicoes,
@@ -25,6 +26,7 @@ function estado(parcial: Partial<EstadoPolling>): EstadoPolling {
     ultimoLoteEm: AGORA - 1_000,
     ultimaFrotaEm: AGORA - 10_000,
     ultimosVehiclesEm: AGORA - 10_000,
+    recebeEventos: true,
     ...parcial,
   };
 }
@@ -153,6 +155,15 @@ describe('decidirPolling', () => {
     expect(v(AGORA - VEHICLES_CONTINGENCIA_MS)).toBe(true);
     expect(v(AGORA - VEHICLES_CONTINGENCIA_MS + POLL_MS / 2)).toBe(true);
     expect(v(AGORA - VEHICLES_CONTINGENCIA_MS + POLL_MS / 2 + 1)).toBe(false);
+  });
+
+  it('contingência com socket ok mas sem receber eventos (CLIENT) mantém os 32 s', () => {
+    const v = (ultimosVehiclesEm: number, recebeEventos: boolean) =>
+      decidirPolling(estado({ ultimosVehiclesEm, recebeEventos })).vehicles;
+    expect(v(AGORA - VEHICLES_MS, false)).toBe(true);
+    expect(v(AGORA - 10_000, false)).toBe(false);
+    expect(v(AGORA - VEHICLES_MS, true)).toBe(false);
+    expect(v(AGORA - VEHICLES_CONTINGENCIA_MS, true)).toBe(true);
   });
 
   it('legado recarrega vehicles a cada 4 tiques, independentemente do relógio', () => {
@@ -346,5 +357,28 @@ describe('devePedirFrotaHttp', () => {
     for (const r of ['SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'VIEWER', undefined]) {
       expect(devePedirFrotaHttp(r)).toBe(true);
     }
+  });
+});
+
+describe('criarSequencia', () => {
+  it('só a carga mais nova já aplicada vale; resposta atrasada é descartada', () => {
+    const seq = criarSequencia();
+    const a = seq.proximo();
+    const b = seq.proximo();
+    expect(b).toBeGreaterThan(a);
+    // b (iniciada depois) responde primeiro e é aplicada.
+    expect(seq.aplicavel(b)).toBe(true);
+    // a responde atrasada: mais velha que a última aplicada.
+    expect(seq.aplicavel(a)).toBe(false);
+    // repetir a mesma aplicada não regride nada.
+    expect(seq.aplicavel(b)).toBe(true);
+  });
+
+  it('ordem normal aplica todas', () => {
+    const seq = criarSequencia();
+    const a = seq.proximo();
+    expect(seq.aplicavel(a)).toBe(true);
+    const b = seq.proximo();
+    expect(seq.aplicavel(b)).toBe(true);
   });
 });

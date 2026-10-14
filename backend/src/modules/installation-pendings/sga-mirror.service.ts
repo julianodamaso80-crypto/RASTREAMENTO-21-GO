@@ -1,5 +1,6 @@
-import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, type OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
   HINOVA_CLIENT,
   SITUACOES_SGA,
@@ -49,6 +50,7 @@ export class SgaMirrorService implements OnModuleInit {
   constructor(
     @Inject(HINOVA_CLIENT) private hinova: IHinovaClient,
     private prisma: PrismaService,
+    @Optional() private deviceRegistry?: DeviceRegistryService,
   ) {}
 
   /**
@@ -352,6 +354,7 @@ export class SgaMirrorService implements OnModuleInit {
     }
 
     const total = virarMoto.length + virarCarro.length;
+    this.deviceRegistry?.notifyVehiclesChanged(tenantId, 'tipo do veículo alinhado com o SGA');
     this.logger.warn(
       `Tipo do veículo alinhado com o SGA: ${virarMoto.length} moto(s) e ` +
         `${virarCarro.length} carro(s) corrigidos.`,

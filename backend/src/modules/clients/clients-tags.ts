@@ -153,10 +153,10 @@ export function casaBusca(
  * `TAGS_CACHE_MS=0` desliga.
  */
 export const TAGS_CACHE_MS = 30_000;
-const cachePosicoes = new CacheCompartilhado<Map<string, PosicaoTag>>({ maxEntradas: 200, timeoutMs: 30_000 });
+const cachePosicoes = new CacheCompartilhado<Map<string, PosicaoTag>>({ maxEntradas: 200, timeoutMs: 90_000 });
 const cacheVinculos = new CacheCompartilhado<Awaited<ReturnType<typeof montarVinculosDaTela>>>({
   maxEntradas: 50,
-  timeoutMs: 30_000,
+  timeoutMs: 90_000,
 });
 const geracoes = new Map<string, number>();
 

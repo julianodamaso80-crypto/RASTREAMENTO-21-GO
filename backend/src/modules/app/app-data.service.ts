@@ -2,12 +2,14 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Optional,
   NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AlertType, VehicleStatus } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
   TraccarService,
   TraccarPosition,
@@ -150,6 +152,7 @@ export class AppDataService {
     private readonly traccar: TraccarService,
     private readonly reports: ReportsService,
     private readonly geocode: ReverseGeocodeService,
+    @Optional() private readonly deviceRegistry?: DeviceRegistryService,
   ) {
     const flag = process.env.APP_VEHICLES_POR_DEVICE?.trim().toLowerCase();
     this.porDevice = flag === '1' || flag === 'true';
@@ -285,6 +288,7 @@ export class AppDataService {
       where: { id: vehicle.id },
       data: { status: block ? VehicleStatus.BLOCKED : VehicleStatus.ACTIVE },
     });
+    this.deviceRegistry?.notifyVehiclesChanged(tenantId, 'bloqueio pelo app do associado');
     return { status: block ? 'BLOCKED' : 'ACTIVE', queued: !enviado };
   }
 

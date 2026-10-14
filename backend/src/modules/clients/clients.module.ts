@@ -1,3 +1,4 @@
+import { TraccarModule } from '../traccar/traccar.module';
 import { Module } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { ClientsController } from './clients.controller';
@@ -11,7 +12,7 @@ import { StockModule } from '../stock/stock.module';
   // AppAssociateModule traz o AssociateAuthService pro botão "Redefinir senha
   // do app"; HinovaModule traz o cliente do SGA pro sync de situação do ativo;
   // StockModule traz o lookup do SGA que a troca de titularidade reaproveita.
-  imports: [AppAssociateModule, HinovaModule, StockModule],
+  imports: [AppAssociateModule, HinovaModule, StockModule, TraccarModule],
   controllers: [ClientsController],
   providers: [ClientsService, AssetsSgaSyncService, OwnershipTransferService],
   exports: [ClientsService],

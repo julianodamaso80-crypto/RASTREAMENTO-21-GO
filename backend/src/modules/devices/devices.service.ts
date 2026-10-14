@@ -193,6 +193,7 @@ export class DevicesService {
           });
           this.deviceRegistry.notifyDeviceChanged(
             `cadastro de rastreador ${dto.imei}`,
+            tenantId,
           );
         }
 
@@ -353,7 +354,7 @@ export class DevicesService {
       }
     }
 
-    this.deviceRegistry.notifyDeviceChanged(`retirada do rastreador ${device.imei}`);
+    this.deviceRegistry.notifyDeviceChanged(`retirada do rastreador ${device.imei}`, tenantId);
     this.logger.log(
       `Rastreador ${device.imei} retirado${vehicleId ? ` do veículo ${vehicleId}` : ''} e devolvido ao estoque.`,
     );
@@ -397,7 +398,7 @@ export class DevicesService {
 
     // Mapping do tempo real na hora — sem isso o carro ficava até 2min sem
     // aparecer no mapa depois do vínculo.
-    this.deviceRegistry.notifyDeviceChanged(`vínculo do rastreador ${device.imei}`);
+    this.deviceRegistry.notifyDeviceChanged(`vínculo do rastreador ${device.imei}`, tenantId);
 
     return this.findOne(deviceId, tenantId);
   }
@@ -419,6 +420,7 @@ export class DevicesService {
 
     this.deviceRegistry.notifyDeviceChanged(
       `desvínculo do rastreador ${device.imei}`,
+      tenantId,
     );
 
     return this.findOne(deviceId, tenantId);

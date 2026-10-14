@@ -25,6 +25,8 @@ export interface EstadoPolling {
   ultimoLoteEm: number | null;
   ultimaFrotaEm: number;
   ultimosVehiclesEm: number;
+  /** Entra na sala do tenant e recebe `vehicles:changed`? CLIENT nao (o backend o exclui). */
+  recebeEventos: boolean;
 }
 
 // Meio tique de folga: o setInterval atrasa uns ms, e sem ela o prazo de 32 s
@@ -47,7 +49,7 @@ export function decidirPolling(e: EstadoPolling): {
   if (e.ultimoLoteEm !== null && e.agora - e.ultimoLoteEm > SOCKET_MUDO_MS) {
     return { frota: true, vehicles: vehiclesSemSocket, motivo: 'socket-mudo' };
   }
-  const vehicles = vehiclesApos(VEHICLES_CONTINGENCIA_MS);
+  const vehicles = vehiclesApos(e.recebeEventos ? VEHICLES_CONTINGENCIA_MS : VEHICLES_MS);
   if (e.agora - e.ultimaFrotaEm >= RECONCILIA_MS - FOLGA_MS) {
     return { frota: true, vehicles, motivo: 'reconciliacao' };
   }
@@ -174,4 +176,23 @@ export function aplicarAtributos(
 /** CLIENT recebe 403 em /traccar/*; os veículos dele vêm de /vehicles/mine. */
 export function devePedirFrotaHttp(role: string | undefined): boolean {
   return role !== 'CLIENT';
+}
+
+/**
+ * Numera as cargas da lista de veiculos: resposta de carga iniciada antes de
+ * uma ja aplicada chegou atrasada e nao deve sobrescrever o dado mais novo.
+ */
+export function criarSequencia() {
+  let ultimaIniciada = 0;
+  let ultimaAplicada = 0;
+  return {
+    proximo(): number {
+      return ++ultimaIniciada;
+    },
+    aplicavel(n: number): boolean {
+      if (n < ultimaAplicada) return false;
+      ultimaAplicada = n;
+      return true;
+    },
+  };
 }

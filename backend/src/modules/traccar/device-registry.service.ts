@@ -17,18 +17,21 @@ export class DeviceRegistryService {
   private readonly logger = new Logger(DeviceRegistryService.name);
   private refresher: (() => Promise<void>) | null = null;
 
-  private readonly ouvintes: Array<(motivo: string) => void> = [];
+  private readonly ouvintes: Array<(tenantId: string | null, motivo: string) => void> = [];
 
   /** O gateway escuta mudanças do conjunto de veículos para avisar os painéis. */
-  onChanged(cb: (motivo: string) => void) {
+  onChanged(cb: (tenantId: string | null, motivo: string) => void) {
     this.ouvintes.push(cb);
   }
 
-  /** Só avisa os ouvintes (painéis), sem refresh do mapping. */
-  notifyVehiclesChanged(motivo: string): void {
+  /**
+   * Só avisa os ouvintes (painéis), sem refresh do mapping. `tenantId` null =
+   * global (reconciliação): todas as salas de tenant.
+   */
+  notifyVehiclesChanged(tenantId: string | null, motivo: string): void {
     for (const cb of this.ouvintes) {
       try {
-        cb(motivo);
+        cb(tenantId, motivo);
       } catch (erro) {
         this.logger.warn(
           `Ouvinte de mudança de veículos falhou: ${erro instanceof Error ? erro.message : erro}`,
@@ -47,8 +50,8 @@ export class DeviceRegistryService {
    * uma instalação que já foi concluída — no pior caso o refresh periódico
    * (2 min) resolve.
    */
-  notifyDeviceChanged(motivo: string): void {
-    this.notifyVehiclesChanged(motivo);
+  notifyDeviceChanged(motivo: string, tenantId?: string): void {
+    this.notifyVehiclesChanged(tenantId ?? null, motivo);
     if (!this.refresher) return;
     void this.refresher().catch((erro) =>
       this.logger.warn(

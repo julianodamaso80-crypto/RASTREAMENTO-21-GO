@@ -154,6 +154,9 @@ const HEADER_MAP: Record<string, keyof ParsedRow> = {
 
 const SGA_LOOKUP_CACHE_S = 120;
 
+/** Pedidos de "Atualizar TAG" cujo doneAt já derrubou o cache de TAGs. */
+const pedidosConcluidosVistos = new Map<string, true>();
+
 @Injectable()
 export class StockService {
   private readonly logger = new Logger(StockService.name);
@@ -580,7 +583,6 @@ export class StockService {
       data: { tenantId, serialNumber: item.imei, requestedById: userId ?? null },
       select: { id: true, requestedAt: true },
     });
-    invalidarCacheDeTags(tenantId);
     this.logger.log(`Atualizar TAG ${item.imei} solicitado (pedido ${pedido.id}).`);
     return {
       pendente: true,
@@ -616,6 +618,14 @@ export class StockService {
     const estado = estadoAtualizacaoTag(ultima?.requestedAt ?? null);
     let avistamentoMaisRecenteEm: Date | null = null;
     if (ultima?.doneAt) {
+      // As posições novas só existem depois do doneAt: derruba o cache de TAGs
+      // na primeira vez que o pedido concluído é visto, não a cada consulta.
+      const chave = `${tenantId}:${item.imei}:${ultima.requestedAt.getTime()}`;
+      if (!pedidosConcluidosVistos.has(chave)) {
+        if (pedidosConcluidosVistos.size > 2000) pedidosConcluidosVistos.clear();
+        pedidosConcluidosVistos.set(chave, true);
+        invalidarCacheDeTags(tenantId);
+      }
       const linhas = await this.prisma.$queryRaw<Array<{ max: Date | null }>>(Prisma.sql`
         SELECT max(seen_at) AS max
           FROM tag_positions
@@ -1403,7 +1413,7 @@ export class StockService {
     // 7) Mapping do tempo real na hora: sem isto o carro recém-instalado ficava
     // até 2 minutos sem aparecer no mapa (o gateway descartava as posições dele
     // por não conhecer o device ainda). Ver P0.3 do plano.
-    this.deviceRegistry.notifyDeviceChanged(`instalação da placa ${placa}`);
+    this.deviceRegistry.notifyDeviceChanged(`instalação da placa ${placa}`, tenantId);
 
     this.logger.log(
       `Estoque associado: IMEI ${item.imei} → placa ${placa} (cliente ${result.associate.id})`,

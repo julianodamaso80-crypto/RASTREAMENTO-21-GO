@@ -8,7 +8,7 @@ import { ALERT_TYPE_LABELS, ALERT_TYPE_COLORS } from '@/types/alert';
 import { formatRelativeTime } from '@/lib/utils';
 
 export default function AlertsPage() {
-  const { alerts, unreadCount, markAlertRead, markAllAlertsRead } = useTracking();
+  const { alerts, unreadCount, unreadCapped, markAlertRead, markAllAlertsRead } = useTracking();
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6">
@@ -19,7 +19,7 @@ export default function AlertsPage() {
           <div>
             <h1 className="text-2xl font-bold">Alertas</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {unreadCount >= 1000 ? '999+' : unreadCount} não lido{unreadCount !== 1 ? 's' : ''}
+              {unreadCapped || unreadCount >= 1000 ? '999+' : unreadCount} não lido{unreadCount !== 1 ? 's' : ''}
             </p>
           </div>
           {unreadCount > 0 && (

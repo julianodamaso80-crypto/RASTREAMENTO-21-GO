@@ -7,7 +7,7 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { Server, Socket } from 'socket.io';
+import { Namespace, Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import WebSocket from 'ws';
@@ -60,8 +60,8 @@ export class TraccarGateway
   private resolverAgendado: (() => void) | null = null;
   private readonly REFRESH_DEBOUNCE_MS = 1_000;
   // Coalescência do aviso `vehicles:changed` (rajada de mudanças → 1 evento).
-  private vehiclesChangedTimer: ReturnType<typeof setTimeout> | null = null;
-  private vehiclesChangedMotivo = '';
+  // Um timer por tenant ('*' = global) para tenants não compartilharem debounce.
+  private vehiclesChangedTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly VEHICLES_CHANGED_DEBOUNCE_MS = 2_000;
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
@@ -104,24 +104,34 @@ export class TraccarGateway
   /**
    * Conjunto de veículos mudou (cadastro, vínculo, exclusão): os painéis
    * recarregam a lista só quando recebem isto, em vez de sondar a cada 32 s.
-   * A notificação do registry é global (sem tenant); como o evento é raro,
-   * vai para todas as salas de tenant abertas.
+   * A notificação do registry traz o tenant (só a sala dele é avisada) ou null
+   * (reconciliação: todas as salas de tenant abertas).
    */
   private registrarOuvinteVehicles() {
-    this.deviceRegistry.onChanged((motivo) => {
-      this.vehiclesChangedMotivo = motivo;
-      if (this.vehiclesChangedTimer) return;
-      this.vehiclesChangedTimer = setTimeout(() => {
-        this.vehiclesChangedTimer = null;
-        this.emitirVehiclesChanged(this.vehiclesChangedMotivo);
-      }, this.VEHICLES_CHANGED_DEBOUNCE_MS);
+    this.deviceRegistry.onChanged((tenantId, motivo) => {
+      this.logger.debug(`vehicles:changed (${tenantId ?? 'global'}): ${motivo}`);
+      const chave = tenantId ?? '*';
+      if (this.vehiclesChangedTimers.has(chave)) return;
+      this.vehiclesChangedTimers.set(
+        chave,
+        setTimeout(() => {
+          this.vehiclesChangedTimers.delete(chave);
+          this.emitirVehiclesChanged(tenantId);
+        }, this.VEHICLES_CHANGED_DEBOUNCE_MS),
+      );
     });
   }
 
-  private emitirVehiclesChanged(motivo: string) {
-    const salas = this.server?.sockets?.adapter?.rooms;
+  // O payload é só `{ at }`: motivo carrega placa/IMEI e nunca vai para o socket.
+  private emitirVehiclesChanged(tenantId: string | null) {
+    const payload = { at: new Date().toISOString() };
+    if (tenantId) {
+      this.server?.to(`tenant:${tenantId}`).emit('vehicles:changed', payload);
+      return;
+    }
+    // Com namespace, `server` é um Namespace: o adapter fica direto nele.
+    const salas = (this.server as unknown as Namespace)?.adapter?.rooms;
     if (!salas) return;
-    const payload = { at: new Date().toISOString(), motivo };
     for (const sala of salas.keys()) {
       if (typeof sala === 'string' && sala.startsWith('tenant:')) {
         this.server.to(sala).emit('vehicles:changed', payload);
