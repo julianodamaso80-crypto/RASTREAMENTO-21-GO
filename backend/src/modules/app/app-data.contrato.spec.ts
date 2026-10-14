@@ -51,8 +51,6 @@ function servico(vehicles: any[]) {
   const traccar: any = {
     getPositions: jest.fn().mockResolvedValue([]),
     getDevices: jest.fn().mockResolvedValue([]),
-    getPositionsDosDevices: jest.fn().mockResolvedValue([]),
-    getDevicesPorIds: jest.fn().mockResolvedValue([]),
   };
   return new AppDataService(prisma, traccar, {} as any, {} as any);
 }

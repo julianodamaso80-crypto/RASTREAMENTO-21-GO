@@ -78,7 +78,7 @@ const VINCULADOS = [11, 12, 15, 21, 31, 41];
 const POSICOES = [11, 12, 14, 15, 21, 31, 41].map((d) => pos(d));
 const DEVICES = [11, 12, 14, 15, 21, 31, 41].map(dev);
 
-function montar(opts: { traccarDevolveAMais?: boolean } = {}) {
+function montar(opts: { traccarDevolveAMais?: boolean; porDevice?: boolean } = {}) {
   const findMany = jest.fn(async ({ where }: { where: Partial<V> }) =>
     BANCO.filter(
       (v) =>
@@ -102,13 +102,18 @@ function montar(opts: { traccarDevolveAMais?: boolean } = {}) {
         : DEVICES.filter((d) => ids.includes(d.id) && VINCULADOS.includes(d.id)),
     ),
   };
+  // A flag é lida no construtor.
+  const antes = process.env.APP_VEHICLES_POR_DEVICE;
+  process.env.APP_VEHICLES_POR_DEVICE = (opts.porDevice ?? true) ? '1' : '';
   const service = new AppDataService(prisma, traccar as any, {} as any, {} as any);
+  if (antes === undefined) delete process.env.APP_VEHICLES_POR_DEVICE;
+  else process.env.APP_VEHICLES_POR_DEVICE = antes;
   return { service, traccar, findMany };
 }
 
 /** Montagem de antes desta mudança: frota inteira do Traccar + filtro em memória. */
 async function montagemAntiga(associateId: string, tenantId: string) {
-  const { service, traccar, findMany } = montar();
+  const { service, traccar, findMany } = montar({ porDevice: false });
   const vehicles: any[] = await findMany({ where: { associateId, tenantId, deletedAt: null } });
   const comDevice = vehicles.filter((v) => v.traccarDeviceId !== null);
   // Reaproveita os DTOs reais: o serviço com um único veículo sem device
@@ -154,7 +159,7 @@ async function montagemAntiga(associateId: string, tenantId: string) {
   );
 }
 
-describe('/app/vehicles — autorização', () => {
+describe('/app/vehicles com APP_VEHICLES_POR_DEVICE ligada — autorização', () => {
   it('A vê só os próprios veículos vivos do próprio tenant', async () => {
     const { service } = montar();
     const r = await service.getVehicles('A', 't1');
@@ -219,15 +224,18 @@ describe('/app/vehicles — autorização', () => {
   });
 
   it.each([
-    [undefined, 't1'],
-    ['A', undefined],
-    [undefined, undefined],
-    ['', 't1'],
-    ['A', ''],
+    [undefined, 't1', true],
+    ['A', undefined, true],
+    [undefined, undefined, true],
+    ['', 't1', true],
+    ['A', '', true],
+    [undefined, 't1', false],
+    ['A', undefined, false],
+    ['', '', false],
   ])(
-    'sem contexto de associado (%p, %p) → 401, sem tocar banco nem Traccar',
-    async (associateId, tenantId) => {
-      const { service, traccar, findMany } = montar();
+    'sem contexto de associado (%p, %p), flag %p → 401, sem tocar banco nem Traccar',
+    async (associateId, tenantId, porDevice) => {
+      const { service, traccar, findMany } = montar({ porDevice });
       await expect(
         service.getVehicles(associateId as any, tenantId as any),
       ).rejects.toThrow(UnauthorizedException);
@@ -249,13 +257,17 @@ describe('/app/vehicles — autorização', () => {
 
 describe('/app/vehicles — mesma resposta da montagem antiga', () => {
   it.each([
-    ['A', 't1'],
-    ['B', 't1'],
-    ['A', 't2'],
-    ['SEM', 't1'],
-  ])('associado %s / tenant %s: JSON idêntico', async (associateId, tenantId) => {
+    ['A', 't1', true],
+    ['B', 't1', true],
+    ['A', 't2', true],
+    ['SEM', 't1', true],
+    ['A', 't1', false],
+    ['B', 't1', false],
+    ['A', 't2', false],
+    ['SEM', 't1', false],
+  ])('associado %s / tenant %s, flag %p: JSON idêntico', async (associateId, tenantId, porDevice) => {
     const antiga = await montagemAntiga(associateId, tenantId);
-    const { service } = montar();
+    const { service } = montar({ porDevice });
     const nova = await service.getVehicles(associateId, tenantId);
     expect(JSON.stringify(nova)).toBe(JSON.stringify(antiga));
   });
@@ -269,5 +281,62 @@ describe('/app/vehicles — mesma resposta da montagem antiga', () => {
     expect(porId.a3).toMatchObject({ position: null, connection: null });
     expect(porId.a4).toMatchObject({ position: null, connection: null });
     expect(porId.a6).toMatchObject({ position: null, connection: null });
+  });
+});
+
+describe('/app/vehicles com APP_VEHICLES_POR_DEVICE desligada (padrão) — caminho de hoje', () => {
+  it.each([[undefined], [''], ['0'], ['false'], ['sim']])(
+    'flag %p → frota inteira via getPositions()/getDevices(), nada por id',
+    async (valor) => {
+      const antes = process.env.APP_VEHICLES_POR_DEVICE;
+      if (valor === undefined) delete process.env.APP_VEHICLES_POR_DEVICE;
+      else process.env.APP_VEHICLES_POR_DEVICE = valor;
+      const { traccar, findMany } = montar();
+      // montar() liga a flag; aqui o serviço é criado com o valor do teste.
+      const service = new AppDataService(
+        { vehicle: { findMany } } as any,
+        traccar as any,
+        {} as any,
+        {} as any,
+      );
+      if (antes === undefined) delete process.env.APP_VEHICLES_POR_DEVICE;
+      else process.env.APP_VEHICLES_POR_DEVICE = antes;
+
+      const r = await service.getVehicles('A', 't1');
+      expect(r.map((v) => v.id)).toEqual(['a1', 'a2', 'a3', 'a4', 'a5', 'a6']);
+      expect(traccar.getPositions).toHaveBeenCalledTimes(1);
+      expect(traccar.getPositions).toHaveBeenCalledWith();
+      expect(traccar.getDevices).toHaveBeenCalledTimes(1);
+      expect(traccar.getDevices).toHaveBeenCalledWith();
+      expect(traccar.getPositionsDosDevices).not.toHaveBeenCalled();
+      expect(traccar.getDevicesPorIds).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([['1'], ['true'], [' TRUE ']])('flag %p liga o caminho por id', async (valor) => {
+    const antes = process.env.APP_VEHICLES_POR_DEVICE;
+    process.env.APP_VEHICLES_POR_DEVICE = valor;
+    const { traccar, findMany } = montar();
+    const service = new AppDataService({ vehicle: { findMany } } as any, traccar as any, {} as any, {} as any);
+    if (antes === undefined) delete process.env.APP_VEHICLES_POR_DEVICE;
+    else process.env.APP_VEHICLES_POR_DEVICE = antes;
+    await service.getVehicles('A', 't1');
+    expect(traccar.getPositionsDosDevices).toHaveBeenCalledTimes(1);
+    expect(traccar.getPositions).not.toHaveBeenCalled();
+  });
+
+  it('associado sem veículos → [] e Traccar não é chamado (como hoje)', async () => {
+    const { service, traccar } = montar({ porDevice: false });
+    await expect(service.getVehicles('SEM', 't1')).resolves.toEqual([]);
+    expect(traccar.getPositions).not.toHaveBeenCalled();
+    expect(traccar.getDevices).not.toHaveBeenCalled();
+  });
+
+  it('Traccar devolve a frota com B: nada de B chega a A', async () => {
+    const { service } = montar({ porDevice: false });
+    const s = JSON.stringify(await service.getVehicles('A', 't1'));
+    for (const deB of ['b1', 'BBB1B11', String(pos(21).latitude), String(pos(31).latitude)]) {
+      expect(s).not.toContain(deB);
+    }
   });
 });

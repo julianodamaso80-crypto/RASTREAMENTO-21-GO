@@ -131,6 +131,18 @@ function toAlertDto(a: {
   };
 }
 
+/**
+ * Prisma ignora filtro `undefined`: sem associado ou tenant, as consultas
+ * escopadas viram a frota do tenant (ou de todos) e o `findFirst` por id casa
+ * veículo de qualquer associado. O guard já barra; isto garante que nenhum
+ * outro caminho chegue às consultas sem contexto.
+ */
+function exigirContexto(associateId: string, tenantId: string) {
+  if (!associateId || !tenantId) {
+    throw new UnauthorizedException('Associado não identificado');
+  }
+}
+
 @Injectable()
 export class AppDataService {
   constructor(
@@ -138,16 +150,17 @@ export class AppDataService {
     private readonly traccar: TraccarService,
     private readonly reports: ReportsService,
     private readonly geocode: ReverseGeocodeService,
-  ) {}
+  ) {
+    const flag = process.env.APP_VEHICLES_POR_DEVICE?.trim().toLowerCase();
+    this.porDevice = flag === '1' || flag === 'true';
+  }
+
+  /** Desligada (padrão): `/app/vehicles` monta pela frota inteira, como sempre. */
+  private readonly porDevice: boolean;
 
   /** Veículos do associado + última posição + status de conexão. */
   async getVehicles(associateId: string, tenantId: string) {
-    // Prisma ignora filtro `undefined`: sem associado ou tenant, a consulta
-    // abaixo viraria a frota do tenant (ou de todos). O guard já barra; isto
-    // garante que nenhum outro caminho chegue aqui sem contexto.
-    if (!associateId || !tenantId) {
-      throw new UnauthorizedException('Associado não identificado');
-    }
+    exigirContexto(associateId, tenantId);
     const vehicles = await this.prisma.vehicle.findMany({
       where: { associateId, tenantId, deletedAt: null },
       select: {
@@ -175,21 +188,9 @@ export class AppDataService {
 
     // Posição (GPS real) e device (status de conexão = heartbeat) são fontes
     // distintas e expostas separadamente — ver regra de segurança do projeto.
-    // Só os devices do associado — nunca a frota inteira.
-    const [positions, devices] = await Promise.all([
-      this.traccar.getPositionsDosDevices(deviceIds),
-      this.traccar.getDevicesPorIds(deviceIds),
-    ]);
-
-    const devByDevice = new Map(devices.map((d) => [d.id, d]));
-    // `/positions` sem filtro só trazia devices vinculados ao usuário da
-    // sessão; por id o Traccar não exige vínculo. Posição só entra se o
-    // device veio na lista, como antes.
-    const posByDevice = new Map(
-      positions
-        .filter((p) => devByDevice.has(p.deviceId))
-        .map((p) => [p.deviceId, p]),
-    );
+    const { posByDevice, devByDevice } = this.porDevice
+      ? await this.posicoesEDevicesDoAssociado(deviceIds)
+      : await this.posicoesEDevicesDaFrota();
 
     return vehicles.map((v) => {
       const pos = v.traccarDeviceId
@@ -208,6 +209,36 @@ export class AppDataService {
     });
   }
 
+  /** Caminho de hoje: frota inteira do Traccar; o filtro é o veículo do associado. */
+  private async posicoesEDevicesDaFrota() {
+    const [positions, devices] = await Promise.all([
+      this.traccar.getPositions(),
+      this.traccar.getDevices(),
+    ]);
+    return {
+      posByDevice: new Map(positions.map((p) => [p.deviceId, p])),
+      devByDevice: new Map(devices.map((d) => [d.id, d])),
+    };
+  }
+
+  /** APP_VEHICLES_POR_DEVICE ligada: só os devices do associado, nunca a frota. */
+  private async posicoesEDevicesDoAssociado(deviceIds: number[]) {
+    const [positions, devices] = await Promise.all([
+      this.traccar.getPositionsDosDevices(deviceIds),
+      this.traccar.getDevicesPorIds(deviceIds),
+    ]);
+    const devByDevice = new Map(devices.map((d) => [d.id, d]));
+    // `/positions` sem filtro só trazia devices vinculados ao usuário da
+    // sessão; por id o Traccar não exige vínculo. Posição só entra se o
+    // device veio na lista, como no caminho da frota.
+    const posByDevice = new Map(
+      positions
+        .filter((p) => devByDevice.has(p.deviceId))
+        .map((p) => [p.deviceId, p]),
+    );
+    return { posByDevice, devByDevice };
+  }
+
   /**
    * Bloqueio/desbloqueio pelo próprio associado. A permissão é conferida no
    * momento da chamada: se o admin retirou o acesso, o app aberto para na hora.
@@ -219,6 +250,7 @@ export class AppDataService {
     vehicleId: string,
     block: boolean,
   ) {
+    exigirContexto(associateId, tenantId);
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: vehicleId, associateId, tenantId, deletedAt: null },
       select: {
@@ -265,6 +297,7 @@ export class AppDataService {
     from: string,
     to: string,
   ) {
+    exigirContexto(associateId, tenantId);
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: vehicleId, associateId, tenantId, deletedAt: null },
       select: { traccarDeviceId: true },
@@ -301,6 +334,7 @@ export class AppDataService {
     from: string,
     to: string,
   ) {
+    exigirContexto(associateId, tenantId);
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: vehicleId, associateId, tenantId, deletedAt: null },
       select: { traccarDeviceId: true },
@@ -352,6 +386,7 @@ export class AppDataService {
     date: string,
     comEnderecos = false,
   ): Promise<DiaDoHistorico> {
+    exigirContexto(associateId, tenantId);
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: vehicleId, associateId, tenantId, deletedAt: null },
       select: { traccarDeviceId: true },
@@ -407,6 +442,7 @@ export class AppDataService {
     to: string,
     type: string,
   ) {
+    exigirContexto(associateId, tenantId);
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: vehicleId, associateId, tenantId, deletedAt: null },
       select: { traccarDeviceId: true, plate: true },
