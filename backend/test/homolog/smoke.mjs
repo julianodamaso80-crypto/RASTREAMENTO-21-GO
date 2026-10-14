@@ -239,11 +239,11 @@ async function main() {
   const ra = await req('GET', '/stock/map', { token: tokenDoAssociado(fx.associadoA) });
   check('token do associado em /stock/map = 401 (não vale no painel)', ra.status === 401, { status: ra.status });
 
-  // Comportamento pré-existente, registrado sem reprovar: as rotas abaixo não
-  // têm RolesGuard, então o perfil CLIENT do painel chega nelas.
+  // Regressão do F10: estas rotas têm RolesGuard e o perfil CLIENT do painel
+  // recebe 403 (os veículos dele vêm de /vehicles/mine).
   for (const rota of ['/stock/map', '/traccar/devices']) {
     const r = await req('GET', rota, { token: client });
-    observar(`CLIENT do painel em GET ${rota}`, { status: r.status }, r.status === 200);
+    check(`CLIENT do painel em GET ${rota} = 403`, r.status === 403, { status: r.status });
   }
 }
 
