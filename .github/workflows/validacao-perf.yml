@@ -1,0 +1,323 @@
+name: Validação de performance (suíte, builds e homologação efêmera)
+
+# Nada aqui toca produção: banco, Traccar e Redis são containers do runner,
+# e todo segredo é gerado no próprio job, só para esta execução.
+
+on:
+  push:
+    branches: ['perf/**']
+  workflow_dispatch:
+
+concurrency:
+  group: validacao-perf-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Monorepo com workspaces: um install na raiz serve backend e dashboard.
+      - name: Instalar dependências
+        run: |
+          if ! npm ci --no-audit --no-fund; then
+            echo "::warning title=package-lock::package-lock.json fora de sincronia com os package.json. Caindo para npm install --legacy-peer-deps, como o Dockerfile de produção."
+            npm install --no-audit --no-fund --legacy-peer-deps
+          fi
+
+      - name: Gerar Prisma Client
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+        run: |
+          npx prisma generate
+          # O client vai para backend/node_modules/.prisma; o @prisma/client
+          # içado na raiz procura .prisma ao lado dele.
+          rm -rf ../node_modules/.prisma
+          ln -s "$PWD/node_modules/.prisma" ../node_modules/.prisma
+
+      - name: Testes (jest --ci, suíte completa)
+        working-directory: backend
+        run: npx jest --ci
+
+      - name: Build (nest build)
+        working-directory: backend
+        run: |
+          npm run build
+          test -f dist/src/main.js || { echo "::error::nest build não gerou dist/src/main.js"; exit 1; }
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependências
+        run: |
+          if ! npm ci --no-audit --no-fund; then
+            echo "::warning title=package-lock::package-lock.json fora de sincronia com os package.json. Caindo para npm install --legacy-peer-deps, como o Dockerfile de produção."
+            npm install --no-audit --no-fund --legacy-peer-deps
+          fi
+
+      - name: Testes (jest --ci)
+        working-directory: frontend/dashboard
+        run: npx jest --ci
+
+      - name: next build sem args
+        working-directory: frontend/dashboard
+        run: npx next build
+
+      - name: next build com contingência e cluster do estoque
+        working-directory: frontend/dashboard
+        env:
+          NEXT_PUBLIC_POLLING_MODE: contingencia
+          NEXT_PUBLIC_STOCK_MAP_CLUSTER: 'on'
+        run: |
+          rm -rf .next
+          npx next build
+
+  homolog:
+    needs: backend-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: homolog
+          POSTGRES_DB: rastreamento21go
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      traccar:
+        # Mesma imagem e JVM do docker/docker-compose.yml; banco H2 padrão da imagem.
+        image: traccar/traccar:6.14.5
+        env:
+          JAVA_OPTS: '-Xms512m -Xmx1500m -Duser.timezone=America/Sao_Paulo'
+          TZ: America/Sao_Paulo
+        ports: ['8082:8082']
+    env:
+      NODE_ENV: production
+      TZ: America/Sao_Paulo
+      PORT: '3001'
+      API_URL: http://localhost:3001/api/v1
+      DATABASE_URL: postgresql://postgres:homolog@localhost:5432/rastreamento21go
+      REDIS_URL: redis://localhost:6379
+      TRACCAR_URL: http://localhost:8082
+      TRACCAR_API_URL: http://localhost:8082/api
+      TRACCAR_ADMIN_EMAIL: homolog@homolog.example.com
+      CORS_ORIGINS: http://localhost:3000
+      LOG_LEVEL: warn
+      # Integrações externas desligadas: nada sai do runner.
+      HINOVA_MOCK: 'true'
+      HINOVA_SYNC_ENABLED: 'false'
+      INSTALLATION_PENDINGS_SYNC_ENABLED: 'false'
+      CONSULTANTS_SYNC_ENABLED: 'false'
+      EXPO_PUSH_ENABLED: 'false'
+      WHATSAPP_PROVIDER: none
+      GIT_SHA: ${{ github.sha }}
+      HOMOLOG_FIXTURE: ${{ github.workspace }}/homolog/fixture.json
+      RESULTADOS: ${{ github.workspace }}/homolog
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Gerar segredos de teste
+        run: |
+          mkdir -p "$RESULTADOS"
+          for nome in JWT_SECRET JWT_ASSOCIATE_SECRET TRACCAR_ADMIN_PASSWORD; do
+            valor=$(openssl rand -hex 32)
+            echo "::add-mask::$valor"
+            echo "$nome=$valor" >> "$GITHUB_ENV"
+          done
+          echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      # NODE_ENV=production do job faria o npm pular as devDependencies
+      # (nest, prisma, tsx); --include=dev mantém o mesmo install dos outros jobs.
+      - name: Instalar dependências
+        run: |
+          if ! npm ci --no-audit --no-fund --include=dev; then
+            echo "::warning title=package-lock::package-lock.json fora de sincronia com os package.json. Caindo para npm install --legacy-peer-deps, como o Dockerfile de produção."
+            npm install --no-audit --no-fund --include=dev --legacy-peer-deps
+          fi
+
+      - name: Prisma Client e build
+        working-directory: backend
+        run: |
+          npx prisma generate
+          rm -rf ../node_modules/.prisma
+          ln -s "$PWD/node_modules/.prisma" ../node_modules/.prisma
+          npm run build
+
+      - name: Esperar o Traccar
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8082/api/server > /dev/null; then echo "Traccar no ar"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::Traccar não respondeu /api/server em 180 s"
+          docker logs "$(docker ps -q --filter ancestor=traccar/traccar:6.14.5)" 2>&1 | tail -50
+          exit 1
+
+      # Instalação nova não tem usuário: o primeiro cadastrado vira admin.
+      # Se a imagem vier com admin/admin, ele cria o nosso usuário admin.
+      - name: Criar o admin de teste no Traccar
+        run: |
+          sessao() {
+            curl -s -o /tmp/sessao.json -w '%{http_code}' -X POST http://localhost:8082/api/session \
+              --data-urlencode "email=$TRACCAR_ADMIN_EMAIL" --data-urlencode "password=$TRACCAR_ADMIN_PASSWORD"
+          }
+          # Sem sessão o Traccar recusa o campo administrator (checkUserUpdate);
+          # o primeiro usuário vira admin sozinho.
+          corpo=$(jq -n --arg e "$TRACCAR_ADMIN_EMAIL" --arg p "$TRACCAR_ADMIN_PASSWORD" \
+            '{name:"Homolog CI", email:$e, password:$p}')
+          if [ "$(sessao)" != "200" ]; then
+            codigo=$(curl -s -o /tmp/usuario.json -w '%{http_code}' -X POST http://localhost:8082/api/users \
+              -H 'Content-Type: application/json' -d "$corpo")
+            if [ "$codigo" != "200" ]; then
+              codigo=$(curl -s -o /tmp/usuario.json -w '%{http_code}' -u admin:admin -X POST http://localhost:8082/api/users \
+                -H 'Content-Type: application/json' -d "$(echo "$corpo" | jq '. + {administrator:true}')")
+            fi
+            [ "$codigo" = "200" ] || { echo "::error::não consegui criar o admin no Traccar ($codigo)"; cat /tmp/usuario.json; exit 1; }
+          fi
+          [ "$(sessao)" = "200" ] || { echo "::error::login do admin de teste no Traccar falhou"; exit 1; }
+          [ "$(jq -r .administrator /tmp/sessao.json)" = "true" ] || { echo "::error::usuário de teste do Traccar não é administrador"; exit 1; }
+
+      - name: Migrations e seed
+        working-directory: backend
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed.ts
+
+      - name: Semear frota sintética (10.000 devices, 7.000 veículos, 9.386 no estoque)
+        id: semear
+        working-directory: backend
+        run: node test/homolog/semear-frota.mjs
+
+      - name: Boot legado (sem flags) → smoke + carga
+        id: legado
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          unset STOCK_MAP_CACHE_MS FROTA_PAINEL_CACHE_MS
+          node dist/src/main > "$RESULTADOS/backend-legado.log" 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true; wait $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            kill -0 $PID 2>/dev/null || { echo "::error::backend morreu no boot"; tail -50 "$RESULTADOS/backend-legado.log"; exit 1; }
+            curl -sf "$API_URL/health" > /dev/null && break
+            [ "$i" = 60 ] && { echo "::error::backend não respondeu /health em 120 s"; tail -50 "$RESULTADOS/backend-legado.log"; exit 1; }
+            sleep 2
+          done
+          node test/homolog/smoke.mjs --modo legado --saida "$RESULTADOS/smoke-legado.json"
+          node test/homolog/carga.mjs --modo legado --saida "$RESULTADOS/carga-legado.json"
+
+      - name: Boot com flags → smoke + carga
+        id: flags
+        if: ${{ !cancelled() && steps.semear.outcome == 'success' }}
+        working-directory: backend
+        env:
+          STOCK_MAP_CACHE_MS: '10000'
+          FROTA_PAINEL_CACHE_MS: '2000'
+        run: |
+          set -euo pipefail
+          node dist/src/main > "$RESULTADOS/backend-flags.log" 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true; wait $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            kill -0 $PID 2>/dev/null || { echo "::error::backend morreu no boot"; tail -50 "$RESULTADOS/backend-flags.log"; exit 1; }
+            curl -sf "$API_URL/health" > /dev/null && break
+            [ "$i" = 60 ] && { echo "::error::backend não respondeu /health em 120 s"; tail -50 "$RESULTADOS/backend-flags.log"; exit 1; }
+            sleep 2
+          done
+          node test/homolog/smoke.mjs --modo flags --saida "$RESULTADOS/smoke-flags.json"
+          node test/homolog/carga.mjs --modo flags --saida "$RESULTADOS/carga-flags.json"
+
+      - name: Consolidar resultados e resumo
+        if: ${{ always() }}
+        run: |
+          node - <<'EOF'
+          const fs = require('node:fs');
+          const dir = process.env.RESULTADOS;
+          const ler = (n) => { try { return JSON.parse(fs.readFileSync(`${dir}/${n}.json`, 'utf8')); } catch { return null; } };
+          const r = {
+            commit: process.env.GITHUB_SHA,
+            nivel: '(3) homologação completa — dados sintéticos, runner do GitHub Actions',
+            legado: { smoke: ler('smoke-legado'), carga: ler('carga-legado') },
+            flags: { smoke: ler('smoke-flags'), carga: ler('carga-flags') },
+          };
+          fs.writeFileSync(`${dir}/homolog-resultados.json`, JSON.stringify(r, null, 2));
+          const v = (x) => (x === null || x === undefined ? '—' : x);
+          const linhas = [
+            `## Homologação efêmera — ${r.nivel}`,
+            '',
+            '| Modo | Smoke | Rota | Enviadas | Erros | p50 ms | p95 ms | p99 ms | Montagens | Idade máx. ms |',
+            '|---|---|---|---|---|---|---|---|---|---|',
+          ];
+          for (const modo of ['legado', 'flags']) {
+            const s = r[modo].smoke;
+            const smoke = s ? (s.ok ? 'ok' : `FALHOU (${s.falhas.length})`) : 'não rodou';
+            const rotas = Object.entries(r[modo].carga?.rotas ?? {});
+            if (rotas.length === 0) linhas.push(`| ${modo} | ${smoke} | — | — | — | — | — | — | — | — |`);
+            for (const [rota, x] of rotas) {
+              linhas.push(`| ${modo} | ${smoke} | ${rota} | ${x.enviadas} | ${x.erros} | ${v(x.p50Ms)} | ${v(x.p95Ms)} | ${v(x.p99Ms)} | ${v(x.montagens)} | ${v(x.idadeMaxMs)} |`);
+            }
+          }
+          for (const modo of ['legado', 'flags']) {
+            const falhas = r[modo].smoke?.falhas ?? [];
+            if (falhas.length) linhas.push('', `**Falhas do smoke (${modo}):**`, ...falhas.map((f) => `- ${f}`));
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, linhas.join('\n') + '\n');
+          console.log(linhas.join('\n'));
+          EOF
+
+      - name: Publicar artefato
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: homolog-resultados
+          path: |
+            homolog/homolog-resultados.json
+            homolog/smoke-*.json
+            homolog/carga-*.json
+            homolog/fixture.json
+            homolog/backend-*.log
+          if-no-files-found: warn
