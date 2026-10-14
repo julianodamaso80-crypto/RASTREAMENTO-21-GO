@@ -13,6 +13,7 @@ import {
 import { Prisma } from '.prisma/client';
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
+import { TtlCache } from '../../common/cache/ttl-cache';
 import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
 import { AssignStockDto } from './dto/assign-stock.dto';
@@ -151,9 +152,12 @@ const HEADER_MAP: Record<string, keyof ParsedRow> = {
   SERVIDOR: 'server',
 };
 
+const SGA_LOOKUP_CACHE_S = 120;
+
 @Injectable()
 export class StockService {
   private readonly logger = new Logger(StockService.name);
+  private readonly sgaLookupCache = new TtlCache();
 
   constructor(
     private prisma: PrismaService,
@@ -715,6 +719,32 @@ export class StockService {
     tenantId: string,
     placaOuChassi: string,
   ): Promise<HinovaLookupResult> {
+    // O operador acabou de ver esse resultado no diálogo; reaproveitar por 2 min
+    // não mostra nada mais velho do que ele já viu e poupa a 2ª ida ao SGA
+    // (~6 s) no "Associar". Só resultado ENCONTRADO fica em cache: falha,
+    // exceção e "não encontrado" nunca são guardados. O termo é normalizado só
+    // por trim/maiúscula/sem espaços (igual ao que já existia, sem tirar hífen).
+    const key = StockService.sgaLookupKey(tenantId, placaOuChassi);
+    const guardado = this.sgaLookupCache.get<HinovaLookupResult>(key);
+    if (guardado) {
+      this.logger.debug(`Lookup SGA ${placaOuChassi}: reaproveitado do cache.`);
+      return guardado;
+    }
+    const resultado = await this.consultarSga(tenantId, placaOuChassi);
+    if (resultado.encontrado) {
+      this.sgaLookupCache.set(key, resultado, SGA_LOOKUP_CACHE_S);
+    }
+    return resultado;
+  }
+
+  private static sgaLookupKey(tenantId: string, termo: string): string {
+    return `sga-lookup:${tenantId}:${termo.trim().toUpperCase().replace(/\s+/g, '')}`;
+  }
+
+  private async consultarSga(
+    tenantId: string,
+    placaOuChassi: string,
+  ): Promise<HinovaLookupResult> {
     const vivo = await this.hinova.lookupByPlate(placaOuChassi);
     if (vivo.encontrado) {
       // O lookup ao vivo é financeiro e NÃO devolve o tipo do veículo. Sem
@@ -1239,6 +1269,13 @@ export class StockService {
       return { associate, vehicle, device };
     });
     this.stockTraccar.invalidarMapa(tenantId);
+    // A situação do associado mudou do nosso lado: a próxima consulta é ao vivo.
+    this.sgaLookupCache.invalidate(StockService.sgaLookupKey(tenantId, dto.placa));
+    if (lookup.veiculo.placa) {
+      this.sgaLookupCache.invalidate(
+        StockService.sgaLookupKey(tenantId, lookup.veiculo.placa),
+      );
+    }
 
     // 5) Traccar (best-effort — não derruba o vínculo se estiver indisponível).
     let traccarDeviceId: number | null = null;
