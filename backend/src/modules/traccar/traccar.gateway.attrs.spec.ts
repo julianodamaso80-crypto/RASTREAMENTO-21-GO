@@ -184,28 +184,39 @@ describe('TraccarGateway — refresh do mapping após vínculo', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('o registry chama um refresh com debounce: N avisos em rajada = 1 consulta', async () => {
+  async function preparar() {
     const { gateway, setRefresher } = montar();
     const refresh = jest
       .spyOn(gateway, 'refreshDeviceMapping')
       .mockResolvedValue(undefined);
     (gateway as unknown as { connectToTraccar: () => void }).connectToTraccar = jest.fn();
-
     await gateway.afterInit();
     refresh.mockClear();
     const refresher = setRefresher.mock.calls[0][0] as () => Promise<void>;
+    return { refresh, refresher };
+  }
 
+  it('vínculo isolado atualiza o mapping na hora, como antes', async () => {
+    const { refresh, refresher } = await preparar();
     void refresher();
-    void refresher();
-    void refresher();
-    expect(refresh).not.toHaveBeenCalled();
-
+    expect(refresh).toHaveBeenCalledTimes(1);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
 
-    // Aviso depois da janela agenda outro.
-    void refresher();
+  it('rajada de N vínculos em 1 s vira no máximo 2 consultas', async () => {
+    const { refresh, refresher } = await preparar();
+    let resolvidos = 0;
+    for (let i = 0; i < 5; i++) void refresher().then(() => resolvidos++);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
     await jest.advanceTimersByTimeAsync(1_000);
     expect(refresh).toHaveBeenCalledTimes(2);
+    expect(resolvidos).toBe(5);
+
+    // Depois de a janela fechar sem avisos, o próximo volta a ser imediato.
+    await jest.advanceTimersByTimeAsync(1_000);
+    void refresher();
+    expect(refresh).toHaveBeenCalledTimes(3);
   });
 });

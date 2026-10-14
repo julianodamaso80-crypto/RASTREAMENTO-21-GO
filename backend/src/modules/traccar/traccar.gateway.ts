@@ -54,8 +54,10 @@ export class TraccarGateway
   private loteDevicesPorTenant = new Map<string, TraccarWsMessage['devices']>();
   // Atributos de posições reprovadas pelo portão (sem coordenada), por tenant.
   private loteAtributosPorTenant = new Map<string, AtributosItem[]>();
-  // Debounce do refresh do mapping: N vínculos em rajada = 1 consulta.
+  // Coalescência do refresh do mapping pedido por vínculo/desvínculo.
+  private janelaRefreshAberta = false;
   private refreshAgendado: Promise<void> | null = null;
+  private resolverAgendado: (() => void) | null = null;
   private readonly REFRESH_DEBOUNCE_MS = 1_000;
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
@@ -230,18 +232,28 @@ export class TraccarGateway
   }
 
   /**
-   * Refresh pedido por vínculo/desvínculo. Quem chega dentro da janela entra
-   * no refresh já agendado; o atraso máximo é a própria janela (1 s).
+   * Refresh pedido por vínculo/desvínculo. O primeiro aviso roda na hora (o
+   * vínculo isolado não espera nada a mais que antes); os que chegam dentro
+   * da janela de 1 s viram UM refresh no fim dela. Rajada de N vínculos = no
+   * máximo 2 consultas, em vez de N.
    */
   agendarRefreshMapping(): Promise<void> {
-    if (this.refreshAgendado) return this.refreshAgendado;
-    this.refreshAgendado = new Promise<void>((resolve) => {
-      setTimeout(() => {
-        this.refreshAgendado = null;
-        void this.refreshDeviceMapping().finally(resolve);
-      }, this.REFRESH_DEBOUNCE_MS);
-    });
-    return this.refreshAgendado;
+    if (this.janelaRefreshAberta) {
+      this.refreshAgendado ??= new Promise<void>((resolve) => {
+        this.resolverAgendado = resolve;
+      });
+      return this.refreshAgendado;
+    }
+    this.janelaRefreshAberta = true;
+    setTimeout(() => {
+      this.janelaRefreshAberta = false;
+      const resolve = this.resolverAgendado;
+      if (!resolve) return;
+      this.refreshAgendado = null;
+      this.resolverAgendado = null;
+      void this.agendarRefreshMapping().finally(resolve);
+    }, this.REFRESH_DEBOUNCE_MS);
+    return this.refreshDeviceMapping();
   }
 
   // Refresh periódico — evita que veículos novos cadastrados após o boot
