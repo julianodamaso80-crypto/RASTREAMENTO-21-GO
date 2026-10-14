@@ -36,9 +36,21 @@ jobs:
       - name: Instalar dependências
         run: |
           if ! npm ci --no-audit --no-fund; then
-            echo "::warning title=package-lock::package-lock.json fora de sincronia com os package.json. Caindo para npm install --legacy-peer-deps, como o Dockerfile de produção."
+            echo "::warning title=package-lock::npm ci falhou: lockfile desatualizado; instalado com npm install; lock regenerado no artefato — commitar com autorização"
             npm install --no-audit --no-fund --legacy-peer-deps
+            mkdir -p "$RUNNER_TEMP/lock-regenerado"
+            cp package-lock.json "$RUNNER_TEMP/lock-regenerado/package-lock.json"
+            echo "npm ci falhou: lockfile desatualizado; instalado com npm install; lock regenerado no artefato — commitar com autorização" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Só existe quando o npm ci falhou: é o lock que o npm install resolveu.
+      - name: Publicar lock regenerado
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-lock-regenerado
+          path: ${{ runner.temp }}/lock-regenerado/package-lock.json
+          if-no-files-found: ignore
 
       - name: Gerar Prisma Client
         working-directory: backend
@@ -76,9 +88,21 @@ jobs:
       - name: Instalar dependências
         run: |
           if ! npm ci --no-audit --no-fund; then
-            echo "::warning title=package-lock::package-lock.json fora de sincronia com os package.json. Caindo para npm install --legacy-peer-deps, como o Dockerfile de produção."
+            echo "::warning title=package-lock::npm ci falhou: lockfile desatualizado; instalado com npm install; lock regenerado no artefato — commitar com autorização"
             npm install --no-audit --no-fund --legacy-peer-deps
+            mkdir -p "$RUNNER_TEMP/lock-regenerado"
+            cp package-lock.json "$RUNNER_TEMP/lock-regenerado/package-lock.json"
+            echo "npm ci falhou: lockfile desatualizado; instalado com npm install; lock regenerado no artefato — commitar com autorização" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Só existe quando o npm ci falhou: é o lock que o npm install resolveu.
+      - name: Publicar lock regenerado
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-lock-regenerado-frontend
+          path: ${{ runner.temp }}/lock-regenerado/package-lock.json
+          if-no-files-found: ignore
 
       - name: Testes (jest --ci)
         working-directory: frontend/dashboard
@@ -175,9 +199,21 @@ jobs:
       - name: Instalar dependências
         run: |
           if ! npm ci --no-audit --no-fund --include=dev; then
-            echo "::warning title=package-lock::package-lock.json fora de sincronia com os package.json. Caindo para npm install --legacy-peer-deps, como o Dockerfile de produção."
+            echo "::warning title=package-lock::npm ci falhou: lockfile desatualizado; instalado com npm install; lock regenerado no artefato — commitar com autorização"
             npm install --no-audit --no-fund --include=dev --legacy-peer-deps
+            mkdir -p "$RUNNER_TEMP/lock-regenerado"
+            cp package-lock.json "$RUNNER_TEMP/lock-regenerado/package-lock.json"
+            echo "npm ci falhou: lockfile desatualizado; instalado com npm install; lock regenerado no artefato — commitar com autorização" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Só existe quando o npm ci falhou: é o lock que o npm install resolveu.
+      - name: Publicar lock regenerado
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-lock-regenerado-homolog
+          path: ${{ runner.temp }}/lock-regenerado/package-lock.json
+          if-no-files-found: ignore
 
       - name: Prisma Client e build
         working-directory: backend
@@ -247,8 +283,11 @@ jobs:
             [ "$i" = 60 ] && { echo "::error::backend não respondeu /health em 120 s"; tail -50 "$RESULTADOS/backend-legado.log"; exit 1; }
             sleep 2
           done
-          node test/homolog/smoke.mjs --modo legado --saida "$RESULTADOS/smoke-legado.json"
-          node test/homolog/carga.mjs --modo legado --saida "$RESULTADOS/carga-legado.json"
+          # A carga roda mesmo com o smoke reprovado: a medição não se perde.
+          rc=0
+          node test/homolog/smoke.mjs --modo legado --saida "$RESULTADOS/smoke-legado.json" || rc=1
+          node test/homolog/carga.mjs --modo legado --saida "$RESULTADOS/carga-legado.json" || rc=1
+          exit $rc
 
       - name: Boot com flags → smoke + carga
         id: flags
@@ -268,8 +307,11 @@ jobs:
             [ "$i" = 60 ] && { echo "::error::backend não respondeu /health em 120 s"; tail -50 "$RESULTADOS/backend-flags.log"; exit 1; }
             sleep 2
           done
-          node test/homolog/smoke.mjs --modo flags --saida "$RESULTADOS/smoke-flags.json"
-          node test/homolog/carga.mjs --modo flags --saida "$RESULTADOS/carga-flags.json"
+          # A carga roda mesmo com o smoke reprovado: a medição não se perde.
+          rc=0
+          node test/homolog/smoke.mjs --modo flags --saida "$RESULTADOS/smoke-flags.json" || rc=1
+          node test/homolog/carga.mjs --modo flags --saida "$RESULTADOS/carga-flags.json" || rc=1
+          exit $rc
 
       - name: Consolidar resultados e resumo
         if: ${{ always() }}

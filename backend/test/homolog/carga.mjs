@@ -8,7 +8,11 @@
 // As rotas logadas se dividem entre 6 operadores criados aqui: o throttler
 // limita 300 req/min por usuário e um usuário só levaria 429 (480 req/min).
 //
-// Sai com código 1 se alguma rota passar de CARGA_ERRO_MAX em erros.
+// Só no modo flags sai com código 1 se alguma rota passar de CARGA_ERRO_MAX em
+// erros; no legado (linha de base) a taxa é só registrada.
+//
+// Os crons do backend (adotarDesconhecidos, destravarEstoqueConectado, alertas)
+// continuam rodando durante a carga e põem ruído na medição.
 
 import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -52,6 +56,20 @@ async function postar(rota, corpo, token) {
 }
 
 const login = async (email, senha) => (await postar('/auth/login', { email, password: senha })).accessToken;
+
+/** Versões do que foi medido; Traccar fora não impede o resultado. */
+async function versoes() {
+  let traccar = null;
+  try {
+    const url = (process.env.TRACCAR_API_URL ?? 'http://localhost:8082/api').replace(/\/$/, '');
+    const res = await fetch(`${url}/server`, { signal: AbortSignal.timeout(10_000) });
+    traccar = (await res.json())?.version ?? null;
+  } catch {
+    traccar = null;
+  }
+  const sha = process.env.GITHUB_SHA ?? process.env.GIT_SHA ?? null;
+  return { node: process.version, traccar, backendGitSha: sha ? sha.slice(0, 7) : null };
+}
 
 function percentil(ordenados, q) {
   if (ordenados.length === 0) return null;
@@ -149,8 +167,10 @@ try {
 const acimaDoLimite = Object.entries(rotas)
   .filter(([, r]) => r.taxaErro > ERRO_MAX)
   .map(([rota]) => rota);
+const reprova = args.modo === 'flags';
 const resultado = {
   modo: args.modo,
+  versoes: await versoes(),
   nivel: '(3) homologação completa — dados sintéticos, runner do GitHub Actions',
   flags: {
     STOCK_MAP_CACHE_MS: process.env.STOCK_MAP_CACHE_MS ?? null,
@@ -160,13 +180,19 @@ const resultado = {
   operadores: OPERADORES,
   erroMax: ERRO_MAX,
   ok: !erroFatal && acimaDoLimite.length === 0,
+  reprovaPorErro: reprova,
+  observacoes: [
+    'Crons do backend (adotarDesconhecidos, destravarEstoqueConectado, alertas) rodam durante a carga e põem ruído na medição.',
+  ],
   erroFatal,
   acimaDoLimite,
   rotas,
 };
 writeFileSync(args.saida, JSON.stringify(resultado, null, 2));
 console.log(JSON.stringify(rotas, null, 2));
-if (!resultado.ok) {
+if (!resultado.ok && !reprova) {
+  console.log(`::warning::Carga legado (linha de base) acima do limite: ${erroFatal ?? acimaDoLimite.join(', ')} — só registrado.`);
+} else if (!resultado.ok) {
   console.error(`Carga ${args.modo} reprovada: ${erroFatal ?? `erros acima de ${ERRO_MAX * 100}% em ${acimaDoLimite.join(', ')}`}`);
   process.exit(1);
 }

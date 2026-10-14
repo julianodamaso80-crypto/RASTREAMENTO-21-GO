@@ -29,8 +29,23 @@ const observacoes = [];
 const naoCoberto = [
   'Login real do associado (/app/auth/login): depende do SGA Hinova ao vivo. O token do associado é assinado pelo próprio teste com o JWT_ASSOCIATE_SECRET de teste.',
   'Posições reais: devices sintéticos não têm posição; /traccar/positions devolve [] e o geocode do mapa do estoque não é exercitado.',
-  'WebSocket (Socket.io) e crons: fora do escopo do smoke HTTP.',
+  'WebSocket (Socket.io): fora do escopo do smoke HTTP.',
+  'Crons do backend (adotarDesconhecidos e destravarEstoqueConectado a cada 60 s, alertas a cada 60 s) rodam durante o smoke e a carga e põem ruído na medição.',
 ];
+
+/** Versões do que foi medido; Traccar fora não impede o resultado. */
+async function versoes() {
+  let traccar = null;
+  try {
+    const url = (process.env.TRACCAR_API_URL ?? 'http://localhost:8082/api').replace(/\/$/, '');
+    const res = await fetch(`${url}/server`, { signal: AbortSignal.timeout(10_000) });
+    traccar = (await res.json())?.version ?? null;
+  } catch {
+    traccar = null;
+  }
+  const sha = process.env.GITHUB_SHA ?? process.env.GIT_SHA ?? null;
+  return { node: process.version, traccar, backendGitSha: sha ? sha.slice(0, 7) : null };
+}
 
 function check(nome, ok, detalhe) {
   checks.push({ nome, ok: Boolean(ok), detalhe });
@@ -213,7 +228,7 @@ async function main() {
   // --- App do associado (mundo separado do painel) ---
   for (const a of [fx.associadoA, fx.associadoB]) {
     const r = await req('GET', '/app/vehicles', { token: tokenDoAssociado(a) });
-    const placas = (dados(r) ?? []).map((v) => v.plate).sort();
+    const placas = (Array.isArray(dados(r)) ? dados(r) : []).map((v) => v.plate).sort();
     check(`/app/vehicles do associado ${a.nome} traz só os veículos dele`, r.status === 200 && JSON.stringify(placas) === JSON.stringify([...a.placas].sort()), {
       status: r.status,
       placas,
@@ -242,6 +257,7 @@ try {
 
 const resultado = {
   modo: args.modo,
+  versoes: await versoes(),
   nivel: '(3) homologação completa — dados sintéticos',
   flags: {
     STOCK_MAP_CACHE_MS: process.env.STOCK_MAP_CACHE_MS ?? null,
