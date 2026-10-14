@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronRight, Crosshair, Loader2, MapPin, X } from 'lucide-react';
+import { ChevronRight, Crosshair, KeyRound, Loader2, MapPin, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface LinhaSelecionada {
@@ -17,6 +17,12 @@ export interface LinhaSelecionada {
   enderecoCarregando: boolean;
   /** false quando o item nunca reportou posição — não entra no mapa. */
   temPosicao: boolean;
+  /**
+   * Chavinha da ignição, como a Rede mostra no card: true = Ligada (verde),
+   * false = Desligada (laranja), null = sem leitura confiável ("--", cinza).
+   * Ausente = a tela não mostra a linha (o estoque já põe no `estado`).
+   */
+  ignicao?: boolean | null;
 }
 
 interface Props {
@@ -121,6 +127,27 @@ export function SelectionListPanel({
             >
               {linha.estado}
             </div>
+
+            {linha.ignicao !== undefined && (
+              <div className="mt-1 ml-7 flex items-center gap-1.5 text-xs">
+                <KeyRound
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0',
+                    linha.ignicao === true && 'text-emerald-500',
+                    linha.ignicao === false && 'text-orange-500',
+                    linha.ignicao === null && 'text-muted-foreground',
+                  )}
+                />
+                <span className="text-muted-foreground">Ignição</span>
+                <span className="font-semibold">
+                  {linha.ignicao === null
+                    ? '--'
+                    : linha.ignicao
+                      ? 'Ligada'
+                      : 'Desligada'}
+                </span>
+              </div>
+            )}
 
             {/* A localização escrita. Enquanto a busca desta coordenada não
                 volta, diz que está buscando — nunca mostra o endereço de

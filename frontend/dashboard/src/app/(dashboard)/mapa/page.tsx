@@ -378,6 +378,10 @@ export default function MapaPage() {
                   endereco: geo?.address ?? null,
                   enderecoCarregando: geo?.loading ?? false,
                   temPosicao: Boolean(v.latitude && v.longitude),
+                  // Offline = a última leitura da chave pode ser velha; a
+                  // Rede mostra "--" nesse caso e nós também.
+                  ignicao:
+                    v.displayStatus === 'offline' ? null : v.ignition,
                 };
               })}
               onFocar={(id) => {

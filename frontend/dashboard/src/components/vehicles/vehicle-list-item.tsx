@@ -12,7 +12,7 @@ interface VehicleListItemProps {
 }
 
 export function VehicleListItem({ vehicle }: VehicleListItemProps) {
-  const { selectedIds, selectVehicle, toggleVehicle } = useTracking();
+  const { selectedIds, toggleVehicle } = useTracking();
   // Realce pela MARCAÇÃO, não pelo "selecionado sozinho": com 4 marcados o
   // operador precisa reconhecer os 4 na lista, não nenhum.
   const isSelected = selectedIds.includes(vehicle.id);
@@ -28,9 +28,9 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
           : 'hover:bg-muted/30 border-l-2 border-transparent',
       )}
     >
-      {/* Caixinha = acrescenta este veículo aos que já estão marcados.
-          Clicar no corpo da linha continua trocando a seleção inteira por
-          este — os dois gestos convivem porque são botões irmãos. */}
+      {/* Caixinha e corpo da linha fazem a mesma coisa: marcam/desmarcam este
+          veículo sem tirar os outros. O operador clica no nome, não mira a
+          caixinha. */}
       <SelectionCheckbox
         marcado={isSelected}
         onToggle={() => toggleVehicle(vehicle.id)}
@@ -39,7 +39,7 @@ export function VehicleListItem({ vehicle }: VehicleListItemProps) {
       />
       <button
         type="button"
-        onClick={() => selectVehicle(vehicle.id)}
+        onClick={() => toggleVehicle(vehicle.id)}
         className="min-w-0 flex-1 text-left"
       >
       <div className="flex items-center justify-between">

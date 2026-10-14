@@ -7,8 +7,10 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
+import { usePathname } from 'next/navigation';
 import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
@@ -503,6 +505,19 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
     );
   }, []);
+
+  // Saiu do mapa pra outra aba: na volta a lista começa limpa, sem a busca
+  // nem os marcados de antes. Só na SAÍDA de /mapa — a busca do topo grava o
+  // termo e navega PARA o mapa, e isso não pode ser apagado.
+  const pathname = usePathname();
+  const rotaAnterior = useRef(pathname);
+  useEffect(() => {
+    if (rotaAnterior.current === '/mapa' && pathname !== '/mapa') {
+      setSelectedIds([]);
+      setSearchQuery('');
+    }
+    rotaAnterior.current = pathname;
+  }, [pathname]);
 
   const markAlertRead = useCallback(async (id: string) => {
     await alertsApi.markAsRead(id);
