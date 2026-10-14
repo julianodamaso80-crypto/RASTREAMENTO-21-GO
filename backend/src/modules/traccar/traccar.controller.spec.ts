@@ -120,6 +120,53 @@ describe('TraccarController — frota do painel com etag', () => {
     });
   });
 
+  describe('falha de um lado (flag ligada)', () => {
+    it('positions falhou → /devices 200 e /positions relança o mesmo erro', async () => {
+      const { controller, res, frota } = montar(true);
+      const erro = new Error('positions fora');
+      frota.frotaDoTenant.mockResolvedValue({
+        ...frotas['tenant-a'],
+        positions: [],
+        erroPositions: erro,
+      });
+      await expect(
+        controller.getDevices(req('tenant-a'), undefined, res as never),
+      ).resolves.toEqual([{ id: 1 }]);
+      await expect(
+        controller.getPositions(req('tenant-a'), undefined, res as never),
+      ).rejects.toBe(erro);
+    });
+
+    it('devices falhou → /positions 200 e /devices relança o mesmo erro', async () => {
+      const { controller, res, frota } = montar(true);
+      const erro = new Error('devices fora');
+      frota.frotaDoTenant.mockResolvedValue({
+        ...frotas['tenant-a'],
+        devices: [],
+        erroDevices: erro,
+      });
+      await expect(
+        controller.getPositions(req('tenant-a'), undefined, res as never),
+      ).resolves.toEqual([{ id: 10, deviceId: 1 }]);
+      await expect(
+        controller.getDevices(req('tenant-a'), undefined, res as never),
+      ).rejects.toBe(erro);
+    });
+
+    it('erro não manda ETag nem 304', async () => {
+      const { controller, res, frota } = montar(true);
+      frota.frotaDoTenant.mockResolvedValue({
+        ...frotas['tenant-a'],
+        erroDevices: new Error('x'),
+      });
+      await expect(
+        controller.getDevices(req('tenant-a'), ETAG_A_DEV, res as never),
+      ).rejects.toThrow('x');
+      expect(res.setHeader).not.toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+  });
+
   describe('flag desligada → caminho de hoje', () => {
     it('getDevices: corpo de hoje, sem cabeçalho', async () => {
       const { controller, res, frota } = montar(false);

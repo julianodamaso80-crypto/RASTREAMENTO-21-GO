@@ -61,6 +61,8 @@ export class TraccarController {
     const tenantId = req.tenantId;
     if (this.frota.ligado) {
       const f = await this.frota.frotaDoTenant(tenantId);
+      // Mesmo objeto de erro de hoje, para o filtro global tratar igual.
+      if ('erroDevices' in f) throw f.erroDevices;
       return this.responderComEtag(f.devices, f.etagDevices, ifNoneMatch, res);
     }
     const vehicles = await this.prisma.vehicle.findMany({
@@ -90,6 +92,7 @@ export class TraccarController {
     const tenantId = req.tenantId;
     if (this.frota.ligado) {
       const f = await this.frota.frotaDoTenant(tenantId);
+      if ('erroPositions' in f) throw f.erroPositions;
       return this.responderComEtag(
         f.positions,
         f.etagPositions,

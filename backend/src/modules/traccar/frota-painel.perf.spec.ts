@@ -99,6 +99,7 @@ async function rajada(cacheMs: string | undefined) {
   const traccar = {
     getDevices: jest.fn().mockResolvedValue(devices),
     getPositions: jest.fn().mockResolvedValue(posicoes),
+    frotaBuscadaEm: jest.fn().mockReturnValue(null),
   };
   const servico = new FrotaPainelService(prisma as never, traccar as never);
   const controller = new TraccarController(
@@ -155,11 +156,9 @@ async function rajada(cacheMs: string | undefined) {
       const desligado = await rajada(undefined);
       const ligado = await rajada('2000');
 
-      if (PERF) {
-        console.log(
-          `[frota-painel sintético] desligado=${JSON.stringify(desligado)} ligado=${JSON.stringify(ligado)}`,
-        );
-      }
+      console.log(
+        `[frota-painel sintético] desligado=${JSON.stringify(desligado)} ligado=${JSON.stringify(ligado)}`,
+      );
 
       expect(ligado.itens).toBe(desligado.itens);
       expect(desligado.montagens).toBe(CHAMADAS);

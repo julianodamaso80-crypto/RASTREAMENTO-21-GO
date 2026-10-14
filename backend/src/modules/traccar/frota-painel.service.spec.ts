@@ -44,6 +44,7 @@ function servico(cacheMs: string | undefined, cenario: Cenario) {
   const traccar = {
     getDevices: jest.fn(() => Promise.resolve(cenario.devices)),
     getPositions: jest.fn(() => Promise.resolve(cenario.posicoes)),
+    frotaBuscadaEm: jest.fn<number | null, [string]>(() => null),
   };
   const s = new FrotaPainelService(prisma as never, traccar as never);
   return { s, prisma, traccar };
@@ -202,12 +203,122 @@ describe('FrotaPainelService', () => {
     }
   });
 
-  it('falha do Traccar não fica guardada', async () => {
-    const { s, traccar } = servico('2000', base);
-    traccar.getDevices.mockRejectedValueOnce(new Error('traccar fora'));
-    await expect(s.frotaDoTenant('tenant-a')).rejects.toThrow('traccar fora');
-    const f = await s.frotaDoTenant('tenant-a');
-    expect(f.devices.map((d) => d.id)).toEqual([1, 3]);
+  describe('idade medida desde a busca no Traccar', () => {
+    const T0 = Date.parse('2026-10-13T15:00:00Z');
+    beforeEach(() => jest.useFakeTimers({ now: T0 }));
+    afterEach(() => jest.useRealTimers());
+
+    it('busca em t0 e montagem em t0+1.500 → expira em t0+2.000, não em t0+3.500', async () => {
+      const { s, prisma, traccar } = servico('2000', base);
+      traccar.frotaBuscadaEm.mockReturnValue(T0);
+      jest.setSystemTime(T0 + 1_500);
+      const f = await s.frotaDoTenant('tenant-a');
+      expect(f.geradoEm).toBe(T0);
+
+      jest.setSystemTime(T0 + 1_999);
+      await s.frotaDoTenant('tenant-a');
+      expect(prisma.vehicle.findMany).toHaveBeenCalledTimes(1);
+
+      jest.setSystemTime(T0 + 2_000);
+      traccar.frotaBuscadaEm.mockReturnValue(T0 + 2_000);
+      await s.frotaDoTenant('tenant-a');
+      expect(prisma.vehicle.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('geradoEm é a busca mais antiga entre devices e positions', async () => {
+      const { s, traccar } = servico('2000', base);
+      traccar.frotaBuscadaEm.mockImplementation((rota: string) =>
+        rota === '/devices' ? T0 - 300 : T0 - 1_200,
+      );
+      const f = await s.frotaDoTenant('tenant-a');
+      expect(traccar.frotaBuscadaEm).toHaveBeenCalledWith('/devices');
+      expect(traccar.frotaBuscadaEm).toHaveBeenCalledWith('/positions');
+      expect(f.geradoEm).toBe(T0 - 1_200);
+    });
+
+    it('sem registro da busca → geradoEm = agora', async () => {
+      const { s } = servico('2000', base);
+      jest.setSystemTime(T0 + 42);
+      const f = await s.frotaDoTenant('tenant-a');
+      expect(f.geradoEm).toBe(T0 + 42);
+    });
+
+    it('busca já mais velha que o TTL → não guarda', async () => {
+      const { s, prisma, traccar } = servico('2000', base);
+      traccar.frotaBuscadaEm.mockReturnValue(T0 - 2_500);
+      await s.frotaDoTenant('tenant-a');
+      await s.frotaDoTenant('tenant-a');
+      expect(prisma.vehicle.findMany).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('falha de um lado não derruba o outro', () => {
+    it('positions falha → devices servidos, erro de positions guardado', async () => {
+      const { s, traccar } = servico('2000', base);
+      const erro = new Error('positions fora');
+      traccar.getPositions.mockRejectedValueOnce(erro);
+      const f = await s.frotaDoTenant('tenant-a');
+      expect(f.devices.map((d) => d.id)).toEqual([1, 3]);
+      expect(f.erroDevices).toBeUndefined();
+      expect(f.erroPositions).toBe(erro);
+      expect(f.positions).toEqual([]);
+    });
+
+    it('devices falha → positions servidas, erro de devices guardado', async () => {
+      const { s, traccar } = servico('2000', base);
+      const erro = new Error('devices fora');
+      traccar.getDevices.mockRejectedValueOnce(erro);
+      const f = await s.frotaDoTenant('tenant-a');
+      expect(f.positions.map((p) => p.deviceId)).toEqual([3, 1]);
+      expect(f.erroPositions).toBeUndefined();
+      expect(f.erroDevices).toBe(erro);
+      expect(f.devices).toEqual([]);
+    });
+
+    it('os dois ok → sem erro', async () => {
+      const { s } = servico('2000', base);
+      const f = await s.frotaDoTenant('tenant-a');
+      expect(f.erroDevices).toBeUndefined();
+      expect(f.erroPositions).toBeUndefined();
+    });
+
+    it('resultado com erro dura no máximo 1 s', async () => {
+      const T0 = Date.parse('2026-10-13T15:00:00Z');
+      jest.useFakeTimers({ now: T0 });
+      try {
+        const { s, prisma, traccar } = servico('2000', base);
+        traccar.getDevices.mockRejectedValueOnce(new Error('traccar fora'));
+        const f1 = await s.frotaDoTenant('tenant-a');
+        expect(f1.erroDevices).toBeDefined();
+
+        jest.setSystemTime(T0 + 999);
+        await s.frotaDoTenant('tenant-a');
+        expect(prisma.vehicle.findMany).toHaveBeenCalledTimes(1);
+
+        jest.setSystemTime(T0 + 1_000);
+        const f2 = await s.frotaDoTenant('tenant-a');
+        expect(prisma.vehicle.findMany).toHaveBeenCalledTimes(2);
+        expect(f2.erroDevices).toBeUndefined();
+        expect(f2.devices.map((d) => d.id)).toEqual([1, 3]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  it('mesma lista em tenants diferentes → etags diferentes', async () => {
+    const { s } = servico('2000', {
+      ...base,
+      veiculos: {
+        'tenant-a': [{ traccarDeviceId: 1 }],
+        'tenant-b': [{ traccarDeviceId: 1 }],
+      },
+    });
+    const a = await s.frotaDoTenant('tenant-a');
+    const b = await s.frotaDoTenant('tenant-b');
+    expect(b.devices).toEqual(a.devices);
+    expect(b.etagDevices).not.toBe(a.etagDevices);
+    expect(b.etagPositions).not.toBe(a.etagPositions);
   });
 });
 

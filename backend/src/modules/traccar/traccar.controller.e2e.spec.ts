@@ -41,6 +41,7 @@ async function subir(flag: string | undefined) {
       { id: 20, deviceId: 2 },
       { id: 10, deviceId: 1 },
     ]),
+    frotaBuscadaEm: jest.fn().mockReturnValue(null),
   };
   const modulo = await Test.createTestingModule({
     controllers: [TraccarController],
@@ -50,7 +51,9 @@ async function subir(flag: string | undefined) {
       { provide: TraccarService, useValue: traccar },
     ],
   }).compile();
-  const app = modulo.createNestApplication<INestApplication<App>>();
+  const app = modulo.createNestApplication<INestApplication<App>>({
+    logger: false,
+  });
   app.use((req: Request, _res: Response, next: NextFunction) => {
     (req as unknown as { tenantId: string }).tenantId = String(
       req.headers['x-tenant'],
@@ -63,6 +66,8 @@ async function subir(flag: string | undefined) {
 }
 
 describe('TraccarController — 304 pelo Express (supertest)', () => {
+  // Subir o Nest com ts-jest frio passa dos 5 s padrão em máquina ocupada.
+  jest.setTimeout(30_000);
   const envOriginal = process.env.FROTA_PAINEL_CACHE_MS;
   let app: INestApplication<App> | undefined;
   afterEach(async () => {
@@ -122,6 +127,22 @@ describe('TraccarController — 304 pelo Express (supertest)', () => {
         (b.body as { data: Array<{ id: number }> }).data.map((x) => x.id),
       ).toEqual(rota.endsWith('devices') ? [2] : [20]);
     });
+  });
+
+  it('positions fora do ar: /traccar/devices 200, /traccar/positions erro', async () => {
+    const s = await subir('2000');
+    app = s.app;
+    s.traccar.getPositions.mockRejectedValue(new Error('positions fora'));
+    const d = await request(app.getHttpServer())
+      .get('/traccar/devices')
+      .set('x-tenant', 'tenant-a');
+    const p = await request(app.getHttpServer())
+      .get('/traccar/positions')
+      .set('x-tenant', 'tenant-a');
+    expect(d.status).toBe(200);
+    expect(d.body).toEqual({ data: [{ id: 1, name: 'um' }] });
+    expect(p.status).toBe(500);
+    expect(s.prisma.vehicle.findMany).toHaveBeenCalledTimes(1);
   });
 
   it('flag desligada: corpo de hoje, sem Cache-Control novo (ETag continua o do Express)', async () => {
