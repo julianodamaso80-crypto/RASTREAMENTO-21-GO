@@ -182,7 +182,7 @@ describe('StockService.lookupSga — cache de 2 min', () => {
       technicianName: 'Técnico',
       installLocation: 'porta-luvas',
     });
-    expect(r.ok).toBe(true);
+    expect(r).toMatchObject({ ok: true });
     expect(hinova).toHaveBeenCalledTimes(1);
     await s.lookupSga(T1, 'EIN4I70');
     expect(hinova).toHaveBeenCalledTimes(2);
