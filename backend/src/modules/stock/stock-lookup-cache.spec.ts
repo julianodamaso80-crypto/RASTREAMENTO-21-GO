@@ -75,6 +75,7 @@ function servico(lookupByPlate: jest.Mock) {
     { markStopDoneByPlate: jest.fn().mockResolvedValue(undefined) } as never,
     {} as never,
     { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
+    { avisarInstalado: jest.fn() } as never,
   );
   return { s };
 }

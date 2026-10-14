@@ -94,6 +94,7 @@ function servico() {
     { markStopDoneByPlate: jest.fn().mockResolvedValue(undefined) } as never,
     { persistIfRelevant: jest.fn().mockResolvedValue(undefined) } as never,
     { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
+    { avisarInstalado: jest.fn() } as never,
   );
   return { s, prisma, tx, stockTraccar };
 }
