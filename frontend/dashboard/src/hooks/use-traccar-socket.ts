@@ -16,6 +16,8 @@ interface UseTraccarSocketOptions {
   onDevicesBatch?: (devices: TraccarDevice[]) => void;
   onAlert?: (alert: Alert) => void;
   onBleSighting?: (event: BleSightingEvent) => void;
+  /** Reconectou depois de já ter conectado: o que passou no intervalo se perdeu. */
+  onReconnect?: () => void;
 }
 
 export function useTraccarSocket({
@@ -26,9 +28,11 @@ export function useTraccarSocket({
   onDevicesBatch,
   onAlert,
   onBleSighting,
+  onReconnect,
 }: UseTraccarSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  const jaConectou = useRef(false);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {
@@ -55,7 +59,11 @@ export function useTraccarSocket({
 
     socketRef.current = socket;
 
-    socket.on('connect', () => setIsConnected(true));
+    socket.on('connect', () => {
+      setIsConnected(true);
+      if (jaConectou.current) onReconnect?.();
+      jaConectou.current = true;
+    });
     socket.on('disconnect', () => setIsConnected(false));
 
     socket.on('position:update', (data: TraccarPosition) => {

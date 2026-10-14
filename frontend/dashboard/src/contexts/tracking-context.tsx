@@ -7,6 +7,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
 import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
@@ -21,6 +22,13 @@ import { toast } from 'sonner';
 import { useTraccarSocket } from '@/hooks/use-traccar-socket';
 import { getDisplayStatus, estaAndando, estaConectado } from '@/lib/utils';
 import { matchesVehicleSearch } from '@/lib/vehicle-search';
+import {
+  MODO_POLLING,
+  POLL_MS,
+  decidirPolling,
+  mesclarDevices,
+  mesclarPosicoes,
+} from '@/lib/tracking-polling';
 
 interface StatusCounts {
   total: number;
@@ -246,11 +254,25 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   // re-buscamos posições + devices a cada 8s direto do Traccar (REST), então o
   // marcador e o endereço SEMPRE refletem o dado real e atual — sem depender só
   // do WS. Rastreamento não pode parar de atualizar.
+  //
+  // Com NEXT_PUBLIC_POLLING_MODE=contingencia a frota só vem pelo REST quando o
+  // socket está fora ou mudo, e numa reconciliação a cada 60 s; sem a env, é o
+  // polling de 8 s de sempre. Quem decide é `decidirPolling`.
+  // Refs: o timer lê o valor atual sem recriar o intervalo a cada reconexão.
+  const socketConectadoRef = useRef(false);
+  const ultimoLoteEmRef = useRef<number | null>(null);
+  const ultimaFrotaEmRef = useRef(0);
+  const ultimosVehiclesEmRef = useRef(0);
+  const forcarCompletoRef = useRef(false);
+  const pollRef = useRef<(() => Promise<void>) | null>(null);
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    let tick = 0;
     let emAndamento = false;
+    // O carregamento inicial acabou de buscar tudo: os prazos contam daqui.
+    ultimaFrotaEmRef.current = Date.now();
+    ultimosVehiclesEmRef.current = Date.now();
     const poll = async () => {
       // Aba escondida não mostra mapa: baixar a frota a cada 8s em toda aba
       // aberta somou 8 GB num dia só do escritório (18/09/2026) e saturou o
@@ -260,21 +282,41 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       // empilhava pedidos (medido em 30/09/2026: 10.541 chamadas a /vehicles em
       // 2 h) e cada um chegava mais lento que o anterior.
       if (emAndamento) return;
+      const agora = Date.now();
+      // A lista de veículos também precisa acompanhar: um vínculo feito no
+      // estoque (outra aba ou outra rota) criava veículo que só aparecia no
+      // mapa depois de F5. A cada ~32s recarrega a lista.
+      const decisao = decidirPolling({
+        modo: MODO_POLLING,
+        agora,
+        socketConectado: socketConectadoRef.current,
+        ultimoLoteEm: ultimoLoteEmRef.current,
+        ultimaFrotaEm: ultimaFrotaEmRef.current,
+        ultimosVehiclesEm: ultimosVehiclesEmRef.current,
+      });
+      const forcar = forcarCompletoRef.current;
+      const buscarFrota = decisao.frota || forcar;
+      const buscarVehicles = decisao.vehicles || forcar;
+      if (!buscarFrota && !buscarVehicles) return;
+      forcarCompletoRef.current = false;
+      // Conta a partir da tentativa, com ou sem sucesso, como o contador de
+      // tiques de antes: backend fora não pode virar /vehicles a cada 8 s.
+      if (buscarFrota) ultimaFrotaEmRef.current = agora;
+      if (buscarVehicles) ultimosVehiclesEmRef.current = agora;
       emAndamento = true;
       try {
-        // A lista de veículos também precisa acompanhar: um vínculo feito no
-        // estoque (outra aba ou outra rota) criava veículo que só aparecia no
-        // mapa depois de F5. A cada 4 ciclos (~32s) recarrega a lista.
-        tick++;
-        const refreshVehicles = tick % 4 === 0;
         const [devices, positions, vehiclesList] = await Promise.all([
-          traccarApi.getDevices(),
-          traccarApi.getPositions(),
-          refreshVehicles ? loadAllVehicles() : Promise.resolve(null),
+          buscarFrota ? traccarApi.getDevices() : Promise.resolve(null),
+          buscarFrota ? traccarApi.getPositions() : Promise.resolve(null),
+          buscarVehicles ? loadAllVehicles() : Promise.resolve(null),
         ]);
         if (cancelled) return;
-        setDeviceMap(new Map(devices.map((d) => [d.id, d])));
-        setPositionMap(new Map(positions.map((p) => [p.deviceId, p])));
+        // Mesclar, e não trocar o mapa: o lote do WebSocket pode ser mais novo
+        // que o snapshot desta resposta.
+        if (devices && positions) {
+          setDeviceMap((prev) => mesclarDevices(prev, devices));
+          setPositionMap((prev) => mesclarPosicoes(prev, positions));
+        }
         if (vehiclesList) {
           setVehicleMap(new Map(vehiclesList.map((v) => [v.id, v])));
         }
@@ -284,17 +326,29 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         emAndamento = false;
       }
     };
-    const id = setInterval(poll, 8000);
+    pollRef.current = poll;
+    const id = setInterval(poll, POLL_MS);
     const aoVoltar = () => {
       if (!document.hidden) void poll();
     };
     document.addEventListener('visibilitychange', aoVoltar);
     return () => {
       cancelled = true;
+      pollRef.current = null;
       clearInterval(id);
       document.removeEventListener('visibilitychange', aoVoltar);
     };
   }, [token, loadAllVehicles]);
+
+  // O que chegou enquanto o socket estava fora se perdeu: recarrega tudo. No
+  // legado o tique de 8 s já cobre isso, e o comportamento fica o de hoje.
+  // Se a aba estiver escondida ou houver ciclo em andamento, o próximo tique
+  // faz a carga completa.
+  const handleReconnect = useCallback(() => {
+    if (MODO_POLLING !== 'contingencia') return;
+    forcarCompletoRef.current = true;
+    void pollRef.current?.();
+  }, []);
 
   // WebSocket
   const handlePositionUpdate = useCallback((position: TraccarPosition) => {
@@ -308,6 +362,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   // Lote de 1 s: um estado novo para todas as posições do lote, e não um
   // render por posição.
   const handlePositionsBatch = useCallback((positions: TraccarPosition[]) => {
+    ultimoLoteEmRef.current = Date.now();
     setPositionMap((prev) => {
       const next = new Map(prev);
       for (const position of positions) next.set(position.deviceId, position);
@@ -366,7 +421,12 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     onDevicesBatch: handleDevicesBatch,
     onAlert: handleAlert,
     onBleSighting: handleBleSighting,
+    onReconnect: handleReconnect,
   });
+
+  useEffect(() => {
+    socketConectadoRef.current = isConnected;
+  }, [isConnected]);
 
   // O status depende do relógio (30 min, 60 min, 2 dias sem contato): sem
   // este tique, rastreador que parou de falar ficaria ONLINE até chegar outro
