@@ -90,11 +90,16 @@ export default function EstoqueMapaPage() {
   const [listaOpen, setListaOpen] = useState(false);
   const mapRef = useRef<StockMapRef>(null);
   const focouInicial = useRef(false);
+  const geradoEmRef = useRef<string | null>(null);
 
   const carregar = useCallback(async (comSpinner: boolean) => {
     if (comSpinner) setCarregando(true);
     try {
       const res = await stockApi.map();
+      // Mesmo payload do servidor (cache): nada a redesenhar. Backend antigo
+      // não manda `geradoEm` e cai no caminho de sempre.
+      if (res.geradoEm && res.geradoEm === geradoEmRef.current) return;
+      geradoEmRef.current = res.geradoEm ?? null;
       setPontos(res.pontos);
       setIndisponivel(res.indisponivel);
     } catch {

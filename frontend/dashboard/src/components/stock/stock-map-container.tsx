@@ -4,15 +4,24 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
   useState,
   forwardRef,
   useImperativeHandle,
 } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import type Supercluster from 'supercluster';
 import { MAP_CENTER, MAP_ZOOM, BASEMAPS, type BasemapId } from '@/lib/constants';
 import { resolveSatelliteStyle, type SatelliteProvider } from '@/lib/basemap';
 import { mapApi } from '@/lib/api';
+import {
+  CLUSTER_ATIVO,
+  CLUSTER_MAX_ZOOM,
+  indexarPontos,
+  itensVisiveis,
+  type ClusterVisivel,
+} from '@/lib/stock-cluster';
 import type { StockMapPoint } from '@/types/stock';
 import { BasemapToggle } from '@/components/map/basemap-toggle';
 import { GoogleMapsAttribution } from '@/components/map/google-attribution';
@@ -41,6 +50,97 @@ export function corDaConexao(ponto: StockMapPoint): string {
   return '#ef4444';
 }
 
+/** Círculo com a quantidade agrupada — o mesmo do mapa principal. */
+function pintarCluster(el: HTMLElement, total: number) {
+  if (el.dataset.total === String(total)) return;
+  el.dataset.total = String(total);
+  const tamanho = total < 10 ? 36 : total < 100 ? 44 : 52;
+  el.style.width = `${tamanho}px`;
+  el.style.height = `${tamanho}px`;
+  el.textContent = total >= 1000 ? `${Math.floor(total / 1000)}k` : String(total);
+}
+
+function criarElementoCluster(total: number, aoClicar: () => void): HTMLElement {
+  const el = document.createElement('div');
+  el.style.cssText =
+    'cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(15,23,42,0.92);color:#fff;font-size:13px;font-weight:700;border:3px solid #f97316;box-shadow:0 2px 8px rgba(0,0,0,0.55);';
+  pintarCluster(el, total);
+  el.onclick = (e) => {
+    e.stopPropagation();
+    aoClicar();
+  };
+  return el;
+}
+
+type CriarMarcador = (
+  ponto: StockMapPoint,
+  selecionado: boolean,
+  ordem: number | null,
+) => HTMLElement;
+
+/** Deixa no mapa exatamente um marcador por ponto de `lista`, reaproveitando os que não mudaram. */
+function sincronizarMarcadores(
+  map: maplibregl.Map,
+  markers: Map<string, maplibregl.Marker>,
+  lista: StockMapPoint[],
+  selecionadosIds: string[],
+  criarMarcador: CriarMarcador,
+) {
+  const vivos = new Set<string>();
+  // Ordem de marcação → número da etiqueta. `null` com um só marcado.
+  const ordemPorId = new Map<string, number>();
+  if (selecionadosIds.length > 1) {
+    selecionadosIds.forEach((id, i) => ordemPorId.set(id, i + 1));
+  }
+
+  for (const ponto of lista) {
+    vivos.add(ponto.id);
+    const lngLat: [number, number] = [ponto.longitude!, ponto.latitude!];
+    const selecionado = selecionadosIds.includes(ponto.id);
+    const ordem = ordemPorId.get(ponto.id) ?? null;
+    // A ordem entra na chave: desmarcar um vizinho renumera os outros, e
+    // sem isso a etiqueta ficaria com o número velho.
+    const chave = `${ponto.conexao}|${ponto.gpsConfiavel}|${ponto.direcao}|${selecionado}|${ordem}`;
+    const existente = markers.get(ponto.id);
+
+    if (existente) {
+      const el = existente.getElement();
+      if (el.dataset.chave === chave) {
+        existente.setLngLat(lngLat);
+      } else {
+        // Trocar o nó por dentro (replaceWith + reatribuir `_element`)
+        // deixava o marcador sem o transform que o MapLibre aplica na
+        // posição: o pino ia parar no canto do mapa, atrás dos controles,
+        // e o operador via o mapa certo sem pino nenhum. Refazer o
+        // marcador é o caminho que o MapLibre suporta.
+        existente.remove();
+        const novoEl = criarMarcador(ponto, selecionado, ordem);
+        novoEl.dataset.chave = chave;
+        markers.set(
+          ponto.id,
+          new maplibregl.Marker({ element: novoEl })
+            .setLngLat(lngLat)
+            .addTo(map),
+        );
+      }
+    } else {
+      const el = criarMarcador(ponto, selecionado, ordem);
+      el.dataset.chave = chave;
+      markers.set(
+        ponto.id,
+        new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map),
+      );
+    }
+  }
+
+  markers.forEach((marker, id) => {
+    if (!vivos.has(id)) {
+      marker.remove();
+      markers.delete(id);
+    }
+  });
+}
+
 /**
  * Mapa do estoque: uma seta por rastreador, na última posição conhecida.
  *
@@ -56,6 +156,9 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+    const clusterMarkersRef = useRef<Map<number, maplibregl.Marker>>(new Map());
+    const indiceDesenhadoRef = useRef<Supercluster | null>(null);
+    const desenharRef = useRef<(() => void) | null>(null);
     const [basemap, setBasemap] = useState<BasemapId>('streets');
     const [satProvider, setSatProvider] = useState<SatelliteProvider | null>(null);
     const [googleMinZoom, setGoogleMinZoom] = useState<number | null>(null);
@@ -123,9 +226,13 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
         'bottom-left',
       );
       mapRef.current = map;
+      if (CLUSTER_ATIVO) map.on('moveend', () => desenharRef.current?.());
+      const clusterMarkers = clusterMarkersRef.current;
       return () => {
         markersRef.current.forEach((m) => m.remove());
         markersRef.current.clear();
+        clusterMarkers.forEach((m) => m.remove());
+        clusterMarkers.clear();
         map.remove();
         mapRef.current = null;
       };
@@ -292,61 +399,88 @@ const StockMapContainer = forwardRef<StockMapRef, Props>(
 
     useEffect(() => {
       const map = mapRef.current;
-      if (!map) return;
-      const vivos = new Set<string>();
-      // Ordem de marcação → número da etiqueta. `null` com um só marcado.
-      const ordemPorId = new Map<string, number>();
-      if (selecionadosIds.length > 1) {
-        selecionadosIds.forEach((id, i) => ordemPorId.set(id, i + 1));
+      if (!map || CLUSTER_ATIVO) return;
+      sincronizarMarcadores(map, markersRef.current, comPosicao, selecionadosIds, criarMarcador);
+    }, [comPosicao, selecionadosIds, criarMarcador]);
+
+    // ─────────────────────────────────────────────────────────────────
+    // Com NEXT_PUBLIC_STOCK_MAP_CLUSTER=on, o DOM só recebe o que está na
+    // tela, agrupado pelo supercluster (mesmo desenho do mapa principal).
+    // Medido em produção em 13/10/2026: ~9.400 marcadores travavam a thread
+    // 13,8 s a cada 90 s. O índice só é refeito quando `pontos` muda — a
+    // página mantém a mesma lista enquanto o payload não muda.
+    // ─────────────────────────────────────────────────────────────────
+    const indice = useMemo(() => (CLUSTER_ATIVO ? indexarPontos(pontos) : null), [pontos]);
+
+    const desenhar = useCallback(() => {
+      const map = mapRef.current;
+      if (!map || !indice) return;
+
+      // Índice novo: os ids de cluster do anterior não valem mais.
+      if (indiceDesenhadoRef.current !== indice) {
+        clusterMarkersRef.current.forEach((m) => m.remove());
+        clusterMarkersRef.current.clear();
+        indiceDesenhadoRef.current = indice;
       }
 
-      for (const ponto of comPosicao) {
-        vivos.add(ponto.id);
-        const lngLat: [number, number] = [ponto.longitude!, ponto.latitude!];
-        const selecionado = selecionadosIds.includes(ponto.id);
-        const ordem = ordemPorId.get(ponto.id) ?? null;
-        // A ordem entra na chave: desmarcar um vizinho renumera os outros, e
-        // sem isso a etiqueta ficaria com o número velho.
-        const chave = `${ponto.conexao}|${ponto.gpsConfiavel}|${ponto.direcao}|${selecionado}|${ordem}`;
-        const existente = markersRef.current.get(ponto.id);
+      let lista: StockMapPoint[];
+      let clusters: ClusterVisivel[] = [];
+      if (selecionadosIds.length > 0) {
+        // Com marcados o mapa mostra só eles, como sem cluster.
+        const marcados = new Set(selecionadosIds);
+        lista = pontos.filter(
+          (p) => marcados.has(p.id) && p.latitude !== null && p.longitude !== null,
+        );
+      } else {
+        // Folga de meia tela para cada lado: um pan curto não faz marcador
+        // nascer na borda.
+        const b = map.getBounds();
+        const dLng = (b.getEast() - b.getWest()) / 2;
+        const dLat = (b.getNorth() - b.getSouth()) / 2;
+        const visiveis = itensVisiveis(
+          indice,
+          [b.getWest() - dLng, b.getSouth() - dLat, b.getEast() + dLng, b.getNorth() + dLat],
+          map.getZoom(),
+          new Set(selecionadosIds),
+        );
+        lista = visiveis.pontos;
+        clusters = visiveis.clusters;
+      }
 
+      const clustersAtuais = new Set<number>();
+      for (const c of clusters) {
+        clustersAtuais.add(c.id);
+        const existente = clusterMarkersRef.current.get(c.id);
         if (existente) {
-          const el = existente.getElement();
-          if (el.dataset.chave === chave) {
-            existente.setLngLat(lngLat);
-          } else {
-            // Trocar o nó por dentro (replaceWith + reatribuir `_element`)
-            // deixava o marcador sem o transform que o MapLibre aplica na
-            // posição: o pino ia parar no canto do mapa, atrás dos controles,
-            // e o operador via o mapa certo sem pino nenhum. Refazer o
-            // marcador é o caminho que o MapLibre suporta.
-            existente.remove();
-            const novoEl = criarMarcador(ponto, selecionado, ordem);
-            novoEl.dataset.chave = chave;
-            markersRef.current.set(
-              ponto.id,
-              new maplibregl.Marker({ element: novoEl })
-                .setLngLat(lngLat)
-                .addTo(map),
-            );
-          }
+          existente.setLngLat(c.lngLat);
+          pintarCluster(existente.getElement(), c.total);
         } else {
-          const el = criarMarcador(ponto, selecionado, ordem);
-          el.dataset.chave = chave;
-          markersRef.current.set(
-            ponto.id,
-            new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map),
+          const el = criarElementoCluster(c.total, () => {
+            const alvo = Math.min(indice.getClusterExpansionZoom(c.id), CLUSTER_MAX_ZOOM + 2);
+            map.easeTo({ center: c.lngLat, zoom: alvo, duration: 500 });
+          });
+          clusterMarkersRef.current.set(
+            c.id,
+            new maplibregl.Marker({ element: el }).setLngLat(c.lngLat).addTo(map),
           );
         }
       }
-
-      markersRef.current.forEach((marker, id) => {
-        if (!vivos.has(id)) {
+      clusterMarkersRef.current.forEach((marker, id) => {
+        if (!clustersAtuais.has(id)) {
           marker.remove();
-          markersRef.current.delete(id);
+          clusterMarkersRef.current.delete(id);
         }
       });
-    }, [comPosicao, selecionadosIds, criarMarcador]);
+
+      sincronizarMarcadores(map, markersRef.current, lista, selecionadosIds, criarMarcador);
+    }, [indice, pontos, selecionadosIds, criarMarcador]);
+
+    // Pan e zoom redesenham pelo `moveend` registrado na criação do mapa.
+    useEffect(() => {
+      if (!CLUSTER_ATIVO) return;
+      desenharRef.current = desenhar;
+      desenhar();
+    }, [desenhar]);
 
     return (
       <div className="relative h-full w-full">
