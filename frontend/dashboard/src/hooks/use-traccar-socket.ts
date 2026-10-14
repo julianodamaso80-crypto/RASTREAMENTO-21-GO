@@ -6,6 +6,7 @@ import type { TraccarPosition, TraccarDevice } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
 import type { BleSightingEvent } from '@/types/ble-tag';
 import type { AtributosItem } from '@/lib/tracking-polling';
+import { criarCoalescedorDeLotes, type LoteTempoReal } from '@/lib/coalescedor-lotes';
 
 interface UseTraccarSocketOptions {
   token: string | null;
@@ -17,6 +18,8 @@ interface UseTraccarSocketOptions {
   onDevicesBatch?: (devices: TraccarDevice[]) => void;
   /** Lote de 1 s (`attrs:batch`): ignição/energia de pacotes sem fix, sem coordenada. */
   onAttrsBatch?: (itens: AtributosItem[]) => void;
+  /** Os três lotes acima que chegaram no mesmo tique, numa chamada só (um render). */
+  onLote?: (lote: LoteTempoReal) => void;
   onAlert?: (alert: Alert) => void;
   onBleSighting?: (event: BleSightingEvent) => void;
   /** Reconectou depois de já ter conectado: o que passou no intervalo se perdeu. */
@@ -30,6 +33,7 @@ export function useTraccarSocket({
   onDeviceUpdate,
   onDevicesBatch,
   onAttrsBatch,
+  onLote,
   onAlert,
   onBleSighting,
   onReconnect,
@@ -37,6 +41,11 @@ export function useTraccarSocket({
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const jaConectou = useRef(false);
+  // Ref: o socket é criado uma vez por token e precisa chamar o onLote atual.
+  const onLoteRef = useRef(onLote);
+  useEffect(() => {
+    onLoteRef.current = onLote;
+  }, [onLote]);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {
@@ -62,6 +71,7 @@ export function useTraccarSocket({
     });
 
     socketRef.current = socket;
+    const coalescedor = criarCoalescedorDeLotes((lote) => onLoteRef.current?.(lote));
 
     socket.on('connect', () => {
       setIsConnected(true);
@@ -75,7 +85,10 @@ export function useTraccarSocket({
     });
 
     socket.on('positions:batch', (data: TraccarPosition[]) => {
-      if (Array.isArray(data) && data.length > 0) onPositionsBatch?.(data);
+      if (Array.isArray(data) && data.length > 0) {
+        onPositionsBatch?.(data);
+        coalescedor.positions(data);
+      }
     });
 
     socket.on('device:update', (data: TraccarDevice) => {
@@ -83,11 +96,17 @@ export function useTraccarSocket({
     });
 
     socket.on('devices:batch', (data: TraccarDevice[]) => {
-      if (Array.isArray(data) && data.length > 0) onDevicesBatch?.(data);
+      if (Array.isArray(data) && data.length > 0) {
+        onDevicesBatch?.(data);
+        coalescedor.devices(data);
+      }
     });
 
     socket.on('attrs:batch', (data: AtributosItem[]) => {
-      if (Array.isArray(data) && data.length > 0) onAttrsBatch?.(data);
+      if (Array.isArray(data) && data.length > 0) {
+        onAttrsBatch?.(data);
+        coalescedor.atributos(data);
+      }
     });
 
     socket.on('alert:new', (data: Alert) => {
@@ -99,6 +118,7 @@ export function useTraccarSocket({
     });
 
     return () => {
+      coalescedor.cancelar();
       socket.disconnect();
     };
   }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
