@@ -81,6 +81,9 @@ export const TECHNICIAN_CONTROLLERS: readonly string[] = [
 export const PUBLIC_CONTROLLERS: readonly string[] = [
   'health/health.controller.ts',
   'legal/legal.controller.ts',
+  // Link do histórico em PDF entregue ao cliente: abre pelo código aleatório,
+  // sem login, até expirar (history-requests.service.ts).
+  'reports/history-public.controller.ts',
 ];
 
 /**

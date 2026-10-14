@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { AppApi, HistoryReport, HistoryReportType } from '@/lib/api';
+import { AppApi, HistoryReport, HistoryReportType, HistoryRequest } from '@/lib/api';
+import { AcoesDoPdf } from '@/components/historico-solicitados';
 import { colors, radii } from '@/lib/theme';
 
 const PERIODOS = [
@@ -36,12 +37,37 @@ function distancia(m: number | null, kmh: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(2).replace('.', ',')} km` : `${m} m`;
 }
 
-export function HistoricoConsultar({ vehicleId }: { vehicleId: string }) {
+export function HistoricoConsultar({
+  vehicleId,
+  aoGerarPdf,
+}: {
+  vehicleId: string;
+  aoGerarPdf?: () => void;
+}) {
   const [minutos, setMinutos] = useState(1440);
   const [tipo, setTipo] = useState<HistoryReportType>('basico');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [relatorio, setRelatorio] = useState<HistoryReport | null>(null);
+  const [gerando, setGerando] = useState(false);
+  const [gerado, setGerado] = useState<HistoryRequest | null>(null);
+
+  async function gerarPdf() {
+    setGerando(true);
+    setErro(null);
+    setGerado(null);
+    try {
+      const fim = new Date();
+      const inicio = new Date(fim.getTime() - minutos * 60_000);
+      setGerado(await AppApi.createHistoryRequest(vehicleId, inicio.toISOString(), fim.toISOString(), tipo));
+      aoGerarPdf?.();
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setErro(msg || 'Não foi possível gerar o PDF agora.');
+    } finally {
+      setGerando(false);
+    }
+  }
 
   async function buscar() {
     setCarregando(true);
@@ -91,7 +117,26 @@ export function HistoricoConsultar({ vehicleId }: { vehicleId: string }) {
         {carregando ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buscarText}>Buscar</Text>}
       </TouchableOpacity>
 
+      <TouchableOpacity onPress={gerarPdf} disabled={gerando} style={styles.pdf}>
+        {gerando ? (
+          <ActivityIndicator color={colors.orange} />
+        ) : (
+          <Text style={styles.pdfText}>Gerar PDF</Text>
+        )}
+      </TouchableOpacity>
+
       {erro && <Text style={styles.erro}>{erro}</Text>}
+
+      {gerado && (
+        <View style={[styles.card, styles.cardPdf]}>
+          <Text style={styles.cardTitulo}>PDF pronto · nº {gerado.number}</Text>
+          <Text style={styles.cardMuted}>
+            Fica guardado na aba Solicitados. O link abre até{' '}
+            {new Date(gerado.expiresAt).toLocaleDateString('pt-BR')}.
+          </Text>
+          <AcoesDoPdf item={gerado} />
+        </View>
+      )}
 
       {relatorio && (
         <View style={styles.card}>
@@ -179,6 +224,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buscarText: { color: colors.white, fontWeight: '700', fontSize: 15 },
+  pdf: {
+    borderRadius: radii.lg,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.orange,
+    backgroundColor: colors.card,
+  },
+  pdfText: { color: colors.orange, fontWeight: '700', fontSize: 15 },
+  cardPdf: { borderColor: colors.orange },
   erro: { color: '#b91c1c', fontSize: 13 },
   vazio: { color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 8 },
   card: {

@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import type { TipoRelatorio } from '@/lib/historico';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { FonteDePdf, TipoRelatorio } from '@/lib/historico';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -407,6 +407,17 @@ function HistoryTab({ vehicleId, deviceId }: { vehicleId: string; deviceId: numb
       reportsApi.getHistoryReport(deviceId as number, from, to, tipo),
     [deviceId],
   );
+  const pdf = useMemo<FonteDePdf | undefined>(
+    () =>
+      deviceId
+        ? {
+            gerar: (from, to, tipo) => reportsApi.createHistoryRequest(deviceId, from, to, tipo),
+            listar: () => reportsApi.listHistoryRequests(deviceId),
+            baixar: (id) => reportsApi.downloadHistoryRequest(id),
+          }
+        : undefined,
+    [deviceId],
+  );
   return (
     <div className="space-y-6">
       {deviceId ? (
@@ -422,6 +433,8 @@ function HistoryTab({ vehicleId, deviceId }: { vehicleId: string; deviceId: numb
               diasConsulta={90}
               resolverEndereco={geocodeApi.reverse}
               nomeArquivo={`historico-${vehicleId}`}
+              pdf={pdf}
+              mostrarQuemPediu
             />
           </CardContent>
         </Card>

@@ -375,6 +375,12 @@ export default function MeusVeiculosPage() {
               diasViagens={30}
               diasConsulta={31}
               nomeArquivo={`historico-${historicoDe.plate}`}
+              pdf={{
+                gerar: (from, to, tipo) =>
+                  associateApi.createHistoryRequest(historicoDe.id, from, to, tipo),
+                listar: () => associateApi.listHistoryRequests(historicoDe.id),
+                baixar: (id) => associateApi.downloadHistoryRequest(id),
+              }}
             />
           )}
         </DialogContent>

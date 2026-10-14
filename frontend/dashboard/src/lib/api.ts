@@ -24,7 +24,12 @@ import type {
   MaintenanceReason,
 } from '@/types/appointment';
 import type { GoogleTileSource } from '@/types/map';
-import type { JornadaDoDia, RelatorioHistorico, TipoRelatorio } from '@/lib/historico';
+import type {
+  HistoricoSolicitado,
+  JornadaDoDia,
+  RelatorioHistorico,
+  TipoRelatorio,
+} from '@/lib/historico';
 import type {
   ConsultantOption,
   FinancialEntry,
@@ -487,6 +492,29 @@ export const reportsApi = {
       params: { deviceId, from, to, type },
     });
     return res.data.data;
+  },
+  createHistoryRequest: async (
+    deviceId: number,
+    from: string,
+    to: string,
+    type: TipoRelatorio,
+  ): Promise<HistoricoSolicitado> => {
+    const res = await api.post<ApiResponse<HistoricoSolicitado>>(
+      '/reports/history-requests',
+      { deviceId, from, to, type },
+      { timeout: 120_000 },
+    );
+    return res.data.data;
+  },
+  listHistoryRequests: async (deviceId: number): Promise<HistoricoSolicitado[]> => {
+    const res = await api.get<ApiResponse<HistoricoSolicitado[]>>('/reports/history-requests', {
+      params: { deviceId },
+    });
+    return res.data.data;
+  },
+  downloadHistoryRequest: async (id: string): Promise<Blob> => {
+    const res = await api.get(`/reports/history-requests/${id}/pdf`, { responseType: 'blob' });
+    return res.data as Blob;
   },
   getExportUrl: (type: string, deviceId: number, from: string, to: string, format: string): string => {
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';

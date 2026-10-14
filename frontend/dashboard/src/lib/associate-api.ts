@@ -1,5 +1,10 @@
 import axios from 'axios';
-import type { JornadaDoDia, RelatorioHistorico, TipoRelatorio } from '@/lib/historico';
+import type {
+  HistoricoSolicitado,
+  JornadaDoDia,
+  RelatorioHistorico,
+  TipoRelatorio,
+} from '@/lib/historico';
 
 /**
  * Client do associado na web. Usa as mesmas rotas /app/* do app Android e
@@ -86,6 +91,27 @@ export const associateApi = {
   setBlocked: async (vehicleId: string, block: boolean): Promise<{ queued: boolean }> => {
     const res = await http.post(`/app/vehicles/${vehicleId}/${block ? 'block' : 'unblock'}`);
     return unwrap<{ queued: boolean }>(res.data);
+  },
+  createHistoryRequest: async (
+    vehicleId: string,
+    from: string,
+    to: string,
+    type: TipoRelatorio,
+  ): Promise<HistoricoSolicitado> => {
+    const res = await http.post(
+      `/app/vehicles/${vehicleId}/history-requests`,
+      { from, to, type },
+      { timeout: 120_000 },
+    );
+    return unwrap<HistoricoSolicitado>(res.data);
+  },
+  listHistoryRequests: async (vehicleId: string): Promise<HistoricoSolicitado[]> => {
+    const res = await http.get(`/app/vehicles/${vehicleId}/history-requests`);
+    return unwrap<HistoricoSolicitado[]>(res.data);
+  },
+  downloadHistoryRequest: async (id: string): Promise<Blob> => {
+    const res = await http.get(`/app/history-requests/${id}/pdf`, { responseType: 'blob' });
+    return res.data as Blob;
   },
   historyReport: async (
     vehicleId: string,

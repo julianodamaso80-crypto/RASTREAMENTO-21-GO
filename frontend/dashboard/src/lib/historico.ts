@@ -105,6 +105,31 @@ export interface RelatorioHistorico {
   days: DiaRelatorio[];
 }
 
+/** Histórico já gerado em PDF (aba "Solicitados"). `url` abre sem login até `expiresAt`. */
+export interface HistoricoSolicitado {
+  id: string;
+  plate: string;
+  from: string;
+  to: string;
+  type: TipoRelatorio;
+  source: 'PAINEL' | 'APP';
+  requestedByName: string | null;
+  rowCount: number;
+  pdfSize: number;
+  createdAt: string;
+  expiresAt: string;
+  expired: boolean;
+  url: string;
+  number: string;
+}
+
+/** O que a tela precisa para gerar, listar e baixar os PDFs. */
+export interface FonteDePdf {
+  gerar: (from: string, to: string, tipo: TipoRelatorio) => Promise<HistoricoSolicitado>;
+  listar: () => Promise<HistoricoSolicitado[]>;
+  baixar: (id: string) => Promise<Blob>;
+}
+
 /** Valor de <input type="datetime-local"> (hora do navegador) a partir de um instante. */
 export function paraCampoLocal(instante: number): string {
   const d = new Date(instante);

@@ -1,16 +1,19 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { Download, Loader2, MapPinned, Printer, Search } from 'lucide-react';
+import { Download, FileText, Loader2, MapPinned, Printer, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TrajetoNoMapa } from '@/components/historico/historico-do-dia';
+import { AcoesDoPdf } from '@/components/historico/historico-solicitados';
 import {
   dataHoraLocal,
   distanciaDaLinha,
   duracaoLegivel,
   paraCampoLocal,
   relatorioParaCsv,
+  type FonteDePdf,
+  type HistoricoSolicitado,
   type RelatorioHistorico,
   type TipoRelatorio,
 } from '@/lib/historico';
@@ -20,6 +23,10 @@ interface Props {
   /** Quantos dias para trás o período pode começar. */
   diasMax: number;
   nomeArquivo: string;
+  /** Sem isso o botão "Gerar PDF" não aparece. */
+  pdf?: FonteDePdf;
+  /** Avisado a cada PDF novo (a aba Solicitados recarrega). */
+  aoGerarPdf?: (item: HistoricoSolicitado) => void;
 }
 
 const PREDEFINIDOS = [
@@ -38,7 +45,7 @@ const TIPOS: { id: TipoRelatorio; rotulo: string; dica: string }[] = [
 
 const LINHAS_NA_TELA = 2000;
 
-export function HistoricoConsultar({ carregar, diasMax, nomeArquivo }: Props) {
+export function HistoricoConsultar({ carregar, diasMax, nomeArquivo, pdf, aoGerarPdf }: Props) {
   const [inicio, setInicio] = useState(() => paraCampoLocal(Date.now() - 24 * 3600_000));
   const [fim, setFim] = useState(() => paraCampoLocal(Date.now()));
   const [tipo, setTipo] = useState<TipoRelatorio>('basico');
@@ -46,6 +53,8 @@ export function HistoricoConsultar({ carregar, diasMax, nomeArquivo }: Props) {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mapa, setMapa] = useState(false);
+  const [gerando, setGerando] = useState(false);
+  const [gerado, setGerado] = useState<HistoricoSolicitado | null>(null);
   const area = useRef<HTMLDivElement>(null);
 
   function predefinido(min: number) {
@@ -66,6 +75,23 @@ export function HistoricoConsultar({ carregar, diasMax, nomeArquivo }: Props) {
       setErro(msg || 'Não foi possível gerar o relatório agora.');
     } finally {
       setCarregando(false);
+    }
+  }
+
+  async function gerarPdf() {
+    if (!pdf) return;
+    setGerando(true);
+    setErro(null);
+    setGerado(null);
+    try {
+      const item = await pdf.gerar(new Date(inicio).toISOString(), new Date(fim).toISOString(), tipo);
+      setGerado(item);
+      aoGerarPdf?.(item);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setErro(msg || 'Não foi possível gerar o PDF agora.');
+    } finally {
+      setGerando(false);
     }
   }
 
@@ -155,10 +181,34 @@ export function HistoricoConsultar({ carregar, diasMax, nomeArquivo }: Props) {
           {carregando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
           Buscar
         </Button>
+        {pdf && (
+          <Button size="sm" variant="outline" onClick={gerarPdf} disabled={gerando || !inicio || !fim}>
+            {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+            {gerando ? 'Gerando PDF…' : 'Gerar PDF'}
+          </Button>
+        )}
         <span className="text-xs text-muted-foreground">Período de até {diasMax} dias para trás.</span>
       </div>
 
       {erro && <p className="text-sm text-destructive">{erro}</p>}
+
+      {pdf && gerado && (
+        <div className="space-y-2 rounded-lg border border-orange-200 bg-orange-50/60 p-3 dark:border-orange-900 dark:bg-orange-950/20">
+          <div className="text-sm">
+            <b>PDF pronto</b> · nº {gerado.number} · {gerado.rowCount.toLocaleString('pt-BR')}{' '}
+            {gerado.type === 'consolidado' ? 'dias' : 'registros'}. O link abre sem senha até{' '}
+            {new Date(gerado.expiresAt).toLocaleDateString('pt-BR')}.
+          </div>
+          <Input
+            readOnly
+            value={gerado.url}
+            onFocus={(e) => e.currentTarget.select()}
+            aria-label="Link do PDF"
+            className="font-mono text-xs"
+          />
+          <AcoesDoPdf fonte={pdf} item={gerado} />
+        </div>
+      )}
 
       {relatorio && (
         <div className="space-y-2">
@@ -166,9 +216,16 @@ export function HistoricoConsultar({ carregar, diasMax, nomeArquivo }: Props) {
             <Button variant="outline" size="sm" onClick={exportar}>
               <Download className="mr-2 h-4 w-4" /> Excel
             </Button>
-            <Button variant="outline" size="sm" onClick={imprimir}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimir / PDF
-            </Button>
+            {pdf ? (
+              <Button size="sm" onClick={gerarPdf} disabled={gerando}>
+                {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+                {gerando ? 'Gerando PDF…' : 'PDF com link'}
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={imprimir}>
+                <Printer className="mr-2 h-4 w-4" /> Imprimir / PDF
+              </Button>
+            )}
             {relatorio.type !== 'consolidado' && caminho.length > 1 && (
               <Button variant="outline" size="sm" onClick={() => setMapa((m) => !m)}>
                 <MapPinned className="mr-2 h-4 w-4" /> {mapa ? 'Ocultar mapa' : 'Traçar no mapa'}
@@ -226,8 +283,8 @@ export function HistoricoConsultar({ carregar, diasMax, nomeArquivo }: Props) {
                         <td className="whitespace-nowrap p-1">{dataHoraLocal(l.time)}</td>
                         {avancado && <td className="whitespace-nowrap p-1">{l.gprs ? dataHoraLocal(l.gprs) : ''}</td>}
                         {avancado && <td className="whitespace-nowrap p-1">{l.gps ? dataHoraLocal(l.gps) : ''}</td>}
-                        <td className="p-1">{l.lat}</td>
-                        <td className="p-1">{l.lng}</td>
+                        <td className="p-1">{l.lat.toFixed(6)}</td>
+                        <td className="p-1">{l.lng.toFixed(6)}</td>
                         <td className="p-1">{l.address ?? '—'}</td>
                         <td className="p-1">{l.speed}</td>
                         <td className="p-1">{l.ignition === null ? '—' : l.ignition ? 'Ligado' : 'Desligado'}</td>

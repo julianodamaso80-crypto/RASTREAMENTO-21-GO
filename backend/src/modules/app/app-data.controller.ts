@@ -6,15 +6,19 @@ import {
   Param,
   Patch,
   Post,
+  ParseUUIDPipe,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators';
 import { AppDataService } from './app-data.service';
 import { AssociateJwtGuard } from './guards/associate-jwt.guard';
 import { CurrentAssociate } from './decorators/current-associate.decorator';
 import { NotificationPrefsDto } from './dto/notification-prefs.dto';
+import { HistoryRequestsService } from '../reports/history-requests.service';
 
 @ApiTags('App - Dados do Associado')
 @ApiBearerAuth()
@@ -22,7 +26,10 @@ import { NotificationPrefsDto } from './dto/notification-prefs.dto';
 @UseGuards(AssociateJwtGuard)
 @Controller('app')
 export class AppDataController {
-  constructor(private readonly service: AppDataService) {}
+  constructor(
+    private readonly service: AppDataService,
+    private readonly historyRequests: HistoryRequestsService,
+  ) {}
 
   @Get('vehicles')
   @ApiOperation({
@@ -116,6 +123,49 @@ export class AppDataController {
     @Query('type') type: string,
   ) {
     return this.service.getHistoryReport(associateId, tenantId, vehicleId, from, to, type);
+  }
+
+  @Post('vehicles/:id/history-requests')
+  @ApiOperation({ summary: 'Gera o histórico do período em PDF para o associado' })
+  async createHistoryRequest(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id', ParseUUIDPipe) vehicleId: string,
+    @Body() body: { from: string; to: string; type: string },
+  ) {
+    return this.historyRequests.criar({
+      tenantId,
+      vehicleId,
+      from: String(body?.from ?? ''),
+      to: String(body?.to ?? ''),
+      type: String(body?.type ?? ''),
+      maxDias: 31,
+      solicitante: { origem: 'APP', associateId },
+    });
+  }
+
+  @Get('vehicles/:id/history-requests')
+  @ApiOperation({ summary: 'Históricos em PDF que o associado já pediu para o veículo' })
+  async listHistoryRequests(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id', ParseUUIDPipe) vehicleId: string,
+  ) {
+    return this.historyRequests.listarDoAssociado(tenantId, associateId, vehicleId);
+  }
+
+  @Get('history-requests/:id/pdf')
+  @ApiOperation({ summary: 'Baixar o PDF de um histórico do associado' })
+  async downloadHistoryRequest(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ) {
+    const { pdf, nome } = await this.historyRequests.pdfDoAssociado(tenantId, associateId, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);
+    res.send(pdf);
   }
 
   @Get('alerts')

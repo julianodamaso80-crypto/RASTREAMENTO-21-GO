@@ -18,6 +18,7 @@ const SOFT_DELETE_MODELS = new Set([
   'Technician',
   'Appointment',
   'FinancialEntry',
+  'HistoryReportRequest',
 ]);
 
 const READ_OPERATIONS = new Set([
@@ -71,6 +72,7 @@ function createExtendedClient(base: PrismaClient) {
       technician: softDeleteModel,
       appointment: softDeleteModel,
       financialEntry: softDeleteModel,
+      historyReportRequest: softDeleteModel,
     },
     query: {
       $allModels: {
@@ -133,6 +135,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   }
   get associate() {
     return this.ext.associate;
+  }
+  get historyReportRequest() {
+    return this.ext.historyReportRequest;
   }
   get alert() {
     return this.ext.alert;

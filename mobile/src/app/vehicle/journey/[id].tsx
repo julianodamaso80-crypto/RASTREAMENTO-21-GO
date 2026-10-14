@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppApi, JourneyDay, JourneyTrip } from '@/lib/api';
 import { colors, radii } from '@/lib/theme';
 import { HistoricoConsultar } from '@/components/historico-consultar';
+import { HistoricoSolicitados } from '@/components/historico-solicitados';
 
 const DIAS = 31;
 
@@ -59,7 +60,8 @@ export default function VehicleJourneyScreen() {
   const [erro, setErro] = useState(false);
   const [escolhida, setEscolhida] = useState(0);
   const [detalhes, setDetalhes] = useState(false);
-  const [aba, setAba] = useState<'viagens' | 'consultar'>('viagens');
+  const [aba, setAba] = useState<'viagens' | 'consultar' | 'solicitados'>('viagens');
+  const [versaoPdf, setVersaoPdf] = useState(0);
   const mapa = useRef<MapView>(null);
 
   useEffect(() => {
@@ -110,10 +112,10 @@ export default function VehicleJourneyScreen() {
       <Stack.Screen options={{ title: plate ? String(plate) : 'Histórico' }} />
 
       <View style={styles.abas}>
-        {(['viagens', 'consultar'] as const).map((a) => (
+        {(['viagens', 'consultar', 'solicitados'] as const).map((a) => (
           <TouchableOpacity key={a} onPress={() => setAba(a)} style={[styles.aba, aba === a && styles.abaOn]}>
             <Text style={[styles.abaText, aba === a && styles.abaTextOn]}>
-              {a === 'viagens' ? 'Viagens' : 'Consultar'}
+              {a === 'viagens' ? 'Viagens' : a === 'consultar' ? 'Consultar' : 'Solicitados'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -121,7 +123,11 @@ export default function VehicleJourneyScreen() {
 
       {aba === 'consultar' ? (
         <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
-          <HistoricoConsultar vehicleId={String(id)} />
+          <HistoricoConsultar vehicleId={String(id)} aoGerarPdf={() => setVersaoPdf((v) => v + 1)} />
+        </ScrollView>
+      ) : aba === 'solicitados' ? (
+        <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
+          <HistoricoSolicitados vehicleId={String(id)} versao={versaoPdf} />
         </ScrollView>
       ) : (
       <>

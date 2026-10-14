@@ -164,6 +164,21 @@ export interface HistoryReportDay {
   address: string | null;
 }
 
+/** Histórico já gerado em PDF. `url` abre sem login até `expiresAt`. */
+export interface HistoryRequest {
+  id: string;
+  plate: string;
+  from: string;
+  to: string;
+  type: HistoryReportType;
+  rowCount: number;
+  createdAt: string;
+  expiresAt: string;
+  expired: boolean;
+  url: string;
+  number: string;
+}
+
 export interface HistoryReport {
   plate: string;
   from: string;
@@ -270,6 +285,18 @@ export const AppApi = {
     api
       .get<Trip[]>(`/app/vehicles/${vehicleId}/trips`, { params: { from, to } })
       .then((r) => r.data),
+
+  createHistoryRequest: (vehicleId: string, from: string, to: string, type: HistoryReportType) =>
+    api
+      .post<HistoryRequest>(
+        `/app/vehicles/${vehicleId}/history-requests`,
+        { from, to, type },
+        { timeout: 120_000 },
+      )
+      .then((r) => r.data),
+
+  historyRequests: (vehicleId: string) =>
+    api.get<HistoryRequest[]>(`/app/vehicles/${vehicleId}/history-requests`).then((r) => r.data),
 
   historyReport: (vehicleId: string, from: string, to: string, type: HistoryReportType) =>
     api
