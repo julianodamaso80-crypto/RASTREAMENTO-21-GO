@@ -82,7 +82,8 @@ afterEach(() => {
 describe('derivarLinha', () => {
   it('veículo andando, online, com device e posição', () => {
     const v = veiculo('1');
-    const linha = derivarLinha(v, device(1), posicao(1));
+    const leitura = { ligada: true, em: haMin(1) };
+    const linha = derivarLinha(v, device(1), posicao(1), leitura);
     expect(linha).toEqual({
       ...v,
       vehicleType: 'CAR',
@@ -96,6 +97,7 @@ describe('derivarLinha', () => {
       deviceStatus: 'online',
       displayStatus: 'online',
       ignition: true,
+      ignicaoLeitura: leitura,
       moving: true,
       satellites: 9,
     });
@@ -140,6 +142,7 @@ describe('derivarLinha', () => {
       deviceStatus: 'offline',
       displayStatus: 'offline',
       ignition: false,
+      ignicaoLeitura: null,
       moving: false,
       satellites: 0,
     });
@@ -163,6 +166,23 @@ describe('criarCacheLinhas', () => {
     const b = cache.obter(v, d, p, AGORA + 1_000);
     expect(b).toBe(a);
     expect(cache.recalculos).toBe(1);
+  });
+
+  it('ignição vem da última leitura real e troca a linha quando muda (8fbe3ea)', () => {
+    const cache = criarCacheLinhas();
+    const v = veiculo('1');
+    const d = device(1);
+    const p = posicao(1, { attributes: {} }); // "estou vivo" sem `ignition`
+    const semLeitura = cache.obter(v, d, p, AGORA, null);
+    expect(semLeitura.ignition).toBe(false);
+    expect(semLeitura.ignicaoLeitura).toBeNull();
+    const ligada = { ligada: true, em: new Date(AGORA).toISOString() };
+    const comLeitura = cache.obter(v, d, p, AGORA, ligada);
+    expect(comLeitura).not.toBe(semLeitura);
+    expect(comLeitura.ignition).toBe(true);
+    expect(comLeitura.ignicaoLeitura).toBe(ligada);
+    expect(cache.obter(v, d, p, AGORA + 500, ligada)).toBe(comLeitura);
+    expect(cache.recalculos).toBe(2);
   });
 
   it('referência nova quando a posição muda', () => {

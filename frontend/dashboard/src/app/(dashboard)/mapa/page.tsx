@@ -9,7 +9,8 @@ import { VehicleDetailPanel } from '@/components/vehicles/vehicle-detail-panel';
 import { SelectionListPanel } from '@/components/map/selection-list-panel';
 import { TagDetailPanel } from '@/components/map/tag-detail-panel';
 import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
-import { formatSpeed, getVehicleStatusLabel, ultimaAtualizacao } from '@/lib/utils';
+import { useIgnicaoHistorico } from '@/hooks/use-ignicao-historico';
+import { estaConectado, formatSpeed, getVehicleStatusLabel, ultimaAtualizacao } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { STATUS_COLORS } from '@/lib/constants';
 import type { MapContainerRef } from '@/components/map/map-container';
@@ -69,6 +70,16 @@ export default function MapaPage() {
     [selectedIds, vehicles],
   );
   const varios = marcados.length > 1;
+
+  // Marcados conectados cuja posição atual não trouxe a chave: a leitura vem
+  // do histórico, nunca de um "Desligada" presumido.
+  const ignicaoHistorico = useIgnicaoHistorico(
+    varios
+      ? marcados
+          .filter((v) => v.traccarDeviceId && !v.ignicaoLeitura && estaConectado(v.displayStatus))
+          .map((v) => v.traccarDeviceId as number)
+      : [],
+  );
 
   // Endereço de cada marcado. Só busca quando o painel de lista está em cena:
   // com um só quem resolve é o painel de detalhe, e pedir duas vezes o mesmo
@@ -378,6 +389,15 @@ export default function MapaPage() {
                   endereco: geo?.address ?? null,
                   enderecoCarregando: geo?.loading ?? false,
                   temPosicao: Boolean(v.latitude && v.longitude),
+                  // Desconectado = a leitura pode ser velha; a Rede mostra
+                  // "--" e nós também. Sem leitura real nenhuma, também "--".
+                  ignicao: estaConectado(v.displayStatus)
+                    ? (v.ignicaoLeitura ??
+                        (v.traccarDeviceId
+                          ? ignicaoHistorico.get(v.traccarDeviceId)
+                          : null) ??
+                        null)
+                    : null,
                 };
               })}
               onFocar={(id) => {

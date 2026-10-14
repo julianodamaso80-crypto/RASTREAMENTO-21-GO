@@ -1,4 +1,4 @@
-import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
+import type { IgnicaoLeitura, Vehicle, VehicleWithTracking } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import { getDisplayStatus, estaAndando, estaConectado } from '@/lib/utils';
 import { proximaTransicaoEm } from '@/lib/status-transicoes';
@@ -8,6 +8,7 @@ export function derivarLinha(
   vehicle: Vehicle,
   device: TraccarDevice | undefined,
   position: TraccarPosition | undefined,
+  ignicaoLeitura: IgnicaoLeitura | null = null,
 ): VehicleWithTracking {
   const speed = position?.speed ?? 0;
   // `lastUpdate` = heartbeat do device (Traccar atualiza mesmo em keep-alive
@@ -20,7 +21,9 @@ export function derivarLinha(
   const lastUpdate = device?.lastUpdate || position?.serverTime || '';
   const positionTime = position?.fixTime || position?.deviceTime || position?.serverTime || null;
   const deviceStatus = device?.status || 'offline';
-  const ignition = (position?.attributes?.ignition as boolean) ?? false;
+  // Última leitura REAL da chave (8fbe3ea): o "estou vivo" sem `ignition`
+  // não pode virar "Desligada".
+  const ignition = ignicaoLeitura?.ligada ?? false;
   const vehicleType = vehicle.vehicleType ?? 'CAR';
   const displayStatus = getDisplayStatus({
     lastUpdate,
@@ -46,6 +49,7 @@ export function derivarLinha(
     deviceStatus,
     displayStatus,
     ignition,
+    ignicaoLeitura,
     moving,
     satellites: (position?.attributes?.sat as number) ?? 0,
   };
@@ -55,6 +59,7 @@ interface Entrada {
   vehicle: Vehicle;
   device: TraccarDevice | undefined;
   position: TraccarPosition | undefined;
+  ignicaoLeitura: IgnicaoLeitura | null;
   /** Quando o status/movimento desta linha muda só pelo relógio; null = nunca. */
   expiraEm: number | null;
   linha: VehicleWithTracking;
@@ -81,6 +86,7 @@ export function criarCacheLinhas() {
       device: TraccarDevice | undefined,
       position: TraccarPosition | undefined,
       agora: number,
+      ignicaoLeitura: IgnicaoLeitura | null = null,
     ): VehicleWithTracking {
       const e = entradas.get(vehicle.id);
       if (
@@ -88,19 +94,20 @@ export function criarCacheLinhas() {
         e.vehicle === vehicle &&
         e.device === device &&
         e.position === position &&
+        e.ignicaoLeitura === ignicaoLeitura &&
         (e.expiraEm === null || agora < e.expiraEm)
       ) {
         return e.linha;
       }
       recalculos++;
-      const linha = derivarLinha(vehicle, device, position);
+      const linha = derivarLinha(vehicle, device, position, ignicaoLeitura);
       const expiraEm = proximaTransicaoEm({
         lastUpdate: linha.lastUpdate,
         positionTime: linha.positionTime,
         vehicleType: linha.vehicleType,
         agora,
       });
-      entradas.set(vehicle.id, { vehicle, device, position, expiraEm, linha });
+      entradas.set(vehicle.id, { vehicle, device, position, ignicaoLeitura, expiraEm, linha });
       return linha;
     },
     /** Tira do cache quem não está mais na frota. */

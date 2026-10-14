@@ -10,7 +10,8 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
+import { usePathname } from 'next/navigation';
+import type { IgnicaoLeitura, Vehicle, VehicleWithTracking } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import type { Alert } from '@/types/alert';
 import type { BleTag, BleSightingEvent } from '@/types/ble-tag';
@@ -107,6 +108,20 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [vehicleMap, setVehicleMap] = useState<Map<string, Vehicle>>(new Map());
   const [deviceMap, setDeviceMap] = useState<Map<number, TraccarDevice>>(new Map());
   const [positionMap, setPositionMap] = useState<Map<number, TraccarPosition>>(new Map());
+  // Última leitura REAL da chave por device. Vários rastreadores mandam o
+  // "estou vivo" sem o campo `ignition`; tratar essa ausência como desligada
+  // mostrava "Desligada" num carro que tinha acabado de andar ligado.
+  type LeituraComAtributos = { deviceId: number; serverTime: string; attributes?: Record<string, unknown> };
+  const ultimaIgnicao = useRef<Map<number, IgnicaoLeitura>>(new Map());
+  const lembrarIgnicao = useCallback((positions: Iterable<LeituraComAtributos>) => {
+    for (const p of positions) {
+      const valor = p.attributes?.ignition;
+      if (typeof valor !== 'boolean') continue;
+      const antes = ultimaIgnicao.current.get(p.deviceId);
+      if (antes && antes.em > p.serverTime) continue;
+      ultimaIgnicao.current.set(p.deviceId, { ligada: valor, em: p.serverTime });
+    }
+  }, []);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -215,6 +230,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         const pMap = new Map<number, TraccarPosition>();
         if (positionsR.status === 'fulfilled') {
           positionsR.value.forEach((p) => pMap.set(p.deviceId, p));
+          lembrarIgnicao(positionsR.value);
         }
 
         setVehicleMap(vMap);
@@ -251,7 +267,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       }
     }
     loadData();
-  }, [loadAllVehicles, user?.role]);
+  }, [loadAllVehicles, user?.role, lembrarIgnicao]);
 
   // Polling de GARANTIA. O WebSocket dá updates instantâneos, mas se ele cair,
   // não reconectar, ou o backend não emitir `position:update` (ex.: device fora
@@ -325,6 +341,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         // que o snapshot desta resposta.
         if (devices && positions) {
           setDeviceMap((prev) => mesclarDevices(prev, devices));
+          lembrarIgnicao(positions);
           setPositionMap((prev) => mesclarPosicoes(prev, positions));
         }
         if (vehiclesList) {
@@ -348,7 +365,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       clearInterval(id);
       document.removeEventListener('visibilitychange', aoVoltar);
     };
-  }, [token, loadAllVehicles, user?.role]);
+  }, [token, loadAllVehicles, user?.role, lembrarIgnicao]);
 
   // O que chegou enquanto o socket estava fora se perdeu: recarrega tudo. No
   // legado o tique de 8 s já cobre isso, e o comportamento fica o de hoje.
@@ -362,12 +379,13 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
 
   // WebSocket
   const handlePositionUpdate = useCallback((position: TraccarPosition) => {
+    lembrarIgnicao([position]);
     setPositionMap((prev) => {
       const next = new Map(prev);
       next.set(position.deviceId, position);
       return next;
     });
-  }, []);
+  }, [lembrarIgnicao]);
 
   const handleDeviceUpdate = useCallback((device: TraccarDevice) => {
     setDeviceMap((prev) => {
@@ -384,6 +402,10 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   // sem fix) vêm depois das posições e nunca mexem na coordenada.
   const handleLote = useCallback(({ positions, devices, atributos }: LoteTempoReal) => {
     ultimoLoteEmRef.current = Date.now();
+    // A chave vem da última leitura real: tanto da posição quanto do pacote
+    // sem fix (`attrs:batch`), que também traz `ignition`.
+    lembrarIgnicao(positions);
+    lembrarIgnicao(atributos);
     if (process.env.NODE_ENV !== 'production') {
       const stats = statsDev();
       stats.lotes++;
@@ -406,7 +428,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
         return next;
       });
     }
-  }, []);
+  }, [lembrarIgnicao]);
 
   const handleAlert = useCallback((alert: Alert) => {
     setAlerts((prev) => [alert, ...prev].slice(0, 100));
@@ -473,7 +495,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       const deviceId = vehicle.traccarDeviceId;
       const device = deviceId ? deviceMap.get(deviceId) : undefined;
       const position = deviceId ? positionMap.get(deviceId) : undefined;
-      result.push(cache.obter(vehicle, device, position, agora));
+      const ignicaoLeitura = deviceId ? ultimaIgnicao.current.get(deviceId) ?? null : null;
+      result.push(cache.obter(vehicle, device, position, agora, ignicaoLeitura));
     });
     cache.podar(vehicleMap);
     if (process.env.NODE_ENV !== 'production') statsDev().recalculos += cache.recalculos - antes;
@@ -554,6 +577,19 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
     );
   }, []);
+
+  // Saiu do mapa pra outra aba: na volta a lista começa limpa, sem a busca
+  // nem os marcados de antes. Só na SAÍDA de /mapa — a busca do topo grava o
+  // termo e navega PARA o mapa, e isso não pode ser apagado.
+  const pathname = usePathname();
+  const rotaAnterior = useRef(pathname);
+  useEffect(() => {
+    if (rotaAnterior.current === '/mapa' && pathname !== '/mapa') {
+      setSelectedIds([]);
+      setSearchQuery('');
+    }
+    rotaAnterior.current = pathname;
+  }, [pathname]);
 
   const markAlertRead = useCallback(async (id: string) => {
     await alertsApi.markAsRead(id);
