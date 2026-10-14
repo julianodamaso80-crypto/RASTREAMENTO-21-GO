@@ -75,7 +75,10 @@ describe('AlertsCron.detectOffline', () => {
     expect(prisma.alert.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.alert.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ type: AlertType.OFFLINE }),
+        where: expect.objectContaining({
+          type: AlertType.OFFLINE,
+          tenantId: { in: [TENANT] },
+        }),
       }),
     );
     expect(prisma.alert.findFirst).not.toHaveBeenCalled();

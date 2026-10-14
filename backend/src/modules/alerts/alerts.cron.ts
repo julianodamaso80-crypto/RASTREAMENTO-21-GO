@@ -85,6 +85,7 @@ export class AlertsCron {
       const comAlertaRecente = await this.vehiclesComAlertaRecente(
         AlertType.OFFLINE,
         dedupSince,
+        vehicles.map((v) => v.tenantId),
       );
       let createdCount = 0;
 
@@ -169,6 +170,7 @@ export class AlertsCron {
       const comAlertaRecente = await this.vehiclesComAlertaRecente(
         AlertType.GPS_SILENT,
         dedupSince,
+        vehicles.map((v) => v.tenantId),
       );
       let createdCount = 0;
 
@@ -243,9 +245,16 @@ export class AlertsCron {
   private async vehiclesComAlertaRecente(
     type: AlertType,
     desde: Date,
+    tenantIds: string[],
   ): Promise<Set<string>> {
+    // tenantId na consulta deixa o indice (tenant_id, type, created_at DESC)
+    // servir o dedup; so interessam alertas dos tenants dos veiculos avaliados.
     const recentes = await this.prisma.alert.findMany({
-      where: { type, createdAt: { gte: desde } },
+      where: {
+        tenantId: { in: [...new Set(tenantIds)] },
+        type,
+        createdAt: { gte: desde },
+      },
       select: { vehicleId: true },
     });
     return new Set(recentes.map((a) => a.vehicleId));

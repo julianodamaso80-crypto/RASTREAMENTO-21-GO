@@ -698,6 +698,10 @@ model Alert {
   @@index([tenantId, status, createdAt(sort: Desc)])
   @@index([assignedToId, status])
   @@index([vehicleId, type, createdAt(sort: Desc)])
+  @@index([tenantId, type, createdAt(sort: Desc)])
+  // Indice parcial alerts_tenant_id_nao_lidos_idx (tenant_id) WHERE read = false
+  // existe so no SQL (migration 20261014120000); o Prisma nao representa indice
+  // parcial, entao `migrate diff` o mostra como drift esperado. Nao remover.
   @@map("alerts")
 }
 

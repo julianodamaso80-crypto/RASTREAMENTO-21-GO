@@ -93,6 +93,7 @@ Precedente no repositório: `backend/prisma/migrations/20260930190000_indice_tag
 
 - Criar uma migration com `CREATE INDEX IF NOT EXISTS` (sem `CONCURRENTLY`, porque a migration roda em transação) **do mesmo nome**; em produção, depois de criar o índice à mão: `prisma migrate resolve --applied <nome_da_migration>` (ou deixar rodar: é no-op). Nunca `drizzle-kit`/`prisma db push` contra produção.
 - **A1** é expressável no schema como `@@index([type, createdAt(sort: Desc)])` (sem o `INCLUDE`; o Prisma não representa `INCLUDE` nem índice parcial). **A2** (parcial) não é expressável: ficaria só no SQL da migration. Registrar isso na migration, para ninguém "limpar" por engano num `db push` futuro.
+- **Implementado em F7a (arquivo, não aplicado):** a migration `20261014120000_indices_alerts_dedup_tenant_e_nao_lidos` troca A1 por `(tenant_id, type, created_at DESC)` (o cron passou a filtrar `tenantId`) e mantém A2 parcial com o nome `alerts_tenant_id_nao_lidos_idx`. O §1.3 vale com esses nomes no passo 3; o cabeçalho da migration traz os comandos `CONCURRENTLY` e o `migrate resolve --applied`.
 - O deploy do backend **não roda migration no boot** (memória do projeto); então registrar a migration não altera nada em produção por si só.
 
 ### 1.5 O que pode quebrar
