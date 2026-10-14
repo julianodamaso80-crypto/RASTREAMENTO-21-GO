@@ -37,6 +37,7 @@ import { StockMapDetail } from '@/components/stock/stock-map-detail';
 import { StockMapDetailTag } from '@/components/stock/stock-map-detail-tag';
 import { SelectionCheckbox } from '@/components/map/selection-checkbox';
 import { SelectionListPanel } from '@/components/map/selection-list-panel';
+import { ITENS_POR_VEZ, janelaDaLista } from '@/lib/stock-list-window';
 import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
 import { corDaConexao } from '@/components/stock/stock-map-container';
 import type { StockConexao, StockMapPoint } from '@/types/stock';
@@ -529,6 +530,17 @@ function SidebarContent({
   onSelecionar: (id: string) => void;
   onMarcar: (id: string) => void;
 }) {
+  const [visiveisNaLista, setVisiveisNaLista] = useState(ITENS_POR_VEZ);
+  // Busca ou filtro novo recomeça a janela: o "mostrar mais" acumulado numa
+  // busca anterior não pode vazar para a próxima.
+  const chaveDaLista = `${busca}|${filtro}`;
+  const [chaveVista, setChaveVista] = useState(chaveDaLista);
+  if (chaveVista !== chaveDaLista) {
+    setChaveVista(chaveDaLista);
+    setVisiveisNaLista(ITENS_POR_VEZ);
+  }
+  const janela = janelaDaLista(lista, visiveisNaLista);
+
   return (
     <>
       <div className="flex flex-col gap-2 border-b p-3">
@@ -632,15 +644,26 @@ function SidebarContent({
             Nenhum equipamento com esse filtro.
           </p>
         ) : (
-          lista.map((p) => (
-            <CardEstoque
-              key={p.id}
-              ponto={p}
-              selecionado={selecionadosIds.includes(p.id)}
-              onClick={() => onSelecionar(p.id)}
-              onMarcar={() => onMarcar(p.id)}
-            />
-          ))
+          <>
+            {janela.itens.map((p) => (
+              <CardEstoque
+                key={p.id}
+                ponto={p}
+                selecionado={selecionadosIds.includes(p.id)}
+                onClick={() => onSelecionar(p.id)}
+                onMarcar={() => onMarcar(p.id)}
+              />
+            ))}
+            {janela.restantes > 0 && (
+              <button
+                type="button"
+                onClick={() => setVisiveisNaLista((n) => n + ITENS_POR_VEZ)}
+                className="w-full rounded-lg py-2 text-xs font-medium text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+              >
+                Mostrar mais equipamentos ({janela.restantes} restantes)
+              </button>
+            )}
+          </>
         )}
       </div>
     </>
