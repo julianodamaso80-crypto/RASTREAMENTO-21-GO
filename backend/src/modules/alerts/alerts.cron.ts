@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { AlertType } from '.prisma/client';
+import { AlertType, Prisma } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TraccarService } from '../traccar/traccar.service';
 import { AlertsService } from './alerts.service';
@@ -82,12 +82,16 @@ export class AlertsCron {
 
       const now = Date.now();
       const dedupSince = new Date(now - this.DEDUP_WINDOW_MS);
-      const comAlertaRecente = await this.vehiclesComAlertaRecente(
-        AlertType.OFFLINE,
-        dedupSince,
-        vehicles.map((v) => v.tenantId),
-      );
-      let createdCount = 0;
+      const porEpisodio = this.dedupPorEpisodio();
+      const comAlertaRecente = porEpisodio
+        ? null
+        : await this.vehiclesComAlertaRecente(
+            AlertType.OFFLINE,
+            dedupSince,
+            vehicles.map((v) => v.tenantId),
+          );
+      // Início do episódio OFFLINE = último contato do device.
+      const candidatos: Array<{ v: (typeof vehicles)[number]; lastUpdate: string; inicio: Date }> = [];
 
       for (const v of vehicles) {
         if (!v.traccarDeviceId) continue;
@@ -101,10 +105,25 @@ export class AlertsCron {
         if (offlineFor < offlineThresholdMs) continue;
 
         // Já tem alerta OFFLINE recente? Pula.
-        if (comAlertaRecente.has(v.id)) continue;
+        if (comAlertaRecente?.has(v.id)) continue;
 
+        candidatos.push({ v, lastUpdate, inicio: new Date(lastMs) });
+      }
+
+      const { criar, suprimidosPorEpisodio } = porEpisodio
+        ? await this.filtrarPorEpisodio(AlertType.OFFLINE, candidatos, dedupSince)
+        : { criar: candidatos, suprimidosPorEpisodio: 0 };
+
+      let createdCount = 0;
+      for (const { v, lastUpdate } of criar) {
         await this.alertsService.notifyOffline(v.id, v.tenantId, lastUpdate);
         createdCount++;
+      }
+
+      if (porEpisodio) {
+        this.logger.debug(
+          `Dedup por episódio OFFLINE: criados=${createdCount} suprimidosPorEpisodio=${suprimidosPorEpisodio}`,
+        );
       }
 
       if (createdCount > 0) {
@@ -167,12 +186,16 @@ export class AlertsCron {
 
       const now = Date.now();
       const dedupSince = new Date(now - this.DEDUP_WINDOW_MS);
-      const comAlertaRecente = await this.vehiclesComAlertaRecente(
-        AlertType.GPS_SILENT,
-        dedupSince,
-        vehicles.map((v) => v.tenantId),
-      );
-      let createdCount = 0;
+      const porEpisodio = this.dedupPorEpisodio();
+      const comAlertaRecente = porEpisodio
+        ? null
+        : await this.vehiclesComAlertaRecente(
+            AlertType.GPS_SILENT,
+            dedupSince,
+            vehicles.map((v) => v.tenantId),
+          );
+      // Início do episódio GPS_SILENT = último fix válido.
+      const candidatos: Array<{ v: (typeof vehicles)[number]; heartbeat: Date; inicio: Date }> = [];
 
       for (const v of vehicles) {
         if (!v.traccarDeviceId) continue;
@@ -210,15 +233,25 @@ export class AlertsCron {
           lastIgnition === true || (lastIgnition == null && lastSpeed > 1);
         if (!wasInUse) continue;
 
-        if (comAlertaRecente.has(v.id)) continue;
+        if (comAlertaRecente?.has(v.id)) continue;
 
-        await this.alertsService.notifyGpsSilent(
-          v.id,
-          v.tenantId,
-          new Date(positionTime),
-          heartbeat,
-        );
+        candidatos.push({ v, heartbeat, inicio: new Date(positionTime) });
+      }
+
+      const { criar, suprimidosPorEpisodio } = porEpisodio
+        ? await this.filtrarPorEpisodio(AlertType.GPS_SILENT, candidatos, dedupSince)
+        : { criar: candidatos, suprimidosPorEpisodio: 0 };
+
+      let createdCount = 0;
+      for (const { v, heartbeat, inicio } of criar) {
+        await this.alertsService.notifyGpsSilent(v.id, v.tenantId, inicio, heartbeat);
         createdCount++;
+      }
+
+      if (porEpisodio) {
+        this.logger.debug(
+          `Dedup por episódio GPS_SILENT: criados=${createdCount} suprimidosPorEpisodio=${suprimidosPorEpisodio}`,
+        );
       }
 
       if (createdCount > 0) {
@@ -258,5 +291,70 @@ export class AlertsCron {
       select: { vehicleId: true },
     });
     return new Set(recentes.map((a) => a.vehicleId));
+  }
+
+  /** ALERTS_DEDUP_EPISODIO=1 liga o dedup por episódio; desligada = janela de 30 min de hoje. */
+  private dedupPorEpisodio(): boolean {
+    return process.env.ALERTS_DEDUP_EPISODIO?.trim() === '1';
+  }
+
+  /**
+   * Um alerta por episódio: suprime o veículo cujo último alerta do tipo (de
+   * qualquer idade) é mais novo que o início do episódio — ele não voltou desde
+   * o aviso. Se voltou (contato/fix depois do último alerta), é episódio novo.
+   * A janela de 30 min continua como piso: nunca cria mais que hoje.
+   * Só lê a data do último alerta; não lê nem altera status do histórico.
+   */
+  private async filtrarPorEpisodio<T extends { v: { id: string; tenantId: string }; inicio: Date }>(
+    type: AlertType,
+    candidatos: T[],
+    dedupSince: Date,
+  ): Promise<{ criar: T[]; suprimidosPorEpisodio: number }> {
+    if (candidatos.length === 0) return { criar: [], suprimidosPorEpisodio: 0 };
+    const ultimo = await this.ultimoAlertaPorVeiculo(
+      type,
+      candidatos.map((c) => c.v.id),
+      candidatos.map((c) => c.v.tenantId),
+    );
+    const criar: T[] = [];
+    let suprimidosPorEpisodio = 0;
+    for (const c of candidatos) {
+      const ultimoEm = ultimo.get(c.v.id);
+      if (ultimoEm && ultimoEm >= dedupSince) continue;
+      if (ultimoEm && ultimoEm > c.inicio) {
+        suprimidosPorEpisodio++;
+        continue;
+      }
+      criar.push(c);
+    }
+    return { criar, suprimidosPorEpisodio };
+  }
+
+  /**
+   * Data do último alerta do tipo de cada veículo candidato, numa consulta só.
+   *
+   * Não usa `findMany({ distinct })`: o `distinct` do Prisma Client, sem o
+   * preview `nativeDistinct`, deduplica em memória depois de trazer TODOS os
+   * alertas do tipo do tenant (1,3 M OFFLINE abertos). O LATERAL faz uma busca
+   * `LIMIT 1` por veículo no índice (vehicle_id, type, created_at DESC). Os ids
+   * vão num array só, então a forma da consulta não muda com a frota.
+   */
+  private async ultimoAlertaPorVeiculo(
+    type: AlertType,
+    vehicleIds: string[],
+    tenantIds: string[],
+  ): Promise<Map<string, Date>> {
+    const linhas = await this.prisma.$queryRaw<Array<{ vehicle_id: string; created_at: Date }>>(Prisma.sql`
+      SELECT v.id AS vehicle_id, a.created_at
+        FROM unnest(${vehicleIds}::uuid[]) AS v(id)
+        CROSS JOIN LATERAL (
+          SELECT created_at FROM alerts
+           WHERE vehicle_id = v.id
+             AND type = ${type}::"AlertType"
+             AND tenant_id = ANY(${[...new Set(tenantIds)]}::uuid[])
+           ORDER BY created_at DESC
+           LIMIT 1
+        ) a`);
+    return new Map(linhas.map((l) => [l.vehicle_id, new Date(l.created_at)]));
   }
 }
