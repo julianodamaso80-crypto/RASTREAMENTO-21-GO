@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AlertType, VehicleStatus } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -141,6 +142,12 @@ export class AppDataService {
 
   /** Veículos do associado + última posição + status de conexão. */
   async getVehicles(associateId: string, tenantId: string) {
+    // Prisma ignora filtro `undefined`: sem associado ou tenant, a consulta
+    // abaixo viraria a frota do tenant (ou de todos). O guard já barra; isto
+    // garante que nenhum outro caminho chegue aqui sem contexto.
+    if (!associateId || !tenantId) {
+      throw new UnauthorizedException('Associado não identificado');
+    }
     const vehicles = await this.prisma.vehicle.findMany({
       where: { associateId, tenantId, deletedAt: null },
       select: {
@@ -168,13 +175,21 @@ export class AppDataService {
 
     // Posição (GPS real) e device (status de conexão = heartbeat) são fontes
     // distintas e expostas separadamente — ver regra de segurança do projeto.
+    // Só os devices do associado — nunca a frota inteira.
     const [positions, devices] = await Promise.all([
-      this.traccar.getPositions(),
-      this.traccar.getDevices(),
+      this.traccar.getPositionsDosDevices(deviceIds),
+      this.traccar.getDevicesPorIds(deviceIds),
     ]);
 
-    const posByDevice = new Map(positions.map((p) => [p.deviceId, p]));
     const devByDevice = new Map(devices.map((d) => [d.id, d]));
+    // `/positions` sem filtro só trazia devices vinculados ao usuário da
+    // sessão; por id o Traccar não exige vínculo. Posição só entra se o
+    // device veio na lista, como antes.
+    const posByDevice = new Map(
+      positions
+        .filter((p) => devByDevice.has(p.deviceId))
+        .map((p) => [p.deviceId, p]),
+    );
 
     return vehicles.map((v) => {
       const pos = v.traccarDeviceId
