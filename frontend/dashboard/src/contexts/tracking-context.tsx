@@ -274,6 +274,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     // O carregamento inicial acabou de buscar tudo: os prazos contam daqui.
     ultimaFrotaEmRef.current = Date.now();
     ultimosVehiclesEmRef.current = Date.now();
+    // Token novo = socket novo: o último lote do socket anterior não vale.
+    ultimoLoteEmRef.current = null;
     const poll = async () => {
       // Aba escondida não mostra mapa: baixar a frota a cada 8s em toda aba
       // aberta somou 8 GB num dia só do escritório (18/09/2026) e saturou o
@@ -381,7 +383,10 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // `devices:batch` sai a cada mensagem do rastreador, mesmo sem GPS: é o
+  // melhor sinal de que o elo backend↔Traccar está vivo (watchdog do socket mudo).
   const handleDevicesBatch = useCallback((devices: TraccarDevice[]) => {
+    ultimoLoteEmRef.current = Date.now();
     setDeviceMap((prev) => {
       const next = new Map(prev);
       for (const device of devices) next.set(device.id, device);
