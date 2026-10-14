@@ -1,9 +1,15 @@
 // Smoke da homologação efêmera do CI: só Node 22 (fetch + crypto), sem deps.
 //
-// Uso: node smoke.mjs --modo legado|flags --saida <arquivo.json>
+// Uso: node smoke.mjs --modo legado|flags|flags-b --saida <arquivo.json>
 // Env: API_URL, HOMOLOG_FIXTURE (escrito pelo semear-frota.mjs),
 //      JWT_ASSOCIATE_SECRET (segredo DE TESTE gerado no job),
-//      STOCK_MAP_CACHE_MS (só para o limite de idade no modo flags).
+//      STOCK_MAP_CACHE_MS (só para o limite de idade nos modos flags),
+//      SMOKE_LEGADO (flags-b: smoke-legado.json, para comparar a forma do
+//      /app/vehicles), TRACCAR_API_URL + TRACCAR_ADMIN_EMAIL/PASSWORD
+//      (flags-b: leitura direta das posições no Traccar).
+//
+// flags-b = flags de cache + APP_VEHICLES_POR_DEVICE + ALERTS_DEDUP_EPISODIO,
+// com posições reais semeadas (semear-posicoes.mjs) nos devices do associado A.
 //
 // Sai com código 1 se qualquer verificação falhar.
 
@@ -17,7 +23,8 @@ const { values: args } = parseArgs({
     saida: { type: 'string', default: 'smoke.json' },
   },
 });
-const FLAGS = args.modo === 'flags';
+const FLAGS_B = args.modo === 'flags-b';
+const FLAGS = args.modo === 'flags' || FLAGS_B;
 const API = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
 const SEED_EMAIL = process.env.SEED_EMAIL ?? 'admin@rastreamento21go.com.br';
 const SEED_SENHA = process.env.SEED_PASSWORD ?? 'admin123';
@@ -28,7 +35,9 @@ const checks = [];
 const observacoes = [];
 const naoCoberto = [
   'Login real do associado (/app/auth/login): depende do SGA Hinova ao vivo. O token do associado é assinado pelo próprio teste com o JWT_ASSOCIATE_SECRET de teste.',
-  'Posições reais: devices sintéticos não têm posição; /traccar/positions devolve [] e o geocode do mapa do estoque não é exercitado.',
+  FLAGS_B
+    ? 'Posições reais: só os 2 devices do associado A têm posição (osmand); o resto da frota e o estoque seguem sem posição, e o geocode do mapa do estoque não é exercitado.'
+    : 'Posições reais: devices sintéticos não têm posição; /traccar/positions devolve [] e o geocode do mapa do estoque não é exercitado.',
   'WebSocket (Socket.io): fora do escopo do smoke HTTP.',
   'Crons do backend (adotarDesconhecidos e destravarEstoqueConectado a cada 60 s, alertas a cada 60 s) rodam durante o smoke e a carga e põem ruído na medição.',
 ];
@@ -107,6 +116,89 @@ function tokenDoAssociado(a) {
     exp: agora + 600,
   })}`;
   return `${corpo}.${createHmac('sha256', segredo).update(corpo).digest('base64url')}`;
+}
+
+// --- /app/vehicles: forma da resposta e posições (flags-b) ---
+let formaAppVehicles = null;
+
+// Chaves do toPositionDto (backend/src/modules/app/app-data.service.ts). No
+// boot legado os devices ainda não têm posição, então a forma da posição é
+// conferida contra esta lista; a do veículo, contra o smoke legado.
+const CHAVES_POSICAO = [
+  'address', 'battery', 'blocked', 'course', 'fixTime', 'ignition', 'latitude', 'longitude',
+  'motion', 'odometer', 'powerCut', 'satellites', 'speed', 'voltage',
+];
+
+function formaDe(lista) {
+  const chaves = (o) => (o && typeof o === 'object' ? Object.keys(o).sort() : null);
+  const comPosicao = lista.find((v) => v.position);
+  const comConexao = lista.find((v) => v.connection);
+  return {
+    veiculo: [...new Set(lista.flatMap((v) => Object.keys(v)))].sort(),
+    posicao: comPosicao ? chaves(comPosicao.position) : null,
+    conexao: comConexao ? chaves(comConexao.connection) : null,
+  };
+}
+
+async function posicaoNoTraccar(deviceId) {
+  const url = (process.env.TRACCAR_API_URL ?? 'http://localhost:8082/api').replace(/\/$/, '');
+  const auth = Buffer.from(`${process.env.TRACCAR_ADMIN_EMAIL}:${process.env.TRACCAR_ADMIN_PASSWORD}`).toString('base64');
+  const res = await fetch(`${url}/positions?deviceId=${deviceId}`, {
+    headers: { authorization: `Basic ${auth}`, accept: 'application/json' },
+    signal: AbortSignal.timeout(10_000),
+  });
+  const lista = res.ok ? await res.json() : [];
+  return Array.isArray(lista) && lista.length > 0 ? lista[0] : null;
+}
+
+async function conferirAppVehiclesComPosicao(lista) {
+  const KNOTS_TO_KMH = 1.852;
+  for (const d of fx.associadoA.dispositivos ?? []) {
+    const v = lista.find((x) => x.plate === d.placa);
+    const p = await posicaoNoTraccar(d.deviceId);
+    const esperado = p && {
+      latitude: p.latitude,
+      longitude: p.longitude,
+      speed: Math.round(p.speed * KNOTS_TO_KMH),
+      ignition: p.attributes?.ignition ?? null,
+    };
+    const recebido = v?.position && {
+      latitude: v.position.latitude,
+      longitude: v.position.longitude,
+      speed: v.position.speed,
+      ignition: v.position.ignition,
+    };
+    check(
+      `flags-b: /app/vehicles ${d.placa} com posição igual à leitura direta do Traccar`,
+      Boolean(esperado) && Boolean(recebido) && JSON.stringify(recebido) === JSON.stringify(esperado),
+      { deviceId: d.deviceId, recebido, esperado },
+    );
+  }
+  check('flags-b: os 2 veículos do associado A vêm com posição', (fx.associadoA.dispositivos ?? []).length >= 2 &&
+    fx.associadoA.dispositivos.every((d) => lista.find((x) => x.plate === d.placa)?.position), {
+    placas: lista.map((v) => ({ placa: v.plate, comPosicao: Boolean(v.position) })),
+  });
+
+  const forma = formaDe(lista);
+  let legado = null;
+  try {
+    legado = JSON.parse(readFileSync(process.env.SMOKE_LEGADO, 'utf8')).formaAppVehicles ?? null;
+  } catch {
+    legado = null;
+  }
+  check('flags-b: chaves do veículo em /app/vehicles iguais às do boot legado', Boolean(legado) &&
+    JSON.stringify(forma.veiculo) === JSON.stringify(legado.veiculo), { flagsB: forma.veiculo, legado: legado?.veiculo ?? null });
+  const posicaoEsperada = legado?.posicao ?? CHAVES_POSICAO;
+  check('flags-b: chaves da posição iguais às do caminho legado (toPositionDto)', JSON.stringify(forma.posicao) === JSON.stringify(posicaoEsperada), {
+    flagsB: forma.posicao,
+    esperado: posicaoEsperada,
+  });
+  if (legado?.conexao) {
+    check('flags-b: chaves da conexão iguais às do boot legado', JSON.stringify(forma.conexao) === JSON.stringify(legado.conexao), {
+      flagsB: forma.conexao,
+      legado: legado.conexao,
+    });
+  }
 }
 
 async function main() {
@@ -228,11 +320,16 @@ async function main() {
   // --- App do associado (mundo separado do painel) ---
   for (const a of [fx.associadoA, fx.associadoB]) {
     const r = await req('GET', '/app/vehicles', { token: tokenDoAssociado(a) });
-    const placas = (Array.isArray(dados(r)) ? dados(r) : []).map((v) => v.plate).sort();
+    const lista = Array.isArray(dados(r)) ? dados(r) : [];
+    const placas = lista.map((v) => v.plate).sort();
     check(`/app/vehicles do associado ${a.nome} traz só os veículos dele`, r.status === 200 && JSON.stringify(placas) === JSON.stringify([...a.placas].sort()), {
       status: r.status,
       placas,
     });
+    if (a === fx.associadoA) {
+      formaAppVehicles = formaDe(lista);
+      if (FLAGS_B) await conferirAppVehiclesComPosicao(lista);
+    }
   }
   const rc = await req('GET', '/app/vehicles', { token: client });
   check('CLIENT do painel em /app/vehicles = 401 (token do painel não vale no app)', rc.status === 401, { status: rc.status });
@@ -262,7 +359,10 @@ const resultado = {
   flags: {
     STOCK_MAP_CACHE_MS: process.env.STOCK_MAP_CACHE_MS ?? null,
     FROTA_PAINEL_CACHE_MS: process.env.FROTA_PAINEL_CACHE_MS ?? null,
+    APP_VEHICLES_POR_DEVICE: process.env.APP_VEHICLES_POR_DEVICE ?? null,
+    ALERTS_DEDUP_EPISODIO: process.env.ALERTS_DEDUP_EPISODIO ?? null,
   },
+  formaAppVehicles,
   ok: checks.every((c) => c.ok),
   falhas: checks.filter((c) => !c.ok).map((c) => c.nome),
   checks,

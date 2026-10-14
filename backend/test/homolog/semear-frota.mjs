@@ -10,6 +10,8 @@
 //
 // Limitação conhecida: devices sintéticos não têm posição no Traccar, então
 // /traccar/positions devolve [] e o mapa do estoque não passa pelo geocode.
+// Antes do boot flags-b, o semear-posicoes.mjs dá posição aos 2 devices do
+// associado A.
 
 import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
@@ -229,6 +231,10 @@ async function main() {
         tenantId: tenantA.id,
         nome: assocA.name,
         placas: veiculosA.filter((v) => v.associateId).map((v) => v.plate),
+        // Para o semear-posicoes.mjs (protocolo osmand usa o uniqueId).
+        dispositivos: veiculosA
+          .filter((v) => v.associateId)
+          .map((v) => ({ placa: v.plate, uniqueId: v.uniqueId, deviceId: v.traccarDeviceId })),
       },
       associadoB: {
         id: assocB.id,

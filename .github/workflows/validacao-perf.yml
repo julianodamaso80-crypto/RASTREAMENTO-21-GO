@@ -152,7 +152,8 @@ jobs:
         env:
           JAVA_OPTS: '-Xms512m -Xmx1500m -Duser.timezone=America/Sao_Paulo'
           TZ: America/Sao_Paulo
-        ports: ['8082:8082']
+        # 5055 = osmand (docker/traccar/traccar.xml e padrão da imagem): posições do boot flags-b.
+        ports: ['8082:8082', '5055:5055']
     env:
       NODE_ENV: production
       TZ: America/Sao_Paulo
@@ -283,10 +284,12 @@ jobs:
             [ "$i" = 60 ] && { echo "::error::backend não respondeu /health em 120 s"; tail -50 "$RESULTADOS/backend-legado.log"; exit 1; }
             sleep 2
           done
+          BOOT=$(date +%s)
           # A carga roda mesmo com o smoke reprovado: a medição não se perde.
           rc=0
           node test/homolog/smoke.mjs --modo legado --saida "$RESULTADOS/smoke-legado.json" || rc=1
           node test/homolog/carga.mjs --modo legado --saida "$RESULTADOS/carga-legado.json" || rc=1
+          bash test/homolog/alertas-por-tipo.sh legado "$RESULTADOS/backend-legado.log" "$BOOT" || rc=1
           exit $rc
 
       - name: Boot com flags → smoke + carga
@@ -307,10 +310,59 @@ jobs:
             [ "$i" = 60 ] && { echo "::error::backend não respondeu /health em 120 s"; tail -50 "$RESULTADOS/backend-flags.log"; exit 1; }
             sleep 2
           done
+          BOOT=$(date +%s)
           # A carga roda mesmo com o smoke reprovado: a medição não se perde.
           rc=0
           node test/homolog/smoke.mjs --modo flags --saida "$RESULTADOS/smoke-flags.json" || rc=1
           node test/homolog/carga.mjs --modo flags --saida "$RESULTADOS/carga-flags.json" || rc=1
+          bash test/homolog/alertas-por-tipo.sh flags "$RESULTADOS/backend-flags.log" "$BOOT" || rc=1
+          exit $rc
+
+      # Posições reais (osmand) nos 2 devices do associado A, lidas de volta pela
+      # API do Traccar. O limiar OFFLINE do tenant A cai para 1 min: sem device
+      # com último contato antigo o cron não tem candidato e a consulta crua do
+      # dedup por episódio nunca roda. Fica para o boot flags-b, o último.
+      - name: Semear posições do associado A e limiar OFFLINE de 1 min
+        id: posicoes
+        if: ${{ !cancelled() && steps.semear.outcome == 'success' }}
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          node test/homolog/semear-posicoes.mjs
+          TENANT_A=$(jq -r .tenantA.id "$HOMOLOG_FIXTURE")
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO tenant_settings (id, tenant_id, offline_threshold_minutes, updated_at)
+             VALUES (gen_random_uuid(), '$TENANT_A', 1, now())
+             ON CONFLICT (tenant_id) DO UPDATE SET offline_threshold_minutes = 1, updated_at = now()"
+
+      - name: Boot flags-b (por device + dedup por episódio) → smoke + alertas
+        id: flags-b
+        if: ${{ !cancelled() && steps.posicoes.outcome == 'success' }}
+        working-directory: backend
+        env:
+          STOCK_MAP_CACHE_MS: '10000'
+          FROTA_PAINEL_CACHE_MS: '2000'
+          APP_VEHICLES_POR_DEVICE: '1'
+          ALERTS_DEDUP_EPISODIO: OFFLINE
+          # debug só aqui: a linha "suprimidosPorEpisodio" do cron é debug.
+          LOG_LEVEL: debug
+          SMOKE_LEGADO: ${{ github.workspace }}/homolog/smoke-legado.json
+        run: |
+          set -euo pipefail
+          node dist/src/main > "$RESULTADOS/backend-flags-b.log" 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true; wait $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            kill -0 $PID 2>/dev/null || { echo "::error::backend morreu no boot"; tail -50 "$RESULTADOS/backend-flags-b.log"; exit 1; }
+            curl -sf "$API_URL/health" > /dev/null && break
+            [ "$i" = 60 ] && { echo "::error::backend não respondeu /health em 120 s"; tail -50 "$RESULTADOS/backend-flags-b.log"; exit 1; }
+            sleep 2
+          done
+          BOOT=$(date +%s)
+          # A conferência dos alertas roda mesmo com o smoke reprovado.
+          rc=0
+          node test/homolog/smoke.mjs --modo flags-b --saida "$RESULTADOS/smoke-flags-b.json" || rc=1
+          bash test/homolog/alertas-por-tipo.sh flags-b "$RESULTADOS/backend-flags-b.log" "$BOOT" episodio || rc=1
           exit $rc
 
       - name: Consolidar resultados e resumo
@@ -325,6 +377,7 @@ jobs:
             nivel: '(3) homologação completa — dados sintéticos, runner do GitHub Actions',
             legado: { smoke: ler('smoke-legado'), carga: ler('carga-legado') },
             flags: { smoke: ler('smoke-flags'), carga: ler('carga-flags') },
+            'flags-b': { smoke: ler('smoke-flags-b'), carga: null },
           };
           fs.writeFileSync(`${dir}/homolog-resultados.json`, JSON.stringify(r, null, 2));
           const v = (x) => (x === null || x === undefined ? '—' : x);
@@ -334,7 +387,7 @@ jobs:
             '| Modo | Smoke | Rota | Enviadas | Erros | p50 ms | p95 ms | p99 ms | Montagens | Idade máx. ms |',
             '|---|---|---|---|---|---|---|---|---|---|',
           ];
-          for (const modo of ['legado', 'flags']) {
+          for (const modo of ['legado', 'flags', 'flags-b']) {
             const s = r[modo].smoke;
             const smoke = s ? (s.ok ? 'ok' : `FALHOU (${s.falhas.length})`) : 'não rodou';
             const rotas = Object.entries(r[modo].carga?.rotas ?? {});
@@ -343,7 +396,7 @@ jobs:
               linhas.push(`| ${modo} | ${smoke} | ${rota} | ${x.enviadas} | ${x.erros} | ${v(x.p50Ms)} | ${v(x.p95Ms)} | ${v(x.p99Ms)} | ${v(x.montagens)} | ${v(x.idadeMaxMs)} |`);
             }
           }
-          for (const modo of ['legado', 'flags']) {
+          for (const modo of ['legado', 'flags', 'flags-b']) {
             const falhas = r[modo].smoke?.falhas ?? [];
             if (falhas.length) linhas.push('', `**Falhas do smoke (${modo}):**`, ...falhas.map((f) => `- ${f}`));
           }
