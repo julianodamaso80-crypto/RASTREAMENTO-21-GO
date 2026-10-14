@@ -11,6 +11,7 @@ na Rede Veículos (RDV), e provam o mapa do estoque (cluster e uso prolongado). 
 | `provar-cluster-estoque.mjs` | F4 — prova que o agrupamento do mapa do estoque não esconde ponto. PASS/FAIL por checagem + capturas. |
 | `uso-prolongado-estoque.mjs` | F5 — 10 × "Mostrar mais", busca, seleção e 20 min parado; long tasks e memória a cada 60 s. PASS/FAIL. |
 | `comum.mjs` | Peças compartilhadas (navegador, instrumentação, estatística, login do painel). |
+| `comum.test.mjs` | Testes das funções puras (`node --test scripts/perf/comum.test.mjs`, sem navegador). |
 
 ## Antes de rodar
 
@@ -61,7 +62,7 @@ MSYS_NO_PATHCONV=1 node scripts/perf/medir-experiencia.mjs --alvo nosso --base h
 | `--pausa` / `--pausa-rodada` | 3000 / 10000 ms | ritmo de gente entre ações e entre rodadas |
 | `--visivel` | — | abre o nosso painel em janela (a RDV é sempre visível) |
 | `--perfil-cpu` | — | grava um `.cpuprofile` por ação em `resultados/perfis/`; essas amostras **não entram** nas medianas |
-| `--rdv-novo-login` | — | usa um perfil novo na RDV (sem isso o perfil `%TEMP%/perf-rdv-perfil` guarda o cookie da sessão — nunca a senha; o gerenciador de senhas do Chrome fica desligado nesse perfil) |
+| `--manter-perfil` | — | não apaga o perfil da RDV no fim. Sem esta opção o perfil `%TEMP%/perf-rdv-perfil` (onde fica o cookie da sessão do dono — nunca a senha; o gerenciador de senhas do Chrome fica desligado nele) é **apagado** ao terminar, mesmo com erro, e o dono digita a senha a cada execução. Com ela, apague a pasta à mão para encerrar a sessão |
 
 ### O que cada métrica quer dizer
 
@@ -94,6 +95,10 @@ MSYS_NO_PATHCONV=1 node scripts/perf/medir-experiencia.mjs --alvo nosso --base h
 | buscar-imei | digita `PERF_IMEI` → primeira linha é o IMEI | campo de busca heurístico + Enter → IMEI na tela |
 | abrir-estoque-mapa | `/estoque/mapa` com marcadores e cards | `/rastreamento/v2/?tipo=estoque` com marcadores |
 
+Login da RDV: na tela de login o script só escuta o envio do formulário (`submit`) e o clique no botão, para marcar o instante do "entrar" — nenhuma tecla é escutada e nenhum campo é lido. Sem formulário, o início do login cai no instante em que a URL sai de `/login`.
+
+Histórico na RDV só é tentado com a ficha do ativo aberta (senão: "sem equivalente identificado: ficha não aberta"), e o botão final aceita Consultar/Buscar/Pesquisar/Filtrar — nunca "Gerar", que lá pode disparar relatório assíncrono.
+
 Na RDV, quando a heurística não acha o elemento, a ação sai como **"sem equivalente identificado:
 &lt;passo&gt;"** — nunca com um tempo inventado. Na primeira rodada, confira essas linhas e ajuste o
 objeto `RDV` no topo da parte da RDV em `medir-experiencia.mjs`. Texto ou `onclick` com bloquear,
@@ -123,7 +128,9 @@ MSYS_NO_PATHCONV=1 node scripts/perf/uso-prolongado-estoque.mjs --base http://lo
 O F4 não precisa de gancho no código do painel: enquadra com o botão "Ver todos", lê os pontos da
 própria resposta de `/stock/map` e distingue grupo (`data-total`) de ponto (`data-chave`) pelo DOM. O
 F5 passa se, em toda janela de 90 s do período parado, a soma das long tasks ficar abaixo de 3.000 ms
-e nenhuma passar de 300 ms. Os dois saem com código 0 (tudo PASS) ou 1 (algum FAIL).
+e nenhuma passar de 300 ms. Os dois saem com código 0 (tudo PASS) ou 1 (algum FAIL); o F5 sai com 3 e
+imprime `AVISO: só N cliques` quando a lista acabou antes dos 10 "Mostrar mais" (não testou 2.200
+cards). A série do F5 é gravada a cada amostra, então uma queda no meio não perde o que já foi medido.
 
 ## Regras de honestidade (valem para toda medição)
 
@@ -132,10 +139,15 @@ e nenhuma passar de 300 ms. Os dois saem com código 0 (tudo PASS) ou 1 (algum F
 - **Mesma máquina, mesmo navegador, mesma rede** para os dois lados da comparação; sessões separadas.
 - **Rodadas alternadas** (`--alvo nosso,rdv`): na rodada ímpar um vai primeiro, na par o outro.
 - **Frio e quente separados**: nunca misture os dois numa mesma tabela (o `comparar.mjs` avisa).
-- **Mediana e p95**; p99 só com 20 amostras ou mais.
+- **Mediana e p95**; p99 só com 20 amostras ou mais. Mediana clássica (n par = média dos dois centrais);
+  p75/p95/p99 por posição (nearest-rank).
 - **Inconclusiva** quando |diferença| < max(espalhamento p95 − mediana, 10 % da maior mediana).
 - **Volumes diferentes** (marcadores, linhas, cards) ficam registrados em `volume` — a RDV tem outro
   tamanho de base, e isso entra na leitura.
 - **RDV**: só a conta do dono, senha digitada por ele, ritmo normal, só leitura, nenhuma carga.
+- **Limitações conhecidas:** o A de `buscar-placa` pode ser contaminado por atualização ao vivo da lista
+  (uma posição nova chegando pelo WebSocket muda o DOM antes do resultado da busca). Na tabela do
+  `comparar.mjs`, "Não testado — acesso pendente" também aparece quando só a RDV foi medida (a Situação
+  julga o nosso painel, não a RDV).
 - Resolução de A e B: 50 ms. "Frio" limpa o cache HTTP, mas mantém sessão, `localStorage` e service
   worker — não é a primeira visita absoluta.

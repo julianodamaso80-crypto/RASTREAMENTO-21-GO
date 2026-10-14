@@ -109,6 +109,9 @@ async function main() {
   const pagina = (await navegador.pages())[0] || (await navegador.newPage());
   const coletor = await instrumentar(pagina);
   const relatorio = { nivel, nivelDescricao: NIVEIS[nivel], base, flags: o.flags, minutos: o.minutos, roteiro: {}, serie: [], janelas: [] };
+  // Gravado a cada amostra e no fim: uma queda no minuto 18 não perde a série.
+  const arq = path.join(pastaDeSaida(o.saida), `${carimbo()}-uso-prolongado-estoque.json`);
+  const gravar = () => fs.writeFileSync(arq, JSON.stringify(relatorio, null, 1), 'utf8');
 
   try {
     await entrarNoPainel(pagina, base);
@@ -171,6 +174,7 @@ async function main() {
         longMaxMs: Math.round(novas.reduce((m, x) => Math.max(m, x.d), 0)),
       };
       relatorio.serie.push(linha);
+      gravar();
       console.log(
         `min ${String(linha.minuto).padStart(3)} · heap ${linha.heapUsadoMB} MB · nós ${linha.nos} · cards ${linha.cards} · long tasks ${linha.longN} (soma ${ms(linha.longTotalMs)}, máx ${ms(linha.longMaxMs)})`,
       );
@@ -191,6 +195,7 @@ async function main() {
     relatorio.erros = { console: coletor.log.console.length, rede: coletor.log.falhas.length };
   } finally {
     await navegador.close().catch(() => {});
+    gravar();
   }
 
   const piorTotal = Math.max(0, ...relatorio.janelas.map((j) => j.totalMs));
@@ -200,18 +205,22 @@ async function main() {
   const heapN = s.length ? s[s.length - 1].heapUsadoMB : null;
   const okTotal = piorTotal < LIMITE_TOTAL_MS;
   const okMax = piorMax < LIMITE_MAX_MS;
-  relatorio.veredito = { piorTotal90sMs: piorTotal, piorLongTaskMs: piorMax, okTotal, okMax, heapInicialMB: heap0, heapFinalMB: heapN };
+  // Lista curta (menos de 10 "Mostrar mais") não testou o cenário de 2.200
+  // cards: o resultado vale, mas não é PASS limpo.
+  const cliques = Math.min(relatorio.roteiro.mostrarMais1?.length ?? 0, relatorio.roteiro.mostrarMais2?.length ?? 0);
+  const aviso = cliques < 10 ? `AVISO: só ${cliques} cliques em "Mostrar mais" (lista acabou antes de 10) — ${relatorio.roteiro.cardsDepois2 ?? '?'} cards, não 2.200` : null;
+  relatorio.veredito = { piorTotal90sMs: piorTotal, piorLongTaskMs: piorMax, okTotal, okMax, heapInicialMB: heap0, heapFinalMB: heapN, aviso };
+  gravar();
 
   console.log('');
   console.log(`${okTotal ? 'PASS' : 'FAIL'}  pior janela de 90 s: ${ms(piorTotal)} de long tasks (limite < ${ms(LIMITE_TOTAL_MS)})`);
   console.log(`${okMax ? 'PASS' : 'FAIL'}  maior long task: ${ms(piorMax)} (limite < ${ms(LIMITE_MAX_MS)})`);
+  if (aviso) console.log(aviso);
   console.log(`info  heap ${heap0} MB → ${heapN} MB · erros console ${relatorio.erros?.console ?? '?'} · rede ${relatorio.erros?.rede ?? '?'}`);
 
-  const dir = pastaDeSaida(o.saida);
-  const arq = path.join(dir, `${carimbo()}-uso-prolongado-estoque.json`);
-  fs.writeFileSync(arq, JSON.stringify(relatorio, null, 1), 'utf8');
   console.log(`série completa: ${arq}`);
-  process.exit(okTotal && okMax ? 0 : 1);
+  // 0 = PASS limpo · 1 = FAIL · 3 = PASS com aviso (lista curta).
+  process.exit(!(okTotal && okMax) ? 1 : aviso ? 3 : 0);
 }
 
 main().catch((e) => {

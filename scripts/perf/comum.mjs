@@ -434,11 +434,20 @@ export function percentil(valores, p) {
   return v[pos - 1];
 }
 
+/** Mediana clássica: com n par, média dos dois centrais. */
+export function mediana(valores) {
+  const v = valores.filter((x) => typeof x === 'number' && Number.isFinite(x)).sort((a, b) => a - b);
+  if (v.length === 0) return null;
+  const meio = Math.floor(v.length / 2);
+  return v.length % 2 ? v[meio] : (v[meio - 1] + v[meio]) / 2;
+}
+
 export function estatistica(valores) {
   const v = valores.filter((x) => typeof x === 'number' && Number.isFinite(x));
   return {
     n: v.length,
-    mediana: percentil(v, 50),
+    // p50 = mediana clássica; p75/p95/p99 por posição (nearest-rank).
+    mediana: mediana(v),
     p75: percentil(v, 75),
     p95: percentil(v, 95),
     // p99 só com 20 amostras ou mais (regra global).

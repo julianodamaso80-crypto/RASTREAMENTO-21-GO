@@ -389,7 +389,7 @@ const RDV = {
   dialogos: '.modal.show, .leaflet-popup, .popover.show, .offcanvas.show, [role="dialog"], .gm-style-iw',
   campoBusca: 'placa|pesquis|busca|search|imei|chassi',
   // Texto/onclick que NUNCA é clicado: a conta é a real do dono, em produção.
-  proibido: 'bloque|desbloq|exclu|remov|apag|cancel|enviar|salvar|comando|retirar|inativ|desativ|export|imprim|excel|pdf|transfer|vincul',
+  proibido: 'bloque|desbloq|exclu|remov|apag|cancel|enviar|salvar|comando|retirar|inativ|desativ|export|imprim|excel|pdf|transfer|vincul|gerar',
 };
 
 const PR = {
@@ -648,6 +648,16 @@ const RDV_ACOES = {
   'abrir-historico': async (ctx) => {
     // "Viagens e históricos" → Consultar → 24h → Consultar/Buscar. ≤ 24 h é
     // síncrono na RDV (acima disso vira relatório assíncrono — não pedimos).
+    // Só com a ficha do ativo aberta: sem ela, "Histórico" pode casar com
+    // outro botão da tela, e a conta é a real do dono.
+    const fichaAberta = await ctx.pagina.evaluate(
+      (s) =>
+        [...document.querySelectorAll(s)].some(
+          (e) => window.__perfUtil.visivel(e) && !/contrato|termo/i.test(e.innerText || ''),
+        ),
+      RDV.dialogos,
+    );
+    if (!fichaAberta) return { semEquivalente: 'ficha não aberta' };
     const abrir = await elementoOuNulo(await botaoSeguro(ctx.pagina, /hist[oó]ric|viage/));
     if (!abrir) return { semEquivalente: 'botão de histórico não identificado na ficha' };
     await abrir.click();
@@ -661,7 +671,8 @@ const RDV_ACOES = {
     if (!preset) return { semEquivalente: 'atalho de 24 h não identificado' };
     await preset.click();
     await dorme(400);
-    const enviar = await elementoOuNulo(await botaoSeguro(ctx.pagina, /^(consultar|buscar|gerar|pesquisar|filtrar)$/, true));
+    // Sem "gerar": na RDV "Gerar" pode disparar relatório assíncrono na conta do dono.
+    const enviar = await elementoOuNulo(await botaoSeguro(ctx.pagina, /^(consultar|buscar|pesquisar|filtrar)$/, true));
     if (!enviar) return { semEquivalente: 'botão de consultar não identificado' };
     const antes = await ctx.pagina.evaluate(
       () => [...document.querySelectorAll('tbody tr')].filter((l) => window.__perfUtil.visivel(l) && !l.querySelector('.dataTables_empty')).length,
@@ -736,8 +747,10 @@ async function esperarLoginDoDono(ctx) {
     const marca = () => {
       if (location.pathname.includes('login') && window.__perfMarcaLogin) window.__perfMarcaLogin(Date.now());
     };
+    // Só o envio do formulário e o clique no botão — nenhuma tecla é escutada
+    // na tela onde o dono digita a senha. (Enter num <form> também dispara
+    // `submit`; sem formulário, t0 cai no instante em que a URL saiu de /login.)
     document.addEventListener('submit', marca, true);
-    document.addEventListener('keydown', (e) => e.key === 'Enter' && marca(), true);
     document.addEventListener(
       'click',
       (e) => e.target && e.target.closest && e.target.closest('button, input[type="submit"]') && marca(),
@@ -919,29 +932,55 @@ function escreverResumo(arquivo, execucoes, opcoes) {
   fs.writeFileSync(arquivo, linhas.join('\n'), 'utf8');
 }
 
+/**
+ * Apaga o perfil do Chrome ao fim: no da RDV mora o cookie da sessão do dono.
+ * `--manter-perfil` preserva o da RDV de propósito (evita redigitar a senha).
+ */
+function apagarPerfil(perfil, manter) {
+  if (!perfil) return;
+  if (manter) {
+    console.log(`perfil da RDV mantido (--manter-perfil): ${perfil} — apague a pasta para encerrar a sessão.`);
+    return;
+  }
+  try {
+    fs.rmSync(perfil, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+  } catch (e) {
+    console.warn(`não consegui apagar o perfil ${perfil}: ${e.message} — apague à mão.`);
+  }
+}
+
 async function prepararAlvo(alvo, opcoes, carimboExec) {
   const base = (alvo === 'rdv' ? opcoes['base-rdv'] : opcoes.base).replace(/\/$/, '');
   const visivel = alvo === 'rdv' || opcoes.visivel;
+  // RDV: perfil com caminho fixo, para `--manter-perfil` reaproveitar o
+  // cookie da sessão; sem a opção ele é apagado no fim (ver apagarPerfil).
   const perfil =
-    alvo === 'rdv' && !opcoes['rdv-novo-login'] ? path.join(os.tmpdir(), 'perf-rdv-perfil') : undefined;
+    alvo === 'rdv' ? path.join(os.tmpdir(), 'perf-rdv-perfil') : fs.mkdtempSync(path.join(os.tmpdir(), 'perf-perfil-'));
   const navegador = await abrirNavegador({ visivel, perfil });
-  const pagina = (await navegador.pages())[0] || (await navegador.newPage());
-  const coletor = await instrumentar(pagina);
-  const ctx = { alvo, base, navegador, pagina, coletor, opcoes, nivel: opcoes.nivel, carimbo: carimboExec, saida: opcoes.saidaAbs, amostras: [] };
-  if (alvo === 'rdv') {
-    ctx.loginMedido = await esperarLoginDoDono(ctx);
-    ctx.versao = await versaoDaRdv(pagina);
-  } else {
-    await pagina.goto(`${base}/login`, { waitUntil: 'domcontentloaded', timeout: PRAZO_MS });
-    const v = await versaoDoPainel(base, pagina);
-    ctx.versao = `backend ${v.backend} · frontend ${v.frontend} · api ${apiDoPainel(base)}`;
-    // Sem a ação "login" na lista, entra uma vez fora da medição.
-    if (!opcoes.listaAcoes.includes('login')) {
-      await entrarNoPainel(pagina, base);
-      await esperar(pagina, P.painel, OCUPADO_NOSSO, PRAZO_MS);
+  try {
+    const pagina = (await navegador.pages())[0] || (await navegador.newPage());
+    const coletor = await instrumentar(pagina);
+    const ctx = { alvo, base, navegador, pagina, coletor, opcoes, perfil, nivel: opcoes.nivel, carimbo: carimboExec, saida: opcoes.saidaAbs, amostras: [] };
+    if (alvo === 'rdv') {
+      ctx.loginMedido = await esperarLoginDoDono(ctx);
+      ctx.versao = await versaoDaRdv(pagina);
+    } else {
+      await pagina.goto(`${base}/login`, { waitUntil: 'domcontentloaded', timeout: PRAZO_MS });
+      const v = await versaoDoPainel(base, pagina);
+      ctx.versao = `backend ${v.backend} · frontend ${v.frontend} · api ${apiDoPainel(base)}`;
+      // Sem a ação "login" na lista, entra uma vez fora da medição.
+      if (!opcoes.listaAcoes.includes('login')) {
+        await entrarNoPainel(pagina, base);
+        await esperar(pagina, P.painel, OCUPADO_NOSSO, PRAZO_MS);
+      }
     }
+    return ctx;
+  } catch (e) {
+    // Falhou antes de entrar na lista de alvos: fecha e apaga aqui mesmo.
+    await navegador.close().catch(() => {});
+    apagarPerfil(perfil, alvo === 'rdv' && opcoes['manter-perfil']);
+    throw e;
   }
-  return ctx;
 }
 
 async function rodarRodada(ctx) {
@@ -977,7 +1016,7 @@ async function main() {
       pausa: 3000,
       'pausa-rodada': 10000,
     },
-    ['visivel', 'perfil-cpu', 'rdv-novo-login'],
+    ['visivel', 'perfil-cpu', 'manter-perfil'],
   );
   opcoes.nivel = exigirNivel(opcoes.nivel);
   if (!['frio', 'quente'].includes(opcoes.modo)) throw new Error('--modo frio|quente');
@@ -991,9 +1030,8 @@ async function main() {
   const carimboExec = carimbo();
 
   const ctxs = [];
-  for (const alvo of alvos) ctxs.push(await prepararAlvo(alvo, opcoes, carimboExec));
-
   try {
+    for (const alvo of alvos) ctxs.push(await prepararAlvo(alvo, opcoes, carimboExec));
     for (let r = 1; r <= opcoes.rodadas; r += 1) {
       // Rodadas alternadas: na ímpar um alvo vai primeiro, na par o outro —
       // nenhum fica sempre com a rede/CPU "descansada".
@@ -1028,6 +1066,7 @@ async function main() {
       execucoes.push({ ...meta, resumo });
       console.log(`resultado: ${nomeBase}.json / .csv`);
       await ctx.navegador.close().catch(() => {});
+      apagarPerfil(ctx.perfil, ctx.alvo === 'rdv' && opcoes['manter-perfil']);
     }
     const arqResumo = path.join(opcoes.saidaAbs, `${carimboExec}-resumo.md`);
     escreverResumo(arqResumo, execucoes, opcoes);
