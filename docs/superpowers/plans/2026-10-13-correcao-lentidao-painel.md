@@ -221,7 +221,7 @@ Conteúdo obrigatório, com base no relatório §4.5 e §2 (causas 4–6) e na m
 
 ## Publicação (só depois de autorização expressa) — rascunho
 
-1. Backend primeiro (A+B com envs ausentes = desligado) → `/health` 200 → ligar `STOCK_MAP_CACHE_MS=10000` (reinício ~20 s) → observar 1 h no pico → ligar `FROTA_PAINEL_CACHE_MS=2000` → observar.
+1. Backend primeiro (A+B com envs ausentes = desligado) → `/api/v1/health` 200 → ligar `STOCK_MAP_CACHE_MS=10000` (reinício ~20 s) → observar 1 h no pico → ligar `FROTA_PAINEL_CACHE_MS=2000` → observar.
 2. Frontend depois (C+D com envs ausentes = legado) → ligar `NEXT_PUBLIC_POLLING_MODE=contingencia` num build → observar → `NEXT_PUBLIC_STOCK_MAP_CLUSTER=on`.
 3. Rollback: tags anteriores no registry (`r21go-backend:b366657`, `r21go-frontend:206709d`); desligar = env + reinício, **não é instantâneo**.
-4. Critérios de interrupção: qualquer 5xx novo, `/health` `db.ok=false`, posições paradas (`tc_positions` 2 min = 0), reclamação de dado errado/permissão.
+4. Critérios de interrupção: qualquer 5xx novo, `/api/v1/health` `db.ok=false`, posições paradas (`tc_positions` 2 min = 0), reclamação de dado errado/permissão.

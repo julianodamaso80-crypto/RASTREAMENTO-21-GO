@@ -216,11 +216,6 @@ export class TraccarService implements OnModuleInit {
     return this.frotaCompartilhada('/positions', buscar);
   }
 
-  /**
-   * Quem pede a lista completa dentro de 2 s recebe a mesma resposta, e
-   * chamadas simultâneas esperam a mesma requisição em vez de abrir outra.
-   * Falha não fica guardada: a próxima chamada tenta de novo na hora.
-   */
   /** Início da busca da lista completa que o coalesce está servindo agora; `null` se não há uma vigente. */
   frotaBuscadaEm(rota: '/devices' | '/positions'): number | null {
     const emCache = this.frotaCache.get(rota);
@@ -230,6 +225,11 @@ export class TraccarService implements OnModuleInit {
     return emCache.at;
   }
 
+  /**
+   * Quem pede a lista completa dentro de 2 s recebe a mesma resposta, e
+   * chamadas simultâneas esperam a mesma requisição em vez de abrir outra.
+   * Falha não fica guardada: a próxima chamada tenta de novo na hora.
+   */
   private frotaCompartilhada<T>(chave: string, buscar: () => Promise<T>): Promise<T> {
     const agora = Date.now();
     const emCache = this.frotaCache.get(chave);
