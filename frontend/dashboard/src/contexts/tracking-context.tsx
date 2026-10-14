@@ -449,29 +449,34 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
 
   // O status depende do relógio (30 min, 60 min, 2 dias sem contato): sem
   // este tique, rastreador que parou de falar ficaria ONLINE até chegar outro
-  // evento qualquer.
+  // evento qualquer. Cada linha sabe o instante exato da próxima virada; o
+  // tique de 1 s só pede render quando alguma já venceu.
+  const cacheLinhas = useRef(criarCacheLinhas());
   const [relogio, setRelogio] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setRelogio((n) => n + 1), 60_000);
+    const id = setInterval(() => {
+      if (cacheLinhas.current.venceuAlguma(Date.now())) setRelogio((n) => n + 1);
+    }, 1_000);
     return () => clearInterval(id);
   }, []);
 
-  // Merge vehicles + devices + positions. Só recalcula a linha de quem mudou;
-  // o `relogio` (minuto) recalcula todas, porque o status depende da hora.
-  const cacheLinhas = useRef(criarCacheLinhas());
+  // Merge vehicles + devices + positions. Só recalcula a linha de quem mudou
+  // ou cujo status virou pelo relógio.
   const vehicles = useMemo<VehicleWithTracking[]>(() => {
     const cache = cacheLinhas.current;
     const antes = cache.recalculos;
+    const agora = Date.now();
     const result: VehicleWithTracking[] = [];
     vehicleMap.forEach((vehicle) => {
       const deviceId = vehicle.traccarDeviceId;
       const device = deviceId ? deviceMap.get(deviceId) : undefined;
       const position = deviceId ? positionMap.get(deviceId) : undefined;
-      result.push(cache.obter(vehicle, device, position, relogio));
+      result.push(cache.obter(vehicle, device, position, agora));
     });
     cache.podar(vehicleMap);
     if (process.env.NODE_ENV !== 'production') statsDev().recalculos += cache.recalculos - antes;
     return result;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- relogio só força o recálculo das vencidas
   }, [vehicleMap, deviceMap, positionMap, relogio]);
 
   // Filtros
@@ -560,7 +565,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     setUnreadCount(0);
   }, []);
 
-  // Sem memo, qualquer estado do Provider (ex.: o `relogio`) recriava o objeto
+  // Sem memo, qualquer estado do Provider recriava o objeto
   // e re-renderizava todos os consumidores.
   const value = useMemo<TrackingContextType>(
     () => ({

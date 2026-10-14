@@ -1,18 +1,13 @@
 import type { Vehicle, VehicleWithTracking } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import { getDisplayStatus, estaAndando, estaConectado } from '@/lib/utils';
+import { proximaTransicaoEm } from '@/lib/status-transicoes';
 
-/**
- * Linha do painel: veículo + device + posição. `minuto` não entra na conta —
- * ele só existe para o cache saber que o relógio andou (o status depende de
- * Date.now()).
- */
+/** Linha do painel: veículo + device + posição. O status depende de Date.now(). */
 export function derivarLinha(
   vehicle: Vehicle,
   device: TraccarDevice | undefined,
   position: TraccarPosition | undefined,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- chave do cache
-  _minuto: number,
 ): VehicleWithTracking {
   const speed = position?.speed ?? 0;
   // `lastUpdate` = heartbeat do device (Traccar atualiza mesmo em keep-alive
@@ -60,23 +55,32 @@ interface Entrada {
   vehicle: Vehicle;
   device: TraccarDevice | undefined;
   position: TraccarPosition | undefined;
-  minuto: number;
+  /** Quando o status/movimento desta linha muda só pelo relógio; null = nunca. */
+  expiraEm: number | null;
   linha: VehicleWithTracking;
 }
 
 /**
  * Cache por veículo: um lote que mexe em 500 de 7.000 veículos recalcula 500
- * linhas, e as outras voltam com a mesma referência.
+ * linhas, e as outras voltam com a mesma referência. Linha cujo status vira
+ * pelo relógio (30 min, 60 min, 3 min sem GPS...) vence no instante exato.
  */
 export function criarCacheLinhas() {
   const entradas = new Map<string, Entrada>();
   let recalculos = 0;
+  const proximoVencimento = (): number | null => {
+    let menor: number | null = null;
+    for (const e of entradas.values()) {
+      if (e.expiraEm !== null && (menor === null || e.expiraEm < menor)) menor = e.expiraEm;
+    }
+    return menor;
+  };
   return {
     obter(
       vehicle: Vehicle,
       device: TraccarDevice | undefined,
       position: TraccarPosition | undefined,
-      minuto: number,
+      agora: number,
     ): VehicleWithTracking {
       const e = entradas.get(vehicle.id);
       if (
@@ -84,18 +88,30 @@ export function criarCacheLinhas() {
         e.vehicle === vehicle &&
         e.device === device &&
         e.position === position &&
-        e.minuto === minuto
+        (e.expiraEm === null || agora < e.expiraEm)
       ) {
         return e.linha;
       }
       recalculos++;
-      const linha = derivarLinha(vehicle, device, position, minuto);
-      entradas.set(vehicle.id, { vehicle, device, position, minuto, linha });
+      const linha = derivarLinha(vehicle, device, position);
+      const expiraEm = proximaTransicaoEm({
+        lastUpdate: linha.lastUpdate,
+        positionTime: linha.positionTime,
+        vehicleType: linha.vehicleType,
+        agora,
+      });
+      entradas.set(vehicle.id, { vehicle, device, position, expiraEm, linha });
       return linha;
     },
     /** Tira do cache quem não está mais na frota. */
     podar(vivos: { has(id: string): boolean }) {
       for (const id of entradas.keys()) if (!vivos.has(id)) entradas.delete(id);
+    },
+    proximoVencimento,
+    /** Alguma linha já mudou de status pelo relógio? Só então vale um render. */
+    venceuAlguma(agora: number): boolean {
+      const p = proximoVencimento();
+      return p !== null && p <= agora;
     },
     get recalculos() {
       return recalculos;

@@ -82,7 +82,7 @@ afterEach(() => {
 describe('derivarLinha', () => {
   it('veículo andando, online, com device e posição', () => {
     const v = veiculo('1');
-    const linha = derivarLinha(v, device(1), posicao(1), 0);
+    const linha = derivarLinha(v, device(1), posicao(1));
     expect(linha).toEqual({
       ...v,
       vehicleType: 'CAR',
@@ -110,7 +110,7 @@ describe('derivarLinha', () => {
       address: undefined as unknown as string,
       attributes: {},
     });
-    const linha = derivarLinha(v, undefined, p, 0);
+    const linha = derivarLinha(v, undefined, p);
     expect(linha.lastUpdate).toBe(haMin(45));
     expect(linha.positionTime).toBe(haMin(45));
     expect(linha.deviceStatus).toBe('offline');
@@ -126,7 +126,7 @@ describe('derivarLinha', () => {
       traccarDeviceId: null,
       vehicleType: undefined as unknown as Vehicle['vehicleType'],
     });
-    const linha = derivarLinha(v, undefined, undefined, 0);
+    const linha = derivarLinha(v, undefined, undefined);
     expect(linha).toEqual({
       ...v,
       vehicleType: 'CAR',
@@ -147,20 +147,20 @@ describe('derivarLinha', () => {
 
   it('BLOCKED vira alert e device.lastUpdate tem prioridade sobre serverTime', () => {
     const v = veiculo('4', { status: 'BLOCKED' });
-    const linha = derivarLinha(v, device(4, { lastUpdate: haMin(2) }), posicao(4, { serverTime: haMin(9) }), 0);
+    const linha = derivarLinha(v, device(4, { lastUpdate: haMin(2) }), posicao(4, { serverTime: haMin(9) }));
     expect(linha.lastUpdate).toBe(haMin(2));
     expect(linha.displayStatus).toBe('alert');
   });
 });
 
 describe('criarCacheLinhas', () => {
-  it('mesma referência quando as quatro entradas são idênticas', () => {
+  it('mesma referência quando as três entradas são idênticas e nada venceu', () => {
     const cache = criarCacheLinhas();
     const v = veiculo('1');
     const d = device(1);
     const p = posicao(1);
-    const a = cache.obter(v, d, p, 0);
-    const b = cache.obter(v, d, p, 0);
+    const a = cache.obter(v, d, p, AGORA);
+    const b = cache.obter(v, d, p, AGORA + 1_000);
     expect(b).toBe(a);
     expect(cache.recalculos).toBe(1);
   });
@@ -169,44 +169,62 @@ describe('criarCacheLinhas', () => {
     const cache = criarCacheLinhas();
     const v = veiculo('1');
     const d = device(1);
-    const a = cache.obter(v, d, posicao(1), 0);
-    const b = cache.obter(v, d, posicao(1, { speed: 0 }), 0);
+    const a = cache.obter(v, d, posicao(1), AGORA);
+    const b = cache.obter(v, d, posicao(1, { speed: 0 }), AGORA);
     expect(b).not.toBe(a);
     expect(b.speed).toBe(0);
     expect(cache.recalculos).toBe(2);
   });
 
-  it('minuto novo recalcula todos e reflete o tempo que passou', () => {
+  it('posição de 2 min 59 s não recalcula; aos 3 min 01 s recalcula e moving vira false', () => {
     const cache = criarCacheLinhas();
-    const vs = ['1', '2', '3'].map((id) => veiculo(id));
-    const ds = vs.map((v) => device(v.traccarDeviceId!));
-    const ps = vs.map((v) => posicao(v.traccarDeviceId!));
-    const antes = vs.map((v, i) => cache.obter(v, ds[i], ps[i], 0));
-    expect(antes[0].displayStatus).toBe('online');
-    jest.setSystemTime(AGORA + 40 * 60_000);
-    const mesmoMinuto = vs.map((v, i) => cache.obter(v, ds[i], ps[i], 0));
-    mesmoMinuto.forEach((l, i) => expect(l).toBe(antes[i]));
-    const depois = vs.map((v, i) => cache.obter(v, ds[i], ps[i], 1));
-    depois.forEach((l, i) => expect(l).not.toBe(antes[i]));
-    expect(depois[0].displayStatus).toBe('sem_resp');
-    expect(cache.recalculos).toBe(6);
+    const v = veiculo('1');
+    const d = device(1, { lastUpdate: haMin(0) });
+    const p = posicao(1, { fixTime: haMin(0), deviceTime: haMin(0), serverTime: haMin(0) });
+    const a = cache.obter(v, d, p, AGORA);
+    expect(a.moving).toBe(true);
+    jest.setSystemTime(AGORA + 179_000);
+    expect(cache.venceuAlguma(Date.now())).toBe(false);
+    expect(cache.obter(v, d, p, Date.now())).toBe(a);
+    jest.setSystemTime(AGORA + 181_000);
+    expect(cache.venceuAlguma(Date.now())).toBe(true);
+    const b = cache.obter(v, d, p, Date.now());
+    expect(b).not.toBe(a);
+    expect(b.moving).toBe(false);
+    expect(b.displayStatus).toBe('online');
+    expect(cache.recalculos).toBe(2);
+  });
+
+  it('vira S/RESP no instante dos 30 min, sem esperar minuto', () => {
+    const cache = criarCacheLinhas();
+    const v = veiculo('1');
+    const d = device(1, { lastUpdate: haMin(10) });
+    const p = posicao(1, { fixTime: haMin(10), deviceTime: haMin(10), serverTime: haMin(10) });
+    const a = cache.obter(v, d, p, AGORA);
+    expect(a.displayStatus).toBe('online');
+    const vence = cache.proximoVencimento()!;
+    expect(vence).toBe(AGORA + 20 * 60_000 + 1);
+    jest.setSystemTime(vence - 1);
+    expect(cache.obter(v, d, p, Date.now())).toBe(a);
+    jest.setSystemTime(vence);
+    expect(cache.obter(v, d, p, Date.now()).displayStatus).toBe('sem_resp');
   });
 
   it('podar remove quem saiu do vehicleMap', () => {
     const cache = criarCacheLinhas();
     const v1 = veiculo('1');
     const v2 = veiculo('2');
-    cache.obter(v1, undefined, undefined, 0);
-    cache.obter(v2, undefined, undefined, 0);
+    cache.obter(v1, undefined, undefined, AGORA);
+    cache.obter(v2, undefined, undefined, AGORA);
     expect(cache.tamanho).toBe(2);
     cache.podar(new Map([[v1.id, v1]]));
     expect(cache.tamanho).toBe(1);
-    const a = cache.obter(v1, undefined, undefined, 0);
+    const a = cache.obter(v1, undefined, undefined, AGORA);
     expect(cache.recalculos).toBe(2);
-    expect(cache.obter(v1, undefined, undefined, 0)).toBe(a);
+    expect(cache.obter(v1, undefined, undefined, AGORA)).toBe(a);
   });
 
-  it('7.000 veículos e lote de 500 posições: exatamente 500 recálculos', () => {
+  it('7.000 veículos: lote de 500 posições = 500 recálculos; tique sem vencimento = 0 e sem render', () => {
     const cache = criarCacheLinhas();
     const vs: Vehicle[] = [];
     const ds = new Map<number, TraccarDevice>();
@@ -216,12 +234,18 @@ describe('criarCacheLinhas', () => {
       ds.set(i, device(i));
       ps.set(i, posicao(i));
     }
-    const rodada = () =>
-      vs.map((v) => cache.obter(v, ds.get(v.traccarDeviceId!), ps.get(v.traccarDeviceId!), 0));
-    rodada();
+    const rodada = (agora: number) =>
+      vs.map((v) => cache.obter(v, ds.get(v.traccarDeviceId!), ps.get(v.traccarDeviceId!), agora));
+    rodada(AGORA);
     expect(cache.recalculos).toBe(7000);
     for (let i = 1; i <= 500; i++) ps.set(i * 7, posicao(i * 7, { speed: 50 }));
-    rodada();
+    rodada(AGORA);
     expect(cache.recalculos).toBe(7500);
+    // Tique de 1 s: a posição tem 1 min e só vence aos 3 — nada a renderizar.
+    expect(cache.venceuAlguma(AGORA + 1_000)).toBe(false);
+    rodada(AGORA + 1_000);
+    expect(cache.recalculos).toBe(7500);
+    // Aos 2 min + 1 s a posição de todos passou de 3 min: o tique pede render.
+    expect(cache.venceuAlguma(AGORA + 121_000)).toBe(true);
   });
 });
