@@ -7,6 +7,7 @@ import { TraccarGateway } from './traccar.gateway';
 import { DeviceRegistryService } from './device-registry.service';
 import { TraccarReconcileService } from './traccar-reconcile.service';
 import { DeviceHealthService } from './device-health.service';
+import { FrotaPainelService } from './frota-painel.service';
 import { BleTagsModule } from '../ble-tags/ble-tags.module';
 import { AlertsModule } from '../alerts/alerts.module';
 
@@ -31,6 +32,7 @@ import { AlertsModule } from '../alerts/alerts.module';
     DeviceRegistryService,
     TraccarReconcileService,
     DeviceHealthService,
+    FrotaPainelService,
   ],
   exports: [
     TraccarService,

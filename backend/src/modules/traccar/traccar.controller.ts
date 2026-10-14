@@ -1,4 +1,13 @@
-import { Controller, Get, Param, Query, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -7,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 import { TraccarService } from './traccar.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FrotaPainelService, etagCasa } from './frota-painel.service';
 
 interface AuthenticatedRequest {
   tenantId: string;
@@ -20,14 +30,39 @@ export class TraccarController {
   constructor(
     private traccarService: TraccarService,
     private prisma: PrismaService,
+    private frota: FrotaPainelService,
   ) {}
+
+  /** Com o etag igual ao do navegador responde 304 sem corpo (o Express não recalcula o ETag quando ele já está setado). */
+  private responderComEtag<T>(
+    lista: T[],
+    etag: string,
+    ifNoneMatch: string | undefined,
+    res: Response,
+  ): T[] | undefined {
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'private, no-cache');
+    if (etagCasa(ifNoneMatch, etag)) {
+      res.status(304);
+      return undefined;
+    }
+    return lista;
+  }
 
   @Get('devices')
   @ApiOperation({
     summary: 'Lista dispositivos do Traccar (filtrado por tenant)',
   })
-  async getDevices(@Req() req: AuthenticatedRequest) {
+  async getDevices(
+    @Req() req: AuthenticatedRequest,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const tenantId = req.tenantId;
+    if (this.frota.ligado) {
+      const f = await this.frota.frotaDoTenant(tenantId);
+      return this.responderComEtag(f.devices, f.etagDevices, ifNoneMatch, res);
+    }
     const vehicles = await this.prisma.vehicle.findMany({
       where: { tenantId, traccarDeviceId: { not: null }, deletedAt: null },
       select: { traccarDeviceId: true },
@@ -47,8 +82,21 @@ export class TraccarController {
   @ApiOperation({
     summary: 'Posições atuais de todos os dispositivos do tenant',
   })
-  async getPositions(@Req() req: AuthenticatedRequest) {
+  async getPositions(
+    @Req() req: AuthenticatedRequest,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const tenantId = req.tenantId;
+    if (this.frota.ligado) {
+      const f = await this.frota.frotaDoTenant(tenantId);
+      return this.responderComEtag(
+        f.positions,
+        f.etagPositions,
+        ifNoneMatch,
+        res,
+      );
+    }
     const vehicles = await this.prisma.vehicle.findMany({
       where: { tenantId, traccarDeviceId: { not: null }, deletedAt: null },
       select: { traccarDeviceId: true, plate: true, id: true },
