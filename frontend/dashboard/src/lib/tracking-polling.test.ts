@@ -8,6 +8,7 @@ import {
   POLL_MS,
   RECONCILIA_MS,
   SOCKET_MUDO_MS,
+  VEHICLES_CONTINGENCIA_MS,
   VEHICLES_MS,
   type EstadoPolling,
   type PosicaoComAtributos,
@@ -123,15 +124,35 @@ describe('decidirPolling', () => {
     expect(decidirPolling(estado({ ultimaFrotaEm: AGORA - 59_900 })).motivo).toBe('reconciliacao');
   });
 
-  it('contingência recarrega vehicles a cada 32 s, com folga de meio tique', () => {
+  it('contingência com socket fora recarrega vehicles a cada 32 s, com folga de meio tique', () => {
     const limite = VEHICLES_MS - POLL_MS / 2;
-    expect(decidirPolling(estado({ ultimosVehiclesEm: AGORA - VEHICLES_MS })).vehicles).toBe(true);
-    expect(decidirPolling(estado({ ultimosVehiclesEm: AGORA - limite })).vehicles).toBe(true);
-    expect(decidirPolling(estado({ ultimosVehiclesEm: AGORA - limite + 1 })).vehicles).toBe(false);
+    const v = (ultimosVehiclesEm: number) =>
+      decidirPolling(estado({ socketConectado: false, ultimosVehiclesEm })).vehicles;
+    expect(v(AGORA - VEHICLES_MS)).toBe(true);
+    expect(v(AGORA - limite)).toBe(true);
+    expect(v(AGORA - limite + 1)).toBe(false);
   });
 
-  it('contingência com jitter: vehicles há 31.900 ms dispara (não escorrega para o 5º tique)', () => {
-    expect(decidirPolling(estado({ ultimosVehiclesEm: AGORA - 31_900 })).vehicles).toBe(true);
+  it('contingência com socket fora e jitter: vehicles há 31.900 ms dispara', () => {
+    expect(
+      decidirPolling(estado({ socketConectado: false, ultimosVehiclesEm: AGORA - 31_900 })).vehicles,
+    ).toBe(true);
+  });
+
+  it('contingência com socket mudo mantém os 32 s (o vehicles:changed não chega)', () => {
+    const mudo = { ultimoLoteEm: AGORA - SOCKET_MUDO_MS - 1 };
+    expect(decidirPolling(estado({ ...mudo, ultimosVehiclesEm: AGORA - VEHICLES_MS })).vehicles).toBe(true);
+    expect(decidirPolling(estado({ ...mudo, ultimosVehiclesEm: AGORA - 10_000 })).vehicles).toBe(false);
+  });
+
+  it('contingência com socket ok não recarrega vehicles aos 32 s, só aos 5 min', () => {
+    expect(VEHICLES_CONTINGENCIA_MS).toBe(300_000);
+    const v = (ultimosVehiclesEm: number) => decidirPolling(estado({ ultimosVehiclesEm })).vehicles;
+    expect(v(AGORA - VEHICLES_MS)).toBe(false);
+    expect(v(AGORA - 120_000)).toBe(false);
+    expect(v(AGORA - VEHICLES_CONTINGENCIA_MS)).toBe(true);
+    expect(v(AGORA - VEHICLES_CONTINGENCIA_MS + POLL_MS / 2)).toBe(true);
+    expect(v(AGORA - VEHICLES_CONTINGENCIA_MS + POLL_MS / 2 + 1)).toBe(false);
   });
 
   it('legado recarrega vehicles a cada 4 tiques, independentemente do relógio', () => {
@@ -144,8 +165,8 @@ describe('decidirPolling', () => {
     expect(legado(5, AGORA - 100_000)).toBe(false);
   });
 
-  it('contingência com socket vivo ainda recarrega vehicles no prazo, sem frota', () => {
-    const d = decidirPolling(estado({ ultimosVehiclesEm: AGORA - VEHICLES_MS }));
+  it('contingência com socket vivo recarrega vehicles no prazo de 5 min, sem frota', () => {
+    const d = decidirPolling(estado({ ultimosVehiclesEm: AGORA - VEHICLES_CONTINGENCIA_MS }));
     expect(d).toEqual({ frota: false, vehicles: true, motivo: 'nada' });
   });
 });

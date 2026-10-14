@@ -20,7 +20,7 @@ function servico(veiculo?: Record<string, unknown>) {
     getDeviceByUniqueId: jest.fn().mockResolvedValue({ id: 777 }),
     createDevice: jest.fn(),
   };
-  const registry = { notifyDeviceChanged: jest.fn() };
+  const registry = { notifyDeviceChanged: jest.fn(), notifyVehiclesChanged: jest.fn() };
   const s = new VehiclesService(
     prisma as never,
     traccar as never,
@@ -57,6 +57,14 @@ describe('VehiclesService — vínculo avisa o tempo real', () => {
       traccarDeviceId: null,
     });
     await s.remove('veh-2', TENANT);
+    expect(registry.notifyDeviceChanged).not.toHaveBeenCalled();
+    expect(registry.notifyVehiclesChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('edição de veículo avisa os painéis sem refresh do mapping', async () => {
+    const { s, registry } = servico({ id: 'veh-3', uniqueId: 'X', plate: 'AAA1A11', traccarDeviceId: null });
+    await s.update('veh-3', { color: 'preto' } as never, TENANT);
+    expect(registry.notifyVehiclesChanged).toHaveBeenCalledTimes(1);
     expect(registry.notifyDeviceChanged).not.toHaveBeenCalled();
   });
 });

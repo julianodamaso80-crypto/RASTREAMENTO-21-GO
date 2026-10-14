@@ -101,6 +101,9 @@ interface TrackingContextType {
   updateVehicleLocal: (id: string, patch: Partial<Vehicle>) => void;
 }
 
+// Intervalo mínimo entre dois reloads disparados por `vehicles:changed`.
+const VEHICLES_EVENTO_MIN_MS = 5_000;
+
 const TrackingContext = createContext<TrackingContextType | null>(null);
 
 export function TrackingProvider({ children }: { children: ReactNode }) {
@@ -457,6 +460,34 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  // `vehicles:changed`: a lista mudou no backend (vínculo, cadastro, exclusão).
+  // No máximo um reload a cada 5 s; o que chega dentro da janela vira um só,
+  // no fim dela. Marca ultimosVehiclesEmRef para o reload periódico não repetir.
+  const ultimoReloadEventoEmRef = useRef(0);
+  const reloadEventoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleVehiclesChanged = useCallback(() => {
+    if (reloadEventoTimerRef.current) return;
+    const recarregar = () => {
+      reloadEventoTimerRef.current = null;
+      ultimoReloadEventoEmRef.current = Date.now();
+      ultimosVehiclesEmRef.current = Date.now();
+      loadAllVehicles()
+        .then((lista) => setVehicleMap(new Map(lista.map((v) => [v.id, v]))))
+        .catch(() => {
+          // mantém os últimos dados; o reload periódico é a rede de segurança
+        });
+    };
+    const espera = VEHICLES_EVENTO_MIN_MS - (Date.now() - ultimoReloadEventoEmRef.current);
+    if (espera <= 0) recarregar();
+    else reloadEventoTimerRef.current = setTimeout(recarregar, espera);
+  }, [loadAllVehicles]);
+  useEffect(
+    () => () => {
+      if (reloadEventoTimerRef.current) clearTimeout(reloadEventoTimerRef.current);
+    },
+    [],
+  );
+
   const { isConnected } = useTraccarSocket({
     token,
     onPositionUpdate: handlePositionUpdate,
@@ -464,6 +495,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     onLote: handleLote,
     onAlert: handleAlert,
     onBleSighting: handleBleSighting,
+    onVehiclesChanged: handleVehiclesChanged,
     onReconnect: handleReconnect,
   });
 

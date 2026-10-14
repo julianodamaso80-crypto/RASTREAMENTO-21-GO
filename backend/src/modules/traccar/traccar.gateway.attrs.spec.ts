@@ -38,7 +38,7 @@ function montar() {
     { setEmitter: jest.fn() } as any,
     { setEmitter: jest.fn() } as any,
     {} as any,
-    { setRefresher } as any,
+    { setRefresher, onChanged: jest.fn() } as any,
   );
   gateway.server = { to } as any;
   const interno = gateway as unknown as {

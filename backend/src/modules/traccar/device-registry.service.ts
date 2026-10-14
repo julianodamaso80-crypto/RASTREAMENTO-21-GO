@@ -17,6 +17,26 @@ export class DeviceRegistryService {
   private readonly logger = new Logger(DeviceRegistryService.name);
   private refresher: (() => Promise<void>) | null = null;
 
+  private readonly ouvintes: Array<(motivo: string) => void> = [];
+
+  /** O gateway escuta mudanças do conjunto de veículos para avisar os painéis. */
+  onChanged(cb: (motivo: string) => void) {
+    this.ouvintes.push(cb);
+  }
+
+  /** Só avisa os ouvintes (painéis), sem refresh do mapping. */
+  notifyVehiclesChanged(motivo: string): void {
+    for (const cb of this.ouvintes) {
+      try {
+        cb(motivo);
+      } catch (erro) {
+        this.logger.warn(
+          `Ouvinte de mudança de veículos falhou: ${erro instanceof Error ? erro.message : erro}`,
+        );
+      }
+    }
+  }
+
   /** O gateway se registra no afterInit. */
   setRefresher(fn: () => Promise<void>) {
     this.refresher = fn;
@@ -28,6 +48,7 @@ export class DeviceRegistryService {
    * (2 min) resolve.
    */
   notifyDeviceChanged(motivo: string): void {
+    this.notifyVehiclesChanged(motivo);
     if (!this.refresher) return;
     void this.refresher().catch((erro) =>
       this.logger.warn(

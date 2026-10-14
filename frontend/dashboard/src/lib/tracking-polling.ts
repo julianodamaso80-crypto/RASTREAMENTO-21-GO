@@ -9,6 +9,9 @@ export const MODO_POLLING: ModoPolling =
 export const POLL_MS = 8_000;
 export const RECONCILIA_MS = 60_000;
 export const VEHICLES_MS = 32_000;
+// Com o socket vivo, o backend avisa (`vehicles:changed`) quando a lista muda;
+// o reload periódico vira só rede de segurança.
+export const VEHICLES_CONTINGENCIA_MS = 300_000;
 // Maior que pingInterval (25 s) + pingTimeout (20 s) do socket.io: o socket
 // "conectado" sem nenhum lote nesse tempo é tratado como degradado.
 export const SOCKET_MUDO_MS = 90_000;
@@ -36,13 +39,15 @@ export function decidirPolling(e: EstadoPolling): {
   if (e.modo === 'legado') {
     return { frota: true, vehicles: e.tique % 4 === 0, motivo: 'legado' };
   }
-  const vehicles = e.agora - e.ultimosVehiclesEm >= VEHICLES_MS - FOLGA_MS;
-  if (!e.socketConectado) return { frota: true, vehicles, motivo: 'socket-fora' };
+  const vehiclesApos = (prazo: number) => e.agora - e.ultimosVehiclesEm >= prazo - FOLGA_MS;
+  const vehiclesSemSocket = vehiclesApos(VEHICLES_MS);
+  if (!e.socketConectado) return { frota: true, vehicles: vehiclesSemSocket, motivo: 'socket-fora' };
   // Sem nenhum lote ainda (null) nunca conta como mudo: o teto, nesse caso, é
   // a reconciliação.
   if (e.ultimoLoteEm !== null && e.agora - e.ultimoLoteEm > SOCKET_MUDO_MS) {
-    return { frota: true, vehicles, motivo: 'socket-mudo' };
+    return { frota: true, vehicles: vehiclesSemSocket, motivo: 'socket-mudo' };
   }
+  const vehicles = vehiclesApos(VEHICLES_CONTINGENCIA_MS);
   if (e.agora - e.ultimaFrotaEm >= RECONCILIA_MS - FOLGA_MS) {
     return { frota: true, vehicles, motivo: 'reconciliacao' };
   }

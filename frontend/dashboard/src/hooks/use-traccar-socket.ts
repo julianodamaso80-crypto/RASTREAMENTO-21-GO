@@ -22,6 +22,8 @@ interface UseTraccarSocketOptions {
   onLote?: (lote: LoteTempoReal) => void;
   onAlert?: (alert: Alert) => void;
   onBleSighting?: (event: BleSightingEvent) => void;
+  /** O conjunto de veículos do tenant mudou (`vehicles:changed`). */
+  onVehiclesChanged?: () => void;
   /** Reconectou depois de já ter conectado: o que passou no intervalo se perdeu. */
   onReconnect?: () => void;
 }
@@ -36,6 +38,7 @@ export function useTraccarSocket({
   onLote,
   onAlert,
   onBleSighting,
+  onVehiclesChanged,
   onReconnect,
 }: UseTraccarSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -46,6 +49,11 @@ export function useTraccarSocket({
   useEffect(() => {
     onLoteRef.current = onLote;
   }, [onLote]);
+
+  const onVehiclesChangedRef = useRef(onVehiclesChanged);
+  useEffect(() => {
+    onVehiclesChangedRef.current = onVehiclesChanged;
+  }, [onVehiclesChanged]);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {
@@ -115,6 +123,10 @@ export function useTraccarSocket({
 
     socket.on('ble:sighting', (data: BleSightingEvent) => {
       onBleSighting?.(data);
+    });
+
+    socket.on('vehicles:changed', () => {
+      onVehiclesChangedRef.current?.();
     });
 
     return () => {

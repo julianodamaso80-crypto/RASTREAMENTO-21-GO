@@ -282,6 +282,7 @@ export class VehiclesService {
         associateId: dto.associateId,
       },
     });
+    this.deviceRegistry.notifyVehiclesChanged(`edição do veículo ${updated.plate}`);
 
     // Atualiza nome no Traccar se placa mudou
     if (dto.plate && vehicle.traccarDeviceId) {
@@ -317,6 +318,8 @@ export class VehiclesService {
     // O rastreador deixa de pertencer a este tenant/veículo no tempo real.
     if (vehicle.traccarDeviceId) {
       this.deviceRegistry.notifyDeviceChanged(`exclusão da placa ${vehicle.plate}`);
+    } else {
+      this.deviceRegistry.notifyVehiclesChanged(`exclusão da placa ${vehicle.plate}`);
     }
     return removido;
   }

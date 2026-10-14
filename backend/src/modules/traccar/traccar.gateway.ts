@@ -59,6 +59,10 @@ export class TraccarGateway
   private refreshAgendado: Promise<void> | null = null;
   private resolverAgendado: (() => void) | null = null;
   private readonly REFRESH_DEBOUNCE_MS = 1_000;
+  // Coalescência do aviso `vehicles:changed` (rajada de mudanças → 1 evento).
+  private vehiclesChangedTimer: ReturnType<typeof setTimeout> | null = null;
+  private vehiclesChangedMotivo = '';
+  private readonly VEHICLES_CHANGED_DEBOUNCE_MS = 2_000;
   // Backoff exponencial pra reconnect WS Traccar
   private wsReconnectAttempts = 0;
   private readonly WS_BACKOFF_MIN_MS = 2_000;
@@ -81,6 +85,7 @@ export class TraccarGateway
     // Instalação/retirada de rastreador atualiza o mapping na hora, em vez de
     // esperar o refresh de 2min (que deixava o carro recém-instalado invisível).
     this.deviceRegistry.setRefresher(() => this.agendarRefreshMapping());
+    this.registrarOuvinteVehicles();
 
     // Configurar emitter de alertas para WebSocket
     this.alertsService.setEmitter((tenantId, alert) => {
@@ -94,6 +99,34 @@ export class TraccarGateway
 
     await this.refreshDeviceMapping();
     this.connectToTraccar();
+  }
+
+  /**
+   * Conjunto de veículos mudou (cadastro, vínculo, exclusão): os painéis
+   * recarregam a lista só quando recebem isto, em vez de sondar a cada 32 s.
+   * A notificação do registry é global (sem tenant); como o evento é raro,
+   * vai para todas as salas de tenant abertas.
+   */
+  private registrarOuvinteVehicles() {
+    this.deviceRegistry.onChanged((motivo) => {
+      this.vehiclesChangedMotivo = motivo;
+      if (this.vehiclesChangedTimer) return;
+      this.vehiclesChangedTimer = setTimeout(() => {
+        this.vehiclesChangedTimer = null;
+        this.emitirVehiclesChanged(this.vehiclesChangedMotivo);
+      }, this.VEHICLES_CHANGED_DEBOUNCE_MS);
+    });
+  }
+
+  private emitirVehiclesChanged(motivo: string) {
+    const salas = this.server?.sockets?.adapter?.rooms;
+    if (!salas) return;
+    const payload = { at: new Date().toISOString(), motivo };
+    for (const sala of salas.keys()) {
+      if (typeof sala === 'string' && sala.startsWith('tenant:')) {
+        this.server.to(sala).emit('vehicles:changed', payload);
+      }
+    }
   }
 
   async handleConnection(client: Socket) {
