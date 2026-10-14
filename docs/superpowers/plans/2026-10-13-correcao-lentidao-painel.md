@@ -4,7 +4,7 @@
 
 **Goal:** Tirar do thread único do backend o trabalho repetido que o painel do escritório dispara (`/stock/map` e frota montados por aba e por chamada) e as travadas do mapa do estoque, **sem mudar dado, permissão nem fluxo**, com cada comportamento novo nascendo **desligado** e ligável por configuração.
 
-**Architecture:** Payloads que são iguais para todos os usuários de um tenant passam a ser montados uma vez por janela e servidos de um cache em memória com *single-flight* (uma montagem em voo por chave), versão por invalidação e limite de entradas. A frota ganha `ETag` forte por tenant e responde `304` sem montar nada. O painel, em modo "contingência", usa o WebSocket (lote de 1 s) como fonte e só consulta por HTTP quando o socket está fora ou para reconciliar a cada 60 s; o modo "legado" (hoje) continua sendo o padrão de build. O mapa do estoque ganha o mesmo cluster do mapa principal. **Nada aqui toca banco, alertas, app do associado ou retenção** — esses viram propostas separadas (Task E).
+**Architecture:** Payloads que são iguais para todos os usuários de um tenant passam a ser montados uma vez por janela e servidos de um cache em memória com *single-flight* (uma montagem em voo por chave), versão por invalidação e limite de entradas. A frota ganha `ETag` (weak) por tenant e responde `304` sem montar nada. O painel, em modo "contingência", usa o WebSocket (lote de 1 s) como fonte e só consulta por HTTP quando o socket está fora ou para reconciliar a cada 60 s; o modo "legado" (hoje) continua sendo o padrão de build. O mapa do estoque ganha o mesmo cluster do mapa principal. **Nada aqui toca banco, alertas, app do associado ou retenção** — esses viram propostas separadas (Task E).
 
 **Tech Stack:** NestJS 11 + Prisma 7 + Express (backend, 1 réplica), Next.js 16 / React 19 / axios / socket.io-client (dashboard), `supercluster` (já instalado), jest 30 + ts-jest (hoisted no `node_modules` da raiz).
 
@@ -100,7 +100,7 @@ A e B no mesmo deploy de backend (quando autorizado); C e D no mesmo deploy de f
 
 ---
 
-### Task B: Frota do painel montada 1× por tenant a cada 2 s, com `ETag` forte e `304`
+### Task B: Frota do painel montada 1× por tenant a cada 2 s, com `ETag` (weak) e `304`
 
 **Files:**
 - Create: `backend/src/modules/traccar/frota-painel.service.ts` (+ `.spec.ts`)
