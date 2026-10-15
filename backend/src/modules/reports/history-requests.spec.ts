@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { HistoryRequestsService, linkPublico } from './history-requests.service';
-import { gerarHistoricoPdf, linkDoMapa } from './history-report.pdf';
+import { gerarHistoricoPdf, linkDoEndereco, linkDoMapa } from './history-report.pdf';
 
 function servico(prismaOverrides: Record<string, unknown> = {}) {
   const prisma = {
@@ -231,5 +231,16 @@ describe('gerarHistoricoPdf', () => {
     const texto = pdf.toString('latin1');
     expect(texto.startsWith('%PDF')).toBe(true);
     expect(texto).toContain(linkDoMapa(-16.6869, -49.2648));
+    expect(texto).toContain(
+      linkDoEndereco(-16.6869, -49.2648, 'Av. T-63, 1440 - Setor Bueno, Goiânia - GO'),
+    );
+  });
+
+  it('link do endereço abre a rua; endereço só com a cidade cai na coordenada', () => {
+    expect(linkDoEndereco(-22.8, -43.4, 'Rua Barão de Piraquara, Rio de Janeiro - RJ')).toBe(
+      'https://www.google.com/maps/search/?api=1&query=Rua%20Bar%C3%A3o%20de%20Piraquara%2C%20Rio%20de%20Janeiro%20-%20RJ',
+    );
+    expect(linkDoEndereco(-22.8, -43.4, 'Rio de Janeiro - RJ')).toBe(linkDoMapa(-22.8, -43.4));
+    expect(linkDoEndereco(-22.8, -43.4, null)).toBe(linkDoMapa(-22.8, -43.4));
   });
 });

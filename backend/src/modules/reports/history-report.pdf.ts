@@ -62,6 +62,16 @@ export function linkDoMapa(lat: number, lng: number): string {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
 
+/**
+ * Link que abre o Google já com o nome da rua (pedido do dono: coordenada
+ * não diz nada para quem lê). Só quando o endereço tem a rua; endereço que é
+ * só a cidade levaria ao centro dela, então cai na coordenada exata.
+ */
+export function linkDoEndereco(lat: number, lng: number, endereco: string | null): string {
+  if (!endereco || endereco.split(',').length < 2) return linkDoMapa(lat, lng);
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`;
+}
+
 function dataHora(iso: string | Date): string {
   return new Date(iso).toLocaleString('pt-BR', {
     timeZone: FUSO,
@@ -240,7 +250,7 @@ export function gerarHistoricoPdf(dados: DadosHistoricoPdf): Promise<Buffer> {
       .fontSize(7.5)
       .fillColor(CINZA)
       .text(
-        'Horários de Brasília. Clique em "Abrir no mapa" para ver o ponto exato no Google Maps.',
+        'Horários de Brasília. "Abrir no mapa" mostra a rua no Google Maps; clique em "Ponto exato" para a posição precisa do GPS.',
         MARGEM,
         doc.y,
         { width: largura },
@@ -319,7 +329,8 @@ export function gerarHistoricoPdf(dados: DadosHistoricoPdf): Promise<Buffer> {
 
   const linhaDePosicao = (l: LinhaPdf, i: number) => {
     const y = doc.y;
-    const url = linkDoMapa(l.lat, l.lng);
+    const url = linkDoEndereco(l.lat, l.lng, l.address);
+    const exato = linkDoMapa(l.lat, l.lng);
     if (i % 2 === 1) doc.rect(MARGEM, y, largura, ALTURA).fillColor(ZEBRA).fill();
     let x = MARGEM;
     doc.font('Helvetica-Bold').fontSize(8).fillColor(TEXTO);
@@ -335,19 +346,26 @@ export function gerarHistoricoPdf(dados: DadosHistoricoPdf): Promise<Buffer> {
       .filter(Boolean)
       .join(' · ');
     doc.font('Helvetica').fontSize(7.8).fillColor(TEXTO);
-    const endereco = l.address || coordenada(l.lat, l.lng);
-    doc.text(cortar(doc, endereco, COL.endereco - 12), x + 6, y + (detalhe ? 5 : 9), {
+    const endereco = l.address || 'Endereço não identificado';
+    doc.text(cortar(doc, endereco, COL.endereco - 12), x + 6, y + 5, {
       width: COL.endereco - 12,
       lineBreak: false,
     });
+    // Segunda linha: o ponto exato (prova) e o evento, se houver.
+    const ponto = `Ponto exato ${coordenada(l.lat, l.lng)}`;
+    doc.font('Helvetica').fontSize(6.6).fillColor(CINZA);
+    const larguraPonto = doc.widthOfString(ponto);
+    doc.text(ponto, x + 6, y + 15, { width: COL.endereco - 12, lineBreak: false });
     if (detalhe) {
-      doc.font('Helvetica').fontSize(6.6).fillColor(LARANJA_TEXTO);
-      doc.text(cortar(doc, detalhe, COL.endereco - 12), x + 6, y + 15, {
-        width: COL.endereco - 12,
+      const resto = COL.endereco - 12 - larguraPonto - 4;
+      doc.fillColor(LARANJA_TEXTO);
+      doc.text(cortar(doc, ` · ${detalhe}`, resto), x + 6 + larguraPonto + 2, y + 15, {
+        width: resto,
         lineBreak: false,
       });
     }
-    doc.link(x, y, COL.endereco, ALTURA, url);
+    doc.link(x, y, COL.endereco, 13, url);
+    doc.link(x, y + 13, larguraPonto + 12, ALTURA - 13, exato);
     x += COL.endereco;
 
     doc.font('Helvetica').fontSize(8).fillColor(TEXTO);
@@ -434,7 +452,7 @@ export function gerarHistoricoPdf(dados: DadosHistoricoPdf): Promise<Buffer> {
         titulo();
       }
       const y = doc.y;
-      const url = linkDoMapa(d.lat, d.lng);
+      const url = linkDoEndereco(d.lat, d.lng, d.address);
       if (i % 2 === 1) doc.rect(MARGEM, y, largura, ALTURA).fillColor(ZEBRA).fill();
       let x = MARGEM;
       doc.font('Helvetica-Bold').fontSize(8).fillColor(TEXTO);
