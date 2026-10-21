@@ -52,6 +52,14 @@ export const MSG_CABECALHO =
   'Não encontrei o cabeçalho. A primeira linha da tabela precisa ter as colunas ' +
   'PLACA, IMEI, TÉCNICO e LOCAL (em qualquer ordem).';
 
+/**
+ * IMEI de rastreador tem 15 dígitos; a TAG não tem IMEI e vem com um ID de 10 ou
+ * 11 dígitos (ex.: 92603018558). Qualquer outro tamanho é erro de digitação.
+ */
+export function tamanhoDeImeiOuTag(digitos: string): boolean {
+  return [10, 11, 15].includes(digitos.length);
+}
+
 export function linhasDaTabela(matriz: string[][]): TabelaLida {
   let cabecalho = -1;
   const coluna = new Map<Campo, number>();
@@ -131,8 +139,10 @@ export function linhasDaTabela(matriz: string[][]): TabelaLida {
         problemas.push(
           `IMEI "${bruto.imei}" veio em notação científica (o Excel cortou os dígitos); formate a coluna como texto`,
         );
-      } else if (imei.length !== 15) {
-        problemas.push(`IMEI inválido "${bruto.imei}" (precisa de 15 dígitos)`);
+      } else if (!tamanhoDeImeiOuTag(imei)) {
+        problemas.push(
+          `IMEI inválido "${bruto.imei}" (precisa de 15 dígitos; TAG usa o ID de 10 ou 11 dígitos)`,
+        );
       }
     }
 

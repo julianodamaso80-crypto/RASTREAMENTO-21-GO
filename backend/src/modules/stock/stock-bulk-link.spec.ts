@@ -46,6 +46,40 @@ describe('StockBulkLinkService.vincular', () => {
     );
   });
 
+  it('TAG de 11 dígitos que está no Estoque como TAG vincula pelo associate', async () => {
+    const { svc, prisma, stock } = servico({
+      stockItem: { id: 'tag-id', associatedAt: null, kind: 'TAG' },
+    });
+    const [r] = await svc.vincular(TENANT, [{ ...linha, imei: '92603018558' }]);
+    expect(r.status).toBe('VINCULADO');
+    expect(prisma.stockItem.findFirst).toHaveBeenCalledWith({
+      where: { tenantId: TENANT, imei: '92603018558', deletedAt: null, kind: 'TAG' },
+    });
+    expect(stock.associate).toHaveBeenCalledWith(
+      'tag-id',
+      TENANT,
+      { placa: 'ABC1D23', technicianName: 'João', installLocation: 'Painel' },
+      false,
+    );
+  });
+
+  it('ID de 11 dígitos que NÃO é TAG do Estoque não entra no estoque (pode ser erro de digitação)', async () => {
+    const { svc, prisma, stock } = servico({});
+    const [r] = await svc.vincular(TENANT, [{ ...linha, imei: '92603018558' }]);
+    expect(r.status).toBe('ERRO');
+    expect(r.motivo).toMatch(/não está no Estoque como TAG/);
+    expect(prisma.stockItem.upsert).not.toHaveBeenCalled();
+    expect(stock.associate).not.toHaveBeenCalled();
+  });
+
+  it('tamanho que não é de IMEI nem de TAG continua recusado no serviço', async () => {
+    const { svc, stock } = servico({});
+    const [r] = await svc.vincular(TENANT, [{ ...linha, imei: '926030185581' }]);
+    expect(r.status).toBe('ERRO');
+    expect(r.motivo).toMatch(/15 dígitos/);
+    expect(stock.associate).not.toHaveBeenCalled();
+  });
+
   it('nunca libera associado inativo (allowInactive nem é enviado)', async () => {
     const { svc, stock } = servico({});
     await svc.vincular(TENANT, [linha]);

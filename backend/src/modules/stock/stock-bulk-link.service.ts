@@ -11,6 +11,7 @@ import {
   agruparItensEmLinhas,
   linhasDaTabela,
   MSG_CABECALHO,
+  tamanhoDeImeiOuTag,
   type ItemTexto,
   type LinhaVinculo,
   type TabelaLida,
@@ -83,16 +84,36 @@ export class StockBulkLinkService {
     l: BulkLinkRowDto,
   ): Promise<ResultadoVinculo> {
     const base = { linha: l.linha, placa: l.placa, imei: l.imei };
-    if (!/^\d{15}$/.test(l.imei)) {
-      return { ...base, status: 'ERRO', motivo: 'IMEI precisa ter 15 dígitos.' };
+    if (!/^\d+$/.test(l.imei) || !tamanhoDeImeiOuTag(l.imei)) {
+      return {
+        ...base,
+        status: 'ERRO',
+        motivo: 'IMEI precisa ter 15 dígitos (TAG: ID de 10 ou 11 dígitos).',
+      };
     }
+    // ID curto só vale se já for uma TAG do Estoque: não criamos item novo a
+    // partir dele, senão erro de digitação viraria lixo no estoque.
+    const ehTag = l.imei.length !== 15;
 
     let criadoAgora = false;
     let itemId: string | null = null;
     try {
       const existente = await this.prisma.stockItem.findFirst({
-        where: { tenantId, imei: l.imei, deletedAt: null },
+        where: {
+          tenantId,
+          imei: l.imei,
+          deletedAt: null,
+          ...(ehTag ? { kind: 'TAG' } : {}),
+        },
       });
+
+      if (ehTag && !existente) {
+        return {
+          ...base,
+          status: 'ERRO',
+          motivo: `O ID ${l.imei} não está no Estoque como TAG. Confira o número ou importe a TAG antes.`,
+        };
+      }
 
       if (existente?.associatedAt) {
         return await this.jaAssociado(tenantId, base);
