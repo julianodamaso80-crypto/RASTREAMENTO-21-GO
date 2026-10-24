@@ -37,6 +37,8 @@ const COMPONENTES = [
   'src/components/ble-tags/tag-historico-frases.ts',
   'src/components/ble-tags/tag-insights-panel.tsx',
   'src/components/ble-tags/tag-trail-map.tsx',
+  'src/components/ble-tags/tag-historico-consultar.tsx',
+  'src/components/map/tag-historico-dialog.tsx',
 ];
 
 /** Cada regra: rótulo + regex do que não pode aparecer no texto visível. */

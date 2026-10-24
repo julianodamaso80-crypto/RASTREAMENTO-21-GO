@@ -39,19 +39,19 @@ export interface DadosHistoricoPdf {
 }
 
 /** Cores da marca (manual_marca_21go): azul institucional, laranja e verde. */
-const AZUL = '#293c82';
-const AZUL_ESCURO = '#1f2d63';
-const LARANJA = '#f2911d';
-const LARANJA_TEXTO = '#c0700a';
-const VERDE = '#c7d301';
-const CINZA = '#5b6478';
-const TEXTO = '#1f2533';
-const LINHA = '#e3e7ef';
-const ZEBRA = '#f6f7fb';
-const CARTAO = '#f1f4f9';
+export const AZUL = '#293c82';
+export const AZUL_ESCURO = '#1f2d63';
+export const LARANJA = '#f2911d';
+export const LARANJA_TEXTO = '#c0700a';
+export const VERDE = '#c7d301';
+export const CINZA = '#5b6478';
+export const TEXTO = '#1f2533';
+export const LINHA = '#e3e7ef';
+export const ZEBRA = '#f6f7fb';
+export const CARTAO = '#f1f4f9';
 
-const MARGEM = 32;
-const FUSO = 'America/Sao_Paulo';
+export const MARGEM = 32;
+export const FUSO = 'America/Sao_Paulo';
 const TIPO_ROTULO: Record<TipoRelatorio, string> = {
   basico: 'Básico',
   avancado: 'Avançado',
@@ -72,7 +72,7 @@ export function linkDoEndereco(lat: number, lng: number, endereco: string | null
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`;
 }
 
-function dataHora(iso: string | Date): string {
+export function dataHora(iso: string | Date): string {
   return new Date(iso).toLocaleString('pt-BR', {
     timeZone: FUSO,
     day: '2-digit',
@@ -83,7 +83,7 @@ function dataHora(iso: string | Date): string {
   });
 }
 
-function hora(iso: string): string {
+export function hora(iso: string): string {
   return new Date(iso).toLocaleTimeString('pt-BR', {
     timeZone: FUSO,
     hour: '2-digit',
@@ -93,11 +93,11 @@ function hora(iso: string): string {
 }
 
 /** "2026-10-13" no fuso de Brasília. */
-function diaDe(iso: string): string {
+export function diaDe(iso: string): string {
   return new Date(iso).toLocaleDateString('en-CA', { timeZone: FUSO });
 }
 
-function diaPorExtenso(dia: string): string {
+export function diaPorExtenso(dia: string): string {
   const d = new Date(`${dia}T12:00:00Z`);
   const texto = d.toLocaleDateString('pt-BR', {
     timeZone: 'UTC',
@@ -119,7 +119,7 @@ function km(valor: number): string {
   return `${valor.toFixed(1).replace('.', ',')} km`;
 }
 
-function coordenada(lat: number, lng: number): string {
+export function coordenada(lat: number, lng: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
@@ -127,7 +127,7 @@ function coordenada(lat: number, lng: number): string {
  * pdfkit quebra linha mesmo com `lineBreak: false` quando o texto não cabe.
  * Corta na medida real da fonte já aplicada.
  */
-function cortar(doc: PDFKit.PDFDocument, texto: string, largura: number): string {
+export function cortar(doc: PDFKit.PDFDocument, texto: string, largura: number): string {
   if (doc.widthOfString(texto) <= largura) return texto;
   let corte = texto;
   while (corte.length > 1 && doc.widthOfString(`${corte}…`) > largura) {
@@ -136,7 +136,7 @@ function cortar(doc: PDFKit.PDFDocument, texto: string, largura: number): string
   return `${corte}…`;
 }
 
-function logo(): string | null {
+export function logo(): string | null {
   const candidatos = [
     join(process.cwd(), 'assets', 'logo-21go.png'),
     join(__dirname, '..', '..', '..', '..', 'assets', 'logo-21go.png'),

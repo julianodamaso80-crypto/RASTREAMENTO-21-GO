@@ -30,6 +30,7 @@ import type {
   RelatorioHistorico,
   TipoRelatorio,
 } from '@/lib/historico';
+import type { RelatorioDaTag } from '@/lib/historico-tag';
 import type {
   ConsultantOption,
   FinancialEntry,
@@ -457,6 +458,45 @@ export const alertsApi = {
   },
   markAllAsRead: async (): Promise<void> => {
     await api.post('/alerts/read-all');
+  },
+};
+
+/** Histórico de localização da TAG: consulta, PDF com link e lista de gerados (só time interno). */
+export const tagHistoryApi = {
+  relatorio: async (
+    serial: string,
+    from: string,
+    to: string,
+    type: TipoRelatorio,
+  ): Promise<RelatorioDaTag> => {
+    const res = await api.get<ApiResponse<RelatorioDaTag>>('/tag-history/report', {
+      params: { serial, from, to, type },
+      timeout: 60_000,
+    });
+    return res.data.data;
+  },
+  gerarPdf: async (
+    serial: string,
+    from: string,
+    to: string,
+    type: TipoRelatorio,
+  ): Promise<HistoricoSolicitado> => {
+    const res = await api.post<ApiResponse<HistoricoSolicitado>>(
+      '/tag-history/requests',
+      { serial, from, to, type },
+      { timeout: 120_000 },
+    );
+    return res.data.data;
+  },
+  listar: async (serial: string): Promise<HistoricoSolicitado[]> => {
+    const res = await api.get<ApiResponse<HistoricoSolicitado[]>>('/tag-history/requests', {
+      params: { serial },
+    });
+    return res.data.data;
+  },
+  baixar: async (id: string): Promise<Blob> => {
+    const res = await api.get(`/tag-history/requests/${id}/pdf`, { responseType: 'blob' });
+    return res.data as Blob;
   },
 };
 

@@ -1594,7 +1594,10 @@ model FinancialReceipt {
 model HistoryReportRequest {
   id        String    @id @default(uuid()) @db.Uuid
   tenantId  String    @map("tenant_id") @db.Uuid
-  vehicleId String    @map("vehicle_id") @db.Uuid
+  /// Nulo no histórico de TAG, que se identifica por `tagSerial`.
+  vehicleId String?   @map("vehicle_id") @db.Uuid
+  /// Número da TAG quando o PDF é o histórico dela (e não de um rastreador).
+  tagSerial String?   @map("tag_serial")
   plate     String
   from      DateTime  @map("period_from")
   to        DateTime  @map("period_to")
@@ -1615,6 +1618,7 @@ model HistoryReportRequest {
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([tenantId, vehicleId, createdAt(sort: Desc)])
+  @@index([tenantId, tagSerial, createdAt(sort: Desc)])
   @@index([requestedByAssociateId, createdAt(sort: Desc)])
   @@map("history_report_requests")
 }

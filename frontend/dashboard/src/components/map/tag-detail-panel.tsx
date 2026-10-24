@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Bluetooth, MapPin, RefreshCw, Target, X } from 'lucide-react';
+import { Bluetooth, History, MapPin, RefreshCw, Target, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { useReverseGeocode } from '@/hooks/use-reverse-geocode';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { stockApi } from '@/lib/api';
 import { COR_TAG } from '@/components/vehicles/tag-list-item';
 import { mensagemDaConsulta } from '@/components/ble-tags/mensagem-consulta-tag';
+import { TagHistoricoDialog } from '@/components/map/tag-historico-dialog';
 import { useAuth } from '@/contexts/auth-context';
 import { canSeeInstallLocation } from '@/lib/manageable-routes';
 import type { TagNoMapa } from '@/types/tag-map';
@@ -37,6 +38,7 @@ export function TagDetailPanel({
 }) {
   const [restam, setRestam] = useState(0);
   const [pendente, setPendente] = useState(false);
+  const [historicoAberto, setHistoricoAberto] = useState(false);
   const { address: endereco, loading: buscandoEndereco } = useReverseGeocode(
     tag.latitude,
     tag.longitude,
@@ -159,6 +161,19 @@ export function TagDetailPanel({
         {pendente ? 'Consultando…' : 'Atualizar TAG'}
         {restam > 0 && <span className="ml-auto font-mono text-xs">{mmss}</span>}
       </Button>
+
+      <Button size="sm" variant="outline" className="w-full" onClick={() => setHistoricoAberto(true)}>
+        <History className="mr-1 h-4 w-4" />
+        Histórico e PDF
+      </Button>
+      {historicoAberto && (
+        <TagHistoricoDialog
+          serial={tag.serialNumber}
+          placa={tag.plate}
+          open={historicoAberto}
+          onOpenChange={setHistoricoAberto}
+        />
+      )}
 
       {temPosicao ? (
         <div className="rounded-lg border px-3 py-2 text-xs">
