@@ -175,9 +175,15 @@ export class LocationSharesService {
         color: true,
         vehicleType: true,
         traccarDeviceId: true,
+        associateId: true,
       },
     });
     if (!v) throw new GoneException('Este link de localização expirou');
+    // Link do associado morre na troca de titularidade: o dono antigo não
+    // acompanha o veículo de quem comprou.
+    if (r.requestedByAssociateId && v.associateId !== r.requestedByAssociateId) {
+      throw new GoneException('Este link de localização expirou');
+    }
 
     let position: null | {
       latitude: number;

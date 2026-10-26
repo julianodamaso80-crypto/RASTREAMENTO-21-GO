@@ -128,6 +128,21 @@ describe('LocationSharesService', () => {
     expect(JSON.stringify(r)).not.toContain('Operador');
   });
 
+  it('público: link do associado para de abrir quando o veículo troca de dono', async () => {
+    const { s, prisma, traccar } = servico();
+    prisma.locationShare.findFirst.mockResolvedValue(
+      registro({ source: 'APP', requestedByAssociateId: 'assoc-antigo' }),
+    );
+    prisma.vehicle.findFirst.mockResolvedValue({
+      plate: 'ABC1D23',
+      vehicleType: 'CAR',
+      traccarDeviceId: 7,
+      associateId: 'assoc-novo',
+    });
+    await expect(s.publico(TOKEN)).rejects.toBeInstanceOf(GoneException);
+    expect(traccar.getPositionsDosDevices).not.toHaveBeenCalled();
+  });
+
   it('associado só cancela link que ele mesmo gerou', async () => {
     const { s, prisma } = servico();
     await expect(
