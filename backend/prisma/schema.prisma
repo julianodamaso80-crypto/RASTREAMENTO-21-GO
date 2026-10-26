@@ -1622,3 +1622,28 @@ model HistoryReportRequest {
   @@index([requestedByAssociateId, createdAt(sort: Desc)])
   @@map("history_report_requests")
 }
+
+/// Link "compartilhar localização": quem recebe vê o veículo ao vivo no mapa,
+/// sem login, até `expiresAt` ou até alguém cancelar (`revokedAt`).
+model LocationShare {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  vehicleId String    @map("vehicle_id") @db.Uuid
+  plate     String
+  /// Duração escolhida, em horas.
+  hours     Int
+  /// PAINEL | APP
+  source    String
+  requestedByUserId      String? @map("requested_by_user_id") @db.Uuid
+  requestedByAssociateId String? @map("requested_by_associate_id") @db.Uuid
+  requestedByName        String? @map("requested_by_name")
+  /// Código do link público (sem login). Aleatório, 32 bytes em base64url.
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, vehicleId, createdAt(sort: Desc)])
+  @@map("location_shares")
+}

@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Car, History, Loader2, Lock, LockOpen, LogOut } from 'lucide-react';
+import { Car, History, Loader2, Lock, LockOpen, LogOut, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { HistoricoDoVeiculo } from '@/components/historico/historico-do-veiculo';
+import { CompartilharLocalizacaoDialog } from '@/components/compartilhar/compartilhar-localizacao-dialog';
 import { BASEMAPS, MAP_CENTER, STATUS_COLORS } from '@/lib/constants';
 import {
   getDisplayStatus,
@@ -175,6 +176,7 @@ export default function MeusVeiculosPage() {
   const [veiculos, setVeiculos] = useState<AssociateVehicle[] | null>(null);
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [historicoDe, setHistoricoDe] = useState<AssociateVehicle | null>(null);
+  const [compartilharDe, setCompartilharDe] = useState<AssociateVehicle | null>(null);
   const [enviandoBloqueio, setEnviandoBloqueio] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
@@ -328,6 +330,17 @@ export default function MeusVeiculosPage() {
                       >
                         <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCompartilharDe(v);
+                        }}
+                      >
+                        <Share2 className="mr-1.5 h-3.5 w-3.5" /> Compartilhar localização
+                      </Button>
                       {v.blockerAccessAllowed ? (
                         <Button
                           variant={v.status === 'BLOCKED' ? 'outline' : 'destructive'}
@@ -385,6 +398,17 @@ export default function MeusVeiculosPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {compartilharDe && (
+        <CompartilharLocalizacaoDialog
+          aberto
+          onFechar={() => setCompartilharDe(null)}
+          placa={compartilharDe.plate}
+          gerar={(horas) => associateApi.createLocationShare(compartilharDe.id, horas)}
+          listar={() => associateApi.listLocationShares(compartilharDe.id)}
+          cancelar={(id) => associateApi.revokeLocationShare(id)}
+        />
+      )}
     </div>
   );
 }

@@ -19,6 +19,7 @@ import { AssociateJwtGuard } from './guards/associate-jwt.guard';
 import { CurrentAssociate } from './decorators/current-associate.decorator';
 import { NotificationPrefsDto } from './dto/notification-prefs.dto';
 import { HistoryRequestsService } from '../reports/history-requests.service';
+import { LocationSharesService } from '../location-shares/location-shares.service';
 
 @ApiTags('App - Dados do Associado')
 @ApiBearerAuth()
@@ -29,6 +30,7 @@ export class AppDataController {
   constructor(
     private readonly service: AppDataService,
     private readonly historyRequests: HistoryRequestsService,
+    private readonly locationShares: LocationSharesService,
   ) {}
 
   @Get('vehicles')
@@ -200,5 +202,40 @@ export class AppDataController {
     @Body() body: NotificationPrefsDto,
   ) {
     return this.service.setNotificationPrefs(associateId, tenantId, body);
+  }
+
+  @Post('vehicles/:id/location-shares')
+  @ApiOperation({ summary: 'Associado gera link sem login com a localização do veículo por X horas' })
+  async createLocationShare(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id', ParseUUIDPipe) vehicleId: string,
+    @Body() body: { hours: number },
+  ) {
+    return this.locationShares.criar(tenantId, vehicleId, Number(body?.hours), {
+      origem: 'APP',
+      associateId,
+    });
+  }
+
+  @Get('vehicles/:id/location-shares')
+  @ApiOperation({ summary: 'Links de localização que o associado gerou para o veículo' })
+  async listLocationShares(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id', ParseUUIDPipe) vehicleId: string,
+  ) {
+    return this.locationShares.listar(tenantId, vehicleId, { origem: 'APP', associateId });
+  }
+
+  @Post('location-shares/:id/revoke')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Associado cancela o link antes do prazo' })
+  async revokeLocationShare(
+    @CurrentAssociate('id') associateId: string,
+    @CurrentAssociate('tenantId') tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.locationShares.cancelar(tenantId, id, { origem: 'APP', associateId });
   }
 }

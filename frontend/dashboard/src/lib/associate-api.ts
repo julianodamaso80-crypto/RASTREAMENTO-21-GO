@@ -5,6 +5,7 @@ import type {
   RelatorioHistorico,
   TipoRelatorio,
 } from '@/lib/historico';
+import type { LinkLocalizacao } from '@/lib/compartilhar-localizacao';
 
 /**
  * Client do associado na web. Usa as mesmas rotas /app/* do app Android e
@@ -112,6 +113,18 @@ export const associateApi = {
   downloadHistoryRequest: async (id: string): Promise<Blob> => {
     const res = await http.get(`/app/history-requests/${id}/pdf`, { responseType: 'blob' });
     return res.data as Blob;
+  },
+  createLocationShare: async (vehicleId: string, hours: number): Promise<LinkLocalizacao> => {
+    const res = await http.post(`/app/vehicles/${vehicleId}/location-shares`, { hours });
+    return unwrap<LinkLocalizacao>(res.data);
+  },
+  listLocationShares: async (vehicleId: string): Promise<LinkLocalizacao[]> => {
+    const res = await http.get(`/app/vehicles/${vehicleId}/location-shares`);
+    return unwrap<LinkLocalizacao[]>(res.data);
+  },
+  revokeLocationShare: async (id: string): Promise<LinkLocalizacao> => {
+    const res = await http.post(`/app/location-shares/${id}/revoke`);
+    return unwrap<LinkLocalizacao>(res.data);
   },
   historyReport: async (
     vehicleId: string,

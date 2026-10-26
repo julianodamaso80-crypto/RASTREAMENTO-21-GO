@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { LinkLocalizacao } from '@/lib/compartilhar-localizacao';
 import type { LoginRequest, LoginResponse, User } from '@/types/auth';
 import type { Vehicle } from '@/types/vehicle';
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
@@ -1541,6 +1542,23 @@ export const financialApi = {
       '/financial-entries/consultants',
       { params: { search } },
     );
+    return res.data.data;
+  },
+};
+
+export const locationSharesApi = {
+  criar: async (vehicleId: string, hours: number): Promise<LinkLocalizacao> => {
+    const res = await api.post<ApiResponse<LinkLocalizacao>>('/location-shares', { vehicleId, hours });
+    return res.data.data;
+  },
+  listar: async (vehicleId: string): Promise<LinkLocalizacao[]> => {
+    const res = await api.get<ApiResponse<LinkLocalizacao[]>>('/location-shares', {
+      params: { vehicleId },
+    });
+    return res.data.data;
+  },
+  cancelar: async (id: string): Promise<LinkLocalizacao> => {
+    const res = await api.post<ApiResponse<LinkLocalizacao>>(`/location-shares/${id}/revoke`);
     return res.data.data;
   },
 };

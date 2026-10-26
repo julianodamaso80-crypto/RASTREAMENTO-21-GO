@@ -14,9 +14,11 @@ import {
   Pencil,
   Check,
   Loader2,
+  Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { clientsApi } from '@/lib/api';
+import { clientsApi, locationSharesApi } from '@/lib/api';
+import { CompartilharLocalizacaoDialog } from '@/components/compartilhar/compartilhar-localizacao-dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -45,6 +47,7 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   // Cliente final não pode saber onde o rastreador está escondido.
   const showInstallLocation = canSeeInstallLocation(user?.role);
   const [showBlockModal, setShowBlockModal] = useState(false);
+  const [compartilhando, setCompartilhando] = useState(false);
   // Edição do esconderijo do rastreador, direto no painel.
   const [editandoLocal, setEditandoLocal] = useState(false);
   const [localDigitado, setLocalDigitado] = useState('');
@@ -406,6 +409,10 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
               Abrir cockpit completo
             </Button>
           </Link>
+          <Button variant="outline" className="w-full" onClick={() => setCompartilhando(true)}>
+            <Share2 className="h-4 w-4 mr-2" />
+            Compartilhar localização
+          </Button>
           {canBlock && (
             <Button
               variant={isBlocked ? 'default' : 'destructive'}
@@ -434,6 +441,18 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
         vehicle={vehicle}
         isBlocking={!isBlocked}
       />
+
+      {compartilhando && (
+        <CompartilharLocalizacaoDialog
+          aberto
+          onFechar={() => setCompartilhando(false)}
+          placa={vehicle.plate}
+          gerar={(horas) => locationSharesApi.criar(vehicle.id, horas)}
+          listar={() => locationSharesApi.listar(vehicle.id)}
+          cancelar={(id) => locationSharesApi.cancelar(id)}
+          mostrarQuemGerou
+        />
+      )}
     </>
   );
 }

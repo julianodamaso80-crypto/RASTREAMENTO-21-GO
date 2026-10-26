@@ -37,6 +37,7 @@ export const INTERNAL_CONTROLLERS: readonly string[] = [
   'geofences/geofences.controller.ts',
   'hinova/hinova.controller.ts',
   'installation-pendings/installation-pendings.controller.ts',
+  'location-shares/location-shares.controller.ts',
   'consultants/consultants.controller.ts',
   'maintenance/maintenance.controller.ts',
   'map/map.controller.ts',
@@ -84,6 +85,9 @@ export const PUBLIC_CONTROLLERS: readonly string[] = [
   // Link do histórico em PDF entregue ao cliente: abre pelo código aleatório,
   // sem login, até expirar (history-requests.service.ts).
   'reports/history-public.controller.ts',
+  // Link "compartilhar localização": abre pelo código aleatório, sem login,
+  // até o prazo escolhido ou o cancelamento (location-shares.service.ts).
+  'location-shares/location-share-public.controller.ts',
 ];
 
 /**
@@ -185,6 +189,11 @@ export const LEAK_PROBES: readonly LeakProbe[] = [
     path: '/maintenance-plans',
   },
   { world: 'internal', controller: 'map/map.controller.ts', path: '/map/tiles' },
+  {
+    world: 'internal',
+    controller: 'location-shares/location-shares.controller.ts',
+    path: '/location-shares?vehicleId=00000000-0000-0000-0000-000000000000',
+  },
   { world: 'internal', controller: 'search/search.controller.ts', path: '/search' },
   { world: 'internal', controller: 'reports/reports.controller.ts', path: '/reports/positions' },
   {

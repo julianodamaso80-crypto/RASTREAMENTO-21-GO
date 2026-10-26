@@ -13,6 +13,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { HinovaModule } from './modules/hinova/hinova.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { LocationSharesModule } from './modules/location-shares/location-shares.module';
 import { GeofencesModule } from './modules/geofences/geofences.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { BleTagsModule } from './modules/ble-tags/ble-tags.module';
@@ -100,6 +101,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     HinovaModule,
     AlertsModule,
     ReportsModule,
+    LocationSharesModule,
     GeofencesModule,
     DevicesModule,
     BleTagsModule,
