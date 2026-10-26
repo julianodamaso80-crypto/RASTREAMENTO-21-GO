@@ -34,6 +34,8 @@ export default function LocalizacaoPage({ params }: { params: Promise<{ token: s
   const marcador = useRef<maplibregl.Marker | null>(null);
   const imagem = useRef<HTMLImageElement | null>(null);
   const enquadrou = useRef(false);
+  // Segue o veículo até a pessoa arrastar o mapa; "Centralizar" volta a seguir.
+  const seguindo = useRef(true);
   const [pronto, setPronto] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -75,6 +77,9 @@ export default function LocalizacaoPage({ params }: { params: Promise<{ token: s
     });
     m.addControl(new maplibregl.NavigationControl(), 'top-right');
     m.on('load', () => setPronto(true));
+    m.on('dragstart', () => {
+      seguindo.current = false;
+    });
     mapa.current = m;
     return () => {
       m.remove();
@@ -111,10 +116,13 @@ export default function LocalizacaoPage({ params }: { params: Promise<{ token: s
     if (!enquadrou.current) {
       enquadrou.current = true;
       m.jumpTo({ center: [pos.longitude, pos.latitude], zoom: 16 });
+    } else if (seguindo.current) {
+      m.easeTo({ center: [pos.longitude, pos.latitude], duration: 800 });
     }
   }, [pos, pronto, tipoVeiculo]);
 
   function centralizar() {
+    seguindo.current = true;
     if (pos && mapa.current) {
       mapa.current.flyTo({ center: [pos.longitude, pos.latitude], zoom: 16 });
     }
