@@ -31,12 +31,12 @@ describe('acesso ao app pela situação do SGA', () => {
     expect(await associadoPodeUsarApp(prisma, { id: 'a1', cpf: '15512006789' })).toBe(false);
   });
 
-  it('INADIMPLENTE no SGA também não usa', async () => {
+  it('INADIMPLENTE no SGA ainda não corta (aguarda decisão do dono)', async () => {
     const prisma = prismaCom(
       [{ plate: 'AAA1B23', tenantId: 't1' }],
       [{ plate: 'AAA1B23', tenantId: 't1', situationCode: '4' }],
     );
-    expect(await associadoPodeUsarApp(prisma, { id: 'a1', cpf: '1' })).toBe(false);
+    expect(await associadoPodeUsarApp(prisma, { id: 'a1', cpf: '1' })).toBe(true);
   });
 
   it('ATIVO e veículo fora do espelho continuam com acesso', async () => {

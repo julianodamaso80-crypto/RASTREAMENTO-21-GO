@@ -3,10 +3,10 @@ import { normalizeDoc } from './documento';
 
 /**
  * Situações do SGA (espelho `sga_vehicles.situation_code`) que tiram o acesso
- * ao app: 2 INATIVO · 4 INADIMPLENTE. Quem não está no espelho não entra aqui —
- * "não consultado" não é "inativo".
+ * ao app: 2 INATIVO. (4 INADIMPLENTE fica de fora até o dono confirmar.) Quem
+ * não está no espelho não entra aqui — "não consultado" não é "inativo".
  */
-export const SITUACOES_SGA_SEM_ACESSO = ['2', '4'];
+export const SITUACOES_SGA_SEM_ACESSO = ['2'];
 
 /** Device já passado da instalação; PENDING_INSTALL e DEACTIVATED não dão acesso. */
 export const STATUS_DEVICE_COM_ACESSO = [
