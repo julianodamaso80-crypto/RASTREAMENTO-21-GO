@@ -46,6 +46,7 @@ const veiculoGordo = {
 function servico(vehicles: any[]) {
   const prisma: any = {
     vehicle: { findMany: jest.fn().mockResolvedValue(vehicles) },
+    sgaVehicle: { findMany: jest.fn().mockResolvedValue([]) },
     alert: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const traccar: any = {
@@ -165,7 +166,8 @@ describe('contrato do associado — /app/auth/login', () => {
         findMany: jest.fn().mockResolvedValue([associado]),
         update: jest.fn().mockResolvedValue(undefined),
       },
-      device: { count: jest.fn().mockResolvedValue(1) },
+      vehicle: { findMany: jest.fn().mockResolvedValue([{ plate: 'AAA1B23', tenantId: 'tn1' }]) },
+      sgaVehicle: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const jwt: any = { sign: jest.fn().mockReturnValue('tok') };
     const whatsapp: any = {};

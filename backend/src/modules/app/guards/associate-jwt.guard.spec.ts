@@ -16,8 +16,12 @@ function build(payload: any) {
   const config = { get: () => 'b'.repeat(32) };
   const prisma = {
     associate: {
-      findFirst: jest.fn().mockResolvedValue({ id: 'a1', tenantId: 't1' }),
+      findFirst: jest.fn().mockResolvedValue({ id: 'a1', tenantId: 't1', cpf: '1' }),
     },
+    vehicle: {
+      findMany: jest.fn().mockResolvedValue([{ plate: 'AAA1B23', tenantId: 't1' }]),
+    },
+    sgaVehicle: { findMany: jest.fn().mockResolvedValue([]) },
   };
   return new AssociateJwtGuard(jwt as any, config as any, prisma as any);
 }
@@ -42,6 +46,17 @@ describe('AssociateJwtGuard', () => {
     await expect(guard.canActivate(ctx('x'))).resolves.toBe(true);
   });
 
+  it('recusa sessão aberta de associado INATIVO no SGA', async () => {
+    const jwt = { verify: jest.fn(() => ({ sub: 'a1', type: 'associate', tenantId: 't1' })) };
+    const prisma = {
+      associate: { findFirst: jest.fn().mockResolvedValue({ id: 'a1', tenantId: 't1', cpf: '1' }) },
+      vehicle: { findMany: jest.fn().mockResolvedValue([{ plate: 'AAA1B23', tenantId: 't1' }]) },
+      sgaVehicle: { findMany: jest.fn().mockResolvedValue([{ plate: 'AAA1B23', tenantId: 't1' }]) },
+    };
+    const guard = new AssociateJwtGuard(jwt as any, { get: () => 'b'.repeat(32) } as any, prisma as any);
+    await expect(guard.canActivate(ctx('x'))).rejects.toThrow(UnauthorizedException);
+  });
+
   it('recusa requisição sem header', async () => {
     const guard = build({ sub: 'a1', type: 'associate' });
     await expect(guard.canActivate(ctx())).rejects.toThrow(
@@ -60,8 +75,10 @@ describe('AssociateJwtGuard', () => {
     const config = { get: jest.fn((key: string) => key) };
     const prisma = {
       associate: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'a1', tenantId: 't1' }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'a1', tenantId: 't1', cpf: '1' }),
       },
+      vehicle: { findMany: jest.fn().mockResolvedValue([{ plate: 'AAA1B23', tenantId: 't1' }]) },
+      sgaVehicle: { findMany: jest.fn().mockResolvedValue([]) },
     };
 
     const guard = new AssociateJwtGuard(jwt as any, config as any, prisma as any);

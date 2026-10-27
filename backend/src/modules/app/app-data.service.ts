@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { AlertType, VehicleStatus } from '.prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { placasBarradasPeloSga } from './acesso-app';
 import { DeviceRegistryService } from '../traccar/device-registry.service';
 import {
   TraccarService,
@@ -164,8 +165,8 @@ export class AppDataService {
   /** Veículos do associado + última posição + status de conexão. */
   async getVehicles(associateId: string, tenantId: string) {
     exigirContexto(associateId, tenantId);
-    const vehicles = await this.prisma.vehicle.findMany({
-      where: { associateId, tenantId, deletedAt: null },
+    const todos = await this.prisma.vehicle.findMany({
+      where: { associateId, tenantId, deletedAt: null, appAccessBlocked: false },
       select: {
         id: true,
         plate: true,
@@ -180,6 +181,13 @@ export class AppDataService {
       },
       orderBy: { plate: 'asc' },
     });
+
+    // Inativo/inadimplente no SGA não vê o veículo no app (acesso-app.ts).
+    const barradas = await placasBarradasPeloSga(
+      this.prisma,
+      todos.map((v) => ({ plate: v.plate, tenantId })),
+    );
+    const vehicles = todos.filter((v) => !barradas.has(`${tenantId}:${v.plate}`));
 
     const deviceIds = vehicles
       .map((v) => v.traccarDeviceId)
