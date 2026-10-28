@@ -17,6 +17,7 @@ import {
 } from '../auth/password-reset.service';
 import { Prisma } from '.prisma/client';
 import { variantesTelefone } from '../auth/telefone';
+import { associadoPodeUsarApp } from './acesso-app';
 import { AssociateLoginDto } from './dto/associate-login.dto';
 import {
   docVariants,
@@ -121,56 +122,6 @@ export class AssociateAuthService {
   ) {}
 
   /**
-   * Allowlist de testadores — bypass da regra "só quem tem rastreador instalado".
-   * Serve pra quem precisa entrar sem device real (você, equipe de teste). Quem
-   * está aqui entra mesmo sem rastreador; quem não está segue a regra normal
-   * (precisa de rastreador instalado).
-   *
-   * `APP_ASSOCIATE_ALLOWLIST` = CPFs separados por vírgula (dígitos ou com
-   * máscara). Vazia/ausente = ninguém tem bypass, e aí só cliente com rastreador
-   * instalado loga.
-   */
-  private allowedCpfs(): Set<string> | null {
-    const raw = process.env.APP_ASSOCIATE_ALLOWLIST?.trim();
-    if (!raw) return null;
-    const set = new Set(
-      raw
-        .split(',')
-        .map((c) => normalizeDoc(c))
-        .filter((c) => c.length > 0),
-    );
-    return set.size ? set : null;
-  }
-
-  /**
-   * Regra de acesso ao app (a que o dono pediu): só loga quem é cliente real,
-   * ou seja, quem tem **rastreador instalado**. Um associado sem device vinculado
-   * não tem o que ver no app e não deve entrar — mesmo que o CPF exista no banco
-   * (senão, com a senha padrão sendo o CPF, qualquer um com o CPF de um cliente
-   * entraria assim que a base do SGA fosse sincronizada).
-   *
-   * "Instalado" = qualquer device já passado da instalação; PENDING_INSTALL
-   * (ainda não instalado) e DEACTIVATED (desligado) não dão acesso.
-   */
-  private static readonly STATUS_COM_ACESSO = [
-    'INSTALLED',
-    'CONFIGURING',
-    'ONLINE',
-    'OFFLINE',
-    'MAINTENANCE',
-  ] as const;
-
-  private async hasInstalledTracker(associateId: string): Promise<boolean> {
-    const n = await this.prisma.device.count({
-      where: {
-        status: { in: [...AssociateAuthService.STATUS_COM_ACESSO] as any },
-        vehicle: { associateId, deletedAt: null },
-      },
-    });
-    return n > 0;
-  }
-
-  /**
    * Login do associado.
    *
    * Regra de senha (definida pelo dono em 2026-08-10):
@@ -203,8 +154,6 @@ export class AssociateAuthService {
       },
     });
 
-    const allow = this.allowedCpfs();
-
     for (const a of candidates) {
       if (
         !(await this.passwordMatches(
@@ -217,14 +166,14 @@ export class AssociateAuthService {
         continue;
       }
 
-      // Direito de acesso: allowlist (testadores) OU rastreador instalado.
-      const naAllowlist = allow?.has(cpf) ?? false;
-      if (!naAllowlist && !(await this.hasInstalledTracker(a.id))) {
+      // Direito de acesso: allowlist (testadores) OU rastreador instalado em
+      // veículo ativo no SGA e sem corte manual (ver acesso-app.ts).
+      if (!(await associadoPodeUsarApp(this.prisma, a))) {
         this.logger.warn(
-          `Login bloqueado (sem rastreador instalado): CPF ...${cpf.slice(-4)}`,
+          `Login bloqueado (sem acesso: sem rastreador, inativo/inadimplente no SGA ou cortado): CPF ...${cpf.slice(-4)}`,
         );
         throw new UnauthorizedException(
-          'Nenhum rastreador instalado vinculado ao seu cadastro. Fale com a sua associação.',
+          'Seu acesso ao app está indisponível. Fale com a sua associação.',
         );
       }
 

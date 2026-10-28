@@ -91,7 +91,7 @@ function montar(opts: { traccarDevolveAMais?: boolean; porDevice?: boolean } = {
       .sort((x, y) => x.plate.localeCompare(y.plate))
       .map(({ associateId: _a, tenantId: _t, deletedAt: _d, ...sel }) => sel),
   );
-  const prisma: any = { vehicle: { findMany } };
+  const prisma: any = { vehicle: { findMany }, sgaVehicle: { findMany: jest.fn().mockResolvedValue([]) }, };
   const traccar = {
     getPositions: jest.fn(async () => POSICOES.filter((p) => VINCULADOS.includes(p.deviceId))),
     getDevices: jest.fn(async () => DEVICES.filter((d) => VINCULADOS.includes(d.id))),
@@ -211,7 +211,7 @@ describe('/app/vehicles com APP_VEHICLES_POR_DEVICE ligada — autorização', (
       });
     const antes = process.env.APP_VEHICLES_POR_DEVICE;
     process.env.APP_VEHICLES_POR_DEVICE = '1';
-    const service = new AppDataService({ vehicle: { findMany } } as any, real as any, {} as any, {} as any);
+    const service = new AppDataService({ vehicle: { findMany }, sgaVehicle: { findMany: jest.fn().mockResolvedValue([]) }, } as any, real as any, {} as any, {} as any);
     if (antes === undefined) delete process.env.APP_VEHICLES_POR_DEVICE;
     else process.env.APP_VEHICLES_POR_DEVICE = antes;
 
@@ -344,7 +344,7 @@ describe('/app/vehicles com APP_VEHICLES_POR_DEVICE desligada (padrão) — cami
       const { traccar, findMany } = montar();
       // montar() liga a flag; aqui o serviço é criado com o valor do teste.
       const service = new AppDataService(
-        { vehicle: { findMany } } as any,
+        { vehicle: { findMany }, sgaVehicle: { findMany: jest.fn().mockResolvedValue([]) }, } as any,
         traccar as any,
         {} as any,
         {} as any,
@@ -367,7 +367,7 @@ describe('/app/vehicles com APP_VEHICLES_POR_DEVICE desligada (padrão) — cami
     const antes = process.env.APP_VEHICLES_POR_DEVICE;
     process.env.APP_VEHICLES_POR_DEVICE = valor;
     const { traccar, findMany } = montar();
-    const service = new AppDataService({ vehicle: { findMany } } as any, traccar as any, {} as any, {} as any);
+    const service = new AppDataService({ vehicle: { findMany }, sgaVehicle: { findMany: jest.fn().mockResolvedValue([]) }, } as any, traccar as any, {} as any, {} as any);
     if (antes === undefined) delete process.env.APP_VEHICLES_POR_DEVICE;
     else process.env.APP_VEHICLES_POR_DEVICE = antes;
     await service.getVehicles('A', 't1');

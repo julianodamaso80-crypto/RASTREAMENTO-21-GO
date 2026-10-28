@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { associadoPodeUsarApp } from '../acesso-app';
 
 export interface AssociatePayload {
   sub: string;
@@ -65,6 +66,12 @@ export class AssociateJwtGuard implements CanActivate {
 
     if (!associate) {
       throw new UnauthorizedException('Associado não encontrado');
+    }
+
+    // Vale também para sessão já aberta: virou inativo/inadimplente no SGA ou
+    // teve o acesso cortado, a próxima chamada já cai.
+    if (!(await associadoPodeUsarApp(this.prisma, associate))) {
+      throw new UnauthorizedException('Acesso ao app indisponível');
     }
 
     req.associate = associate;
