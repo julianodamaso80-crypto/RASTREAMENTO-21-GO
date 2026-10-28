@@ -98,6 +98,7 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       outrosSeriais: [],
       outrasTags: [],
       comRastreador: false,
+      foraDaLista: null,
       // O mock de $queryRaw devolve posições também para o max(received_at);
       // sem coluna `max` a data da consulta vira null — e a tela lida com isso.
       redeConsultadaEm: null,
@@ -125,7 +126,7 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       .sort();
 
     const noMapa = (await s.tagsNoMapa(TENANT))
-      .filter((t) => !t.comRastreador)
+      .filter((t) => !t.comRastreador && !t.foraDaLista)
       .map((t) => t.id)
       .sort();
     expect(noMapa).toEqual(soTagAtivos);
@@ -142,14 +143,46 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
     expect(r[0]).toMatchObject({ latitude: null, longitude: null, accuracyM: null, seenAt: null });
   });
 
-  it('associado que saiu de ATIVO no SGA some do mapa', async () => {
+  it('associado fora de ATIVO no SGA vem marcado foraDaLista, com o motivo', async () => {
     const prisma = montarPrisma();
     prisma.sgaVehicle.findMany.mockResolvedValue([
-      sga('MOTO2B22', '200', { situationLabel: 'INATIVO' }),
+      sga('MOTO2B22', '200', { situationLabel: 'INADIMPLENTE' }),
       sga('CAR1A11', '100'),
     ]);
     const s = new ClientsService(prisma as never);
-    expect((await s.tagsNoMapa(TENANT)).map((t) => t.plate)).toEqual(['CAR1A11']);
+    const r = await s.tagsNoMapa(TENANT);
+    expect(r.find((t) => t.plate === 'MOTO2B22')).toMatchObject({
+      foraDaLista: 'Cliente INADIMPLENTE no SGA',
+      latitude: -22.7,
+    });
+    expect(r.find((t) => t.plate === 'CAR1A11')?.foraDaLista).toBeNull();
+  });
+
+  // Dono, 28/10/2026 ("segunda vez que falo"): 808092604070236 (TUP3C95,
+  // INADIMPLENTE) abria pela busca do topo e o Mapa dizia "Nenhum veículo
+  // encontrado". Toda TAG que a busca de Clientes Ativos acha, o Mapa tem.
+  it.each([
+    ['INADIMPLENTE no SGA', { situationLabel: 'INADIMPLENTE' }, {}],
+    ['INATIVO no SGA', { situationLabel: 'INATIVO' }, {}],
+    ['vínculo divergente', {}, { verdict: 'DIVERGENTE' }],
+    ['da Rede sem prova e sem posição', {}, { verdict: 'AGUARDANDO_PROVA' }],
+  ])('busca pelo número acha a mesma TAG nas duas telas (%s)', async (_caso, sgaExtra, linkExtra) => {
+    const prisma = montarPrisma();
+    const link = { ...LINK_MOTO, ...linkExtra };
+    prisma.tagLink.findMany.mockResolvedValue([link, LINK_CARRO]);
+    prisma.sgaVehicle.findMany.mockResolvedValue([sga('MOTO2B22', '200', sgaExtra), sga('CAR1A11', '100')]);
+    if ((linkExtra as { verdict?: string }).verdict === 'AGUARDANDO_PROVA') {
+      prisma.$queryRaw.mockResolvedValue([]);
+    }
+    const s = new ClientsService(prisma as never);
+
+    const ativos = await s.findAssets(TENANT, { verTags: true, search: link.serialNumber, perPage: 50 });
+    const achouEmClientes = ativos.data.some((a) => a.id === 'tag-l1');
+    expect(achouEmClientes).toBe(true);
+
+    const noMapa = (await s.tagsNoMapa(TENANT)).find((t) => t.id === 'tag-l1');
+    expect(noMapa).toBeDefined();
+    expect(noMapa?.foraDaLista).toEqual(expect.any(String));
   });
 });
 

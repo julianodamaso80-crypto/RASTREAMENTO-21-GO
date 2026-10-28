@@ -55,6 +55,20 @@ export function vinculoAparece(
   return v.verdict === 'CONFIRMADA' || rastreavel;
 }
 
+/**
+ * Por que a TAG não está na lista (só a busca a acha). Mesma ordem da régua de
+ * `vinculoAparece`: é o texto que o Mapa mostra no painel da TAG oculta.
+ */
+export function motivoForaDaLista(x: {
+  vinculo: Pick<VinculoTag, 'verdict'>;
+  sga: { situationLabel: string } | null;
+}): string {
+  if (!x.sga) return 'Veículo não encontrado no SGA';
+  if (x.sga.situationLabel !== 'ATIVO') return `Cliente ${x.sga.situationLabel} no SGA`;
+  if (x.vinculo.verdict === 'DIVERGENTE') return 'Vínculo divergente: conferir';
+  return 'Sem posição ainda';
+}
+
 /** Seriais que têm ao menos uma posição da nossa coleta. */
 export async function seriaisComPosicao(
   prisma: PrismaService,

@@ -14,8 +14,8 @@ import {
   separarSoTag,
   tagNoMapa,
   ultimasPosicoes,
+  motivoForaDaLista,
   vinculosDaTela,
-  vinculosVisiveis,
 } from './clients-tags';
 
 // Acentos do cadastro → letra sem acento, no SQL (espelha normalizarNome).
@@ -245,12 +245,17 @@ export class ClientsService {
    * As TAGs de cliente para o Mapa — todas de uma vez, com a última posição.
    *
    * O conjunto é o MESMO dos cards de "só TAG" de Clientes Ativos (mesmo
-   * `vinculosVisiveis` + `separarSoTag`): o Mapa somava só veículos e a tela de
+   * `vinculosDaTela` + `separarSoTag`): o Mapa somava só veículos e a tela de
    * clientes somava veículos e TAGs, e o dono via 990 num lugar e 3.835 no
    * outro. Só o time interno chega aqui — o gate é do controller.
    */
   async tagsNoMapa(tenantId: string) {
-    const visiveis = await vinculosVisiveis(this.prisma, tenantId);
+    // Os ocultos vêm junto, marcados `foraDaLista`: a busca de Clientes Ativos
+    // os acha, e a do Mapa tem que achar os mesmos (dono, 28/10: TAG de cliente
+    // INADIMPLENTE abria pela busca do topo e dava "Nenhum veículo" no Mapa).
+    const tela = await vinculosDaTela(this.prisma, tenantId);
+    const ocultos = new Set(tela.ocultos);
+    const visiveis = [...tela.visiveis, ...tela.ocultos];
     const { placasComVeiculo } = await separarSoTag(this.prisma, tenantId, visiveis);
     const pos = await ultimasPosicoes(
       this.prisma,
@@ -289,6 +294,7 @@ export class ClientsService {
         installLocation: localDe.get(serialNumber) ?? null,
       })),
       comRastreador: placasComVeiculo.has(x.vinculo.plate),
+      foraDaLista: ocultos.has(x) ? motivoForaDaLista(x) : null,
       redeConsultadaEm,
     }));
   }

@@ -133,6 +133,11 @@ export function TagDetailPanel({
             {tag.redeConsultadaEm &&
               ` · rede consultada ${formatRelativeTime(tag.redeConsultadaEm)} (a cada 15 min)`}
           </p>
+          {tag.foraDaLista && (
+            <p className="mt-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-500">
+              {tag.foraDaLista} · fora da lista, achada pela busca
+            </p>
+          )}
           {temPosicao && (
             <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
               <MapPin className="mt-0.5 h-3 w-3 shrink-0" />

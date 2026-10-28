@@ -621,7 +621,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
     });
     // "Todos" = veículos com rastreador + veículos só com TAG — o mesmo total
     // de Clientes Ativos.
-    counts.tag = searchedTags.length;
+    counts.tag = tagsDaAba(searchedTags, 'tag', !!searchQuery).length;
     counts.total += tagsDaAba(searchedTags, 'all', !!searchQuery).length;
     return counts;
   }, [searchedVehicles, searchedTags, searchQuery]);

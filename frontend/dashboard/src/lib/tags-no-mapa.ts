@@ -25,12 +25,16 @@ export function tagsDaAba(
   filtro: FiltroDoMapa,
   buscando = false,
 ): TagNoMapa[] {
-  if (filtro === 'tag') return tags;
-  if (filtro !== 'all') return [];
+  if (filtro !== 'all' && filtro !== 'tag') return [];
+  // A TAG fora da lista de Clientes Ativos (cliente inadimplente/inativo no
+  // SGA, vínculo divergente, sem posição) só aparece buscada — como lá. Sem
+  // busca ela não entra em lista, total nem ponto no mapa.
+  const daTela = buscando ? tags : tags.filter((t) => !t.foraDaLista);
+  if (filtro === 'tag') return daTela;
   // Em "Todos" a TAG de carro com rastreador só entra quando o operador a
   // procura: sem busca, o carro já está ali pelo rastreador e o total de
   // "Todos" continua igual ao de Clientes Ativos.
-  return buscando ? tags : tags.filter((t) => !t.comRastreador);
+  return buscando ? daTela : daTela.filter((t) => !t.comRastreador);
 }
 
 /** A busca da TAG cobre o que o operador tem em mãos: placa, nome e número. */

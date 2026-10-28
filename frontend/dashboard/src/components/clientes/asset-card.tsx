@@ -355,6 +355,12 @@ function Acesso({ bloqueado, soTag }: { bloqueado: boolean; soTag: boolean }) {
 
 /** "há 3 minutos" a partir do sinal de vida mais recente. */
 function textoUltimaAtualizacao(asset: ClientAsset): string {
+  // Só TAG não tem rastreador para "comunicar": o frescor é o último
+  // avistamento. "Nunca comunicou" ao lado de "TAG · há 18d" se contradizia.
+  if (asset.soTag) {
+    const vista = asset.tag?.lastSeenAt;
+    return vista ? `TAG vista ${formatRelativeTime(vista)}` : 'TAG nunca vista pela rede';
+  }
   const { gprsAgeMinutes, gpsAgeMinutes } = asset.comms;
   const idades = [gprsAgeMinutes, gpsAgeMinutes].filter(
     (n): n is number => n !== null,

@@ -31,6 +31,12 @@ export interface TagNoMapa {
    * mas fica fora do total de "Todos" — o carro já conta pelo rastreador.
    */
   comRastreador?: boolean;
+  /**
+   * Por que a TAG está fora da lista de Clientes Ativos (ex.: "Cliente
+   * INADIMPLENTE no SGA"). Só a busca a mostra, igual em Clientes Ativos, e ela
+   * fica fora dos totais. `null` = TAG da lista.
+   */
+  foraDaLista?: string | null;
   /** Outras TAGs do mesmo carro: o ponto é um só, a busca acha por qualquer uma. */
   outrosSeriais?: string[];
   /** As mesmas outras TAGs, com o local de cada uma, para o painel. */
