@@ -67,6 +67,8 @@ export interface Vehicle {
     installedAt?: string | null;
     installLocation: string | null;
   } | null;
+  /** Chip do rastreador, vindo do Estoque pelo IMEI. Só na lista interna. */
+  chip?: { iccid: string | null; line: string | null; operator: string | null } | null;
 }
 
 export interface VehicleWithTracking extends Vehicle {

@@ -99,9 +99,37 @@ export class VehiclesService {
     ]);
 
     return {
-      data,
+      data: await this.comChipDoEstoque(tenantId, data),
       meta: { total, page, perPage },
     };
+  }
+
+  /**
+   * ICCID e linha do chip ficam no Estoque (importados da planilha); a tabela
+   * `chips` não é usada. Casa pelo IMEI do device ou, nos ativos vindos do
+   * estoque sem Device, pelo `uniqueId` quando ele é o número mesmo.
+   */
+  private async comChipDoEstoque<
+    T extends { uniqueId: string | null; device: { imei: string } | null },
+  >(tenantId: string, veiculos: T[]) {
+    const imeiDe = (v: T) =>
+      v.device?.imei?.trim() ||
+      (/^\d{6,}$/.test(v.uniqueId?.trim() ?? '') ? v.uniqueId!.trim() : null);
+    const imeis = [...new Set(veiculos.map(imeiDe).filter((i): i is string => !!i))];
+    const porImei = new Map<string, { iccid: string | null; line: string | null; operator: string | null }>();
+    if (imeis.length) {
+      const itens = await this.prisma.stockItem.findMany({
+        where: { tenantId, imei: { in: imeis } },
+        select: { imei: true, iccid: true, line: true, operator: true },
+      });
+      for (const i of itens) {
+        porImei.set(i.imei, { iccid: i.iccid, line: i.line, operator: i.operator });
+      }
+    }
+    return veiculos.map((v) => {
+      const imei = imeiDe(v);
+      return { ...v, chip: (imei && porImei.get(imei)) || null };
+    });
   }
 
   /**

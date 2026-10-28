@@ -319,6 +319,25 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
                 <p className="font-medium font-mono text-xs">{imei}</p>
               </div>
             )}
+            {/* Chip do rastreador, sempre junto do IMEI: é com ele que se
+                cobra a operadora e se manda SMS de comando. */}
+            {imei && (
+              <>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground text-xs">ICCID do chip</span>
+                  <p className="font-medium font-mono text-xs">
+                    {vehicle.chip?.iccid?.trim() || 'Não informado'}
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground text-xs">Número do chip</span>
+                  <p className="font-medium font-mono text-xs">
+                    {vehicle.chip?.line?.trim() || 'Não informado'}
+                    {vehicle.chip?.operator?.trim() && ` · ${vehicle.chip.operator.trim()}`}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
