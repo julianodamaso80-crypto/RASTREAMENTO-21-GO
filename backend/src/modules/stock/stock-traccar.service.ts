@@ -18,6 +18,7 @@ import {
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
 import { ultimasPosicoes } from '../clients/clients-tags';
 import { CacheCompartilhado } from '../../common/cache/cache-compartilhado';
+import { seriaisDeTag } from './tag-serial';
 
 /**
  * Mantém o estoque inteiro cadastrado no servidor GPS.
@@ -367,17 +368,28 @@ export class StockTraccarService {
       hour: '2-digit',
       minute: '2-digit',
     });
+    // TAG híbrida (lote 868294) também fala com o gps1 como gt06: entra no
+    // Estoque como TAG, nunca como rastreador.
+    const tags = await seriaisDeTag(
+      this.prisma,
+      tenants[0].id,
+      adotar.map((d) => d.uniqueId),
+    );
     let ok = 0;
     for (const d of adotar) {
+      const ehTag = tags.has(d.uniqueId);
       try {
         await this.prisma.stockItem.create({
           data: {
             tenantId: tenants[0].id,
             imei: d.uniqueId,
-            status: 'ATIVO',
+            kind: ehTag ? 'TAG' : 'RASTREADOR',
+            status: ehTag ? 'TAG' : 'ATIVO',
             server: 'gps1',
             traccarDeviceId: d.id,
-            notes: `Entrou sozinho em ${quando}`,
+            notes: ehTag
+              ? `Lote ${d.uniqueId.slice(0, 6)} · entrou sozinho em ${quando}`
+              : `Entrou sozinho em ${quando}`,
           },
         });
         ok++;

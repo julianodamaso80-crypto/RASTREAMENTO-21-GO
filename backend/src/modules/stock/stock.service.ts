@@ -13,6 +13,7 @@ import {
 import { Prisma } from '.prisma/client';
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
+import { ehSerialDeTag, seriaisDeTag } from './tag-serial';
 import { TtlCache } from '../../common/cache/ttl-cache';
 import { FilterStockDto } from './dto/filter-stock.dto';
 import { AssociateStockDto } from './dto/associate-stock.dto';
@@ -1005,6 +1006,15 @@ export class StockService {
         'Item de estoque não encontrado ou já associado.',
       );
     }
+    // Item gravado como rastreador por engano (antes da regra única) se
+    // corrige aqui: TAG nunca vira Device nem ocupa o lugar do rastreador.
+    if (item.kind !== 'TAG' && (await ehSerialDeTag(this.prisma, tenantId, item.imei))) {
+      await this.prisma.stockItem.update({
+        where: { id: item.id },
+        data: { kind: 'TAG', status: 'TAG' },
+      });
+      item.kind = 'TAG';
+    }
     if (item.kind === 'TAG') {
       return this.associateTag(item, tenantId, dto, liberadorAdmin, userId);
     }
@@ -1726,6 +1736,7 @@ export class StockService {
       select: { imei: true },
     });
     const existingSet = new Set(existing.map((e) => e.imei));
+    const tags = await seriaisDeTag(this.prisma, tenantId, imeis);
 
     let imported = 0;
     let updated = 0;
@@ -1742,6 +1753,7 @@ export class StockService {
               create: {
                 tenantId,
                 imei: row.imei,
+                ...(tags.has(row.imei) ? { kind: 'TAG' } : {}),
                 iccid: row.iccid,
                 line: row.line,
                 operator: row.operator,

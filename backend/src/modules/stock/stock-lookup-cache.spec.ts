@@ -40,7 +40,9 @@ const NAO_ENCONTRADO = {
 
 function servico(lookupByPlate: jest.Mock) {
   const prisma = {
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
     stockItem: {
+      count: jest.fn().mockResolvedValue(0),
       findFirst: jest
         .fn()
         .mockResolvedValue({ id: 'item-1', imei: '860123456789012' }),

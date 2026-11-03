@@ -53,7 +53,9 @@ function servico() {
     stockItem: { update: jest.fn().mockResolvedValue({}) },
   };
   const prisma = {
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
     stockItem: {
+      count: jest.fn().mockResolvedValue(0),
       findFirst: jest.fn().mockResolvedValue({
         id: 'item-1',
         imei: IMEI,

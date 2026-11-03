@@ -917,7 +917,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         el.style.cssText = `padding:4px 9px;background:rgba(15,23,42,0.95);border:1px solid ${COR_TAG};border-radius:6px;white-space:nowrap;font-size:11px;line-height:1.35;color:#e2e8f0;text-align:center;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,0.55);`;
         el.innerHTML = `
           <div style="font-weight:700;letter-spacing:0.6px;">${sel.plate}</div>
-          <div style="color:${COR_TAG};font-weight:600;">TAG · ${sel.seenAt ? `vista ${formatRelativeTime(sel.seenAt)}` : 'nunca vista'}</div>
+          <div style="color:${COR_TAG};font-weight:600;">${sel.seenAt ? `Última posição ${formatRelativeTime(sel.seenAt)}` : 'Sem posição ainda'}</div>
         `;
         etiquetaTagRef.current = new maplibregl.Marker({ element: el, offset: [0, 30] })
           .setLngLat([sel.longitude as number, sel.latitude as number])

@@ -67,7 +67,9 @@ function servico(deviceJaNoVeiculo: { id: string; imei: string } | null) {
   };
 
   const prisma = {
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
     stockItem: {
+      count: jest.fn().mockResolvedValue(0),
       findFirst: jest.fn().mockResolvedValue({ id: 'item-1', imei: IMEI_NOVO }),
     },
     vehicle: { findFirst: jest.fn().mockResolvedValue(null) },

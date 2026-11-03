@@ -70,7 +70,9 @@ function servico(opts: {
     linkDeviceToSessionUser: jest.fn().mockResolvedValue(undefined),
   };
   const prisma = {
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
     stockItem: {
+      count: jest.fn().mockResolvedValue(0),
       findMany: jest
         .fn()
         .mockResolvedValue((opts.estoque ?? []).map((imei) => ({ imei }))),
@@ -105,6 +107,32 @@ function servico(opts: {
 }
 
 describe('StockTraccarService.adotarDesconhecidos', () => {
+  // Dono, 03/11/2026: 868294085452035 (TAG híbrida, fala gt06 com o gps1)
+  // entrou sozinho como rastreador em 08/10. TAG nunca vira rastreador.
+  it('TAG híbrida de lote conhecido entra como TAG, não como rastreador', async () => {
+    const { s, prisma } = servico({
+      devices: [device('868294085452035', 10135), device('867689065682520', 6082)],
+    });
+    prisma.stockItem.count.mockImplementation(
+      ({ where }: { where: { imei: { startsWith: string } } }) =>
+        Promise.resolve(where.imei.startsWith === '868294' ? 999 : 0),
+    );
+
+    await s.adotarDesconhecidos();
+
+    const criados = prisma.stockItem.create.mock.calls.map(
+      (c: [{ data: ItemCriado & { kind: string } }]) => c[0].data,
+    );
+    expect(criados.find((d) => d.imei === '868294085452035')).toMatchObject({
+      kind: 'TAG',
+      status: 'TAG',
+    });
+    expect(criados.find((d) => d.imei === '867689065682520')).toMatchObject({
+      kind: 'RASTREADOR',
+      status: 'ATIVO',
+    });
+  });
+
   it('adota no estoque o IMEI que apareceu no servidor sem cadastro', async () => {
     const { s, prisma } = servico({
       devices: [device('867689065682520', 6082)],

@@ -11,7 +11,9 @@ function servico(over: {
   associate?: jest.Mock;
 }) {
   const prisma: any = {
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
     stockItem: {
+      count: jest.fn().mockResolvedValue(0),
       findFirst: jest.fn().mockResolvedValue(over.stockItem ?? null),
       upsert: jest.fn().mockResolvedValue({ id: 'novo-id' }),
       update: jest.fn().mockResolvedValue({}),
@@ -61,6 +63,20 @@ describe('StockBulkLinkService.vincular', () => {
       { placa: 'ABC1D23', technicianName: 'João', installLocation: 'Painel' },
       false,
     );
+  });
+
+  // 28/10/2026: 808092605161018 (TAG com chave Find My, 15 dígitos) não
+  // estava no Estoque, entrou como RASTREADOR e virou Device da TUS6B12.
+  it('TAG de 15 dígitos com chave Find My entra no Estoque como TAG', async () => {
+    const { svc, prisma } = servico({});
+    prisma.tagKey.findMany.mockResolvedValue([{ serialNumber: '808092605161018' }]);
+    const [r] = await svc.vincular(TENANT, [{ ...linha, imei: '808092605161018' }]);
+    expect(r.status).toBe('VINCULADO');
+    expect(prisma.stockItem.upsert.mock.calls[0][0].create).toMatchObject({
+      imei: '808092605161018',
+      kind: 'TAG',
+      status: 'TAG',
+    });
   });
 
   it('ID de 11 dígitos que NÃO é TAG do Estoque não entra no estoque (pode ser erro de digitação)', async () => {

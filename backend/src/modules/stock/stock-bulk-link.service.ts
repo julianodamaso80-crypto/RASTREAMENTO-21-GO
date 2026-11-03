@@ -7,6 +7,7 @@ import {
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockService } from './stock.service';
+import { ehSerialDeTag } from './tag-serial';
 import {
   agruparItensEmLinhas,
   linhasDaTabela,
@@ -92,8 +93,10 @@ export class StockBulkLinkService {
       };
     }
     // ID curto só vale se já for uma TAG do Estoque: não criamos item novo a
-    // partir dele, senão erro de digitação viraria lixo no estoque.
-    const ehTag = l.imei.length !== 15;
+    // partir dele, senão erro de digitação viraria lixo no estoque. A TAG de
+    // 15 dígitos (lote 808092/868294) é reconhecida pela regra única.
+    const ehTag = await ehSerialDeTag(this.prisma, tenantId, l.imei);
+    const curto = l.imei.length !== 15;
 
     let criadoAgora = false;
     let itemId: string | null = null;
@@ -103,11 +106,11 @@ export class StockBulkLinkService {
           tenantId,
           imei: l.imei,
           deletedAt: null,
-          ...(ehTag ? { kind: 'TAG' } : {}),
+          ...(curto ? { kind: 'TAG' } : {}),
         },
       });
 
-      if (ehTag && !existente) {
+      if (curto && !existente) {
         return {
           ...base,
           status: 'ERRO',
@@ -127,7 +130,11 @@ export class StockBulkLinkService {
         // IMEI não virar lixo no estoque.
         const item = await this.prisma.stockItem.upsert({
           where: { tenantId_imei: { tenantId, imei: l.imei } },
-          create: { tenantId, imei: l.imei },
+          create: {
+            tenantId,
+            imei: l.imei,
+            ...(ehTag ? { kind: 'TAG', status: 'TAG' } : {}),
+          },
           update: { deletedAt: null },
         });
         itemId = item.id;

@@ -61,7 +61,9 @@ const ATIVO_COM_BOLETO_VENCIDO: HinovaLookupResult = {
 
 function servico(lookup: HinovaLookupResult = INATIVO) {
   const prisma = {
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
     stockItem: {
+      count: jest.fn().mockResolvedValue(0),
       findFirst: jest
         .fn()
         .mockResolvedValue({ id: 'item-1', imei: '860123456789012' }),
