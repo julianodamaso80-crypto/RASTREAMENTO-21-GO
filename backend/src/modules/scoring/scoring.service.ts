@@ -78,19 +78,52 @@ export class ScoringService {
       }));
   }
 
-  async recomputeAll() {
+  /**
+   * Recalcula o score de todos os veículos ativos, pulando quem já tem o score
+   * do dia (balde de 00:00 UTC) e parando no `prazo`, se houver. Medido em
+   * 04/11/2026: 8.656 veículos × 30 dias de posições levavam das 05:00 às
+   * ~13:30 BRT, com o Postgres a 300 % e o backend a 130 % de CPU durante o
+   * expediente. Com o prazo, quem ficou de fora é retomado na noite seguinte.
+   */
+  async recomputeAll(prazo: Date | null = null) {
     const vehicles = await this.prisma.vehicle.findMany({
       where: { deletedAt: null, status: 'ACTIVE' },
       select: { id: true, tenantId: true },
     });
-    this.logger.log(`Recomputando score de ${vehicles.length} veículos...`);
+    const bucket = this.dayBucket(new Date(Date.now()));
+    const feitos = new Set(
+      (
+        await this.prisma.vehicleScore.findMany({
+          where: { periodEnd: bucket },
+          select: { vehicleId: true },
+        })
+      ).map((s) => s.vehicleId),
+    );
+    const resultado = { computados: 0, pulados: 0, interrompido: false };
+    this.logger.log(
+      `Recomputando score de ${vehicles.length} veículos (${feitos.size} já feitos hoje)...`,
+    );
     for (const v of vehicles) {
+      if (feitos.has(v.id)) {
+        resultado.pulados++;
+        continue;
+      }
+      if (prazo && Date.now() >= prazo.getTime()) {
+        resultado.interrompido = true;
+        this.logger.warn(
+          `Prazo do recálculo atingido: ${resultado.computados} computados, ` +
+            `${vehicles.length - resultado.computados - resultado.pulados} ficam para a próxima noite.`,
+        );
+        break;
+      }
       try {
         await this.computeAndStore(v.id, v.tenantId);
+        resultado.computados++;
       } catch (err) {
         this.logger.warn(`Score ${v.id} falhou: ${(err as Error).message}`);
       }
     }
+    return resultado;
   }
 
   async computeAndStore(vehicleId: string, tenantId: string) {
