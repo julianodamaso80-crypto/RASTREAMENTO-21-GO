@@ -1,8 +1,8 @@
 'use client';
 
-import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRef, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
-import { ChevronUp, List } from 'lucide-react';
+import { ChevronLeft, ChevronUp, List, X } from 'lucide-react';
 import { useTracking } from '@/contexts/tracking-context';
 import { VehicleSidebar } from '@/components/vehicles/vehicle-sidebar';
 import { VehicleDetailPanel } from '@/components/vehicles/vehicle-detail-panel';
@@ -31,6 +31,26 @@ const MapContainer = dynamic(
 // Operador entende em 1s onde o veículo está sem precisar dar zoom manual.
 const FOCUS_ZOOM = 17;
 
+// Largura do painel de detalhes no computador — usada como padding do flyTo
+// só quando ele está aberto, pra o veículo não ficar atrás do painel.
+const PANEL_WIDTH = 380;
+
+// Tela dividida (mapa em cima, informação embaixo) é só no celular — navegador
+// do celular e os apps iOS/Android. No computador o painel fica ao lado, por
+// cima do mapa, como sempre foi. Mesmo corte do `lg` que esconde a lista.
+const CELULAR = '(max-width: 1023px)';
+function assinarTela(avisar: () => void) {
+  const mq = window.matchMedia(CELULAR);
+  mq.addEventListener('change', avisar);
+  return () => mq.removeEventListener('change', avisar);
+}
+function useCelular() {
+  return useSyncExternalStore(
+    assinarTela,
+    () => window.matchMedia(CELULAR).matches,
+    () => false,
+  );
+}
 
 export default function MapaPage() {
   const {
@@ -49,9 +69,11 @@ export default function MapaPage() {
     refreshTags,
   } = useTracking();
   const mapRef = useRef<MapContainerRef>(null);
-  // Tela dividida como na Rede: mapa em cima, informação embaixo. O painel
-  // abre a cada seleção nova; recolher devolve a tela inteira ao mapa.
-  const [panelOpen, setPanelOpen] = useState(true);
+  const celular = useCelular();
+  // Computador: painel nasce RECOLHIDO, a prioridade é ver o máximo do mapa.
+  // Celular: tela dividida, o painel abre a cada seleção nova.
+  const [panelOpen, setPanelOpen] = useState(false);
+  const pad = celular ? 0 : PANEL_WIDTH;
   const focouInicial = useRef(false);
   /** Último veículo que a câmera já enquadrou — evita reimpor o zoom. */
   const focadoId = useRef<string | null>(null);
@@ -167,12 +189,12 @@ export default function MapaPage() {
       ? tagsMarcadas
       : filteredTags;
 
-  // Seleção nova = painel de baixo aberto de novo.
+  // Celular: seleção nova = painel de baixo aberto de novo.
   const assinaturaSelecao = `${selectedIds.join(',')}|${markedTagIds.join(',')}|${selectedTagId ?? ''}`;
   const [assinaturaVista, setAssinaturaVista] = useState(assinaturaSelecao);
   if (assinaturaVista !== assinaturaSelecao) {
     setAssinaturaVista(assinaturaSelecao);
-    setPanelOpen(true);
+    if (celular) setPanelOpen(true);
   }
 
   // Selecionou um veículo na lista (mobile) → fecha a gaveta pra revelar o
@@ -195,8 +217,8 @@ export default function MapaPage() {
     if (!mapaPronto || tagLat === null || tagLng === null) return;
     if (tagFocadaId.current === tagAbertaId) return;
     tagFocadaId.current = tagAbertaId;
-    mapRef.current?.flyTo(tagLng, tagLat, FOCUS_ZOOM);
-  }, [tagAbertaId, tagLat, tagLng, mapaPronto]);
+    mapRef.current?.flyTo(tagLng, tagLat, FOCUS_ZOOM, pad);
+  }, [tagAbertaId, tagLat, tagLng, mapaPronto, pad]);
 
   /** Coordenadas dos marcados que já reportaram posição. */
   const pontosMarcados = useMemo(
@@ -213,9 +235,9 @@ export default function MapaPage() {
 
   const enquadrarMarcados = useCallback(() => {
     if (pontosMarcados.length > 0) {
-      mapRef.current?.fitTo(pontosMarcados);
+      mapRef.current?.fitTo(pontosMarcados, pad);
     }
-  }, [pontosMarcados]);
+  }, [pontosMarcados, pad]);
 
   const onMapaPronto = useCallback(() => setMapaPronto(true), []);
 
@@ -226,28 +248,40 @@ export default function MapaPage() {
       // caixinha por caixinha.
       if (varios) {
         setFoco(`v:${vehicleId}`);
-        setPanelOpen(true);
+        if (celular) setPanelOpen(true);
       } else {
         selectVehicle(vehicleId);
       }
       const v = vehicles.find((veh) => veh.id === vehicleId);
       if (v && v.latitude && v.longitude) {
-        mapRef.current?.flyTo(v.longitude, v.latitude, FOCUS_ZOOM);
+        mapRef.current?.flyTo(
+          v.longitude,
+          v.latitude,
+          FOCUS_ZOOM,
+          panelOpen || varios ? pad : 0,
+        );
       }
     },
-    [selectVehicle, vehicles, varios],
+    [selectVehicle, vehicles, varios, celular, panelOpen, pad],
   );
 
   const handleTagClick = useCallback(
     (tagId: string) => {
       if (varios && markedTagIds.includes(tagId)) {
         setFoco(`t:${tagId}`);
-        setPanelOpen(true);
+        if (celular) {
+          setPanelOpen(true);
+        } else {
+          const t = tags.find((x) => x.id === tagId);
+          if (t && t.latitude !== null && t.longitude !== null) {
+            mapRef.current?.flyTo(t.longitude, t.latitude, FOCUS_ZOOM, PANEL_WIDTH);
+          }
+        }
         return;
       }
       selectTag(tagId);
     },
-    [varios, markedTagIds, selectTag],
+    [varios, markedTagIds, selectTag, celular, tags],
   );
 
   // Placa vinda de "Abrir no mapa" em outra tela. Lida do location (e não com
@@ -304,8 +338,8 @@ export default function MapaPage() {
     if (!mapaPronto || !alvoLat || !alvoLng) return;
     if (focadoId.current === selectedVehicleId) return;
     focadoId.current = selectedVehicleId;
-    mapRef.current?.flyTo(alvoLng, alvoLat, FOCUS_ZOOM);
-  }, [selectedVehicleId, alvoLat, alvoLng, mapaPronto]);
+    mapRef.current?.flyTo(alvoLng, alvoLat, FOCUS_ZOOM, panelOpen ? pad : 0);
+  }, [selectedVehicleId, alvoLat, alvoLng, panelOpen, pad, mapaPronto]);
 
   // Vários marcados: enquadra todos UMA vez, quando o conjunto muda. E só.
   //
@@ -329,16 +363,16 @@ export default function MapaPage() {
     // próxima passagem em vez de dar um enquadramento vazio.
     if (pontosMarcados.length === 0) return;
     enquadradoRef.current = assinaturaMarcados;
-    mapRef.current?.fitTo(pontosMarcados);
-  }, [varios, mapaPronto, assinaturaMarcados, pontosMarcados]);
+    mapRef.current?.fitTo(pontosMarcados, pad);
+  }, [varios, mapaPronto, assinaturaMarcados, pontosMarcados, pad]);
 
   // Seguimento: mantém o veículo à vista enquanto ele anda, sem tocar no zoom
   // e sem brigar com quem arrastou o mapa — a câmera só reage quando o veículo
   // sai do quadro.
   useEffect(() => {
     if (!selectedVehicleId || !alvoLat || !alvoLng) return;
-    mapRef.current?.keepInView(alvoLng, alvoLat, 0);
-  }, [selectedVehicleId, alvoLat, alvoLng]);
+    mapRef.current?.keepInView(alvoLng, alvoLat, panelOpen ? pad : 0);
+  }, [selectedVehicleId, alvoLat, alvoLng, panelOpen, pad]);
 
   const linhaDoVeiculo = (v: (typeof marcados)[number]): LinhaSelecionada => {
     const geo = enderecos.get(`v:${v.id}`);
@@ -381,20 +415,36 @@ export default function MapaPage() {
 
   const focarChave = (chave: string) => {
     setFoco(chave);
-    setPanelOpen(true);
+    if (celular) setPanelOpen(true);
     const id = chave.slice(2);
     if (chave.startsWith('v:')) {
       const v = vehicles.find((x) => x.id === id);
       if (v?.latitude && v?.longitude) {
-        mapRef.current?.flyTo(v.longitude, v.latitude, FOCUS_ZOOM);
+        mapRef.current?.flyTo(v.longitude, v.latitude, FOCUS_ZOOM, pad);
       }
     } else {
       const t = tags.find((x) => x.id === id);
       if (t && t.latitude !== null && t.longitude !== null) {
-        mapRef.current?.flyTo(t.longitude, t.latitude, FOCUS_ZOOM);
+        mapRef.current?.flyTo(t.longitude, t.latitude, FOCUS_ZOOM, pad);
       }
     }
   };
+
+  // Computador: o "detalhe" de uma linha cai pro modo de um só, que é onde
+  // mora o painel completo.
+  const detalheNoComputador = (chave: string) => {
+    const id = chave.slice(2);
+    if (chave.startsWith('v:')) {
+      selectVehicle(id);
+      setPanelOpen(true);
+    } else {
+      selectTag(id);
+    }
+  };
+
+  const linhasMarcadas = varios
+    ? [...marcados.map(linhaDoVeiculo), ...tagsMarcadas.map(linhaDaTag)]
+    : [];
 
   const removerChave = (chave: string) => {
     const id = chave.slice(2);
@@ -407,12 +457,108 @@ export default function MapaPage() {
     ? `${chavesMarcadas.length} marcados`
     : (selectedTag?.plate ?? selectedVehicle?.plate ?? '');
 
+  if (!celular) {
+    return (
+      <div className="flex h-full">
+        <div className="hidden lg:block w-[320px] shrink-0 border-r border-border/30">
+          <VehicleSidebar />
+        </div>
+
+        {/* O mapa ocupa toda a largura restante. O painel de detalhes é overlay
+            — abre por cima, nunca encolhe o mapa. */}
+        <div className="flex-1 relative">
+          <MapContainer
+            ref={mapRef}
+            vehicles={vehiclesNoMapa}
+            selectedIds={selectedIds}
+            onVehicleClick={handleVehicleClick}
+            onReady={onMapaPronto}
+            tags={tagsNoMapa}
+            selectedTagId={selectedTag?.id ?? null}
+            onTagClick={handleTagClick}
+            // O painel de detalhe cobre os 380px da direita e engolia o seletor
+            // de mapa (incluindo o Satélite Google). Com o painel aberto ele
+            // sai de baixo, à esquerda do painel.
+            basemapToggleClassName={
+              varios || (selectedVehicleId && panelOpen) || selectedTag
+                ? 'left-3 right-auto lg:left-auto lg:right-[392px]'
+                : undefined
+            }
+          />
+
+          {/* Aba pra abrir os detalhes — só aparece com veículo selecionado
+              e painel recolhido */}
+          {selectedVehicle && !varios && !panelOpen && (
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex flex-col items-end gap-2 animate-in slide-in-from-right duration-200">
+              <button
+                type="button"
+                onClick={() => setPanelOpen(true)}
+                title="Abrir detalhes do veículo"
+                className="flex items-center gap-2 pl-3 pr-3 py-2.5 rounded-l-xl glass-light border border-r-0 border-border/40 shadow-lg hover:bg-muted/40 transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{
+                    backgroundColor: STATUS_COLORS[selectedVehicle.displayStatus],
+                  }}
+                />
+                <span className="text-sm font-bold tracking-wide">
+                  {selectedVehicle.plate}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => selectVehicle(null)}
+                title="Soltar o veículo"
+                aria-label="Soltar o veículo"
+                className="flex items-center justify-center h-8 w-9 rounded-l-xl glass-light border border-r-0 border-border/40 shadow-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* TAG aberta: o painel dela entra direto — ela não tem a telemetria
+              do rastreador que justifica o painel recolhido. */}
+          {selectedTag && (
+            <div className="absolute inset-y-0 right-0 z-30 w-full max-w-[380px]">
+              <TagDetailPanel
+                tag={selectedTag}
+                onClose={() => selectTag(null)}
+                onAtualizou={refreshTags}
+              />
+            </div>
+          )}
+
+          {selectedVehicleId && !varios && panelOpen && (
+            <div className="absolute inset-y-0 right-0 z-30">
+              <VehicleDetailPanel onCollapse={() => setPanelOpen(false)} />
+            </div>
+          )}
+
+          {/* Vários marcados: a localização escrita de cada um, lado a lado com
+              o mapa. Fica no lugar do painel de detalhe — a pergunta aqui é
+              "onde estão estes?", não "tudo sobre um". */}
+          {varios && (
+            <div className="absolute inset-y-0 right-0 z-30 w-full max-w-[360px]">
+              <SelectionListPanel
+                linhas={linhasMarcadas}
+                onFocar={focarChave}
+                onDetalhe={detalheNoComputador}
+                onRemover={removerChave}
+                onEnquadrar={enquadrarMarcados}
+                onLimpar={() => selectVehicle(null)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full">
-      <div className="hidden lg:block w-[320px] shrink-0 border-r border-border/30">
-        <VehicleSidebar />
-      </div>
-
       {/* Tela dividida como na Rede: o mapa em cima com os marcados, embaixo
           a informação do que foi escolhido. Clicar em outro pino ou em outra
           linha troca só a parte de baixo. */}
@@ -463,7 +609,7 @@ export default function MapaPage() {
               <div className="flex h-full flex-col md:flex-row">
                 <div className="h-36 shrink-0 overflow-hidden border-b border-border/40 md:h-full md:w-[340px] md:border-b-0 md:border-r">
                   <SelectionListPanel
-                    linhas={[...marcados.map(linhaDoVeiculo), ...tagsMarcadas.map(linhaDaTag)]}
+                    linhas={linhasMarcadas}
                     ativoId={focoEfetivo}
                     onFocar={focarChave}
                     onDetalhe={focarChave}
