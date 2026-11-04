@@ -28,6 +28,13 @@ const POLL_MS = 20000;
 const SCREEN_H = Dimensions.get('window').height;
 const SHEET_MAX = Math.round(SCREEN_H * 0.66);
 const SHEET_MIN = 150;
+// Rio de Janeiro: onde está a frota. Só aparece até o veículo chegar.
+const REGIAO_INICIAL: Region = {
+  latitude: -22.9068,
+  longitude: -43.1729,
+  latitudeDelta: 0.5,
+  longitudeDelta: 0.5,
+};
 
 /** Cor do ponto de status derivada da POSIÇÃO GPS real. */
 function dotColor(v: Vehicle): string {
@@ -159,14 +166,26 @@ export default function MapScreen() {
   );
 
   const withPos = vehicles.filter((v) => v.position);
-  const initialRegion: Region | undefined = withPos[0]
-    ? {
-        latitude: withPos[0].position!.latitude,
-        longitude: withPos[0].position!.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }
-    : undefined;
+
+  // O mapa nasce antes da lista chegar, e `initialRegion` só vale na
+  // montagem: sem isto ele abria no centro padrão do Google e não saía de lá.
+  // Na primeira lista com posição, vai até o veículo do associado — uma vez,
+  // depois a câmera é de quem está olhando.
+  const enquadrou = useRef(false);
+  const primeiro = withPos[0]?.position ?? null;
+  useEffect(() => {
+    if (enquadrou.current || !primeiro) return;
+    enquadrou.current = true;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: primeiro.latitude,
+        longitude: primeiro.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      },
+      0,
+    );
+  }, [primeiro]);
 
   // Veículo em foco: o selecionado, ou o primeiro por padrão.
   const currentId = selected ?? vehicles[0]?.id ?? null;
@@ -183,7 +202,7 @@ export default function MapScreen() {
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
-        initialRegion={initialRegion}
+        initialRegion={REGIAO_INICIAL}
         mapType="hybrid"
         showsUserLocation={false}
         showsMyLocationButton={false}

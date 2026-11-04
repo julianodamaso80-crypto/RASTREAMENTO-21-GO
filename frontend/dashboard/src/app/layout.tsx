@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import './globals.css';
@@ -14,6 +14,16 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: '21Go! Proteção Patrimonial',
   description: 'Plataforma de rastreamento e proteção patrimonial 21Go!',
+};
+
+// Celular e app (WebView) não dão zoom na página: pinça e o zoom automático
+// do iPhone ao tocar num campo bagunçavam a tela. O mapa continua com zoom —
+// o MapLibre trata o gesto por conta própria, não depende do navegador.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

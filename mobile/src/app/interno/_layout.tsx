@@ -11,6 +11,15 @@ export default function InternoLayout() {
   const router = useRouter();
   const { token, logout } = useInternalAuth();
   const [liberado, setLiberado] = useState(false);
+  // O painel (WebView) só nasce depois do primeiro desbloqueio e daí em diante
+  // NÃO desmonta ao sair do app: antes o bloqueio trocava a tela inteira pela
+  // trava, a WebView morria e voltava do zero no Dashboard — o funcionário
+  // perdia a aba em que estava toda vez que atendia o telefone. Agora a trava
+  // cobre o painel por cima, e o painel continua onde estava.
+  const [painelMontado, setPainelMontado] = useState(false);
+  useEffect(() => {
+    if (liberado) setPainelMontado(true);
+  }, [liberado]);
   const [aguardando, setAguardando] = useState(false);
   const ultimaAtividade = useRef<number | null>(null);
   const tentativas = useRef(0);
@@ -108,9 +117,11 @@ export default function InternoLayout() {
     return () => sub.remove();
   }, [liberado]);
 
-  if (!liberado) {
-    return (
-      <View style={styles.gate}>
+  return (
+    <View style={styles.raiz}>
+      {painelMontado && <Stack screenOptions={{ headerShown: false }} />}
+      {!liberado && (
+      <View style={[StyleSheet.absoluteFill, styles.gate]}>
         {aguardando && <ActivityIndicator size="large" color={colors.orange} />}
         <Text style={styles.texto}>Confirme que é você para continuar</Text>
         <View style={styles.acoes}>
@@ -126,13 +137,13 @@ export default function InternoLayout() {
           </TouchableOpacity>
         </View>
       </View>
-    );
-  }
-
-  return <Stack screenOptions={{ headerShown: false }} />;
+      )}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  raiz: { flex: 1, backgroundColor: colors.navy },
   gate: {
     flex: 1,
     alignItems: 'center',

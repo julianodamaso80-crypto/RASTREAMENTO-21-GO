@@ -30,9 +30,12 @@ export function TagDetailPanel({
   tag,
   onClose,
   onAtualizou,
+  embaixo = false,
 }: {
   tag: TagNoMapa;
   onClose: () => void;
+  /** Painel na metade de baixo da tela, na largura toda (ver VehicleDetailPanel). */
+  embaixo?: boolean;
   /** Recarrega as TAGs depois que vem posição nova. */
   onAtualizou: () => void;
 }) {
@@ -109,7 +112,12 @@ export function TagDetailPanel({
   const mmss = `${String(Math.floor(restam / 60)).padStart(2, '0')}:${String(restam % 60).padStart(2, '0')}`;
 
   return (
-    <div className="flex h-full w-full max-w-[380px] flex-col gap-3 overflow-y-auto border-l border-border/30 bg-card p-3 shadow-xl">
+    <div
+      className={cn(
+        'flex h-full w-full flex-col gap-3 overflow-y-auto bg-card p-3',
+        !embaixo && 'max-w-[380px] border-l border-border/30 shadow-xl',
+      )}
+    >
       <div className="flex items-start gap-2">
         <div className="flex flex-col items-center gap-1">
           <span

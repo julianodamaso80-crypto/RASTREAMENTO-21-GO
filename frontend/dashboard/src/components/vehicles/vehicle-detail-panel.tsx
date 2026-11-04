@@ -3,6 +3,7 @@
 import {
   X,
   ChevronRight,
+  ChevronDown,
   Navigation,
   Gauge,
   Satellite,
@@ -37,9 +38,23 @@ import { useState, useMemo } from 'react';
 interface VehicleDetailPanelProps {
   /** Recolhe o painel mantendo o veículo selecionado no mapa. */
   onCollapse?: () => void;
+  /** Mostra este veículo em vez do selecionado sozinho (modo de vários marcados). */
+  vehicleId?: string;
+  /** O que o X faz. Padrão: soltar a seleção inteira. */
+  onClose?: () => void;
+  /**
+   * Painel na metade de baixo da tela, abaixo do mapa (como na Rede): ocupa a
+   * largura toda e distribui as seções em colunas, em vez da faixa lateral.
+   */
+  embaixo?: boolean;
 }
 
-export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
+export function VehicleDetailPanel({
+  onCollapse,
+  vehicleId,
+  onClose,
+  embaixo = false,
+}: VehicleDetailPanelProps) {
   const { vehicles, selectedVehicleId, selectVehicle, updateVehicleLocal } =
     useTracking();
   const { user } = useAuth();
@@ -54,8 +69,8 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
   const [salvandoLocal, setSalvandoLocal] = useState(false);
 
   const vehicle = useMemo(
-    () => vehicles.find((v) => v.id === selectedVehicleId),
-    [vehicles, selectedVehicleId],
+    () => vehicles.find((v) => v.id === (vehicleId ?? selectedVehicleId)),
+    [vehicles, vehicleId, selectedVehicleId],
   );
 
   // Reverse geocoding via Nominatim (free) — chamado ANTES do early return
@@ -131,8 +146,9 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
     <>
       <div
         className={cn(
-          'w-[380px] max-w-[88vw] h-full glass-light border-l border-border/30 flex flex-col overflow-y-auto shadow-2xl',
-          'animate-in slide-in-from-right duration-200',
+          embaixo
+            ? 'w-full h-full glass-light flex flex-col overflow-y-auto'
+            : 'w-[380px] max-w-[88vw] h-full glass-light border-l border-border/30 flex flex-col overflow-y-auto shadow-2xl animate-in slide-in-from-right duration-200',
         )}
       >
         {/* Header */}
@@ -147,13 +163,13 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
                 title="Recolher painel (libera o mapa)"
                 aria-label="Recolher painel"
               >
-                <ChevronRight className="h-4 w-4" />
+                {embaixo ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </Button>
             )}
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => selectVehicle(null)}
+              onClick={() => (onClose ? onClose() : selectVehicle(null))}
               title="Fechar e soltar o veículo"
               aria-label="Fechar detalhes"
             >
@@ -162,6 +178,12 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
           </div>
         </div>
 
+        <div
+          className={cn(
+            embaixo &&
+              'md:columns-2 xl:columns-3 gap-0 [&>*]:break-inside-avoid [&>[data-orientation]]:hidden',
+          )}
+        >
         {/* Banner de status — visual rápido pro operador/cliente entender em 1s */}
         <div
           className="p-4 flex items-center gap-3"
@@ -451,6 +473,7 @@ export function VehicleDetailPanel({ onCollapse }: VehicleDetailPanelProps) {
               )}
             </Button>
           )}
+        </div>
         </div>
       </div>
 

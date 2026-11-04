@@ -1,8 +1,10 @@
 import type { StyleSpecification } from 'maplibre-gl';
 import type { DisplayStatus, VehicleType } from '@/types/vehicle';
 
-export const MAP_CENTER: [number, number] = [-49.2643, -16.6869]; // Goiânia
-export const MAP_ZOOM = 12;
+// Rio de Janeiro: é onde está a frota. Antes era Goiânia e o mapa abria
+// longe de todos os veículos.
+export const MAP_CENTER: [number, number] = [-43.1729, -22.9068];
+export const MAP_ZOOM = 10;
 
 export const CARTO_DARK_MATTER_URL =
   'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';

@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -15,7 +15,12 @@ import {
   type TipoRelatorioTag,
 } from '../ble-tags/tag-history-report';
 import { gerarHistoricoTagPdf } from '../ble-tags/tag-history-report.pdf';
-import { VALIDADE_LINK_DIAS, linkPublico, numeroDoDocumento } from './history-requests.service';
+import {
+  VALIDADE_LINK_DIAS,
+  linkPublico,
+  novoTokenDoLink,
+  numeroDoDocumento,
+} from './history-requests.service';
 
 /** O que o histórico da TAG guarda: a rede Find My devolve 7 dias, nós acumulamos. */
 const MAX_DIAS_TAG = 90;
@@ -231,7 +236,7 @@ export class TagHistoryRequestsService {
           source: 'PAINEL',
           requestedByUserId: params.solicitante.userId ?? null,
           requestedByName: params.solicitante.nome ?? null,
-          shareToken: randomBytes(32).toString('base64url'),
+          shareToken: novoTokenDoLink(),
           expiresAt: new Date(geradoEm.getTime() + VALIDADE_LINK_DIAS * 24 * 3600_000),
           rowCount: linhas,
           pdf: new Uint8Array(pdf),

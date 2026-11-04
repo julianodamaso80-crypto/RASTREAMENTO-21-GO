@@ -10,11 +10,13 @@ import { HistoryRequestsService } from './history-requests.service';
  */
 @ApiTags('Público')
 @Public()
-@Controller('public/historico')
+@Controller()
 export class HistoryPublicController {
   constructor(private historyRequests: HistoryRequestsService) {}
 
-  @Get(':token')
+  // `h/:token` é o link curto (fora do prefixo api/v1, ver main.ts); o longo
+  // continua valendo para os PDFs já entregues.
+  @Get(['h/:token', 'public/historico/:token'])
   @ApiOperation({ summary: 'PDF do histórico pelo link compartilhado' })
   async abrir(@Param('token') token: string, @Res() res: Response) {
     const { pdf, nome } = await this.historyRequests.pdfPorToken(token);

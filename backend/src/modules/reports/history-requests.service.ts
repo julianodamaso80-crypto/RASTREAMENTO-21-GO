@@ -61,9 +61,18 @@ type Resumo = {
   createdAt: Date;
 };
 
+/**
+ * O link vai colado no WhatsApp e impresso: precisa caber numa linha.
+ * 9 bytes aleatórios = 12 caracteres (72 bits), impossível de adivinhar
+ * nos 90 dias de validade. Links antigos (43 caracteres) seguem abrindo.
+ */
+export function novoTokenDoLink(): string {
+  return randomBytes(9).toString('base64url');
+}
+
 export function linkPublico(token: string): string {
   const base = (process.env.PUBLIC_API_URL || 'https://api.trackgo.site').replace(/\/$/, '');
-  return `${base}/api/v1/public/historico/${token}`;
+  return `${base}/h/${token}`;
 }
 
 /** Sem associado/empresa no token, `where` com undefined listaria de todos. */
@@ -226,7 +235,7 @@ export class HistoryRequestsService {
         requestedByName:
           params.solicitante.nome ??
           (params.solicitante.origem === 'APP' ? (vehicle.associate?.name ?? null) : null),
-        shareToken: randomBytes(32).toString('base64url'),
+        shareToken: novoTokenDoLink(),
         expiresAt: new Date(geradoEm.getTime() + VALIDADE_LINK_DIAS * 24 * 3600_000),
         rowCount: params.type === 'consolidado' ? report.days.length : report.rows.length,
         pdf: new Uint8Array(pdf),
@@ -297,7 +306,7 @@ export class HistoryRequestsService {
 
   /** Link público: só pelo código aleatório e dentro da validade. */
   async pdfPorToken(token: string) {
-    if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw new NotFoundException('Link inválido');
+    if (!/^[A-Za-z0-9_-]{12,64}$/.test(token)) throw new NotFoundException('Link inválido');
     const r = await this.prisma.historyReportRequest.findFirst({
       where: { shareToken: token },
       select: { pdf: true, plate: true, from: true, expiresAt: true },

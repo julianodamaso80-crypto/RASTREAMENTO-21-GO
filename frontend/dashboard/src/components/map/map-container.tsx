@@ -325,7 +325,14 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
         map.getCanvas().style.cursor = '';
       });
 
+      // O painel de baixo abre e fecha mudando a ALTURA do mapa sem mexer na
+      // janela — o MapLibre só se reajusta sozinho no resize da janela, e sem
+      // isto o mapa ficava esticado/cortado.
+      const observador = new ResizeObserver(() => map.resize());
+      observador.observe(mapContainerRef.current);
+
       return () => {
+        observador.disconnect();
         markersRef.current.forEach((m) => m.remove());
         markersRef.current.clear();
         clusterMarkersRef.current.forEach((m) => m.remove());

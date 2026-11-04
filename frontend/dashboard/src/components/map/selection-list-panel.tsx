@@ -45,6 +45,8 @@ interface Props {
   onEnquadrar: () => void;
   /** Limpa a seleção inteira. */
   onLimpar: () => void;
+  /** Linha cujo detalhe está aberto ao lado — fica realçada. */
+  ativoId?: string | null;
 }
 
 /**
@@ -69,6 +71,7 @@ export function SelectionListPanel({
   onRemover,
   onEnquadrar,
   onLimpar,
+  ativoId,
 }: Props) {
   return (
     <div className="flex h-full w-full flex-col glass-light border-l border-border/40 shadow-xl">
@@ -100,7 +103,10 @@ export function SelectionListPanel({
         {linhas.map((linha, i) => (
           <div
             key={linha.id}
-            className="group border-b border-border/25 px-3 py-2.5 transition-colors hover:bg-muted/20"
+            className={cn(
+              'group border-b border-border/25 px-3 py-2.5 transition-colors hover:bg-muted/20',
+              ativoId === linha.id && 'bg-emerald-500/10 border-l-2 border-l-emerald-400',
+            )}
           >
             <div className="flex items-center gap-2">
               {/* O número que casa com a etiqueta do pino no mapa. */}

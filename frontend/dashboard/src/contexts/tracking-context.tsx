@@ -98,6 +98,14 @@ interface TrackingContextType {
   /** A TAG aberta no mapa. Selecionar TAG solta os veículos, e vice-versa. */
   selectedTagId: string | null;
   selectTag: (id: string | null) => void;
+  /**
+   * TAGs marcadas pela caixinha, na ordem em que foram marcadas. Convivem com
+   * os veículos de `selectedIds`: o associado que tem rastreador E TAG
+   * precisa ver os dois juntos no mapa.
+   */
+  markedTagIds: string[];
+  /** Marca/desmarca a TAG sem soltar os veículos marcados. */
+  toggleTag: (id: string) => void;
   refreshTags: () => Promise<void>;
   // Atualiza um veículo localmente (otimista) — ex.: trocar o tipo (carro/moto)
   // reflete na hora no mapa sem esperar reload.
@@ -140,6 +148,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   const [bleTags, setBleTags] = useState<BleTag[]>([]);
   const [tags, setTags] = useState<TagNoMapa[]>([]);
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const [markedTagIds, setMarkedTagIds] = useState<string[]>([]);
   const veTags = PERFIS_QUE_VEEM_TAG.includes(user?.role ?? '');
 
   const refreshTags = useCallback(async () => {
@@ -629,26 +638,57 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   // Só existe "o veículo selecionado" quando há exatamente um marcado. Com
   // vários, quem manda na tela é o painel de lista — e a câmera não persegue
   // ninguém, senão fica pulando entre carros indo pra lados diferentes.
-  const selectedVehicleId = selectedIds.length === 1 ? selectedIds[0] : null;
+  // TAG marcada junto conta como "vários": aí quem manda é o painel de lista.
+  const selectedVehicleId =
+    selectedIds.length === 1 && markedTagIds.length === 0 ? selectedIds[0] : null;
 
   const selectVehicle = useCallback((id: string | null) => {
     setSelectedIds(id ? [id] : []);
     setSelectedTagId(null);
+    setMarkedTagIds([]);
   }, []);
 
   const selectTag = useCallback((id: string | null) => {
     setSelectedTagId(id);
     setSelectedIds([]);
+    setMarkedTagIds([]);
   }, []);
+
+  // A TAG que estava aberta sozinha vira marcada quando o operador marca mais
+  // alguém — senão ela sumiria justo quando ele quer ver as duas coisas.
+  const tagAbertaViraMarcada = useCallback(() => {
+    if (!selectedTagId) return;
+    const aberta = selectedTagId;
+    setSelectedTagId(null);
+    setMarkedTagIds((m) => (m.includes(aberta) ? m : [aberta, ...m]));
+  }, [selectedTagId]);
 
   // Marcar acrescenta no FIM da lista: a numeração do pino no mapa é a ordem
   // em que o operador marcou, e ela não pode dançar quando ele marca o quarto.
-  const toggleVehicle = useCallback((id: string) => {
-    setSelectedTagId(null);
-    setSelectedIds((atual) =>
-      atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
-    );
-  }, []);
+  const toggleVehicle = useCallback(
+    (id: string) => {
+      tagAbertaViraMarcada();
+      setSelectedIds((atual) =>
+        atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
+      );
+    },
+    [tagAbertaViraMarcada],
+  );
+
+  const toggleTag = useCallback(
+    (id: string) => {
+      if (selectedTagId === id) {
+        // Desmarcar a TAG que estava aberta sozinha = fechar.
+        setSelectedTagId(null);
+        return;
+      }
+      tagAbertaViraMarcada();
+      setMarkedTagIds((atual) =>
+        atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
+      );
+    },
+    [selectedTagId, tagAbertaViraMarcada],
+  );
 
   // Saiu do mapa pra outra aba: na volta a lista começa limpa, sem a busca
   // nem os marcados de antes. Só na SAÍDA de /mapa — a busca do topo grava o
@@ -658,6 +698,7 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (rotaAnterior.current === '/mapa' && pathname !== '/mapa') {
       setSelectedIds([]);
+      setMarkedTagIds([]);
       setSearchQuery('');
     }
     rotaAnterior.current = pathname;
@@ -704,6 +745,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       filteredTags,
       selectedTagId,
       selectTag,
+      markedTagIds,
+      toggleTag,
       refreshTags,
       updateVehicleLocal,
     }),
@@ -732,6 +775,8 @@ export function TrackingProvider({ children }: { children: ReactNode }) {
       filteredTags,
       selectedTagId,
       selectTag,
+      markedTagIds,
+      toggleTag,
       refreshTags,
       updateVehicleLocal,
     ],

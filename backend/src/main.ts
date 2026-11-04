@@ -40,6 +40,7 @@ async function bootstrap() {
       'exclusao-dados',
       'exclusao',
       'delete-account',
+      'h/:token',
     ],
   });
 
