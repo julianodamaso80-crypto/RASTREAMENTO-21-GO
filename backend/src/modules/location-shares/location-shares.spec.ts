@@ -90,7 +90,7 @@ describe('LocationSharesService', () => {
     const antes = Date.now();
     const r = await s.criar(TENANT, VEICULO, 24, { origem: 'PAINEL', nome: 'Op' });
     const data = prisma.locationShare.create.mock.calls[0][0].data;
-    expect(data.token).toMatch(/^[A-Za-z0-9_-]{12}$/);
+    expect(data.token).toMatch(/^[A-Za-z0-9_-]{8}$/);
     expect(data.expiresAt.getTime() - antes).toBeGreaterThanOrEqual(24 * 3_600_000 - 1000);
     expect(r.url).toBe(linkDaLocalizacao(data.token));
     expect(r.active).toBe(true);

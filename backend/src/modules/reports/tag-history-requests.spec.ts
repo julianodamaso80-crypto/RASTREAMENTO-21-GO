@@ -121,7 +121,7 @@ describe('TagHistoryRequestsService', () => {
       rowCount: 1,
     });
     expect(Buffer.from(dados.pdf).subarray(0, 4).toString()).toBe('%PDF');
-    expect(item.url).toMatch(/^https:\/\/api\.trackgo\.site\/h\/[A-Za-z0-9_-]{12}$/);
+    expect(item.url).toMatch(/^https:\/\/trackgo\.site\/h\/[A-Za-z0-9_-]{8}$/);
     expect(item.expired).toBe(false);
   });
 

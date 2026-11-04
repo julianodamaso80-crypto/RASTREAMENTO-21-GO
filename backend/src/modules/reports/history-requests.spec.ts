@@ -161,8 +161,8 @@ describe('HistoryRequestsService', () => {
     });
     const data = prisma.historyReportRequest.create.mock.calls[0][0].data;
     expect(Buffer.from(data.pdf).subarray(0, 4).toString()).toBe('%PDF');
-    expect(data.shareToken).toMatch(/^[A-Za-z0-9_-]{12}$/);
-    expect(item.url).toBe(`https://api.trackgo.site/h/${data.shareToken}`);
+    expect(data.shareToken).toMatch(/^[A-Za-z0-9_-]{8}$/);
+    expect(item.url).toBe(`https://trackgo.site/h/${data.shareToken}`);
     expect(data.expiresAt.getTime() - data.createdAt.getTime()).toBe(90 * 24 * 3600_000);
     expect(item.url).toBe(linkPublico(data.shareToken));
     expect(item.requestedByName).toBe('Operador');

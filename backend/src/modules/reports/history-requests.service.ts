@@ -62,16 +62,18 @@ type Resumo = {
 };
 
 /**
- * O link vai colado no WhatsApp e impresso: precisa caber numa linha.
- * 9 bytes aleatórios = 12 caracteres (72 bits), impossível de adivinhar
- * nos 90 dias de validade. Links antigos (43 caracteres) seguem abrindo.
+ * O link vai colado no WhatsApp e impresso: o mais curto possível.
+ * 6 bytes aleatórios = 8 caracteres (48 bits, ~280 trilhões de combinações),
+ * inviável de adivinhar com o limite de requisições. Links antigos
+ * (12 e 43 caracteres) seguem abrindo.
  */
 export function novoTokenDoLink(): string {
-  return randomBytes(9).toString('base64url');
+  return randomBytes(6).toString('base64url');
 }
 
 export function linkPublico(token: string): string {
-  const base = (process.env.PUBLIC_API_URL || 'https://api.trackgo.site').replace(/\/$/, '');
+  // Domínio do site (mais curto que api.); trackgo.site/h/ redireciona pro PDF.
+  const base = (process.env.PUBLIC_SITE_URL || 'https://trackgo.site').replace(/\/$/, '');
   return `${base}/h/${token}`;
 }
 
@@ -306,7 +308,7 @@ export class HistoryRequestsService {
 
   /** Link público: só pelo código aleatório e dentro da validade. */
   async pdfPorToken(token: string) {
-    if (!/^[A-Za-z0-9_-]{12,64}$/.test(token)) throw new NotFoundException('Link inválido');
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) throw new NotFoundException('Link inválido');
     const r = await this.prisma.historyReportRequest.findFirst({
       where: { shareToken: token },
       select: { pdf: true, plate: true, from: true, expiresAt: true },
