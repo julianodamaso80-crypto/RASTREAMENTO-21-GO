@@ -343,6 +343,11 @@ function DeviceRow({ device, onClick }: { device: Device; onClick: () => void })
               <div>
                 <span className="text-amber-500 text-xs font-medium">Sem placa</span>
                 <p className="text-xs text-muted-foreground font-mono">Chassi {device.vehicle.plate}</p>
+                {(device.vehicle.brand || device.vehicle.model) && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {[device.vehicle.brand, device.vehicle.model].filter(Boolean).join(' ')}
+                  </p>
+                )}
               </div>
             ) : (
               <div>
