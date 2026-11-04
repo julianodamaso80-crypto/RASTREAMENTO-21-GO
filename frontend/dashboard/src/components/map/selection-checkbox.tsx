@@ -35,10 +35,10 @@ export function SelectionCheckbox({ marcado, onToggle, rotulo, className }: Prop
         onToggle();
       }}
       className={cn(
-        'flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors',
+        'flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors',
         marcado
           ? 'border-emerald-400 bg-emerald-500 text-white'
-          : 'border-border/60 bg-background/40 hover:border-emerald-400/70',
+          : 'border-muted-foreground/70 bg-background hover:border-emerald-500',
         className,
       )}
     >
