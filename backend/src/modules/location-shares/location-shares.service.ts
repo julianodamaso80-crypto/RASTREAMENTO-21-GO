@@ -25,7 +25,9 @@ export interface Solicitante {
 
 export function linkDaLocalizacao(token: string): string {
   const base = (process.env.PUBLIC_SITE_URL || 'https://trackgo.site').replace(/\/$/, '');
-  return `${base}/localizacao/${token}`;
+  // Curto porque vai no WhatsApp: trackgo.site/l/<12>. A rota longa
+  // /localizacao/ continua abrindo os links já enviados.
+  return `${base}/l/${token}`;
 }
 
 type Registro = {
@@ -109,7 +111,7 @@ export class LocationSharesService {
         requestedByUserId: s.userId ?? null,
         requestedByAssociateId: s.associateId ?? null,
         requestedByName: s.nome ?? null,
-        token: randomBytes(32).toString('base64url'),
+        token: randomBytes(9).toString('base64url'),
         expiresAt: new Date(Date.now() + horas * 3_600_000),
       },
     });
@@ -158,7 +160,7 @@ export class LocationSharesService {
    * nada de dono, IMEI, local de instalação ou empresa.
    */
   async publico(token: string) {
-    if (!token || token.length < 40 || token.length > 64) {
+    if (!token || token.length < 12 || token.length > 64) {
       throw new NotFoundException('Link não encontrado');
     }
     const r = await this.prisma.locationShare.findFirst({ where: { token } });
