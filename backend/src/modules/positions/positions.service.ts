@@ -152,7 +152,8 @@ export class PositionsService {
     let total = 0;
 
     try {
-      for (let volta = 0; volta < 100; volta++) {
+      // Entram ~1,5 milhão de posições por dia (nov/2026); 100 voltas (1 milhão) ficava para trás.
+      for (let volta = 0; volta < 1000; volta++) {
         const removidas = await this.prisma.$executeRaw`
           DELETE FROM positions
           WHERE ctid IN (
