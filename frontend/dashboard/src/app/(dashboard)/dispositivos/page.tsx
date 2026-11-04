@@ -185,6 +185,17 @@ export default function DispositivosPage() {
         </Card>
       ) : (
         <div className="space-y-2">
+          <div className="hidden sm:flex items-center gap-4 px-3 text-xs font-medium uppercase text-muted-foreground">
+            <div className="w-5 shrink-0" />
+            <div className="flex-1 grid grid-cols-5 gap-4">
+              <span>IMEI</span>
+              <span>Status</span>
+              <span>Placa do veículo</span>
+              <span>Chip</span>
+              <span>Última conexão</span>
+            </div>
+            <div className="w-4 shrink-0" />
+          </div>
           {devices.map((device) => (
             <DeviceRow
               key={device.id}
@@ -327,7 +338,22 @@ function DeviceRow({ device, onClick }: { device: Device; onClick: () => void })
 
         <div className="text-sm">
           {device.vehicle ? (
-            <span className="text-foreground font-medium">{device.vehicle.plate}</span>
+            // Zero km sem placa no SGA entra com o chassi (17 caracteres) no campo placa.
+            device.vehicle.plate.length === 17 ? (
+              <div>
+                <span className="text-amber-500 text-xs font-medium">Sem placa</span>
+                <p className="text-xs text-muted-foreground font-mono">Chassi {device.vehicle.plate}</p>
+              </div>
+            ) : (
+              <div>
+                <span className="text-foreground font-medium">{device.vehicle.plate}</span>
+                {(device.vehicle.brand || device.vehicle.model) && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {[device.vehicle.brand, device.vehicle.model].filter(Boolean).join(' ')}
+                  </p>
+                )}
+              </div>
+            )
           ) : (
             <span className="text-muted-foreground text-xs">Não vinculado</span>
           )}
