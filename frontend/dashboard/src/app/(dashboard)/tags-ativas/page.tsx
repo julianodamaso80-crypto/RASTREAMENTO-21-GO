@@ -31,6 +31,7 @@ import {
 } from '@/lib/utils';
 import type { ActiveTagRow, ActiveTagsResponse } from '@/types/ble-tag';
 import { useBuscaDaUrl } from '@/lib/use-busca-url';
+import { BateriaTag } from '@/components/ble-tags/bateria-tag';
 
 const TAMANHOS_PAGINA = [20, 60, 140, 200];
 
@@ -430,6 +431,12 @@ function CardTag({
                   {espelho.modelo ?? 'TAG'}
                 </span>{' '}
                 {espelho.identificador}
+                {espelho.bateria && (
+                  <>
+                    {' · '}
+                    <BateriaTag nivel={espelho.bateria} compacto className="font-sans" />
+                  </>
+                )}
               </span>
             ) : (
               'TAG não identificada — sem número no 21 GO nem no espelho'

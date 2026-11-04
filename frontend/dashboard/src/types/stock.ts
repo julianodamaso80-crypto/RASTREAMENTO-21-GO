@@ -1,3 +1,5 @@
+import type { NivelBateria } from '@/lib/bateria-tag';
+
 export interface StockItem {
   id: string;
   imei: string;
@@ -27,6 +29,7 @@ export interface StockItem {
     lng: number;
     accuracyM: number | null;
     seenAt: string;
+    bateria?: NivelBateria | null;
   } | null;
   createdAt: string;
   updatedAt: string;
@@ -74,6 +77,8 @@ export interface StockConnectivityItem {
   comunicando: boolean;
   gpsOk: boolean;
   lastUpdate: string | null;
+  /** Tensão da última posição; nula quando o aparelho não mandou. */
+  volts?: number | null;
 }
 
 export interface StockConnectivity {
@@ -107,6 +112,8 @@ export interface StockMapPoint {
   tipo?: 'RASTREADOR' | 'TAG';
   /** Raio de confiança do avistamento da TAG, em metros. */
   precisaoM?: number | null;
+  /** Bateria da TAG (último avistamento que a informou). */
+  bateriaTag?: NivelBateria | null;
   iccid: string | null;
   line: string | null;
   operator: string | null;

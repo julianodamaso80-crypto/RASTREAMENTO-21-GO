@@ -95,6 +95,7 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       longitude: -43.3,
       accuracyM: 40,
       seenAt: AGORA,
+      bateria: null,
       outrosSeriais: [],
       outrasTags: [],
       comRastreador: false,

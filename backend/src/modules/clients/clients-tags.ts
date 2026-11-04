@@ -3,6 +3,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { decidirTipoVeiculo } from '../hinova/tipo-veiculo';
 import { assessComms } from './asset-comms';
 import { CacheCompartilhado } from '../../common/cache/cache-compartilhado';
+import { nivelBateria, type NivelBateria } from './bateria-tag';
 
 /**
  * TAG em Clientes Ativos — spec 2026-09-16 §9.
@@ -206,6 +207,8 @@ export interface PosicaoTag {
   lng: number;
   accuracyM: number | null;
   seenAt: Date;
+  /** Bateria do último avistamento que a informou; nulo se a rede nunca disse. */
+  bateria: NivelBateria | null;
 }
 
 /** Última posição de cada TAG, numa consulta (índice tenant+serial+seen_at). */
@@ -235,9 +238,16 @@ async function consultarUltimasPosicoes(
   // medidos em produção em 30/09/2026, contra 0,26 s desta forma. Era isso que
   // deixava o mapa e a busca lentos (a lista de TAGs recarrega a cada minuto).
   const linhas = await prisma.$queryRaw<
-    Array<{ serial_number: string; latitude: number; longitude: number; accuracy_m: number | null; seen_at: Date }>
+    Array<{
+      serial_number: string;
+      latitude: number;
+      longitude: number;
+      accuracy_m: number | null;
+      seen_at: Date;
+      status_byte: number | null;
+    }>
   >(Prisma.sql`
-    SELECT s.serial_number, p.latitude, p.longitude, p.accuracy_m, p.seen_at
+    SELECT s.serial_number, p.latitude, p.longitude, p.accuracy_m, p.seen_at, b.status_byte
       FROM unnest(${[...new Set(seriais)]}::text[]) AS s(serial_number)
       CROSS JOIN LATERAL (
         SELECT latitude, longitude, accuracy_m, seen_at
@@ -246,11 +256,29 @@ async function consultarUltimasPosicoes(
            AND tp.serial_number = s.serial_number
          ORDER BY tp.seen_at DESC
          LIMIT 1
-      ) p`);
+      ) p
+      -- Bateria: o avistamento mais novo que a trouxe (os anteriores a 04/11
+      -- não têm o byte). Só olha 3 dias pra não descer o índice inteiro.
+      LEFT JOIN LATERAL (
+        SELECT tp.status_byte
+          FROM tag_positions tp
+         WHERE tp.tenant_id = ${tenantId}::uuid
+           AND tp.serial_number = s.serial_number
+           AND tp.seen_at > p.seen_at - interval '3 days'
+           AND tp.status_byte IS NOT NULL
+         ORDER BY tp.seen_at DESC
+         LIMIT 1
+      ) b ON true`);
   return new Map(
     linhas.map((l) => [
       l.serial_number,
-      { lat: l.latitude, lng: l.longitude, accuracyM: l.accuracy_m, seenAt: l.seen_at },
+      {
+        lat: l.latitude,
+        lng: l.longitude,
+        accuracyM: l.accuracy_m,
+        seenAt: l.seen_at,
+        bateria: nivelBateria(l.status_byte),
+      },
     ]),
   );
 }
@@ -265,6 +293,7 @@ export function resumoTag(v: VinculoTag, pos: PosicaoTag | undefined) {
     lat: pos?.lat ?? null,
     lng: pos?.lng ?? null,
     accuracyM: pos?.accuracyM ?? null,
+    bateria: pos?.bateria ?? null,
   };
 }
 
@@ -475,6 +504,7 @@ export function tagNoMapa(
     longitude: pos?.lng ?? null,
     accuracyM: pos?.accuracyM ?? null,
     seenAt: pos?.seenAt ?? null,
+    bateria: pos?.bateria ?? null,
   };
 }
 

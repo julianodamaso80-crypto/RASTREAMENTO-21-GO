@@ -1,3 +1,5 @@
+import type { NivelBateria } from '@/lib/bateria-tag';
+
 /**
  * TAG de cliente no Mapa — um veículo que só tem TAG (sem rastreador nosso).
  *
@@ -21,6 +23,7 @@ export interface TagNoMapa {
   accuracyM: number | null;
   /** Quando a TAG foi vista pela última vez (ISO). */
   seenAt: string | null;
+  bateria?: NivelBateria | null;
   /**
    * Quando o coletor perguntou à rede Find My pela última vez (ISO), por
    * qualquer TAG. Separa "ninguém viu a TAG" de "ninguém perguntou".

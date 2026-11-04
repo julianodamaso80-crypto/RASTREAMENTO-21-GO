@@ -2,6 +2,7 @@ import type { IgnicaoLeitura, Vehicle, VehicleWithTracking } from '@/types/vehic
 import type { TraccarDevice, TraccarPosition } from '@/types/traccar';
 import { getDisplayStatus, estaAndando, estaConectado } from '@/lib/utils';
 import { proximaTransicaoEm } from '@/lib/status-transicoes';
+import { extrairVolts } from '@/lib/volts';
 
 /** Linha do painel: veículo + device + posição. O status depende de Date.now(). */
 export function derivarLinha(
@@ -52,6 +53,7 @@ export function derivarLinha(
     ignicaoLeitura,
     moving,
     satellites: (position?.attributes?.sat as number) ?? 0,
+    volts: extrairVolts(position?.attributes),
   };
 }
 

@@ -13,6 +13,7 @@ import {
   UserCheck,
   MapPin,
   SignalHigh,
+  Zap,
   HardHat,
   ListPlus,
   Wrench,
@@ -47,7 +48,6 @@ import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog'
 import { AssignTechnicianDialog } from '@/components/stock/assign-technician-dialog';
 import { BulkLinkDialog } from '@/components/stock/bulk-link-dialog';
 import { InstallCheckSheet } from '@/components/stock/install-check-sheet';
-import { InstallCheckBatchSheet } from '@/components/stock/install-check-batch-sheet';
 import type {
   StockConnectivity,
   StockConnectivityItem,
@@ -57,6 +57,7 @@ import type {
 import { useBuscaDaUrl } from '@/lib/use-busca-url';
 import { haQuantoTempo } from '@/components/stock/stock-format';
 import { ITENS_POR_VEZ, janelaDaLista } from '@/lib/stock-list-window';
+import { BateriaTag } from '@/components/ble-tags/bateria-tag';
 
 // Cor do badge por status (case-insensitive, com fallback neutro).
 function statusColor(status: string | null): string {
@@ -95,14 +96,14 @@ export default function EstoquePage() {
   const [tipoFilter, setTipoFilter] = useState<'' | 'RASTREADOR' | 'TAG'>('');
   const [associItem, setAssociItem] = useState<StockItem | null>(null);
   const [associOpen, setAssociOpen] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Marcados guardam o item inteiro: buscar outro IMEI troca a lista da tela,
+  // e o que já estava marcado não pode sumir junto. Só sai ao desmarcar,
+  // limpar ou depois de usado numa ação.
+  const [selected, setSelected] = useState<Map<string, StockItem>>(new Map());
   const [assignItems, setAssignItems] = useState<StockItem[]>([]);
   const [assignOpen, setAssignOpen] = useState(false);
   const [checkItem, setCheckItem] = useState<StockItem | null>(null);
   const [checkOpen, setCheckOpen] = useState(false);
-  // Conferência em pacote: vários técnicos girando a chave ao mesmo tempo.
-  const [batchItems, setBatchItems] = useState<StockItem[]>([]);
-  const [batchOpen, setBatchOpen] = useState(false);
   const [conn, setConn] = useState<StockConnectivity | null>(null);
   const [totalFiltrado, setTotalFiltrado] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -143,7 +144,18 @@ export default function EstoquePage() {
       // Rastreador primeiro, TAG depois; dentro de cada um, a ordem da API.
       setItems([...res.data].sort((a, b) => Number(a.kind === 'TAG') - Number(b.kind === 'TAG')));
       setTotalFiltrado(res.meta?.total ?? res.data.length);
-      setSelected(new Set()); // recarregou a lista, seleção antiga não vale mais
+      // Recarga troca os dados dos marcados que ainda estão na lista pelos
+      // atuais; os que a busca escondeu continuam marcados como estavam.
+      const frescos = new Map(res.data.map((i) => [i.id, i]));
+      setSelected((prev) => {
+        if (prev.size === 0) return prev;
+        const next = new Map(prev);
+        for (const id of prev.keys()) {
+          const novo = frescos.get(id);
+          if (novo) next.set(id, novo);
+        }
+        return next;
+      });
     } catch {
       if (carga === ultimaCarga.current) toast.error('Erro ao carregar estoque');
     } finally {
@@ -223,34 +235,36 @@ export default function EstoquePage() {
     setCheckOpen(true);
   };
 
-  // Abre o mapa do estoque já centrado neste rastreador — é onde o operador vê
-  // onde ele está (pode estar com o técnico a caminho), voltagem e ignição.
-  const abrirNoMapa = (item: StockItem) => {
-    router.push(`/estoque/mapa?imei=${encodeURIComponent(item.imei)}`);
+  // Uma função só: abre o mapa com os pedidos e, ao lado, o teste de
+  // instalação dos rastreadores (TAG só aparece no mapa, não tem o que testar).
+  const abrirNoMapaETestar = (lista: StockItem[]) => {
+    const imeis = lista.map((i) => i.imei).join(',');
+    router.push(`/estoque/mapa?imeis=${encodeURIComponent(imeis)}&testar=1`);
   };
+  const abrirNoMapa = (item: StockItem) => abrirNoMapaETestar([item]);
 
-  const toggleOne = (id: string) => {
+  const toggleOne = (item: StockItem) => {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const next = new Map(prev);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.set(item.id, item);
       return next;
     });
   };
 
+  // "Todos" vale para a lista que está na tela; marcados de buscas anteriores
+  // ficam como estão.
+  const todosDaTelaMarcados = items.length > 0 && items.every((i) => selected.has(i.id));
   const toggleAll = () => {
-    setSelected((prev) =>
-      prev.size === items.length ? new Set() : new Set(items.map((i) => i.id)),
-    );
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (todosDaTelaMarcados) for (const i of items) next.delete(i.id);
+      else for (const i of items) next.set(i.id, i);
+      return next;
+    });
   };
 
-  const selectedItems = items.filter((i) => selected.has(i.id));
-
-  // O mapa abre só com os marcados — não o estoque inteiro com um em foco.
-  const abrirSelecionadosNoMapa = () => {
-    const imeis = selectedItems.map((i) => i.imei).join(',');
-    router.push(`/estoque/mapa?imeis=${encodeURIComponent(imeis)}`);
-  };
+  const selectedItems = [...selected.values()];
 
   // Liga/desliga de bancada: testa o relé antes de o rastreador ter placa.
   // Quem decide se pode (conectado ou não) é o backend; aqui só confirma.
@@ -304,6 +318,7 @@ export default function EstoquePage() {
     try {
       const res = await stockApi.unassign(comTecnico.map((i) => i.id));
       toast.success(`${res.ok} equipamento(s) devolvido(s) ao estoque livre`);
+      setSelected(new Map());
       await loadStock();
     } catch {
       toast.error('Erro ao cancelar a reserva');
@@ -532,7 +547,7 @@ export default function EstoquePage() {
                       type="checkbox"
                       aria-label="Selecionar todos"
                       className="h-4 w-4 cursor-pointer accent-brand-orange-500"
-                      checked={items.length > 0 && selected.size === items.length}
+                      checked={todosDaTelaMarcados}
                       onChange={toggleAll}
                     />
                   </th>
@@ -564,7 +579,7 @@ export default function EstoquePage() {
                         aria-label={`Selecionar ${item.imei}`}
                         className="h-4 w-4 cursor-pointer accent-brand-orange-500"
                         checked={selected.has(item.id)}
-                        onChange={() => toggleOne(item.id)}
+                        onChange={() => toggleOne(item)}
                       />
                     </td>
                   )}
@@ -615,13 +630,27 @@ export default function EstoquePage() {
                   </td>
                   <td className="px-3 py-2">
                     {item.kind === 'TAG' ? (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="flex flex-col text-xs text-muted-foreground">
                         {item.tagPosition
                           ? `vista ${formatRelativeTime(item.tagPosition.seenAt)}`
                           : 'sem posição'}
+                        {item.tagPosition && (
+                          <BateriaTag nivel={item.tagPosition.bateria} compacto className="text-[11px]" />
+                        )}
                       </span>
                     ) : (
-                      <BadgeConexao estado={conn?.statuses[item.imei]} />
+                      <div className="flex flex-col items-start gap-0.5">
+                        <BadgeConexao estado={conn?.statuses[item.imei]} />
+                        {conn?.statuses[item.imei]?.volts != null && (
+                          <span
+                            className="flex items-center gap-0.5 text-[11px] text-muted-foreground"
+                            title="Tensão da bateria do veículo na última posição"
+                          >
+                            <Zap className="h-3 w-3" />
+                            {conn.statuses[item.imei].volts!.toFixed(1).replace('.', ',')} V
+                          </span>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -661,7 +690,7 @@ export default function EstoquePage() {
                           onClick={() => abrirNoMapa(item)}
                         >
                           <MapPin className="h-3.5 w-3.5 mr-1" />
-                          Abrir no mapa
+                          {item.kind === 'TAG' ? 'Abrir no mapa' : 'Abrir no mapa e testar'}
                         </Button>
                         <Button
                           size="sm"
@@ -716,27 +745,20 @@ export default function EstoquePage() {
             {selected.size} equipamento(s) selecionado(s)
           </span>
           <div className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Map())}>
               Limpar
             </Button>
             <Button size="sm" variant="outline" onClick={handleUnassign}>
               <Ban className="h-4 w-4 mr-1" />
               Cancelar reserva
             </Button>
-            <Button size="sm" variant="outline" onClick={abrirSelecionadosNoMapa}>
-              <MapPin className="h-4 w-4 mr-1" />
-              Abrir no mapa
-            </Button>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => {
-                setBatchItems(selectedItems);
-                setBatchOpen(true);
-              }}
+              onClick={() => abrirNoMapaETestar(selectedItems)}
             >
-              <SignalHigh className="h-4 w-4 mr-1" />
-              Testar instalação
+              <MapPin className="h-4 w-4 mr-1" />
+              Abrir no mapa e testar
             </Button>
             <Button size="sm" onClick={() => openAssign(selectedItems)}>
               <HardHat className="h-4 w-4 mr-1" />
@@ -750,7 +772,10 @@ export default function EstoquePage() {
         items={assignItems}
         open={assignOpen}
         onOpenChange={setAssignOpen}
-        onAssigned={() => Promise.all([loadStock(), loadStats()])}
+        onAssigned={() => {
+          setSelected(new Map());
+          return Promise.all([loadStock(), loadStats()]);
+        }}
       />
 
       <BulkLinkDialog
@@ -774,12 +799,6 @@ export default function EstoquePage() {
         onValidated={() => Promise.all([loadStock(), loadConnectivity()])}
       />
 
-      <InstallCheckBatchSheet
-        items={batchItems}
-        open={batchOpen}
-        onOpenChange={setBatchOpen}
-        onValidated={() => void loadConnectivity()}
-      />
     </div>
   );
 }

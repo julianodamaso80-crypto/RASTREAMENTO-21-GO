@@ -603,6 +603,8 @@ interface HandshakePayload {
 const ATRIBUTOS_LISTA_BRANCA = [
   'ignition',
   'power',
+  // Tensão do carro no gt06/J16 (chega em pacote de status, sem fix).
+  'adc1',
   'charge',
   'blocked',
   'batteryLevel',

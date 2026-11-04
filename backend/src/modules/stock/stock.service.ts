@@ -1,3 +1,4 @@
+import type { NivelBateria } from '../clients/bateria-tag';
 import {
   BadRequestException,
   ForbiddenException,
@@ -61,6 +62,7 @@ export interface PosicaoDeTag {
   lng: number;
   accuracyM: number | null;
   seenAt: Date;
+  bateria: NivelBateria | null;
 }
 
 export type StockTestCommandResult = {

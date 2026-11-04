@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Satellite,
   Search,
+  Signal,
   Target,
   Zap,
 } from 'lucide-react';
@@ -27,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { AssociateStockDialog } from '@/components/stock/associate-stock-dialog';
 import { InstallCheckSheet } from '@/components/stock/install-check-sheet';
+import { InstallCheckBatchSheet } from '@/components/stock/install-check-batch-sheet';
 import {
   badgeConexao,
   haQuantoTempo,
@@ -42,6 +44,7 @@ import { useReverseGeocodeMany } from '@/hooks/use-reverse-geocode-many';
 import { corDaConexao } from '@/components/stock/stock-map-container';
 import type { StockConexao, StockMapPoint } from '@/types/stock';
 import type { StockMapRef } from '@/components/stock/stock-map-container';
+import { BateriaTag } from '@/components/ble-tags/bateria-tag';
 
 const StockMap = dynamic(
   () => import('@/components/stock/stock-map-container'),
@@ -72,6 +75,11 @@ export default function EstoqueMapaPage() {
       .filter(Boolean),
   );
   const recorte = imeisDaUrl.length > 0;
+  // "Abrir no mapa e testar": o teste de instalação dos marcados fica aberto
+  // ao lado do mapa, não num passo separado.
+  const [testando, setTestando] = useState(
+    () => recorte && params.get('testar') === '1',
+  );
 
   const [pontos, setPontos] = useState<StockMapPoint[]>([]);
   const [indisponivel, setIndisponivel] = useState(false);
@@ -200,6 +208,7 @@ export default function EstoqueMapaPage() {
     setSelecionadosIds([]);
     setDetalheId(null);
     setImeisDaUrl([]);
+    setTestando(false);
     window.history.replaceState(null, '', '/estoque/mapa');
   }, []);
 
@@ -273,6 +282,12 @@ export default function EstoqueMapaPage() {
   const selecionado = varios
     ? (pontos.find((p) => p.id === detalheId) ?? null)
     : (marcados[0] ?? null);
+  // TAG não fala com o servidor GPS: não tem o que testar nela.
+  const paraTestar = useMemo(
+    () => visiveis.filter((p) => p.tipo !== 'TAG').map((p) => ({ id: p.id, imei: p.imei })),
+    [visiveis],
+  );
+  const testeAberto = testando && paraTestar.length > 0;
 
   const enquadrarMarcados = useCallback(() => {
     const alvos = marcados
@@ -364,6 +379,18 @@ export default function EstoqueMapaPage() {
           {recorte ? 'Ver todo o estoque' : 'Ver todos'}
         </Button>
 
+        {recorte && !testeAberto && paraTestar.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="absolute bottom-[8.5rem] right-2 z-10 h-8 gap-1 bg-background/90 text-xs backdrop-blur"
+            onClick={() => setTestando(true)}
+          >
+            <Signal className="h-3.5 w-3.5" />
+            Testar instalação
+          </Button>
+        )}
+
         {/* Abaixo de lg a aside com a lista desaparece — este botão + gaveta é
             a única forma de buscar/listar o estoque no celular. */}
         <button
@@ -380,6 +407,18 @@ export default function EstoqueMapaPage() {
         {/* Vários marcados: a localização escrita de cada um. O detalhe
             completo de um item abre POR CIMA desta lista e, ao fechar, o
             conjunto continua marcado. */}
+        {testeAberto && (
+          <div className="absolute right-0 top-0 z-30 h-full w-full max-w-[420px] border-l shadow-xl">
+            <InstallCheckBatchSheet
+              embutido
+              items={paraTestar}
+              open={testeAberto}
+              onOpenChange={(o) => !o && setTestando(false)}
+              onValidated={() => void carregar(false)}
+            />
+          </div>
+        )}
+
         {varios && !selecionado && (
           <div className="absolute right-0 top-0 z-20 h-full w-full max-w-[360px]">
             <SelectionListPanel
@@ -766,12 +805,16 @@ function CardEstoque({
       )}
 
       {ehTag ? (
-        <div className="mt-1.5 grid grid-cols-2 gap-1 border-t pt-1.5 text-center">
+        <div className="mt-1.5 grid grid-cols-3 gap-1 border-t pt-1.5 text-center">
           <Mini
             icone={Bluetooth}
             rotulo="Rede"
             valor="Find My"
           />
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[9px] text-muted-foreground">Bateria</span>
+            <BateriaTag nivel={ponto.bateriaTag} compacto className="text-[10px]" />
+          </div>
           <Mini
             icone={Target}
             rotulo="Precisão"

@@ -5,6 +5,7 @@ import { cn, formatRelativeTime } from '@/lib/utils';
 import { useTracking } from '@/contexts/tracking-context';
 import { SelectionCheckbox } from '@/components/map/selection-checkbox';
 import type { TagNoMapa } from '@/types/tag-map';
+import { BateriaTag } from '@/components/ble-tags/bateria-tag';
 
 /** Cor da TAG no mapa e na lista — a mesma do mapa do Estoque. */
 export const COR_TAG = '#a78bfa';
@@ -60,7 +61,8 @@ export function TagListItem({ tag }: { tag: TagNoMapa }) {
         </div>
         <div className="flex items-center justify-between mt-1 ml-5 gap-2">
           <span className="text-xs text-muted-foreground truncate">{tag.model ?? ''}</span>
-          <span className="text-xs text-muted-foreground shrink-0">
+          <span className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+            {tag.bateria && <BateriaTag nivel={tag.bateria} compacto />}
             {tag.seenAt ? `vista ${formatRelativeTime(tag.seenAt)}` : 'ainda não vista'}
           </span>
         </div>

@@ -87,5 +87,30 @@ WITH inseridas AS (
 SELECT count(*) FROM inseridas;" 2>>"$LOG" | tail -1 | tr -d ' ')
 
 docker exec "$cid" rm -f /tmp/pos.csv 2>/dev/null
+
+# 4. Bateria: o coletar.py escreve, ao lado, posicoes-status.csv (número,
+#    visto_em, byte de status; bits 6-7 = bateria). Só preenche onde ainda
+#    está vazio, e só os últimos 8 dias (a janela que a Apple devolve).
+if [ -s "$PASTA/posicoes-status.csv" ]; then
+  docker cp "$PASTA/posicoes-status.csv" "$cid":/tmp/st.csv >/dev/null 2>&1
+  baterias=$(docker exec "$cid" psql -U postgres -d rastreamento21go -t -A -c "
+CREATE TEMP TABLE st(sn text, visto text, status text);
+COPY st FROM '/tmp/st.csv' WITH (FORMAT csv);
+WITH alvo AS (
+  SELECT DISTINCT ON (sn, visto) sn, visto::timestamp AS visto, nullif(status,'')::smallint AS status
+    FROM st WHERE nullif(status,'') IS NOT NULL
+), feitas AS (
+  UPDATE tag_positions tp SET status_byte = a.status
+    FROM alvo a
+   WHERE tp.tenant_id = (SELECT id FROM tenants WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1)
+     AND tp.serial_number = a.sn AND tp.seen_at = a.visto
+     AND tp.status_byte IS NULL
+     AND tp.seen_at > now() - interval '8 days'
+  RETURNING 1
+)
+SELECT count(*) FROM feitas;" 2>>"$LOG" | tail -1 | tr -d ' ')
+  docker exec "$cid" rm -f /tmp/st.csv 2>/dev/null
+  registrar "bateria: $baterias avistamentos com status"
+fi
 lidas=$(wc -l < "$PASTA/posicoes.csv")
 registrar "fim — $lidas avistamentos lidos, $gravadas novos gravados"

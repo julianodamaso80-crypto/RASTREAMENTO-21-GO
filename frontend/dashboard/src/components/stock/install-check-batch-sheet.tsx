@@ -33,6 +33,9 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onValidated: () => void;
+  /** Ao lado do mapa (Estoque → Abrir no mapa e testar): painel fixo, sem
+   *  fundo escuro por cima — o operador vê o pino e o teste ao mesmo tempo. */
+  embutido?: boolean;
 };
 
 /** Registro de giro de chave por equipamento — a prova do fio de ignição. */
@@ -65,6 +68,7 @@ export function InstallCheckBatchSheet({
   open,
   onOpenChange,
   onValidated,
+  embutido = false,
 }: Props) {
   const [saude, setSaude] = useState<Record<string, DeviceHealth>>({});
   const [giros, setGiros] = useState<Record<string, Giro[]>>({});
@@ -145,20 +149,7 @@ export function InstallCheckBatchSheet({
   const prontos = items.filter((i) => saude[i.id]?.checkOk).length;
   const decididosCount = Object.keys(decididos).length;
 
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="data-[side=right]:sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Signal className="h-5 w-5 text-brand-orange-500" />
-            Conferência em pacote — {items.length} equipamento(s)
-          </SheetTitle>
-          <SheetDescription>
-            Todos atualizam sozinhos a cada 10 segundos. Peça a cada técnico pra
-            girar a chave: o card dele mostra a mudança na hora.
-          </SheetDescription>
-        </SheetHeader>
-
+  const corpo = (
         <div className="flex flex-col gap-3 px-4 pb-4">
           {/* Progresso do pacote */}
           <div className="flex items-center justify-between rounded-lg border bg-card/50 px-3 py-2">
@@ -186,7 +177,7 @@ export function InstallCheckBatchSheet({
               Consultando o servidor GPS...
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className={cn('grid gap-3', !embutido && 'sm:grid-cols-2')}>
               {items.map((item) => (
                 <CardPacote
                   key={item.id}
@@ -202,6 +193,50 @@ export function InstallCheckBatchSheet({
             </div>
           )}
         </div>
+  );
+
+  const titulo = (
+    <>
+      <Signal className="h-5 w-5 text-brand-orange-500" />
+      {embutido ? 'Teste de instalação' : 'Conferência em pacote'} — {items.length} equipamento(s)
+    </>
+  );
+  const descricao =
+    'Todos atualizam sozinhos a cada 10 segundos. Peça a cada técnico pra ' +
+    'girar a chave: o card dele mostra a mudança na hora.';
+
+  if (embutido) {
+    if (!open) return null;
+    return (
+      <div className="flex h-full flex-col overflow-y-auto bg-background">
+        <div className="flex items-start gap-2 p-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="flex items-center gap-2 font-semibold">{titulo}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{descricao}</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 shrink-0 p-0"
+            aria-label="Fechar teste"
+            onClick={() => onOpenChange(false)}
+          >
+            <XCircle className="h-4 w-4" />
+          </Button>
+        </div>
+        {corpo}
+      </div>
+    );
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="data-[side=right]:sm:max-w-2xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">{titulo}</SheetTitle>
+          <SheetDescription>{descricao}</SheetDescription>
+        </SheetHeader>
+        {corpo}
       </SheetContent>
     </Sheet>
   );

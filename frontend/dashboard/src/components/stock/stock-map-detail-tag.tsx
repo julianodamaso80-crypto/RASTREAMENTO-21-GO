@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { stockApi } from '@/lib/api';
 import { mensagemDaConsulta } from '@/components/ble-tags/mensagem-consulta-tag';
 import type { StockMapPoint } from '@/types/stock';
+import { BateriaTag } from '@/components/ble-tags/bateria-tag';
 
 /**
  * Painel da TAG no mapa do Estoque.
@@ -156,6 +157,10 @@ export function StockMapDetailTag({ ponto, onClose, onAssociar, onAtualizou }: P
             <span className="font-medium">
               {ponto.precisaoM ? `${Math.round(ponto.precisaoM)} m` : '—'}
             </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3 py-1">
+            <span className="text-muted-foreground">Bateria</span>
+            <BateriaTag nivel={ponto.bateriaTag} />
           </div>
           <div className="flex items-baseline justify-between gap-3 py-1">
             <span className="flex items-center gap-1 text-muted-foreground">

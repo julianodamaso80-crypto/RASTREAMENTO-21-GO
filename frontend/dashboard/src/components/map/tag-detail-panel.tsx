@@ -13,6 +13,7 @@ import { TagHistoricoDialog } from '@/components/map/tag-historico-dialog';
 import { useAuth } from '@/contexts/auth-context';
 import { canSeeInstallLocation } from '@/lib/manageable-routes';
 import type { TagNoMapa } from '@/types/tag-map';
+import { BateriaTag } from '@/components/ble-tags/bateria-tag';
 
 /**
  * Painel da TAG de cliente no Mapa — irmão do painel de TAG do Estoque
@@ -201,6 +202,10 @@ export function TagDetailPanel({
             <span className="font-medium">
               {tag.accuracyM ? `${Math.round(tag.accuracyM)} m` : '—'}
             </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3 py-1">
+            <span className="text-muted-foreground">Bateria</span>
+            <BateriaTag nivel={tag.bateria} />
           </div>
           <div className="flex items-baseline justify-between gap-3 py-1">
             <span className="flex items-center gap-1 text-muted-foreground">

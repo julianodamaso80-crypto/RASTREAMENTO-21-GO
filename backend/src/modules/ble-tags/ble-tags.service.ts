@@ -16,7 +16,8 @@ import { CreateSightingDto } from './dto/create-sighting.dto';
 import { FilterSightingsDto } from './dto/filter-sightings.dto';
 import { decidirModo, ModoPolling, TURBO_MANUAL_H } from './polling-mode';
 import { ehTagRastreavel } from './tag-ativa-regra';
-import { vinculosVisiveis } from '../clients/clients-tags';
+import { ultimasPosicoes, vinculosVisiveis } from '../clients/clients-tags';
+import type { NivelBateria } from '../clients/bateria-tag';
 import {
   segmentar,
   detectarLocaisHabituais,
@@ -407,6 +408,7 @@ export class BleTagsService {
         longitude: number | null;
         seenAt: string | null;
         origem: string;
+        bateria: NivelBateria | null;
       }
     >();
     if (placas.length === 0 || !this.rdvTagModel) return mapa;
@@ -433,8 +435,19 @@ export class BleTagsService {
         longitude: t.lastLng ?? null,
         seenAt: t.seenAt ? new Date(t.seenAt).toISOString() : null,
         origem: t.source ?? 'REDEVEICULOS',
+        bateria: null,
       });
     }
+
+    // Bateria pelo nosso coletor Find My: o espelho guarda o número com zeros
+    // à esquerda, a coleta sem (mesmo casamento do rodar.sh).
+    const serial = (id: string) => id.replace(/^0+/, '');
+    const porSerial = await ultimasPosicoes(
+      this.prisma,
+      tenantId,
+      [...mapa.values()].map((t) => serial(t.identificador)),
+    );
+    for (const t of mapa.values()) t.bateria = porSerial.get(serial(t.identificador))?.bateria ?? null;
     return mapa;
   }
 

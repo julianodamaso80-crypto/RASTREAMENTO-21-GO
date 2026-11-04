@@ -91,4 +91,6 @@ export interface VehicleWithTracking extends Vehicle {
   /** Andando agora: GPS recente (STALE_POSITION_MS) e velocidade acima do ruído. */
   moving: boolean;
   satellites: number;
+  /** Tensão do veículo na última posição; nula quando o rastreador não mede. */
+  volts: number | null;
 }

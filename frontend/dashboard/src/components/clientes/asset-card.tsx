@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { canSeeInstallLocation } from '@/lib/manageable-routes';
 import type { ClientAsset, CommsState } from '@/types/assets';
 import { AssetActionsMenu } from './asset-actions-menu';
+import { BateriaTag } from '@/components/ble-tags/bateria-tag';
 
 /**
  * Um ativo na lista. A informação é a mesma que o operador precisa quando o
@@ -256,6 +257,12 @@ function SeloTag({ tag }: { tag: NonNullable<ClientAsset['tag']> }) {
     >
       <Tag className="h-3 w-3" />
       TAG · {divergente ? 'conferir' : visto}
+      {tag.bateria && (
+        <>
+          {' · '}
+          <BateriaTag nivel={tag.bateria} compacto />
+        </>
+      )}
     </span>
   );
 }

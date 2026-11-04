@@ -1,3 +1,5 @@
+import type { NivelBateria } from '@/lib/bateria-tag';
+
 /**
  * Estado de comunicação do ativo. Calculado no backend (`asset-comms.ts`) pra
  * que a regra que separa "chip vivo" de "veículo localizado" exista num lugar
@@ -68,6 +70,7 @@ export interface ClientAsset {
     lat: number | null;
     lng: number | null;
     accuracyM: number | null;
+    bateria?: NivelBateria | null;
   } | null;
 }
 

@@ -100,6 +100,7 @@ describe('derivarLinha', () => {
       ignicaoLeitura: leitura,
       moving: true,
       satellites: 9,
+      volts: null,
     });
   });
 
@@ -145,6 +146,7 @@ describe('derivarLinha', () => {
       ignicaoLeitura: null,
       moving: false,
       satellites: 0,
+      volts: null,
     });
   });
 

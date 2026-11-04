@@ -1,3 +1,4 @@
+import type { NivelBateria } from '../clients/bateria-tag';
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
@@ -496,6 +497,7 @@ export class StockTraccarService {
           comunicando: false,
           gpsOk: false,
           lastUpdate: null,
+          volts: null,
         };
         continue;
       }
@@ -510,6 +512,7 @@ export class StockTraccarService {
         comunicando: device.comunicando,
         gpsOk: device.gpsOk,
         lastUpdate: device.lastUpdate,
+        volts: device.volts,
       };
     }
 
@@ -749,6 +752,7 @@ export class StockTraccarService {
         // fix de GPS e nunca deve ser lido como tal.
         gpsConfiavel: false,
         precisaoM: p?.accuracyM ?? null,
+        bateriaTag: p?.bateria ?? null,
         ignicao: null,
         velocidade: null,
         direcao: null,
@@ -911,6 +915,7 @@ export class StockTraccarService {
         agora: falandoAgora,
         gpsOk,
         lastUpdate,
+        volts: posicao ? extrairVolts(posicao.attributes ?? {}) : null,
       };
     });
 
@@ -927,6 +932,7 @@ interface DeviceSnapshot {
   agora: boolean;
   gpsOk: boolean;
   lastUpdate: string | null;
+  volts: number | null;
 }
 
 export interface StockConnectivityItem {
@@ -935,6 +941,8 @@ export interface StockConnectivityItem {
   comunicando: boolean;
   gpsOk: boolean;
   lastUpdate: string | null;
+  /** Tensão da última posição; nula quando o aparelho não mandou. */
+  volts: number | null;
 }
 
 export type StockConexao = 'ONLINE' | 'OFFLINE' | 'SLEEP' | 'NUNCA';
@@ -946,6 +954,8 @@ export interface StockMapPoint {
   tipo?: 'RASTREADOR' | 'TAG';
   /** Raio de confiança do avistamento da TAG, em metros. */
   precisaoM?: number | null;
+  /** Bateria da TAG (bits 6-7 do status Find My); nulo se a rede não informou. */
+  bateriaTag?: NivelBateria | null;
   iccid: string | null;
   line: string | null;
   operator: string | null;

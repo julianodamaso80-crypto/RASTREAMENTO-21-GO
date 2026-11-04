@@ -22,6 +22,7 @@ function montar(rows: any[] = [], espelho: any[] = [], veiculos: any[] = []) {
     },
     vehicle: { findMany: jest.fn(() => Promise.resolve(veiculos)) },
     tagLink: { findMany: jest.fn().mockResolvedValue([]) },
+    $queryRaw: jest.fn().mockResolvedValue([]), // bateria (ultimasPosicoes)
     rdvTag: {
       findMany: jest.fn((args) => {
         rdvArgs.push(args);
@@ -105,6 +106,7 @@ describe('BleTagsService.findActive — espelho da TAG', () => {
       longitude: -43.560026,
       seenAt: '2026-04-15T17:13:58.000Z',
       origem: 'REDEVEICULOS',
+      bateria: null,
     });
   });
 
@@ -207,6 +209,7 @@ describe('BleTagsService.findActive — a régua de "ativa"', () => {
       },
       vehicle: { findMany: jest.fn(() => Promise.resolve([])) },
       tagLink: { findMany: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]), // bateria (ultimasPosicoes)
       rdvTag: {
         findMany: jest.fn(({ where }: any) =>
           Promise.resolve(

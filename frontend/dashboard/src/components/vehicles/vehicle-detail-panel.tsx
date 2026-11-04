@@ -16,6 +16,7 @@ import {
   Check,
   Loader2,
   Share2,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { clientsApi, locationSharesApi } from '@/lib/api';
@@ -436,6 +437,15 @@ export function VehicleDetailPanel({
                 <p className="font-bold text-sm">{Math.round(vehicle.course)}°</p>
               </div>
             </div>
+            {vehicle.volts !== null && (
+              <div className="flex items-center gap-2 bg-muted/20 rounded-lg p-2.5">
+                <Zap className="h-4 w-4 text-amber-400" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Voltagem</p>
+                  <p className="font-bold text-sm">{vehicle.volts.toFixed(1).replace('.', ',')} V</p>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>

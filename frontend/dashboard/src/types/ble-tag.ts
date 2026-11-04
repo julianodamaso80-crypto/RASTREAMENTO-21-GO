@@ -1,3 +1,5 @@
+import type { NivelBateria } from '@/lib/bateria-tag';
+
 export interface BleSighting {
   id: string;
   deviceId: string;
@@ -96,6 +98,8 @@ export interface ActiveTagRow {
     longitude: number | null;
     seenAt: string | null;
     origem: string;
+    /** Bateria pela nossa coleta Find My; nulo se a rede não informou. */
+    bateria?: NivelBateria | null;
   } | null;
   /**
    * Última posição do RASTREADOR do veículo (a TAG não reporta sozinha).

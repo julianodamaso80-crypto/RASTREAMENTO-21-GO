@@ -297,6 +297,7 @@ describe('StockTraccarService.mapPoints — cache por tenant', () => {
           endereco: null,
           gpsConfiavel: false,
           precisaoM: 30,
+          bateriaTag: null,
           ignicao: null,
           velocidade: null,
           direcao: null,

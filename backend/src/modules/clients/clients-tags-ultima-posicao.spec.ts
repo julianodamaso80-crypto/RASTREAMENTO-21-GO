@@ -35,6 +35,7 @@ describe('ultimasPosicoes — uma busca por TAG no índice', () => {
           longitude: -43.46588,
           accuracy_m: 36,
           seen_at: new Date('2026-09-30T14:06:00Z'),
+          status_byte: 160,
         },
       ]),
     };
@@ -44,6 +45,7 @@ describe('ultimasPosicoes — uma busca por TAG no índice', () => {
       lng: -43.46588,
       accuracyM: 36,
       seenAt: new Date('2026-09-30T14:06:00Z'),
+      bateria: 'BAIXA',
     });
   });
 

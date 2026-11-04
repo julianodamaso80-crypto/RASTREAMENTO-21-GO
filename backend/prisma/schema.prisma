@@ -1240,6 +1240,10 @@ model TagPosition {
   /// APPLE_FINDMY (coletor próprio) · ESPELHO_RDV (plataforma de origem).
   source String
 
+  /// Byte de status do relatório Find My (bits 6-7 = bateria). Guardado cru:
+  /// o rótulo sai de `nivelBateria`, para recalibrar sem migração.
+  statusByte Int? @map("status_byte") @db.SmallInt
+
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id])
 
