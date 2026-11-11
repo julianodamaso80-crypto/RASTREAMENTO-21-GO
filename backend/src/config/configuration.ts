@@ -95,8 +95,12 @@ export default () => ({
   // Número de disparo da 21 Go (21 98481-6000, WABA "21 Go"). Sem token e
   // phone id o aviso automático de rastreador fica desligado.
   whatsappDisparo: {
-    token: process.env.WHATSAPP_DISPARO_TOKEN,
-    phoneNumberId: process.env.WHATSAPP_DISPARO_PHONE_NUMBER_ID,
+    // Sem variáveis próprias, usa o mesmo número oficial do código de senha
+    // (21 98481-6000): é o único número de disparo da 21 Go.
+    token: process.env.WHATSAPP_DISPARO_TOKEN || process.env.WHATSAPP_META_TOKEN,
+    phoneNumberId:
+      process.env.WHATSAPP_DISPARO_PHONE_NUMBER_ID ||
+      process.env.WHATSAPP_META_PHONE_NUMBER_ID,
     templateInstalado:
       process.env.WHATSAPP_DISPARO_TEMPLATE_INSTALADO || 'rastreador_instalado_21go',
     apiVersion: process.env.WHATSAPP_DISPARO_API_VERSION || 'v24.0',

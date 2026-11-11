@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Length,
   Matches,
@@ -20,7 +21,7 @@ export class ForgotPasswordDto {
 export class ForgotPasswordWhatsappDto {
   @ApiProperty({ example: '(21) 99834-5046' })
   @IsString()
-  @Length(10, 20, { message: 'Informe o WhatsApp com DDD.' })
+  @Length(10, 120, { message: 'Informe o WhatsApp com DDD, o CPF ou o e-mail.' })
   phone!: string;
 }
 
@@ -28,7 +29,7 @@ export class ForgotPasswordWhatsappDto {
 export class ResetPasswordWhatsappDto {
   @ApiProperty({ example: '(21) 99834-5046' })
   @IsString()
-  @Length(10, 20, { message: 'Informe o WhatsApp com DDD.' })
+  @Length(10, 120, { message: 'Informe o WhatsApp com DDD, o CPF ou o e-mail.' })
   phone!: string;
 
   @ApiProperty({ example: '482913', description: 'Código de 6 dígitos' })
@@ -41,4 +42,17 @@ export class ResetPasswordWhatsappDto {
   @MinLength(6, { message: 'A nova senha precisa ter ao menos 6 caracteres.' })
   @MaxLength(72)
   newPassword!: string;
+}
+
+/** A pessoa logada troca a própria senha. */
+export class ChangeOwnPasswordDto {
+  @ApiProperty({ description: 'Senha nova', minLength: 6 })
+  @IsString()
+  @Length(6, 100, { message: 'A senha precisa ter ao menos 6 caracteres.' })
+  newPassword!: string;
+
+  @ApiProperty({ required: false, description: 'Senha atual (dispensada quando a senha é provisória)' })
+  @IsOptional()
+  @IsString()
+  currentPassword?: string;
 }

@@ -14,6 +14,7 @@ import { Header } from '@/components/layout/header';
 import { StatusBar } from '@/components/layout/status-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VerificarWhatsappDialog } from '@/components/auth/verificar-whatsapp-dialog';
+import { TrocarSenhaDialog } from '@/components/auth/trocar-senha-dialog';
 import { authApi } from '@/lib/api';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -48,6 +49,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated) return null;
+
+  // Senha provisória (dada pelo administrador): cria a própria antes de tudo.
+  if (user && user.mustChangePassword) {
+    return (
+      <TrocarSenhaDialog
+        nome={user.name?.split(' ')[0]}
+        trocar={(senha) => authApi.changePassword(senha)}
+        onTrocada={refreshUser}
+        onSair={logout}
+      />
+    );
+  }
 
   // Sem WhatsApp confirmado não se navega: é esse número que recebe o código
   // quando a pessoa esquecer a senha. Quem decide é o backend — com o canal de

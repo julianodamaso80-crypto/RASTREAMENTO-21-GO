@@ -401,16 +401,16 @@ export class AssociateAuthService {
     message: string;
     sentTo: string | null;
     canUseWhatsapp: boolean;
+    encontrado: boolean;
   }> {
     const cpf = normalizeDoc(rawCpf);
     // CPF (11) ou CNPJ (14): a base tem associado pessoa jurídica.
     if (cpf.length !== 11 && cpf.length !== 14) {
       return {
-        message:
-          'Se esse CPF estiver cadastrado, enviamos um código no WhatsApp. ' +
-          'Não chegou em alguns minutos? Fale com a sua associação.',
+        message: 'Informe um CPF ou CNPJ válido.',
         sentTo: null,
         canUseWhatsapp: this.whatsapp.habilitado,
+        encontrado: false,
       };
     }
     return this.reset.enviarCodigo(
@@ -420,12 +420,27 @@ export class AssociateAuthService {
     );
   }
 
-  /** "Esqueci a senha" pelo WhatsApp — o caminho que todas as telas usam. */
+  /**
+   * A caixa do "Esqueci a senha" aceita WhatsApp ou CPF/CNPJ. Primeiro tenta
+   * o WhatsApp; se nenhum cadastro tem esse número, tenta como documento. O
+   * código vai sempre para o WhatsApp do cadastro.
+   */
+  private async buscarPorTelefoneOuDoc(
+    valor: string,
+  ): Promise<SujeitoReset | null> {
+    const porTelefone = await this.buscarPorTelefone(valor);
+    if (porTelefone) return porTelefone;
+    const doc = normalizeDoc(valor);
+    if (doc.length !== 11 && doc.length !== 14) return null;
+    return this.buscarPorCpf(doc);
+  }
+
+  /** "Esqueci a senha" pelo WhatsApp (ou CPF) — o caminho que todas as telas usam. */
   async forgotPasswordByPhone(telefone: string) {
     return this.reset.enviarCodigo(
-      this.repoReset((t) => this.buscarPorTelefone(t)),
+      this.repoReset((t) => this.buscarPorTelefoneOuDoc(t)),
       telefone,
-      'WhatsApp',
+      'WhatsApp ou CPF',
     );
   }
 
@@ -469,7 +484,7 @@ export class AssociateAuthService {
     novaSenha: string,
   ): Promise<{ ok: true }> {
     return this.reset.redefinirSenha(
-      this.repoReset((t) => this.buscarPorTelefone(t)),
+      this.repoReset((t) => this.buscarPorTelefoneOuDoc(t)),
       telefone,
       codigo,
       novaSenha,

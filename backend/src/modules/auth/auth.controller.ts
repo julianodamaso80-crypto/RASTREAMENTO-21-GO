@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import {
   ForgotPasswordDto,
+  ChangeOwnPasswordDto,
   ForgotPasswordWhatsappDto,
   ResetPasswordWhatsappDto,
 } from './dto/forgot-password.dto';
@@ -132,6 +133,21 @@ export class AuthController {
     return {
       message: 'Senha redefinida com sucesso. Faça login com a nova senha.',
     };
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'A pessoa logada troca a própria senha' })
+  changePassword(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ChangeOwnPasswordDto,
+  ) {
+    return this.authService.changeOwnPassword(
+      userId,
+      dto.newPassword,
+      dto.currentPassword,
+    );
   }
 
   @Get('me')

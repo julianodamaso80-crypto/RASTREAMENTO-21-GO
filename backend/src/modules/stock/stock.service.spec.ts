@@ -196,6 +196,7 @@ describe('StockService.findAll — busca acha equipamento já associado', () => 
     const s = new StockService(
       prisma as never, {} as never, {} as never, {} as never, {} as never,
       {} as never, {} as never, {} as never, {} as never, {} as never, {} as never,
+      { avisarInstalado: jest.fn() } as never,
     );
     return { s, prisma };
   }

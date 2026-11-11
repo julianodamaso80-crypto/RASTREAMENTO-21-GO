@@ -80,11 +80,12 @@ describe('Recuperação de senha do painel por WhatsApp', () => {
     expect(res.sentTo).toBe('*****-6666');
   });
 
-  it('responde igual quando o WhatsApp não está cadastrado', async () => {
+  it('avisa quando o WhatsApp não está cadastrado', async () => {
     buscaPorTelefone = false;
     const res = await service.forgotPasswordWhatsapp('21900000000');
 
-    expect(res.message).toContain('Se esse WhatsApp estiver cadastrado');
+    expect(res.encontrado).toBe(false);
+    expect(res.message).toContain('Não encontramos cadastro');
     expect(res.sentTo).toBeNull();
     expect(enviados).toHaveLength(0);
   });

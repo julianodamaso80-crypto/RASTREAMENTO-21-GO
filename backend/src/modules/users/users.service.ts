@@ -101,6 +101,7 @@ export class UsersService {
           deletedAt: null,
           resetTokenHash: null,
           resetTokenExpiresAt: null,
+          mustChangePassword: true,
         },
         select: USER_SELECT,
       });
@@ -116,6 +117,7 @@ export class UsersService {
         role: dto.role,
         allowedRoutes: dto.allowedRoutes ?? [],
         password: await bcrypt.hash(password, BCRYPT_ROUNDS),
+        mustChangePassword: true,
       },
       select: USER_SELECT,
     });
@@ -166,6 +168,7 @@ export class UsersService {
         password: await bcrypt.hash(password, BCRYPT_ROUNDS),
         resetTokenHash: null,
         resetTokenExpiresAt: null,
+        mustChangePassword: true,
       },
       select: USER_SELECT,
     });

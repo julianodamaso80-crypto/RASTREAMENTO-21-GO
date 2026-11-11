@@ -15,8 +15,8 @@ import { toast } from 'sonner';
 const whatsappSchema = z.object({
   phone: z
     .string()
-    .refine((v) => v.replace(/\D/g, '').length >= 10, {
-      message: 'Informe o WhatsApp com DDD',
+    .refine((v) => v.includes('@') || v.replace(/\D/g, '').length >= 10, {
+      message: 'Informe o WhatsApp com DDD, o CPF ou o e-mail',
     }),
 });
 
@@ -64,6 +64,8 @@ export default function ForgotPasswordPage() {
   const [etapa, setEtapa] = useState<'whatsapp' | 'codigo'>('whatsapp');
   const [whatsapp, setWhatsapp] = useState('');
   const [enviadoPara, setEnviadoPara] = useState<string | null>(null);
+  // Quem achou o cadastro: equipe do painel ou associado.
+  const [mundo, setMundo] = useState<'painel' | 'associado'>('painel');
   const [submitting, setSubmitting] = useState(false);
 
   const formWhatsapp = useForm<WhatsappValues>({
@@ -79,7 +81,23 @@ export default function ForgotPasswordPage() {
   const pedirCodigo = async (values: WhatsappValues) => {
     setSubmitting(true);
     try {
-      const res = await authApi.forgotPasswordWhatsapp(values.phone);
+      let res: { message: string; sentTo: string | null; encontrado?: boolean } =
+        await authApi.forgotPasswordWhatsapp(values.phone);
+      let achadoEm: 'painel' | 'associado' = 'painel';
+      if (res.encontrado === false && !values.phone.includes('@')) {
+        const doAssociado = await authApi.forgotPasswordAssociado(values.phone);
+        if (doAssociado.encontrado !== false) {
+          res = doAssociado;
+          achadoEm = 'associado';
+        } else if (!res.message.includes('sem WhatsApp')) {
+          res = doAssociado;
+        }
+      }
+      if (res.encontrado === false) {
+        toast.error(res.message, { duration: 10000 });
+        return;
+      }
+      setMundo(achadoEm);
       setWhatsapp(values.phone);
       setEnviadoPara(res.sentTo);
       toast.success(res.message);
@@ -102,7 +120,11 @@ export default function ForgotPasswordPage() {
   const salvarSenha = async (values: CodigoValues) => {
     setSubmitting(true);
     try {
-      await authApi.resetPasswordWhatsapp(whatsapp, values.code, values.newPassword);
+      if (mundo === 'associado') {
+        await authApi.resetPasswordAssociado(whatsapp, values.code, values.newPassword);
+      } else {
+        await authApi.resetPasswordWhatsapp(whatsapp, values.code, values.newPassword);
+      }
       toast.success('Senha alterada. Entre com a senha nova.');
       router.push('/login');
     } catch {
@@ -181,7 +203,7 @@ export default function ForgotPasswordPage() {
           className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-brand-orange-600 hover:text-brand-orange-700 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Usar outro número
+          Usar outro número ou CPF
         </button>
       </div>
     );
@@ -197,21 +219,20 @@ export default function ForgotPasswordPage() {
 
       <h1 className="text-2xl font-bold text-slate-900">Esqueceu sua senha?</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Digite o seu WhatsApp cadastrado e enviaremos um código nele.
+        Digite o seu WhatsApp, CPF ou e-mail. Enviaremos um código no WhatsApp do seu cadastro.
       </p>
 
       <form onSubmit={formWhatsapp.handleSubmit(pedirCodigo)} className="mt-8 space-y-5" noValidate>
         <div className="space-y-2">
           <label htmlFor="phone" className="text-sm font-medium text-slate-700">
-            WhatsApp com DDD
+            WhatsApp, CPF ou e-mail
           </label>
           <Input
             id="phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
+            type="text"
+            autoComplete="username"
             autoFocus
-            placeholder="(21) 99999-8888"
+            placeholder="(21) 99999-8888 ou CPF"
             aria-invalid={!!formWhatsapp.formState.errors.phone}
             className="bg-white border-slate-300 focus:border-brand-orange-500 text-slate-900"
             {...formWhatsapp.register('phone')}

@@ -232,6 +232,42 @@ export class AuthService {
     this.logger.log(`Senha redefinida com sucesso: userId=${matchedUserId}`);
   }
 
+  /**
+   * A pessoa troca a própria senha. Quando a senha atual é provisória
+   * (`mustChangePassword`), acabou de ser digitada no login e não se pede de
+   * novo; fora disso a senha atual é obrigatória.
+   */
+  async changeOwnPassword(
+    userId: string,
+    novaSenha: string,
+    senhaAtual?: string,
+  ): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null, active: true },
+      select: { id: true, password: true, mustChangePassword: true },
+    });
+    if (!user) throw new UnauthorizedException('Usuário não encontrado');
+    if (!user.mustChangePassword) {
+      if (!senhaAtual || !(await bcrypt.compare(senhaAtual, user.password))) {
+        throw new BadRequestException('Senha atual incorreta.');
+      }
+    }
+    if (await bcrypt.compare(novaSenha, user.password)) {
+      throw new BadRequestException('A nova senha precisa ser diferente da atual.');
+    }
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: await bcrypt.hash(novaSenha, 10),
+        mustChangePassword: false,
+        resetTokenHash: null,
+        resetTokenExpiresAt: null,
+      },
+    });
+    this.logger.log(`Senha trocada pela própria pessoa: userId=${user.id}`);
+    return { ok: true };
+  }
+
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -244,6 +280,7 @@ export class AuthService {
         allowedRoutes: true,
         phone: true,
         phoneVerifiedAt: true,
+        mustChangePassword: true,
         tenant: {
           select: {
             id: true,
@@ -286,6 +323,26 @@ export class AuthService {
       buscar: async (telefone) => {
         // Só telefone VERIFICADO recebe código — é o número que a pessoa
         // provou ter no popup do login.
+        // A caixa aceita também o e-mail de login.
+        if (telefone.includes('@')) {
+          const porEmail = await this.prisma.user.findFirst({
+            where: {
+              email: { equals: telefone.trim(), mode: 'insensitive' },
+              deletedAt: null,
+              active: true,
+              phoneVerifiedAt: { not: null },
+            },
+            select: {
+              id: true,
+              phone: true,
+              resetCodeHash: true,
+              resetCodeExpiresAt: true,
+              resetCodeAttempts: true,
+              resetCodeSentAt: true,
+            },
+          });
+          return porEmail ?? null;
+        }
         const variantes = variantesTelefone(telefone);
         if (!variantes.length) return null;
         const achados = await this.prisma.$queryRaw<{ id: string }[]>`
@@ -345,6 +402,7 @@ export class AuthService {
             password: hash,
             resetTokenHash: null,
             resetTokenExpiresAt: null,
+            mustChangePassword: false,
           },
         });
       },

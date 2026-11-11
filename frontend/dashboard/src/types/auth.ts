@@ -23,6 +23,8 @@ export interface User {
   phoneVerified?: boolean;
   /** Só true quando falta verificar E o WhatsApp está configurado pra enviar. */
   phoneVerificationRequired?: boolean;
+  /** Senha provisória: o painel obriga a criar a própria antes de navegar. */
+  mustChangePassword?: boolean;
   createdAt: string;
 }
 

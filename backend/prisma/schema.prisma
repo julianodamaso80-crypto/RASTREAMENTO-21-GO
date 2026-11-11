@@ -404,6 +404,9 @@ model User {
   tenantId            String    @map("tenant_id") @db.Uuid
   resetTokenHash      String?   @map("reset_token_hash")
   resetTokenExpiresAt DateTime? @map("reset_token_expires_at")
+  /// Senha provisória (criada ou trocada pelo admin): o painel obriga a
+  /// pessoa a criar a própria senha antes de navegar.
+  mustChangePassword  Boolean   @default(false) @map("must_change_password")
 
   // --- Recuperação de senha por código no WhatsApp ---
   /// Telefone verificado. Só ele recebe código de recuperação.

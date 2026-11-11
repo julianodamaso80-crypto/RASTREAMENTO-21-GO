@@ -87,7 +87,7 @@ describe('PasswordResetService', () => {
     );
   });
 
-  it('responde igual quando o identificador não existe', async () => {
+  it('avisa quando o identificador não existe', async () => {
     const semNinguem = repoFake(null);
     const inexistente = await service.enviarCodigo(
       semNinguem.repo,
@@ -102,17 +102,18 @@ describe('PasswordResetService', () => {
       'CPF',
     );
 
-    expect(inexistente.message).toBe(existente.message);
+    expect(inexistente.encontrado).toBe(false);
+    expect(existente.encontrado).toBe(true);
+    expect(inexistente.message).toContain('Não encontramos cadastro');
     expect(inexistente.sentTo).toBeNull();
   });
 
-  it('responde igual quando existe mas não tem telefone', async () => {
+  it('avisa quando existe mas não tem telefone', async () => {
     const semTel = repoFake({ ...SUJEITO, phone: null });
     const a = await service.enviarCodigo(semTel.repo, '08577590780', 'CPF');
-    const vazio = repoFake(null);
-    const b = await service.enviarCodigo(vazio.repo, '00000000000', 'CPF');
 
-    expect(a.message).toBe(b.message);
+    expect(a.encontrado).toBe(false);
+    expect(a.message).toContain('sem WhatsApp');
     expect(a.sentTo).toBeNull();
     expect(enviados).toHaveLength(0);
   });

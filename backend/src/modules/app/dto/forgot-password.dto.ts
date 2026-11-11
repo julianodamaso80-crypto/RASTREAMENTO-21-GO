@@ -23,7 +23,7 @@ export class AssociateForgotPasswordDto {
   @ApiPropertyOptional({ example: '(21) 99834-5046' })
   @IsOptional()
   @IsString()
-  @Length(10, 20, { message: 'Informe o WhatsApp com DDD.' })
+  @Length(10, 120, { message: 'Informe o WhatsApp com DDD, o CPF ou o e-mail.' })
   phone?: string;
 }
 
@@ -39,7 +39,7 @@ export class AssociateResetPasswordDto {
   @ApiPropertyOptional({ example: '(21) 99834-5046' })
   @IsOptional()
   @IsString()
-  @Length(10, 20, { message: 'Informe o WhatsApp com DDD.' })
+  @Length(10, 120, { message: 'Informe o WhatsApp com DDD, o CPF ou o e-mail.' })
   phone?: string;
 
   @ApiProperty({ example: '482913', description: 'Código de 6 dígitos' })

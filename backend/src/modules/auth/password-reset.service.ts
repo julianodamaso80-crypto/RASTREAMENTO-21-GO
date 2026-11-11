@@ -38,6 +38,13 @@ export interface RespostaEnvio {
   message: string;
   sentTo: string | null;
   canUseWhatsapp: boolean;
+  /**
+   * false = não achamos cadastro com esse identificador (ou está sem
+   * WhatsApp): a tela avisa em vez de mandar a pessoa esperar um código que
+   * nunca vai chegar. Decisão do dono em 11/11/2026, trocando a resposta
+   * neutra por clareza.
+   */
+  encontrado: boolean;
 }
 
 /**
@@ -73,20 +80,35 @@ export class PasswordResetService {
   ): Promise<RespostaEnvio> {
     const generico: RespostaEnvio = {
       message:
-        `Se esse ${rotulo} estiver cadastrado, enviamos um código no WhatsApp. ` +
+        `Enviamos um código no WhatsApp do seu cadastro. ` +
         'Não chegou em alguns minutos? Fale com a sua associação.',
       sentTo: null,
       canUseWhatsapp: this.whatsapp.habilitado,
+      encontrado: true,
     };
 
     const sujeito = await repo.buscar(identificador);
-    if (!sujeito?.phone) {
-      if (sujeito) {
-        this.logger.warn(
-          `Recuperação pedida sem telefone cadastrado (${rotulo}).`,
-        );
-      }
-      return generico;
+    if (!sujeito) {
+      this.logger.warn(`Recuperação pedida sem cadastro encontrado (${rotulo}).`);
+      return {
+        ...generico,
+        encontrado: false,
+        message:
+          `Não encontramos cadastro com esse ${rotulo}. Confira o número ` +
+          'ou tente pelo CPF. Se não der certo, fale com a sua associação.',
+      };
+    }
+    if (!sujeito.phone) {
+      this.logger.warn(
+        `Recuperação pedida sem telefone cadastrado (${rotulo}).`,
+      );
+      return {
+        ...generico,
+        encontrado: false,
+        message:
+          'Seu cadastro está sem WhatsApp. Fale com a sua associação para ' +
+          'atualizar o número e redefinir a senha.',
+      };
     }
 
     if (sujeito.resetCodeSentAt) {
@@ -127,6 +149,7 @@ export class PasswordResetService {
           'Fale com a sua associação para redefinir a sua senha.',
         sentTo: null,
         canUseWhatsapp: false,
+        encontrado: true,
       };
     }
 

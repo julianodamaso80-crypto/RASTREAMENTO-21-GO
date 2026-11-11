@@ -13,9 +13,13 @@ describe('Contrato de recuperação do associado', () => {
   let service: AssociateAuthService;
   let associado: Record<string, unknown>;
   let enviados: string[];
+  let porTelefone: boolean;
+  let associadoExiste: boolean;
 
   beforeEach(async () => {
     enviados = [];
+    porTelefone = true;
+    associadoExiste = true;
     associado = {
       id: 'a-1',
       cpf: '08577590780',
@@ -26,9 +30,9 @@ describe('Contrato de recuperação do associado', () => {
       resetCodeSentAt: null,
     };
     const prisma = {
-      $queryRaw: jest.fn(async () => [{ id: 'a-1' }]),
+      $queryRaw: jest.fn(async () => (porTelefone ? [{ id: 'a-1' }] : [])),
       associate: {
-        findFirst: jest.fn(async () => associado),
+        findFirst: jest.fn(async () => (associadoExiste ? associado : null)),
         update: jest.fn(
           async ({ data }: { data: Record<string, unknown> }) => {
             associado = { ...associado, ...data };
@@ -59,20 +63,23 @@ describe('Contrato de recuperação do associado', () => {
   it('devolve message, sentTo e canUseWhatsapp', async () => {
     const res = await service.forgotPassword('08577590780');
 
+    // O app publicado lê message, sentTo e canUseWhatsapp; `encontrado` é novo
+    // e só as telas novas o usam.
     expect(Object.keys(res).sort()).toEqual([
       'canUseWhatsapp',
+      'encontrado',
       'message',
       'sentTo',
     ]);
     expect(res.sentTo).toBe('*****-8888');
-    expect(res.message).toContain('Se esse CPF estiver cadastrado');
+    expect(res.message).toContain('Enviamos um código');
   });
 
   it('CPF fora do formato devolve a resposta genérica, sem enviar', async () => {
     const res = await service.forgotPassword('123');
 
     expect(res.sentTo).toBeNull();
-    expect(res.message).toContain('Se esse CPF estiver cadastrado');
+    expect(res.encontrado).toBe(false);
     expect(enviados).toHaveLength(0);
   });
 
@@ -101,7 +108,27 @@ describe('Contrato de recuperação do associado', () => {
 
     expect(enviados[0]).toMatch(/^\d{6}$/);
     expect(res.sentTo).toBe('*****-8888');
-    expect(res.message).toContain('Se esse WhatsApp estiver cadastrado');
+    expect(res.message).toContain('Enviamos um código');
+  });
+
+  it('a mesma caixa aceita o CPF quando nenhum cadastro tem o número', async () => {
+    porTelefone = false;
+    const res = await service.forgotPasswordByPhone('085.775.907-80');
+
+    expect(enviados[0]).toMatch(/^\d{6}$/);
+    expect(res.sentTo).toBe('*****-8888');
+  });
+
+  it('avisa quando não acha cadastro, sem enviar nada', async () => {
+    porTelefone = false;
+    const prismaVazio = associadoExiste;
+    associadoExiste = false;
+    const res = await service.forgotPasswordByPhone('(21) 90000-0000');
+    associadoExiste = prismaVazio;
+
+    expect(res.encontrado).toBe(false);
+    expect(res.message).toContain('Não encontramos cadastro');
+    expect(enviados).toHaveLength(0);
   });
 
   it('pelo WhatsApp: continua recusando senha igual ao CPF do cadastro', async () => {

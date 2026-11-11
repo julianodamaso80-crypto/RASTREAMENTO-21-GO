@@ -155,15 +155,40 @@ export const authApi = {
     message: string;
     sentTo: string | null;
     canUseWhatsapp: boolean;
+    encontrado?: boolean;
   }> => {
     const res = await api.post<
       ApiResponse<{
         message: string;
         sentTo: string | null;
         canUseWhatsapp: boolean;
+        encontrado?: boolean;
       }>
     >('/auth/forgot-password-whatsapp', { phone });
     return res.data.data;
+  },
+  /**
+   * Mesma tela, cadastro de associado: quem entra no site com CPF também usa
+   * o "Esqueci a senha". Aceita WhatsApp ou CPF/CNPJ na mesma caixa.
+   */
+  forgotPasswordAssociado: async (
+    valor: string,
+  ): Promise<{ message: string; sentTo: string | null; encontrado?: boolean }> => {
+    const res = await api.post<
+      ApiResponse<{ message: string; sentTo: string | null; encontrado?: boolean }>
+    >('/app/auth/forgot-password', { phone: valor });
+    return res.data.data;
+  },
+  resetPasswordAssociado: async (
+    valor: string,
+    code: string,
+    newPassword: string,
+  ): Promise<void> => {
+    await api.post('/app/auth/reset-password', { phone: valor, code, newPassword });
+  },
+  /** A pessoa logada troca a própria senha (obrigatório quando é provisória). */
+  changePassword: async (newPassword: string, currentPassword?: string): Promise<void> => {
+    await api.post('/auth/change-password', { newPassword, currentPassword });
   },
   /** Popup obrigatório: manda o código pro número informado. */
   startPhone: async (phone: string): Promise<{ sentTo: string }> => {
