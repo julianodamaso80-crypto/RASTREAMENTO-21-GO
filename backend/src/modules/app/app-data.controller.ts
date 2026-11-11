@@ -20,6 +20,7 @@ import { CurrentAssociate } from './decorators/current-associate.decorator';
 import { NotificationPrefsDto } from './dto/notification-prefs.dto';
 import { HistoryRequestsService } from '../reports/history-requests.service';
 import { LocationSharesService } from '../location-shares/location-shares.service';
+import { MapService } from '../map/map.service';
 
 @ApiTags('App - Dados do Associado')
 @ApiBearerAuth()
@@ -31,7 +32,21 @@ export class AppDataController {
     private readonly service: AppDataService,
     private readonly historyRequests: HistoryRequestsService,
     private readonly locationShares: LocationSharesService,
+    private readonly map: MapService,
   ) {}
+
+  /** Os três mapas também para o associado: sessão do satélite do Google. */
+  @Get('map/tiles')
+  @ApiOperation({ summary: 'Sessão do satélite do Google para o mapa do associado' })
+  async mapTiles() {
+    return this.map.tilesOuFallback('satellite');
+  }
+
+  @Get('map/attribution')
+  @ApiOperation({ summary: 'Atribuição do Google do viewport (associado)' })
+  async mapAttribution(@Query() q: Record<string, string>) {
+    return this.map.attributionDaQuery(q);
+  }
 
   @Get('vehicles')
   @ApiOperation({

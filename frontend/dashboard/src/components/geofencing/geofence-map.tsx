@@ -3,7 +3,8 @@
 import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { CARTO_DARK_MATTER_URL, MAP_CENTER } from '@/lib/constants';
+import { BASEMAPS, MAP_CENTER } from '@/lib/constants';
+import { useBasemap } from '@/components/map/use-basemap';
 import type { Geofence } from '@/types/geofence';
 
 interface GeofenceMapProps {
@@ -27,12 +28,13 @@ function createCircleGeoJSON(lat: number, lng: number, radiusMeters: number, ste
 export function GeofenceMap({ geofences, selectedId }: GeofenceMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const { controles } = useBasemap(mapRef);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: CARTO_DARK_MATTER_URL,
+      style: BASEMAPS[0].url,
       center: MAP_CENTER,
       zoom: 12,
       attributionControl: false,
@@ -123,5 +125,10 @@ export function GeofenceMap({ geofences, selectedId }: GeofenceMapProps) {
     }
   }, [geofences, selectedId]);
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
+      {controles}
+    </div>
+  );
 }

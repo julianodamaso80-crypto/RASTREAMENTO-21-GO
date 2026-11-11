@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Download, Loader2, Search, Timer } from 'luc
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BASEMAPS, MAP_CENTER } from '@/lib/constants';
+import { useBasemap } from '@/components/map/use-basemap';
 import {
   diaDeBrasilia,
   duracaoLegivel,
@@ -267,6 +268,7 @@ export function TrajetoNoMapa({ viagem }: { viagem?: { path: PontoDaViagem[] } }
   const mapa = useRef<maplibregl.Map | null>(null);
   const marcas = useRef<maplibregl.Marker[]>([]);
   const [pronto, setPronto] = useState(false);
+  const { controles } = useBasemap(mapa, { toggleClassName: 'right-auto left-3' });
 
   useEffect(() => {
     if (!box.current) return;
@@ -315,5 +317,10 @@ export function TrajetoNoMapa({ viagem }: { viagem?: { path: PontoDaViagem[] } }
     m.fitBounds(b, { padding: 50, maxZoom: 17, duration: 0 });
   }, [viagem, pronto]);
 
-  return <div ref={box} className="h-72 w-full overflow-hidden rounded-md border sm:h-96" />;
+  return (
+    <div className="relative">
+      <div ref={box} className="h-72 w-full overflow-hidden rounded-md border sm:h-96" />
+      {controles}
+    </div>
+  );
 }

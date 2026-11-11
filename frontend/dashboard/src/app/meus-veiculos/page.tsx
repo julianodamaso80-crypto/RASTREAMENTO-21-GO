@@ -18,8 +18,10 @@ import {
   ultimaAtualizacao,
 } from '@/lib/utils';
 import type { DisplayStatus } from '@/types/vehicle';
+import { MapTilesSourceProvider, useBasemap } from '@/components/map/use-basemap';
 import {
   associateApi,
+  associateTilesSource,
   type AssociateMe,
   type AssociateVehicle,
 } from '@/lib/associate-api';
@@ -122,6 +124,8 @@ function Mapa({
   const marcadores = useRef<maplibregl.Marker[]>([]);
   const enquadrou = useRef(false);
   const [pronto, setPronto] = useState(false);
+  // Os zooms ficam no canto direito; o seletor dos mapas vai para o esquerdo.
+  const { controles } = useBasemap(mapa, { toggleClassName: 'right-auto left-3' });
 
   useEffect(() => {
     if (!box.current) return;
@@ -168,7 +172,12 @@ function Mapa({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selecionado]);
 
-  return <div ref={box} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={box} className="h-full w-full" />
+      {controles}
+    </div>
+  );
 }
 
 export default function MeusVeiculosPage() {
@@ -247,6 +256,8 @@ export default function MeusVeiculosPage() {
   }
 
   return (
+    // Tudo aqui dentro (mapa e trajeto do histórico) pede o Google pela rota do associado.
+    <MapTilesSourceProvider source={associateTilesSource}>
     <div className="flex h-dvh flex-col">
       <header className="flex items-center justify-between border-b px-4 py-3">
         <div>
@@ -410,5 +421,6 @@ export default function MeusVeiculosPage() {
         />
       )}
     </div>
+    </MapTilesSourceProvider>
   );
 }

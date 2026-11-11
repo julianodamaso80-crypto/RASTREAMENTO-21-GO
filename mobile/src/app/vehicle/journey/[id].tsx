@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { MapTypeSwitch, CamadaSateliteGratis, mapTypeDe, useMapType } from '@/components/map-type-switch';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppApi, JourneyDay, JourneyTrip } from '@/lib/api';
@@ -55,6 +56,7 @@ export default function VehicleJourneyScreen() {
     [],
   );
   const [dia, setDia] = useState(dias[0]);
+  const tipoMapa = useMapType((s) => s.tipo);
   const [journey, setJourney] = useState<JourneyDay | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(false);
@@ -162,14 +164,16 @@ export default function VehicleJourneyScreen() {
             ref={mapa}
             provider={PROVIDER_GOOGLE}
             style={StyleSheet.absoluteFill}
-            mapType="hybrid"
+            mapType={mapTypeDe(tipoMapa)}
             onMapReady={enquadrar}
           >
+            <CamadaSateliteGratis tipo={tipoMapa} />
             <Polyline coordinates={coords} strokeColor={colors.orange} strokeWidth={5} />
             <Marker coordinate={coords[0]} pinColor="green" title="Saída" />
             <Marker coordinate={coords[coords.length - 1]} pinColor="red" title="Chegada" />
           </MapView>
         )}
+        {!loading && coords.length >= 2 && <MapTypeSwitch />}
       </View>
 
       <ScrollView style={styles.panel} contentContainerStyle={{ padding: 12, gap: 10 }}>

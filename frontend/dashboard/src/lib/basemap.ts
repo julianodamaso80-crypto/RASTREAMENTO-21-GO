@@ -4,6 +4,20 @@ import { ESRI_SATELLITE_STYLE } from './constants';
 
 export type SatelliteProvider = 'google' | 'esri';
 
+/** Quem entrega a sessão do Google: painel, associado ou link público. */
+export interface TilesSource {
+  /** Separa o cache: cada mundo pede a sessão pela própria rota. */
+  chave: string;
+  getTiles: () => ReturnType<typeof mapApi.getTiles>;
+  getAttribution: (b: {
+    zoom: number;
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  }) => Promise<{ copyright: string }>;
+}
+
 export interface ResolvedSatellite {
   provider: SatelliteProvider;
   style: StyleSpecification;
@@ -16,7 +30,7 @@ export interface ResolvedSatellite {
  * estiver configurada, ou a API falhar, cai no Esri — o mapa NUNCA pode
  * ficar em branco durante um rastreamento (Regra 0).
  */
-let cached: { value: ResolvedSatellite; expiresAt: number } | null = null;
+const cache = new Map<string, { value: ResolvedSatellite; expiresAt: number }>();
 
 const esriFallback = (): ResolvedSatellite => ({
   provider: 'esri',
@@ -24,11 +38,14 @@ const esriFallback = (): ResolvedSatellite => ({
   googleMinZoom: null,
 });
 
-export async function resolveSatelliteStyle(): Promise<ResolvedSatellite> {
+export async function resolveSatelliteStyle(
+  origem: TilesSource = { chave: 'painel', getTiles: () => mapApi.getTiles('satellite'), getAttribution: mapApi.getAttribution },
+): Promise<ResolvedSatellite> {
+  const cached = cache.get(origem.chave);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
   try {
-    const source = await mapApi.getTiles('satellite');
+    const source = await origem.getTiles();
     if (source.provider !== 'google') return esriFallback();
 
     // Estilo em duas camadas: Esri por baixo (grátis, cobre todos os zooms) e
@@ -68,7 +85,7 @@ export async function resolveSatelliteStyle(): Promise<ResolvedSatellite> {
       googleMinZoom: source.minzoom,
     };
     // Renova bem antes do expiry do token pra nunca servir sessão morta.
-    cached = { value, expiresAt: Math.min(source.expiresAt, Date.now() + 60 * 60 * 1000) };
+    cache.set(origem.chave, { value, expiresAt: Math.min(source.expiresAt, Date.now() + 60 * 60 * 1000) });
     return value;
   } catch {
     return esriFallback();

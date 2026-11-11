@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { TraccarModule } from '../traccar/traccar.module';
 import { GeocodingModule } from '../geocoding/geocoding.module';
+import { MapModule } from '../map/map.module';
 import { LocationSharesService } from './location-shares.service';
 import { LocationSharesController } from './location-shares.controller';
 import { LocationSharePublicController } from './location-share-public.controller';
 
 @Module({
-  imports: [TraccarModule, GeocodingModule],
+  imports: [TraccarModule, GeocodingModule, MapModule],
   controllers: [LocationSharesController, LocationSharePublicController],
   providers: [LocationSharesService],
   exports: [LocationSharesService],

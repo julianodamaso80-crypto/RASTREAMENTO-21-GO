@@ -11,13 +11,14 @@ import {
   PanResponder,
   Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { useRouter } from 'expo-router';
 import { AlertBanner } from '@/components/alert-banner';
 import { VehicleCard } from '@/components/vehicle-card';
 import { VehicleMarker } from '@/components/vehicle-marker';
+import { MapTypeSwitch, CamadaSateliteGratis, mapTypeDe, useMapType } from '@/components/map-type-switch';
 import { AppApi, Vehicle, Position } from '@/lib/api';
 import { useVehicleRealtime, RawTraccarDevice } from '@/lib/realtime';
 import { useAuth } from '@/lib/auth-store';
@@ -189,12 +190,15 @@ export default function MapScreen() {
 
   // Veículo em foco: o selecionado, ou o primeiro por padrão.
   const currentId = selected ?? vehicles[0]?.id ?? null;
+  const tipoMapa = useMapType((s) => s.tipo);
+  const insets = useSafeAreaInsets();
   const current = vehicles.find((v) => v.id === currentId) ?? null;
 
   return (
     <View style={styles.root}>
       {/*
-        Google Maps nos dois sistemas. No iPhone era Apple Maps com satélite
+        Google Maps nos dois sistemas, com os três mapas do sistema à escolha
+        (botão de camadas). No iPhone era Apple Maps com satélite
         Esri por cima — imagem que no Brasil para no zoom 19 e envelhece. O
         `hybrid` do Google já traz a foto com ruas e rótulos, sem camada extra.
       */}
@@ -203,10 +207,11 @@ export default function MapScreen() {
         provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
         initialRegion={REGIAO_INICIAL}
-        mapType="hybrid"
+        mapType={mapTypeDe(tipoMapa)}
         showsUserLocation={false}
         showsMyLocationButton={false}
       >
+        <CamadaSateliteGratis tipo={tipoMapa} />
         {withPos.map((v) => (
           <VehicleMarker key={v.id} vehicle={v} onPress={() => pickVehicle(v)} />
         ))}
@@ -227,6 +232,8 @@ export default function MapScreen() {
         </View>
         <AlertBanner />
       </SafeAreaView>
+
+      <MapTypeSwitch top={insets.top + 16} />
 
       <Animated.View style={[styles.sheet, { height: sheetH }]}>
         <View style={styles.grabZone} {...panResponder.panHandlers}>

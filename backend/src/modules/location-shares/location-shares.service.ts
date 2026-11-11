@@ -155,6 +155,21 @@ export class LocationSharesService {
     return this.paraTela(atualizado, s.origem === 'PAINEL');
   }
 
+  /** Link ainda vale? Usado pelo mapa da página pública antes de abrir o Google. */
+  async validar(token: string): Promise<void> {
+    if (!token || token.length < 8 || token.length > 64) {
+      throw new NotFoundException('Link não encontrado');
+    }
+    const r = await this.prisma.locationShare.findFirst({
+      where: { token },
+      select: { revokedAt: true, expiresAt: true },
+    });
+    if (!r) throw new NotFoundException('Link não encontrado');
+    if (r.revokedAt || r.expiresAt.getTime() <= Date.now()) {
+      throw new GoneException('Este link de localização expirou');
+    }
+  }
+
   /**
    * O que a página pública mostra. Só o necessário para achar o veículo:
    * nada de dono, IMEI, local de instalação ou empresa.

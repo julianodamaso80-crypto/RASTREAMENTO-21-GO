@@ -6,6 +6,7 @@ import type {
   TipoRelatorio,
 } from '@/lib/historico';
 import type { LinkLocalizacao } from '@/lib/compartilhar-localizacao';
+import type { TilesSource } from '@/lib/basemap';
 
 /**
  * Client do associado na web. Usa as mesmas rotas /app/* do app Android e
@@ -85,6 +86,15 @@ export const associateApi = {
   changePassword: async (currentPassword: string, newPassword: string) => {
     await http.post('/app/auth/change-password', { currentPassword, newPassword });
   },
+  /** Sessão do satélite do Google pela rota do associado. */
+  mapTiles: async () => {
+    const res = await http.get('/app/map/tiles');
+    return unwrap<Awaited<ReturnType<TilesSource['getTiles']>>>(res.data);
+  },
+  mapAttribution: async (bounds: Parameters<TilesSource['getAttribution']>[0]) => {
+    const res = await http.get('/app/map/attribution', { params: bounds });
+    return unwrap<{ copyright: string }>(res.data);
+  },
   vehicles: async (): Promise<AssociateVehicle[]> => {
     const res = await http.get('/app/vehicles');
     return unwrap<AssociateVehicle[]>(res.data);
@@ -143,4 +153,11 @@ export const associateApi = {
     });
     return unwrap<JornadaDoDia>(res.data);
   },
+};
+
+/** Os três mapas na área do associado usam a sessão do Google pela rota dele. */
+export const associateTilesSource: TilesSource = {
+  chave: 'associado',
+  getTiles: () => associateApi.mapTiles(),
+  getAttribution: (b) => associateApi.mapAttribution(b),
 };

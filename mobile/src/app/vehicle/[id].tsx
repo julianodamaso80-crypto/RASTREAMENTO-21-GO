@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { MapTypeSwitch, CamadaSateliteGratis, mapTypeDe, useMapType } from '@/components/map-type-switch';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppApi, Position, VehicleType } from '@/lib/api';
@@ -40,6 +41,7 @@ export default function VehicleHistoryScreen() {
   // seletor de período manda.
   const trajetoEscolhido = Boolean(fromParam && toParam);
   const [hours, setHours] = useState(24);
+  const tipoMapa = useMapType((s) => s.tipo);
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -135,8 +137,9 @@ export default function VehicleHistoryScreen() {
             provider={PROVIDER_GOOGLE}
             style={StyleSheet.absoluteFill}
             initialRegion={region}
-            mapType="hybrid"
+            mapType={mapTypeDe(tipoMapa)}
           >
+            <CamadaSateliteGratis tipo={tipoMapa} />
             <Polyline
               coordinates={coords}
               strokeColor={colors.orange}
@@ -176,6 +179,7 @@ export default function VehicleHistoryScreen() {
             )}
           </MapView>
         )}
+        {!loading && coords.length > 0 && <MapTypeSwitch />}
       </View>
 
       {!loading && coords.length > 0 && (

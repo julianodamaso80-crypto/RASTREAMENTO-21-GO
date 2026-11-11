@@ -1,11 +1,13 @@
 'use client';
 
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Crosshair, Loader2, MapPin, Navigation } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { BASEMAPS, MAP_CENTER, VEHICLE_ICONS } from '@/lib/constants';
+import { useBasemap } from '@/components/map/use-basemap';
+import type { TilesSource } from '@/lib/basemap';
 import { linkGoogleMaps, type LocalizacaoPublica } from '@/lib/compartilhar-localizacao';
 
 const ATUALIZA_MS = 20_000;
@@ -37,6 +39,25 @@ export default function LocalizacaoPage({ params }: { params: Promise<{ token: s
   // Segue o veículo até a pessoa arrastar o mapa; "Centralizar" volta a seguir.
   const seguindo = useRef(true);
   const [pronto, setPronto] = useState(false);
+
+  // Quem abre o link não tem login: o Google vem pela rota pública, que só
+  // responde enquanto o próprio link estiver válido.
+  const tiles = useMemo<TilesSource>(() => {
+    const base = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/public/localizacao/${encodeURIComponent(token)}`;
+    const pegar = async <T,>(url: string): Promise<T> => {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const json = await r.json();
+      return (json?.data ?? json) as T;
+    };
+    return {
+      chave: `link:${token}`,
+      getTiles: () => pegar(`${base}/mapa`),
+      getAttribution: (b) =>
+        pegar(`${base}/mapa/atribuicao?${new URLSearchParams(Object.entries(b).map(([k, v]) => [k, String(v)]))}`),
+    };
+  }, [token]);
+  const { controles } = useBasemap(mapa, { toggleClassName: 'right-auto left-3', source: tiles });
 
   const carregar = useCallback(async () => {
     try {
@@ -167,6 +188,7 @@ export default function LocalizacaoPage({ params }: { params: Promise<{ token: s
 
       <main className="relative min-h-0 flex-1">
         <div ref={box} className="h-full w-full" />
+        {controles}
         {!pos && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80 px-6 text-center text-sm text-muted-foreground">
             O rastreador ainda não enviou uma posição de GPS. A página atualiza sozinha.

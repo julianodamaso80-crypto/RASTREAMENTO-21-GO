@@ -3,7 +3,8 @@
 import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { CARTO_DARK_MATTER_URL, MAP_CENTER } from '@/lib/constants';
+import { BASEMAPS, MAP_CENTER } from '@/lib/constants';
+import { useBasemap } from '@/components/map/use-basemap';
 import type { TraccarPosition } from '@/types/traccar';
 
 interface RouteMapProps {
@@ -13,13 +14,14 @@ interface RouteMapProps {
 export function RouteMap({ positions }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const { controles } = useBasemap(mapRef);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: CARTO_DARK_MATTER_URL,
+      style: BASEMAPS[0].url,
       center: MAP_CENTER,
       zoom: 12,
       attributionControl: false,
@@ -104,5 +106,10 @@ export function RouteMap({ positions }: RouteMapProps) {
     }
   }, [positions]);
 
-  return <div ref={containerRef} className="w-full h-full min-h-[300px] rounded-lg overflow-hidden" />;
+  return (
+    <div className="relative w-full h-full min-h-[300px]">
+      <div ref={containerRef} className="w-full h-full min-h-[300px] rounded-lg overflow-hidden" />
+      {controles}
+    </div>
+  );
 }

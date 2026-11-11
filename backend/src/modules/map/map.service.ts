@@ -79,6 +79,25 @@ export class MapService {
   }
 
   /**
+   * O que o painel, o associado e o link público recebem: a mesma sessão do
+   * Google, ou o aviso para usar o satélite grátis quando não há chave.
+   */
+  async tilesOuFallback(type: MapBasemapType = 'satellite') {
+    if (!this.isEnabled) return { provider: 'esri' as const, enabled: false };
+    return this.getTileSource(type);
+  }
+
+  attributionDaQuery(q: Record<string, string | undefined>) {
+    return this.getViewportAttribution({
+      zoom: Number(q.zoom),
+      north: Number(q.north),
+      south: Number(q.south),
+      east: Number(q.east),
+      west: Number(q.west),
+    });
+  }
+
+  /**
    * Devolve o source raster pronto pro MapLibre. O front cai no Esri quando
    * isto lança — mapa nunca pode ficar em branco.
    */

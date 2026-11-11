@@ -5,6 +5,7 @@ import { TraccarModule } from '../traccar/traccar.module';
 import { ReportsModule } from '../reports/reports.module';
 import { GeocodingModule } from '../geocoding/geocoding.module';
 import { LocationSharesModule } from '../location-shares/location-shares.module';
+import { MapModule } from '../map/map.module';
 import { AssociateAuthService } from './associate-auth.service';
 import { AssociateAuthController } from './associate-auth.controller';
 import { AppDataService } from './app-data.service';
@@ -21,6 +22,7 @@ import { AssociateJwtGuard } from './guards/associate-jwt.guard';
     ReportsModule,
     GeocodingModule,
     LocationSharesModule,
+    MapModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { routesApi, techniciansApi, installationPendingsApi } from '@/lib/api';
-import { CARTO_VOYAGER_URL } from '@/lib/constants';
+import { BASEMAPS } from '@/lib/constants';
+import { useBasemap } from '@/components/map/use-basemap';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -63,6 +64,7 @@ export default function RotasPage() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const { controles } = useBasemap(mapRef);
 
   const filters = useMemo<RouteFilters>(
     () => ({
@@ -107,7 +109,7 @@ export default function RotasPage() {
     if (!mapContainer.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: CARTO_VOYAGER_URL,
+      style: BASEMAPS[0].url,
       center: [-43.4, -22.9], // RJ; o fitBounds ajusta quando os dados chegam
       zoom: 9,
       attributionControl: false,
@@ -264,8 +266,9 @@ export default function RotasPage() {
 
       <div className="grid gap-4 lg:grid-cols-3 shrink-0">
         {/* Mapa */}
-        <Card className="lg:col-span-2 overflow-hidden">
+        <Card className="relative lg:col-span-2 overflow-hidden">
           <div ref={mapContainer} className="h-[460px] w-full" />
+          {controles}
         </Card>
 
         {/* Painel lateral */}
