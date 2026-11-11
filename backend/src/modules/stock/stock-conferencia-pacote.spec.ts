@@ -71,6 +71,7 @@ function servico(itens: Array<{ id: string; imei: string }>) {
     {} as never, // routes
     {} as never, // positions,
     { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
+    { avisarInstalado: jest.fn() } as never,
   );
   return { s, prisma, stockTraccar, deviceHealth };
 }

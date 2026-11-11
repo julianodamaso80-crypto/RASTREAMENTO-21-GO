@@ -92,6 +92,7 @@ function servico(lookup: HinovaLookupResult = INATIVO) {
     {} as never,
     {} as never,
     { registrarVinculo: jest.fn().mockResolvedValue(null) } as never,
+    { avisarInstalado: jest.fn() } as never,
   );
   return { s, prisma };
 }

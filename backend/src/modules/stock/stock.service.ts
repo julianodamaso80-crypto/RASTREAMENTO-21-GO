@@ -43,6 +43,7 @@ import { RoutesService } from '../installation-pendings/routes.service';
 import { StockTraccarService } from './stock-traccar.service';
 import { PositionsService } from '../positions/positions.service';
 import { FinancialService } from '../financial/financial.service';
+import { AvisoRastreadorService } from '../whatsapp-disparo/aviso-rastreador.service';
 import { ValidateStockDto } from './dto/validate-stock.dto';
 
 type ParsedRow = {
@@ -177,6 +178,7 @@ export class StockService {
     private routes: RoutesService,
     private positions: PositionsService,
     private financial: FinancialService,
+    private avisoRastreador: AvisoRastreadorService,
   ) {}
 
   /**
@@ -1530,6 +1532,15 @@ export class StockService {
     this.logger.log(
       `Estoque associado: IMEI ${item.imei} → placa ${placa} (cliente ${result.associate.id})`,
     );
+
+    // 8) WhatsApp ao cliente com o acesso ao app. Sem await: a resposta ao
+    // técnico não espera a Meta, e o serviço nunca lança.
+    void this.avisoRastreador.avisarInstalado({
+      telefone: result.associate.phone,
+      nome: result.associate.name,
+      modelo: result.vehicle.model,
+      placa,
+    });
 
     return {
       ok: true,

@@ -37,6 +37,7 @@ function montar({
     {} as never,
     {} as never,
     {} as never,
+    { avisarInstalado: jest.fn() } as never,
   );
   return { s, prisma, tx, traccar };
 }

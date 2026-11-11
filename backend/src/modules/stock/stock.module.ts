@@ -8,6 +8,7 @@ import { TraccarModule } from '../traccar/traccar.module';
 import { InstallationPendingsModule } from '../installation-pendings/installation-pendings.module';
 import { GeocodingModule } from '../geocoding/geocoding.module';
 import { FinancialModule } from '../financial/financial.module';
+import { WhatsappDisparoModule } from '../whatsapp-disparo/whatsapp-disparo.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { FinancialModule } from '../financial/financial.module';
     InstallationPendingsModule,
     GeocodingModule,
     FinancialModule,
+    WhatsappDisparoModule,
   ],
   controllers: [StockController],
   providers: [StockService, StockTraccarService, StockBulkLinkService],
