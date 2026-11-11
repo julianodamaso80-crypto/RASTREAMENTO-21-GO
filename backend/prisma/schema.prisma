@@ -1196,6 +1196,11 @@ model TagKey {
   /// veio e o que ainda falta pedir ao fabricante.
   batch String?
 
+  /// Número impresso na etiqueta quando é DIFERENTE do `serialNumber` do
+  /// arquivo (lote 926030: a etiqueta traz um número, a chave outro). A busca
+  /// de Estoque, Clientes e Mapa acha a TAG pelos dois.
+  labelSerial String? @map("label_serial")
+
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id])
 
@@ -1205,6 +1210,7 @@ model TagKey {
   @@unique([tenantId, serialNumber])
   @@index([tenantId, hashedAdvKey])
   @@index([tenantId, batch])
+  @@index([tenantId, labelSerial])
   @@map("tag_keys")
 }
 

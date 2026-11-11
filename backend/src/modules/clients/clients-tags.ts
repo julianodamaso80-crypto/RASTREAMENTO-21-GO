@@ -35,6 +35,8 @@ export interface VinculoTag {
   origin: string;
   verdict: string;
   checkedAt: Date;
+  /** Número impresso na etiqueta quando difere do serial (tag_keys.label_serial). */
+  labelSerial?: string | null;
 }
 
 /**
@@ -132,6 +134,8 @@ export function casaBusca(
     serialNumber: string;
     /** Outras TAGs do mesmo carro: o card é um só, a busca acha por qualquer uma. */
     outrosSeriais?: string[];
+    /** Números impressos na etiqueta que diferem do serial (lote 926030). */
+    apelidos?: string[];
   },
   termo: string | undefined,
 ): boolean {
@@ -144,7 +148,7 @@ export function casaBusca(
   }
   const nome = normalizarNome(t);
   if (nome && normalizarNome(item.associateName).includes(nome)) return true;
-  const seriais = [item.serialNumber, ...(item.outrosSeriais ?? [])];
+  const seriais = [item.serialNumber, ...(item.outrosSeriais ?? []), ...(item.apelidos ?? [])];
   // Série com letra ("K306491") casa pelo termo inteiro; placa com letra nunca
   // está contida numa série só de dígitos, então a regra abaixo continua valendo.
   if (/[A-Za-z]/.test(t) && alfa && seriais.some((sn) => soAlfanumerico(sn).includes(alfa))) {
@@ -351,6 +355,19 @@ async function montarVinculosDaTela(prisma: PrismaService, tenantId: string) {
     },
   });
   if (vinculos.length === 0) return { visiveis: [], ocultos: [] };
+
+  // Etiqueta com número diferente do serial do arquivo (lote 926030): o
+  // consultor lê a etiqueta e tem que achar a TAG por ela também.
+  const etiquetas = await prisma.tagKey.findMany({
+    where: {
+      tenantId,
+      labelSerial: { not: null },
+      serialNumber: { in: vinculos.map((v) => v.serialNumber) },
+    },
+    select: { serialNumber: true, labelSerial: true },
+  });
+  const etiquetaDe = new Map(etiquetas.map((e) => [e.serialNumber, e.labelSerial]));
+  for (const v of vinculos) v.labelSerial = etiquetaDe.get(v.serialNumber) ?? null;
 
   const codigos = vinculos.map((v) => v.hinovaVehicleCode).filter((c): c is string => !!c);
   const chassis = vinculos.map((v) => v.chassi).filter((c): c is string => !!c);

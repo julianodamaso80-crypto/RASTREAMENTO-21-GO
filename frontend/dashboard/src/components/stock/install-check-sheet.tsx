@@ -33,7 +33,8 @@ import type { DeviceHealth, StockItem } from '@/types/stock';
 const REFRESH_MS = 10_000;
 
 /** Só o que o painel usa — o mapa do estoque reusa este mesmo fluxo. */
-type ItemConferivel = Pick<StockItem, 'id' | 'imei'>;
+type ItemConferivel = Pick<StockItem, 'id' | 'imei'> &
+  Partial<Pick<StockItem, 'iccid' | 'line' | 'operator'>>;
 
 type Props = {
   item: ItemConferivel | null;
@@ -293,6 +294,16 @@ export function InstallCheckSheet({ item, open, onOpenChange, onValidated }: Pro
                     <p className="mt-1 text-xs text-muted-foreground">
                       Ele nunca se conectou ao servidor. Ligue o equipamento no
                       veículo e a conferência aparece aqui em cerca de 1 minuto.
+                      {item && (item.line || item.iccid) && (
+                        <>
+                          {' '}
+                          Chip {item.line ?? item.iccid}
+                          {item.operator ? ` (${item.operator})` : ''}. Se a operadora
+                          mostra o chip ativo e mesmo assim ele não conecta, o aparelho
+                          está apontado para outro servidor: peça ao escritório o SMS de
+                          configuração do servidor.
+                        </>
+                      )}
                     </p>
                   ) : (
                     health.motivos.length > 0 && (

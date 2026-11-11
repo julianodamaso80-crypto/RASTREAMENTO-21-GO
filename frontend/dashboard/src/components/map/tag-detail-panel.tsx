@@ -32,6 +32,7 @@ export function TagDetailPanel({
   onClose,
   onAtualizou,
   embaixo = false,
+  onCentralizar,
 }: {
   tag: TagNoMapa;
   onClose: () => void;
@@ -39,6 +40,8 @@ export function TagDetailPanel({
   embaixo?: boolean;
   /** Recarrega as TAGs depois que vem posição nova. */
   onAtualizou: () => void;
+  /** Move a câmera do mapa para a posição de uma das TAGs do carro. */
+  onCentralizar?: (lng: number, lat: number) => void;
 }) {
   const [restam, setRestam] = useState(0);
   const [pendente, setPendente] = useState(false);
@@ -54,7 +57,15 @@ export function TagDetailPanel({
   const mostraLocal = canSeeInstallLocation(user?.role);
   // Carro com duas TAGs: a do ponto primeiro, depois as outras.
   const tags = [
-    { serialNumber: tag.serialNumber, installLocation: tag.installLocation ?? null },
+    {
+      serialNumber: tag.serialNumber,
+      installLocation: tag.installLocation ?? null,
+      latitude: tag.latitude,
+      longitude: tag.longitude,
+      accuracyM: tag.accuracyM,
+      seenAt: tag.seenAt,
+      bateria: tag.bateria ?? null,
+    },
     ...(tag.outrasTags ?? []),
   ];
 
@@ -189,61 +200,82 @@ export function TagDetailPanel({
         />
       )}
 
-      {temPosicao ? (
-        <div className="rounded-lg border px-3 py-2 text-xs">
-          <div className="flex items-baseline justify-between gap-3 py-1">
-            <span className="text-muted-foreground">Último avistamento</span>
-            <span className="font-medium">
-              {tag.seenAt ? formatRelativeTime(tag.seenAt) : '—'}
-            </span>
-          </div>
-          <div className="flex items-baseline justify-between gap-3 py-1">
-            <span className="text-muted-foreground">Precisão</span>
-            <span className="font-medium">
-              {tag.accuracyM ? `${Math.round(tag.accuracyM)} m` : '—'}
-            </span>
-          </div>
-          <div className="flex items-baseline justify-between gap-3 py-1">
-            <span className="text-muted-foreground">Bateria</span>
-            <BateriaTag nivel={tag.bateria} />
-          </div>
-          <div className="flex items-baseline justify-between gap-3 py-1">
-            <span className="flex items-center gap-1 text-muted-foreground">
-              <Target className="h-3 w-3" /> Coordenada
-            </span>
-            <span className="font-mono font-medium">
-              {tag.latitude?.toFixed(5)}, {tag.longitude?.toFixed(5)}
-            </span>
-          </div>
-        </div>
-      ) : (
-        <p className="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
-          Esta TAG ainda não foi vista pela rede. Ela aparece no mapa na primeira
-          vez que um iPhone com Bluetooth ligado passar perto do veículo.
-        </p>
-      )}
-
-      {/* IMEI e esconderijo, como no painel do rastreador: é com eles que o
-          time acha a TAG no carro. Aparecem mesmo sem posição. */}
-      <div className="rounded-lg border px-3 py-2 text-xs">
-        {tags.map((t, i) => (
-          <div key={t.serialNumber} className={cn(i > 0 && 'mt-1 border-t pt-1')}>
-            <div className="flex items-baseline justify-between gap-3 py-1">
-              <span className="text-muted-foreground">
-                {tags.length > 1 ? `IMEI da TAG ${i + 1}` : 'IMEI da TAG'}
-              </span>
-              <span className="font-mono font-medium">{t.serialNumber}</span>
-            </div>
-            {mostraLocal && (
+      {/* Uma caixa por TAG: com duas no carro, cada uma mostra a própria
+          posição, e "Centralizar" leva o mapa até ela. Com uma só, fica como
+          sempre foi (sem numeração). */}
+      <div className="flex flex-col gap-3">
+        {tags.map((t, i) => {
+          const posicionada = typeof t.latitude === 'number' && typeof t.longitude === 'number';
+          return (
+            <div key={t.serialNumber} className="rounded-lg border px-3 py-2 text-xs">
+              {tags.length > 1 && (
+                <div className="flex items-center justify-between gap-2 pb-1">
+                  <span className="font-bold">TAG {i + 1}</span>
+                  {posicionada && onCentralizar && (
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-violet-300 underline-offset-2 hover:underline"
+                      onClick={() => onCentralizar(t.longitude as number, t.latitude as number)}
+                    >
+                      Centralizar
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="flex items-baseline justify-between gap-3 py-1">
-                <span className="shrink-0 text-muted-foreground">Local de instalação</span>
-                <span className="text-right font-medium">
-                  {t.installLocation?.trim() || 'Não informado'}
+                <span className="text-muted-foreground">
+                  {tags.length > 1 ? `IMEI da TAG ${i + 1}` : 'IMEI da TAG'}
                 </span>
+                <span className="font-mono font-medium">{t.serialNumber}</span>
               </div>
-            )}
-          </div>
-        ))}
+              {mostraLocal && (
+                <div className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="shrink-0 text-muted-foreground">Local de instalação</span>
+                  <span className="text-right font-medium">
+                    {t.installLocation?.trim() || 'Não informado'}
+                  </span>
+                </div>
+              )}
+              {posicionada ? (
+                <>
+                  <div className="flex items-baseline justify-between gap-3 py-1">
+                    <span className="text-muted-foreground">
+                      {tags.length > 1 ? 'Vista' : 'Último avistamento'}
+                    </span>
+                    <span className="font-medium">
+                      {t.seenAt ? formatRelativeTime(t.seenAt) : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 py-1">
+                    <span className="text-muted-foreground">Precisão</span>
+                    <span className="font-medium">
+                      {t.accuracyM ? `${Math.round(t.accuracyM)} m` : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 py-1">
+                    <span className="text-muted-foreground">Bateria</span>
+                    <BateriaTag nivel={t.bateria ?? null} />
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 py-1">
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Target className="h-3 w-3" /> Coordenada
+                    </span>
+                    <span className="font-mono font-medium">
+                      {(t.latitude as number).toFixed(5)}, {(t.longitude as number).toFixed(5)}
+                    </span>
+                  </div>
+                </>
+              ) : tags.length > 1 ? (
+                <p className="py-1 text-muted-foreground">Ainda não vista pela rede.</p>
+              ) : (
+                <p className="py-3 text-center text-muted-foreground">
+                  Esta TAG ainda não foi vista pela rede. Ela aparece no mapa na primeira
+                  vez que um iPhone com Bluetooth ligado passar perto do veículo.
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">

@@ -32,6 +32,7 @@ function montar(rows: any[] = [], veiculos: any[] = [], vinculos: any[] = []) {
         return Promise.resolve(veiculos);
       }),
     },
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
     tagLink: { findMany: jest.fn().mockResolvedValue(vinculos) },
     $queryRaw: jest.fn().mockResolvedValue([]),
   };

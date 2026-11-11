@@ -185,6 +185,7 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
     const etiquetaTagRef = useRef<maplibregl.Marker | null>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
+    const etiquetasOutrasRef = useRef<maplibregl.Marker[]>([]);
     // Guardado em ref pra não entrar nas dependências do efeito que cria o
     // mapa: um callback inline recriaria o mapa inteiro a cada renderização.
     const onReadyRef = useRef(onReady);
@@ -842,19 +843,31 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       const comPosicao = (tags ?? []).filter(
         (t) => t.latitude !== null && t.longitude !== null,
       );
+      const sel = comPosicao.find((t) => t.id === selectedTagId) ?? (tags ?? []).find((t) => t.id === selectedTagId);
+      // Carro com mais de uma TAG: só com ele selecionado, cada outra TAG que
+      // já foi vista ganha o próprio ponto e círculo (nunca na visão geral).
+      const outrasComPosicao = (sel?.outrasTags ?? [])
+        .map((o, i) => ({ ...o, numero: i + 2 }))
+        .filter((o) => typeof o.latitude === 'number' && typeof o.longitude === 'number');
       const pontos: GeoJSON.FeatureCollection = {
         type: 'FeatureCollection',
-        features: comPosicao.map((t) => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [t.longitude as number, t.latitude as number] },
-          properties: { id: t.id, selecionada: t.id === selectedTagId },
-        })),
+        features: [
+          ...comPosicao.map((t): GeoJSON.Feature => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [t.longitude as number, t.latitude as number] },
+            properties: { id: t.id, selecionada: t.id === selectedTagId, outra: false },
+          })),
+          ...outrasComPosicao.map((o): GeoJSON.Feature => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [o.longitude as number, o.latitude as number] },
+            properties: { id: sel?.id, selecionada: false, outra: true },
+          })),
+        ],
       };
-      const sel = comPosicao.find((t) => t.id === selectedTagId);
       const precisao: GeoJSON.FeatureCollection = {
         type: 'FeatureCollection',
         features:
-          sel && sel.accuracyM
+          sel && sel.accuracyM && sel.latitude !== null && sel.longitude !== null
             ? [{
                 type: 'Feature',
                 geometry: {
@@ -865,6 +878,17 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
               }]
             : [],
       };
+      for (const o of outrasComPosicao) {
+        if (!o.accuracyM) continue;
+        precisao.features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [circuloEmMetros(o.longitude as number, o.latitude as number, o.accuracyM)],
+          },
+          properties: {},
+        });
+      }
 
       const garantir = () => {
         // Fonte já existe: troca os dados SEMPRE. `isStyleLoaded()` fica falso
@@ -901,11 +925,11 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
             'circle-color': COR_TAG,
             'circle-radius': [
               'interpolate', ['linear'], ['zoom'],
-              8, ['case', ['get', 'selecionada'], 7, 3],
-              15, ['case', ['get', 'selecionada'], 11, 7],
+              8, ['case', ['get', 'selecionada'], 7, ['get', 'outra'], 5, 3],
+              15, ['case', ['get', 'selecionada'], 11, ['get', 'outra'], 9, 7],
             ],
             'circle-stroke-color': '#ffffff',
-            'circle-stroke-width': ['case', ['get', 'selecionada'], 2.5, 1],
+            'circle-stroke-width': ['case', ['get', 'selecionada'], 2.5, ['get', 'outra'], 2, 1],
             'circle-opacity': 0.9,
           },
         });
@@ -919,7 +943,20 @@ const MapContainer = forwardRef<MapContainerRef, MapContainerProps>(
       // vista — posição de TAG é passado, e o operador tem que saber de quando.
       etiquetaTagRef.current?.remove();
       etiquetaTagRef.current = null;
-      if (sel) {
+      etiquetasOutrasRef.current.forEach((m) => m.remove());
+      etiquetasOutrasRef.current = [];
+      // Só as outras TAGs do carro selecionado (no máximo uma ou duas), não as ~5 mil.
+      for (const o of outrasComPosicao) {
+        const el = document.createElement('div');
+        el.style.cssText = `padding:2px 6px;background:rgba(15,23,42,0.95);border:1px solid ${COR_TAG};border-radius:5px;white-space:nowrap;font-size:10px;font-weight:700;color:#e2e8f0;pointer-events:none;`;
+        el.textContent = `TAG ${o.numero}`;
+        etiquetasOutrasRef.current.push(
+          new maplibregl.Marker({ element: el, offset: [0, 20] })
+            .setLngLat([o.longitude as number, o.latitude as number])
+            .addTo(map),
+        );
+      }
+      if (sel && sel.latitude !== null && sel.longitude !== null) {
         const el = document.createElement('div');
         el.style.cssText = `padding:4px 9px;background:rgba(15,23,42,0.95);border:1px solid ${COR_TAG};border-radius:6px;white-space:nowrap;font-size:11px;line-height:1.35;color:#e2e8f0;text-align:center;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,0.55);`;
         el.innerHTML = `

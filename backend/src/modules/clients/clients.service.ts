@@ -44,6 +44,9 @@ export interface FindAssetsParams {
  * A tela lista por ATIVO, não por cliente — um card por veículo, como no fluxo
  * de operação real ("quem é o dono desta placa?", "quem parou de comunicar?").
  */
+/** ICCID, linha e operadora do chip, lidos do Estoque pelo IMEI. */
+type ChipDoEstoque = { iccid: string | null; linha: string | null; operadora: string | null };
+
 @Injectable()
 export class ClientsService {
   constructor(
@@ -95,8 +98,30 @@ export class ClientsService {
         'device.chip.phoneNumber',
       ],
     });
+    // ICCID e linha reais moram em `stock_items` (a tabela `chips` está vazia):
+    // o número do chip digitado na busca tem que achar o veículo.
+    const digitosBusca = (params.search ?? '').replace(/\D/g, '');
+    const imeisPorChip =
+      digitosBusca.length >= 6
+        ? (
+            await this.prisma.stockItem.findMany({
+              where: {
+                tenantId,
+                deletedAt: null,
+                OR: [{ iccid: { contains: digitosBusca } }, { line: { contains: digitosBusca } }],
+              },
+              select: { imei: true },
+              take: 200,
+            })
+          ).map((s) => s.imei)
+        : [];
     if (filtro) {
       where.OR = filtro.OR as Prisma.VehicleWhereInput[];
+      if (imeisPorChip.length > 0) {
+        (where.OR as Prisma.VehicleWhereInput[]).push({ device: { imei: { in: imeisPorChip } } });
+      }
+    } else if (imeisPorChip.length > 0) {
+      where.OR = [{ device: { imei: { in: imeisPorChip } } }];
     } else if (params.search?.trim()) {
       // Termo que não pode casar em campo nenhum não devolve a base inteira.
       where.id = '00000000-0000-0000-0000-000000000000';
@@ -134,8 +159,11 @@ export class ClientsService {
         }),
       ]);
       const lastFix = await this.lastFixTimes(tenantId, vehicles.map((v) => v.id));
+      const chips = await this.chipsDoEstoque(tenantId, vehicles);
       return {
-        data: vehicles.map((v) => this.toAsset(v, lastFix.get(v.id) ?? null)),
+        data: vehicles.map((v) =>
+          this.toAsset(v, lastFix.get(v.id) ?? null, chips.get(v.device?.imei ?? '') ?? null),
+        ),
         meta: { total, page, perPage },
       };
     }
@@ -157,6 +185,7 @@ export class ClientsService {
             associateCpf: x.sga?.cpf ?? x.vinculo.associateCpf,
             serialNumber: x.vinculo.serialNumber,
             outrosSeriais: x.outrosSeriais,
+            apelidos: x.vinculo.labelSerial ? [x.vinculo.labelSerial] : [],
           },
           params.search,
         ),
@@ -196,6 +225,7 @@ export class ClientsService {
           })
         : [];
     const lastFix = await this.lastFixTimes(tenantId, vehicles.map((v) => v.id));
+    const chips = await this.chipsDoEstoque(tenantId, vehicles);
 
     const tagPorPlaca = new Map(soTag.map((x) => [x.vinculo.plate, x]));
     const posVeiculo = await ultimasPosicoes(
@@ -206,7 +236,7 @@ export class ClientsService {
         .filter((s): s is string => !!s),
     );
     const dataVeiculos = vehicles.map((v) => {
-      const asset = this.toAsset(v, lastFix.get(v.id) ?? null);
+      const asset = this.toAsset(v, lastFix.get(v.id) ?? null, chips.get(v.device?.imei ?? '') ?? null);
       const x = tagPorPlaca.get(v.plate);
       return x
         ? { ...asset, tag: resumoTag(x.vinculo, posVeiculo.get(x.vinculo.serialNumber)) }
@@ -260,7 +290,7 @@ export class ClientsService {
     const pos = await ultimasPosicoes(
       this.prisma,
       tenantId,
-      visiveis.map((x) => x.vinculo.serialNumber),
+      visiveis.flatMap((x) => [x.vinculo.serialNumber, ...x.outrosSeriais]),
     );
     // Quando o coletor perguntou à Apple pela última vez (ciclo de 20 min ou
     // "Atualizar TAG"). É o que separa "ninguém viu a TAG" de "ninguém
@@ -289,9 +319,17 @@ export class ClientsService {
       // Carro com duas TAGs é um ponto só; a busca tem que achar pelos dois
       // números, como em Clientes Ativos (`casaBusca`).
       outrosSeriais: x.outrosSeriais,
+      // Número da etiqueta quando difere do serial: a busca do Mapa acha por ele.
+      apelidos: x.vinculo.labelSerial ? [x.vinculo.labelSerial] : [],
       outrasTags: x.outrosSeriais.map((serialNumber) => ({
         serialNumber,
         installLocation: localDe.get(serialNumber) ?? null,
+        // Posição de cada TAG, com os mesmos nomes da principal.
+        latitude: pos.get(serialNumber)?.lat ?? null,
+        longitude: pos.get(serialNumber)?.lng ?? null,
+        accuracyM: pos.get(serialNumber)?.accuracyM ?? null,
+        seenAt: pos.get(serialNumber)?.seenAt ?? null,
+        bateria: pos.get(serialNumber)?.bateria ?? null,
       })),
       comRastreador: placasComVeiculo.has(x.vinculo.plate),
       foraDaLista: ocultos.has(x) ? motivoForaDaLista(x) : null,
@@ -307,6 +345,29 @@ export class ClientsService {
    * keep-alive sem fix novo. Mostrar qualquer um dos dois como "GPS" faria um
    * veículo sem sinal parecer rastreado.
    */
+  /**
+   * Chip de cada rastreador da página, numa consulta só. A tabela `chips`
+   * está vazia em produção; o ICCID, a linha e a operadora moram em
+   * `stock_items`, casados pelo IMEI. O consultor precisa do número do chip
+   * para falar com a operadora quando o aparelho some.
+   */
+  private async chipsDoEstoque(
+    tenantId: string,
+    vehicles: Array<{ device: { imei: string } | null }>,
+  ): Promise<Map<string, ChipDoEstoque>> {
+    const imeis = vehicles.map((v) => v.device?.imei).filter((i): i is string => !!i);
+    if (imeis.length === 0) return new Map();
+    const itens = await this.prisma.stockItem.findMany({
+      where: { tenantId, imei: { in: imeis }, deletedAt: null },
+      select: { imei: true, iccid: true, line: true, operator: true },
+    });
+    return new Map(
+      itens
+        .filter((s) => s.iccid || s.line)
+        .map((s) => [s.imei, { iccid: s.iccid ?? null, linha: s.line ?? null, operadora: s.operator ?? null }]),
+    );
+  }
+
   private async lastFixTimes(tenantId: string, vehicleIds: string[]) {
     if (vehicleIds.length === 0) return new Map<string, Date>();
 
@@ -336,6 +397,7 @@ export class ClientsService {
       };
     }>,
     lastFixTime: Date | null,
+    chip: ChipDoEstoque | null = null,
   ) {
     return {
       id: v.id,
@@ -373,6 +435,8 @@ export class ClientsService {
               : null,
             /** Histórico anterior ao cadastro de técnicos. */
             installedByName: v.device.installedBy,
+            /** ICCID, linha e operadora vêm do Estoque, casados pelo IMEI. */
+            chip,
           }
         : null,
       /** GPS: o único carimbo que prova "o veículo estava AQUI". */

@@ -42,8 +42,19 @@ export interface TagNoMapa {
   foraDaLista?: string | null;
   /** Outras TAGs do mesmo carro: o ponto é um só, a busca acha por qualquer uma. */
   outrosSeriais?: string[];
+  /** Números impressos na etiqueta que diferem do serial (lote 926030). */
+  apelidos?: string[];
   /** As mesmas outras TAGs, com o local de cada uma, para o painel. */
-  outrasTags?: Array<{ serialNumber: string; installLocation: string | null }>;
+  outrasTags?: Array<{
+    serialNumber: string;
+    installLocation: string | null;
+    /** Posição própria da TAG (mesmos nomes da principal); nulos se nunca vista. */
+    latitude?: number | null;
+    longitude?: number | null;
+    accuracyM?: number | null;
+    seenAt?: string | null;
+    bateria?: NivelBateria | null;
+  }>;
 }
 
 /** Os perfis que enxergam TAG — espelho de `PERFIS_QUE_VEEM_TAG` no backend. */

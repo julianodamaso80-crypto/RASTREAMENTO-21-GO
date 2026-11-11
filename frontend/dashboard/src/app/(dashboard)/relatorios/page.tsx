@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { ReportFilters } from '@/components/reports/report-filters';
 import { TripsTable } from '@/components/reports/trips-table';
 import { StopsTable } from '@/components/reports/stops-table';
+import { OfflineEquipmentReport } from '@/components/reports/offline-equipment-report';
 import { reportsApi } from '@/lib/api';
 import type { TraccarPosition } from '@/types/traccar';
 import type { Trip, Stop } from '@/types/report';
@@ -29,6 +30,7 @@ export default function ReportsPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [stops, setStops] = useState<Stop[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleWithTracking | null>(null);
+  const [section, setSection] = useState<'vehicle' | 'offline'>('vehicle');
   const [activeTab, setActiveTab] = useState<'route' | 'trips' | 'stops'>('route');
 
   const handleGenerate = useCallback(
@@ -75,6 +77,29 @@ export default function ReportsPage() {
       <div className="max-w-6xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold">Relatórios</h1>
 
+        <div className="flex gap-1 border-b border-border/30">
+          {([
+            { key: 'vehicle', label: 'Por veículo' },
+            { key: 'offline', label: 'Equipamentos offline' },
+          ] as const).map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setSection(s.key)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                section === s.key
+                  ? 'border-emerald-400 text-emerald-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {section === 'offline' && <OfflineEquipmentReport />}
+
+        {section === 'vehicle' && (
+        <>
         <ReportFilters
           onGenerate={handleGenerate}
           loading={loading}
@@ -128,6 +153,8 @@ export default function ReportsPage() {
             <p className="text-lg">Selecione um veículo e período</p>
             <p className="text-sm mt-1">Os dados de posição, viagens e paradas serão exibidos aqui</p>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

@@ -67,6 +67,8 @@ function montarPrisma() {
     },
     position: { groupBy: jest.fn().mockResolvedValue([]) },
     tagLink: { findMany: jest.fn().mockResolvedValue([LINK]) },
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
+    stockItem: { findMany: jest.fn().mockResolvedValue([]) },
     sgaVehicle: { findMany: jest.fn().mockResolvedValue([SGA_MOTO]) },
     $queryRaw: jest.fn().mockResolvedValue([
       { serial_number: LINK.serialNumber, latitude: -22.7, longitude: -43.3, accuracy_m: 40, seen_at: AGORA },

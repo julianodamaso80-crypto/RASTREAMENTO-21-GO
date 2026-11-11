@@ -47,5 +47,7 @@ export function tagCasaBusca(tag: TagNoMapa, termo: string): boolean {
   // Termo com letra nunca vira busca numérica (mesma regra do backend).
   const digitos = t.replace(/\D/g, '');
   if (/[A-Za-z]/.test(t) || digitos.length < 3) return false;
-  return [tag.serialNumber, ...(tag.outrosSeriais ?? [])].some((sn) => sn.includes(digitos));
+  return [tag.serialNumber, ...(tag.outrosSeriais ?? []), ...(tag.apelidos ?? [])].some((sn) =>
+    sn.includes(digitos),
+  );
 }

@@ -220,8 +220,12 @@ export default function ClientesPage() {
       );
       setSoltandoTag(null);
       await load();
-    } catch {
-      toast.error('Não consegui desvincular a TAG. Tente de novo.');
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response
+        ?.data?.message;
+      toast.error(
+        (Array.isArray(msg) ? msg[0] : msg) || 'Não consegui desvincular a TAG. Tente de novo.',
+      );
     } finally {
       setSalvandoTag(false);
     }

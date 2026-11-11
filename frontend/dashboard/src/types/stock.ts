@@ -31,6 +31,13 @@ export interface StockItem {
     seenAt: string;
     bateria?: NivelBateria | null;
   } | null;
+  /** Só vem preenchido na busca, para item já instalado/vinculado (fora do estoque disponível). */
+  vinculo?: {
+    tipo: 'INSTALADO' | 'VINCULADA';
+    placa: string;
+    cliente: string | null;
+    desde: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }

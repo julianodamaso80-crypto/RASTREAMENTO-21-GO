@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RequireRoute } from '../../common/decorators';
 import { ReportsService } from './reports.service';
 import { ReverseGeocodeService } from '../geocoding/reverse-geocode.service';
+import { OfflineEquipmentService } from './offline-equipment.service';
 import { HistoryRequestsService } from './history-requests.service';
 import {
   ReportQueryDto,
@@ -40,6 +41,7 @@ export class ReportsController {
     private prisma: PrismaService,
     private geocode: ReverseGeocodeService,
     private historyRequests: HistoryRequestsService,
+    private offlineEquipment: OfflineEquipmentService,
   ) {}
 
   private async validateDevice(deviceId: number, tenantId: string) {
@@ -173,6 +175,29 @@ export class ReportsController {
   ) {
     await this.validateDevice(query.deviceId, req.tenantId);
     return this.reportsService.getStops(query.deviceId, query.from, query.to);
+  }
+
+  @Get('offline-equipment')
+  @ApiOperation({ summary: 'Equipamentos offline (placa, ICCID, chip, IMEI)' })
+  async offlineEquipmentReport(
+    @Query('format') format: string | undefined,
+    @Req() req: AuthenticatedRequest,
+    @Res() res: Response,
+  ) {
+    if (format === 'xlsx') {
+      const buffer = await this.offlineEquipment.exportarXlsx(req.tenantId);
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        'attachment; filename=equipamentos-offline.xlsx',
+      );
+      res.send(buffer);
+      return;
+    }
+    res.json(await this.offlineEquipment.listar(req.tenantId));
   }
 
   @Get('export')

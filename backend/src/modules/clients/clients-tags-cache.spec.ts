@@ -7,6 +7,7 @@ import {
 function fakePrisma() {
   const n = { link: 0, sga: 0, raw: 0 };
   const prisma = {
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
     tagLink: {
       findMany: jest.fn(async () => {
         n.link++;

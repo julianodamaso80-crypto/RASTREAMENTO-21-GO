@@ -413,12 +413,14 @@ export class StockService {
       conexao,
       tipo,
     } = filters;
-    // associatedAt: null → só rastreadores disponíveis (associados saíram do estoque).
+    // Sem busca: associatedAt: null → só disponíveis (associados saíram do
+    // estoque). Com busca: acha também o já instalado/vinculado, para o
+    // consultor que digita o número de um equipamento que já está em campo.
     const where: Record<string, unknown> = {
       tenantId,
       deletedAt: null,
-      associatedAt: null,
     };
+    if (!search) where.associatedAt = null;
     if (tipo) where.kind = tipo;
 
     // Filtro por estado no servidor GPS. Precisa entrar no `where` (e não sair
@@ -449,16 +451,22 @@ export class StockService {
     if (assignment === 'free') where.assignedTechnicianId = null;
     if (assignment === 'assigned') where.assignedTechnicianId = { not: null };
     if (search) {
-      // Só campos do equipamento: esta lista mostra apenas o que ainda está
-      // disponível (associatedAt: null), então placa e nome de cliente nunca
-      // casariam aqui — quem tem esse dado acha o aparelho pela busca do topo
-      // ou por Clientes Ativos.
+      // Só campos do equipamento; placa e nome de cliente não entram aqui.
       where.OR = [
         { imei: { contains: search, mode: 'insensitive' } },
         { iccid: { contains: search, mode: 'insensitive' } },
         { line: { contains: search, mode: 'insensitive' } },
         { operator: { contains: search, mode: 'insensitive' } },
       ];
+      // TAG cuja etiqueta traz um número diferente do serial (lote 926030):
+      // quem digita o número da etiqueta tem que achar o item.
+      const porEtiqueta = await this.prisma.tagKey.findMany({
+        where: { tenantId, labelSerial: { contains: search } },
+        select: { serialNumber: true },
+      });
+      if (porEtiqueta.length > 0) {
+        (where.OR as unknown[]).push({ imei: { in: porEtiqueta.map((k) => k.serialNumber) } });
+      }
     }
 
     const [data, total] = await Promise.all([
@@ -478,9 +486,99 @@ export class StockService {
     ]);
 
     return {
-      data: await this.comPosicaoDeTag(tenantId, data),
+      data: await this.comVinculo(
+        tenantId,
+        await this.comPosicaoDeTag(tenantId, data),
+      ),
       meta: { total, page, perPage, gpsIndisponivel: false },
     };
+  }
+
+  /**
+   * Onde está cada item já associado da página: uma consulta por tipo
+   * (rastreador → device/veículo; TAG → vínculo vivo). Disponível: vinculo null.
+   */
+  private async comVinculo<
+    T extends {
+      imei: string;
+      kind?: string;
+      deviceId?: string | null;
+      associatedAt?: Date | null;
+    },
+  >(tenantId: string, itens: T[]) {
+    const assoc = itens.filter((i) => i.associatedAt);
+    const deviceIds = assoc
+      .filter((i) => i.kind !== 'TAG' && i.deviceId)
+      .map((i) => i.deviceId as string);
+    const seriais = assoc.filter((i) => i.kind === 'TAG').map((i) => i.imei);
+
+    const [devices, links] = await Promise.all([
+      deviceIds.length
+        ? this.prisma.device.findMany({
+            where: { id: { in: deviceIds }, tenantId, deletedAt: null },
+            select: {
+              id: true,
+              installedAt: true,
+              vehicle: {
+                select: {
+                  plate: true,
+                  deletedAt: true,
+                  associate: { select: { name: true } },
+                },
+              },
+            },
+          })
+        : Promise.resolve([]),
+      seriais.length
+        ? this.prisma.tagLink.findMany({
+            where: { tenantId, serialNumber: { in: seriais }, deletedAt: null },
+            select: {
+              serialNumber: true,
+              plate: true,
+              associateName: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
+    ]);
+    const devicePorId = new Map(devices.map((d) => [d.id, d]));
+    const linkPorSerial = new Map<string, (typeof links)[number]>();
+    for (const l of links) {
+      if (!linkPorSerial.has(l.serialNumber)) linkPorSerial.set(l.serialNumber, l);
+    }
+
+    return itens.map((i) => {
+      if (!i.associatedAt) return { ...i, vinculo: null };
+      if (i.kind === 'TAG') {
+        const l = linkPorSerial.get(i.imei);
+        return {
+          ...i,
+          vinculo: l
+            ? {
+                tipo: 'VINCULADA' as const,
+                placa: l.plate,
+                cliente: l.associateName ?? null,
+                desde: l.createdAt,
+              }
+            : null,
+        };
+      }
+      const d = i.deviceId ? devicePorId.get(i.deviceId) : undefined;
+      const v = d?.vehicle && !d.vehicle.deletedAt ? d.vehicle : null;
+      return {
+        ...i,
+        vinculo:
+          d && v
+            ? {
+                tipo: 'INSTALADO' as const,
+                placa: v.plate,
+                cliente: v.associate?.name ?? null,
+                desde: d.installedAt,
+              }
+            : null,
+      };
+    });
   }
 
   /**

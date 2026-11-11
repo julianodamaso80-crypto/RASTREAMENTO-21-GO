@@ -92,6 +92,16 @@ export function AssetCard({
               {asset.device?.imei ? (
                 <>
                   <span className="font-sans">IMEI</span> {asset.device.imei}
+                  {asset.device.chip?.linha || asset.device.chip?.iccid ? (
+                    <span
+                      className="ml-2"
+                      title={asset.device.chip.iccid ? `ICCID ${asset.device.chip.iccid}` : undefined}
+                    >
+                      <span className="font-sans">Chip</span>{' '}
+                      {asset.device.chip.linha ?? asset.device.chip.iccid}
+                      {asset.device.chip.operadora ? ` · ${asset.device.chip.operadora}` : ''}
+                    </span>
+                  ) : null}
                 </>
               ) : asset.soTag ? (
                 <span className="font-sans">Sem rastreador — só TAG</span>
@@ -256,7 +266,7 @@ function SeloTag({ tag }: { tag: NonNullable<ClientAsset['tag']> }) {
       }
     >
       <Tag className="h-3 w-3" />
-      TAG · {divergente ? 'conferir' : visto}
+      {divergente ? 'conferir' : visto}
       {tag.bateria && (
         <>
           {' · '}
@@ -366,7 +376,7 @@ function textoUltimaAtualizacao(asset: ClientAsset): string {
   // avistamento. "Nunca comunicou" ao lado de "TAG · há 18d" se contradizia.
   if (asset.soTag) {
     const vista = asset.tag?.lastSeenAt;
-    return vista ? `TAG vista ${formatRelativeTime(vista)}` : 'TAG nunca vista pela rede';
+    return vista ? `vista ${formatRelativeTime(vista)}` : 'nunca vista pela rede';
   }
   const { gprsAgeMinutes, gpsAgeMinutes } = asset.comms;
   const idades = [gprsAgeMinutes, gpsAgeMinutes].filter(

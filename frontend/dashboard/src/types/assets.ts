@@ -43,6 +43,8 @@ export interface ClientAsset {
     lastConnection: string | null;
     technician: { id: string; name: string } | null;
     installedByName: string | null;
+    /** ICCID, linha e operadora do chip (do Estoque, pelo IMEI). */
+    chip?: { iccid: string | null; linha: string | null; operadora: string | null } | null;
   } | null;
   /** GPS — o único carimbo que prova onde o veículo estava. */
   lastFixTime: string | null;

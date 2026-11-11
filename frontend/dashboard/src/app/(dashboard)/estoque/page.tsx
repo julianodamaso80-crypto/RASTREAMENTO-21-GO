@@ -254,12 +254,15 @@ export default function EstoquePage() {
 
   // "Todos" vale para a lista que está na tela; marcados de buscas anteriores
   // ficam como estão.
-  const todosDaTelaMarcados = items.length > 0 && items.every((i) => selected.has(i.id));
+  // Item já instalado/vinculado (só aparece na busca) não entra em ação em lote.
+  const selecionaveis = items.filter((i) => !i.vinculo);
+  const todosDaTelaMarcados =
+    selecionaveis.length > 0 && selecionaveis.every((i) => selected.has(i.id));
   const toggleAll = () => {
     setSelected((prev) => {
       const next = new Map(prev);
-      if (todosDaTelaMarcados) for (const i of items) next.delete(i.id);
-      else for (const i of items) next.set(i.id, i);
+      if (todosDaTelaMarcados) for (const i of selecionaveis) next.delete(i.id);
+      else for (const i of selecionaveis) next.set(i.id, i);
       return next;
     });
   };
@@ -529,7 +532,11 @@ export default function EstoquePage() {
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <FileSpreadsheet className="h-12 w-12 text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground">Nenhum rastreador no estoque</p>
+            <p className="text-muted-foreground">
+              {buscaDebounced
+                ? 'Nenhum equipamento com esse número — nem no estoque, nem instalado.'
+                : 'Nenhum rastreador no estoque'}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
               Clique em <strong>Importar planilha</strong> para carregar seus
               rastreadores
@@ -579,6 +586,8 @@ export default function EstoquePage() {
                         aria-label={`Selecionar ${item.imei}`}
                         className="h-4 w-4 cursor-pointer accent-brand-orange-500"
                         checked={selected.has(item.id)}
+                        disabled={!!item.vinculo}
+                        title={item.vinculo ? 'Equipamento já instalado: não entra em ação em lote' : undefined}
                         onChange={() => toggleOne(item)}
                       />
                     </td>
@@ -663,6 +672,19 @@ export default function EstoquePage() {
                     ) : (
                       '—'
                     )}
+                    {item.vinculo && (
+                      <div className="mt-1 flex flex-col items-start gap-0.5">
+                        <Badge className="text-[10px] border bg-sky-500/15 text-sky-500 border-sky-500/30">
+                          {item.vinculo.tipo === 'INSTALADO' ? 'Instalado em' : 'Vinculada a'}{' '}
+                          {item.vinculo.placa}
+                        </Badge>
+                        {item.vinculo.cliente && (
+                          <span className="text-[11px] text-muted-foreground">
+                            {item.vinculo.cliente}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {item.server ?? '—'}
@@ -696,12 +718,15 @@ export default function EstoquePage() {
                           size="sm"
                           variant="outline"
                           className="h-8"
+                          disabled={!!item.vinculo}
+                          title={item.vinculo ? 'Equipamento já instalado/vinculado: não pode ser associado de novo' : undefined}
                           onClick={() => openAssociate(item)}
                         >
                           <UserCheck className="h-3.5 w-3.5 mr-1" />
                           Associar (SGA)
                         </Button>
-                        <StockRowMenu
+                        {/* O menu só tem ações de item disponível (associar, reservar, remover, testes). */}
+                        {!item.vinculo && <StockRowMenu
                           item={item}
                           canDelete={canDelete}
                           onAssociate={() => openAssociate(item)}
@@ -711,7 +736,7 @@ export default function EstoquePage() {
                           onMapa={() => abrirNoMapa(item)}
                           onDelete={() => handleDelete(item)}
                           onSoon={soon}
-                        />
+                        />}
                       </div>
                     </td>
                   )}

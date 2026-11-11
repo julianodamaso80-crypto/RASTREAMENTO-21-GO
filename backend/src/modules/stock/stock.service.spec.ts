@@ -162,3 +162,65 @@ describe('StockService — escrita em StockItem invalida o mapa do tenant', () =
     expect(ordem(stockTraccar.invalidarMapa)).toBeGreaterThan(ultimoUpsert);
   });
 });
+
+
+describe('StockService.findAll — busca acha equipamento já associado', () => {
+  function montar() {
+    const prisma = {
+      tagKey: { findMany: jest.fn().mockResolvedValue([]) },
+      stockItem: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'a', imei: IMEI, kind: 'RASTREADOR', deviceId: 'dev-1', associatedAt: new Date() },
+          { id: 'b', imei: 'TAG1', kind: 'TAG', deviceId: null, associatedAt: new Date() },
+          { id: 'c', imei: '999', kind: 'RASTREADOR', deviceId: null, associatedAt: null },
+        ]),
+        count: jest.fn().mockResolvedValue(3),
+      },
+      device: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'dev-1',
+            installedAt: new Date('2026-10-01'),
+            vehicle: { plate: 'ABC1D23', deletedAt: null, associate: { name: 'FULANO' } },
+          },
+        ]),
+      },
+      tagLink: {
+        findMany: jest.fn().mockResolvedValue([
+          { serialNumber: 'TAG1', plate: 'XYZ9K88', associateName: null, createdAt: new Date('2026-10-02') },
+        ]),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    };
+    const s = new StockService(
+      prisma as never, {} as never, {} as never, {} as never, {} as never,
+      {} as never, {} as never, {} as never, {} as never, {} as never, {} as never,
+    );
+    return { s, prisma };
+  }
+  const base = { page: 1, perPage: 20 } as never;
+
+  it('com search devolve item associado com vinculo preenchido', async () => {
+    const { s, prisma } = montar();
+    const r = await s.findAll(TENANT, { ...(base as object), search: '8665' } as never);
+    const where = prisma.stockItem.findMany.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('associatedAt');
+    expect(where.deletedAt).toBeNull();
+    expect(prisma.device.findMany.mock.calls[0][0].where.tenantId).toBe(TENANT);
+    expect(prisma.tagLink.findMany.mock.calls[0][0].where.tenantId).toBe(TENANT);
+    expect((r.data[0] as { vinculo: unknown }).vinculo).toMatchObject({
+      tipo: 'INSTALADO', placa: 'ABC1D23', cliente: 'FULANO',
+    });
+    expect((r.data[1] as { vinculo: unknown }).vinculo).toMatchObject({
+      tipo: 'VINCULADA', placa: 'XYZ9K88', cliente: null,
+    });
+    expect((r.data[2] as { vinculo: unknown }).vinculo).toBeNull();
+  });
+
+  it('sem search não devolve associado (filtra associatedAt: null)', async () => {
+    const { s, prisma } = montar();
+    await s.findAll(TENANT, base);
+    const where = prisma.stockItem.findMany.mock.calls[0][0].where;
+    expect(where.associatedAt).toBeNull();
+  });
+});

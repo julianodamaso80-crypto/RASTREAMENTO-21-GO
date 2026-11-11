@@ -405,7 +405,7 @@ export default function MapaPage() {
     return {
       id: `t:${t.id}`,
       titulo: `${t.plate} · TAG`,
-      estado: t.seenAt ? `TAG vista ${formatRelativeTime(t.seenAt)}` : 'TAG ainda não vista',
+      estado: t.seenAt ? `vista ${formatRelativeTime(t.seenAt)}` : 'ainda não vista',
       cor: COR_TAG,
       endereco: geo?.address ?? null,
       enderecoCarregando: geo?.loading ?? false,
@@ -527,6 +527,7 @@ export default function MapaPage() {
                 tag={selectedTag}
                 onClose={() => selectTag(null)}
                 onAtualizou={refreshTags}
+                onCentralizar={(lng, lat) => mapRef.current?.flyTo(lng, lat, FOCUS_ZOOM, pad)}
               />
             </div>
           )}

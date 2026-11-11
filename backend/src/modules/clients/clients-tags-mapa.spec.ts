@@ -63,6 +63,8 @@ function montarPrisma() {
     },
     position: { groupBy: jest.fn().mockResolvedValue([]) },
     tagLink: { findMany: jest.fn().mockResolvedValue([LINK_MOTO, LINK_CARRO]) },
+    tagKey: { findMany: jest.fn().mockResolvedValue([]) },
+    stockItem: { findMany: jest.fn().mockResolvedValue([]) },
     sgaVehicle: {
       findMany: jest.fn().mockResolvedValue([sga('MOTO2B22', '200'), sga('CAR1A11', '100')]),
     },
@@ -97,6 +99,7 @@ describe('tagsNoMapa — as TAGs de cliente no mapa', () => {
       seenAt: AGORA,
       bateria: null,
       outrosSeriais: [],
+        apelidos: [],
       outrasTags: [],
       comRastreador: false,
       foraDaLista: null,
@@ -229,7 +232,42 @@ describe('tagsNoMapa — carro com duas TAGs', () => {
 
     expect(r[0].installLocation).toBe('Dentro Do Carpete, Pedal Do Freio');
     expect(r[0].outrasTags).toEqual([
-      { serialNumber: '808092604157355', installLocation: 'Dentro Do Carpete, Pé Do Carona' },
+      {
+        serialNumber: '808092604157355',
+        installLocation: 'Dentro Do Carpete, Pé Do Carona',
+        latitude: null,
+        longitude: null,
+        accuracyM: null,
+        seenAt: null,
+        bateria: null,
+      },
+    ]);
+  });
+
+  // Dono, 11/11/2026: com mais de uma TAG, ver a posição de cada uma.
+  it('carro com duas TAGs devolve a posição de cada uma', async () => {
+    const prisma = montarPrisma();
+    const outraSerial = '808092604157355';
+    prisma.tagLink.findMany.mockResolvedValue([
+      { ...LINK_CARRO, origin: 'ESTOQUE', verdict: 'AGUARDANDO_PROVA' },
+      { ...LINK_CARRO, id: 'l3', serialNumber: outraSerial, origin: 'ESTOQUE', verdict: 'AGUARDANDO_PROVA' },
+    ]);
+    prisma.$queryRaw.mockResolvedValue([
+      { serial_number: LINK_CARRO.serialNumber, latitude: -22.8, longitude: -43.4, accuracy_m: 30, seen_at: AGORA },
+      { serial_number: outraSerial, latitude: -22.9, longitude: -43.5, accuracy_m: 80, seen_at: AGORA },
+    ]);
+    const s = new ClientsService(prisma as never);
+    const r = await s.tagsNoMapa(TENANT);
+
+    expect(r[0].latitude).toBe(-22.8);
+    expect(r[0].outrasTags).toEqual([
+      expect.objectContaining({
+        serialNumber: outraSerial,
+        latitude: -22.9,
+        longitude: -43.5,
+        accuracyM: 80,
+        seenAt: AGORA,
+      }),
     ]);
   });
 });
