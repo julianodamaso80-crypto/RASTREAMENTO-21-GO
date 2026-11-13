@@ -1,11 +1,14 @@
 import axios from 'axios';
-import { AvisoRastreadorService, parametrosInstalado } from './aviso-rastreador.service';
+import { AvisoRastreadorService, erroTransitorio, parametrosInstalado } from './aviso-rastreador.service';
 
 jest.mock('axios');
 const post = axios.post as jest.Mock;
 
 function montar(cfg: Record<string, string | undefined>) {
-  return new AvisoRastreadorService({ get: (k: string) => cfg[k] } as never);
+  const svc = new AvisoRastreadorService({ get: (k: string) => cfg[k] } as never);
+  // Sem esperar de verdade entre as tentativas.
+  jest.spyOn(svc as never, 'esperar').mockResolvedValue(undefined as never);
+  return svc;
 }
 
 const LIGADO = {
@@ -62,5 +65,42 @@ describe('AvisoRastreadorService', () => {
   it('erro da Meta não derruba a ativação', async () => {
     post.mockRejectedValue(Object.assign(new Error('x'), { response: { status: 400 } }));
     await expect(montar(LIGADO).avisarInstalado(aviso)).resolves.toBe(false);
+  });
+
+  it('timeout de conexão com a Meta: tenta de novo e entrega', async () => {
+    post
+      .mockRejectedValueOnce(Object.assign(new Error('connect ETIMEDOUT'), { code: 'ETIMEDOUT' }))
+      .mockResolvedValueOnce({});
+    expect(await montar(LIGADO).avisarInstalado(aviso)).toBe(true);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it('Meta fora do ar (5xx) ou limitando (429): três tentativas e desiste', async () => {
+    post.mockRejectedValue(Object.assign(new Error('x'), { response: { status: 503 } }));
+    expect(await montar(LIGADO).avisarInstalado(aviso)).toBe(false);
+    expect(post).toHaveBeenCalledTimes(3);
+  });
+
+  it('erro do pedido (4xx) não é repetido', async () => {
+    post.mockRejectedValue(Object.assign(new Error('x'), { response: { status: 400 } }));
+    expect(await montar(LIGADO).avisarInstalado(aviso)).toBe(false);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('resposta que não voltou não é repetida: a Meta pode ter aceitado', async () => {
+    post.mockRejectedValue(Object.assign(new Error('timeout of 15000ms exceeded'), { code: 'ECONNABORTED' }));
+    expect(await montar(LIGADO).avisarInstalado(aviso)).toBe(false);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('erroTransitorio', () => {
+  it('só quando é certo que a mensagem não saiu', () => {
+    expect(erroTransitorio({ code: 'ETIMEDOUT' })).toBe(true);
+    expect(erroTransitorio({ response: { status: 429 } })).toBe(true);
+    expect(erroTransitorio({ response: { status: 500 } })).toBe(true);
+    expect(erroTransitorio({ response: { status: 400 } })).toBe(false);
+    expect(erroTransitorio({ code: 'ECONNRESET' })).toBe(false);
+    expect(erroTransitorio(new Error('x'))).toBe(false);
   });
 });
