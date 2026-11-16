@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { StockService } from './stock.service';
 import { StockTraccarService } from './stock-traccar.service';
 import { StockBulkLinkService } from './stock-bulk-link.service';
+import { StockApontamentoService } from './stock-apontamento.service';
 import { StockController } from './stock.controller';
 import { HinovaModule } from '../hinova/hinova.module';
 import { TraccarModule } from '../traccar/traccar.module';
@@ -20,7 +21,12 @@ import { WhatsappDisparoModule } from '../whatsapp-disparo/whatsapp-disparo.modu
     WhatsappDisparoModule,
   ],
   controllers: [StockController],
-  providers: [StockService, StockTraccarService, StockBulkLinkService],
+  providers: [
+    StockService,
+    StockTraccarService,
+    StockBulkLinkService,
+    StockApontamentoService,
+  ],
   exports: [StockService, StockTraccarService],
 })
 export class StockModule {}
