@@ -254,11 +254,135 @@ async function main() {
     }
   }
 
+  await telasExtras(T, veiculos);
+
   // O painel exige WhatsApp confirmado de todo usuário. Na demo ele nasce
   // "confirmado" SEM número: nenhum código de recuperação sai para ninguém.
   await prisma.user.updateMany({ where: { tenantId: T }, data: { phoneVerifiedAt: new Date(), phone: null } });
 
   console.log('pronto. login:', EMAIL);
+}
+
+/** Consultores, Financeiro, Agenda, TAGs Ativas, Manutenção e Rotas — todos inventados. */
+async function telasExtras(T, veiculos) {
+  const tecnicos = await prisma.technician.findMany({ where: { tenantId: T }, orderBy: { name: 'asc' } });
+  const veiculosCompletos = await prisma.vehicle.findMany({ where: { tenantId: T }, include: { associate: true, device: true } });
+
+  // Consultores (powerId fictício a partir de 990001, nunca colide com o Power).
+  const CONSULTORES = ['Ana Paula Lima (Demo)', 'Carlos Eduardo Reis (Demo)', 'Daniela Fontes (Demo)', 'Eduardo Pires (Demo)', 'Fernanda Alves (Demo)', 'Gustavo Melo (Demo)', 'Helena Castro (Demo)', 'Igor Santana (Demo)'];
+  for (const [k, nome] of CONSULTORES.entries()) {
+    await prisma.consultant.upsert({
+      where: { tenantId_powerId: { tenantId: T, powerId: 990001 + k } },
+      create: {
+        tenantId: T, powerId: 990001 + k, name: nome, email: `consultor${k + 1}.demo@trackgo.site`,
+        officeLabel: 'Consultor', branch: 'Rio de Janeiro', managerName: k ? CONSULTORES[0] : null,
+        active: k !== 7, statusLabel: k !== 7 ? 'Ativo' : 'Bloqueado', powerCreatedAt: dias(400 - k * 30), lastAccessAt: dias(k % 4),
+      },
+      update: {},
+    });
+  }
+
+  // Financeiro: lançamentos por placa e consultor nos últimos 3 meses.
+  if ((await prisma.financialEntry.count({ where: { tenantId: T } })) === 0) {
+    const status = ['PAID_PIX', 'PAID_PIX', 'MIGRATION', 'NO_RECEIPT'];
+    const mes = new Date().getMonth() + 1;
+    for (let k = 0; k < 16; k++) {
+      await prisma.financialEntry.create({
+        data: {
+          tenantId: T, plate: veiculoDoSgaSimulado(500 + k).placa, status: status[k % 4],
+          month: ((mes - 1 - (k % 3) + 12) % 12) + 1, consultantName: CONSULTORES[k % CONSULTORES.length],
+          plateCount: k % 5 === 0 ? 2 : 1, createdAt: dias(k * 4),
+        },
+      });
+    }
+  }
+
+  // Agenda: ordens de serviço da semana, com técnicos fictícios.
+  if ((await prisma.appointment.count({ where: { tenantId: T } })) === 0) {
+    const tipos = ['INSTALLATION', 'INSTALLATION', 'MAINTENANCE', 'REMOVAL'];
+    const sit = ['SCHEDULED', 'SCHEDULED', 'EXECUTED', 'SCHEDULED', 'POSTPONED', 'SCHEDULED', 'EXECUTED', 'CANCELED', 'SCHEDULED', 'SCHEDULED'];
+    const bairros = [['Copacabana', -22.9711, -43.1863], ['Tijuca', -22.9249, -43.2329], ['Méier', -22.902, -43.279], ['Barra da Tijuca', -23.0004, -43.3659], ['Icaraí, Niterói', -22.9068, -43.11]];
+    for (let k = 0; k < 10; k++) {
+      const inicio = new Date(); inicio.setHours(8 + (k % 4) * 2, 0, 0, 0); inicio.setDate(inicio.getDate() + (k % 5) - 1);
+      const fim = new Date(inicio.getTime() + 90 * 60000);
+      const v = veiculosCompletos[k % veiculosCompletos.length];
+      const [bairro, lat, lng] = bairros[k % bairros.length];
+      await prisma.appointment.create({
+        data: {
+          tenantId: T, osNumber: `DEMO-${String(k + 1).padStart(4, '0')}`, serviceType: tipos[k % 4],
+          maintenanceReason: tipos[k % 4] === 'MAINTENANCE' ? 'SIGNAL_FAILURE' : null,
+          scheduledStart: inicio, scheduledEnd: fim, technicianId: tecnicos[k % tecnicos.length].id,
+          status: sit[k], completedAt: sit[k] === 'EXECUTED' ? fim : null,
+          vehicleId: tipos[k % 4] === 'INSTALLATION' ? null : v.id, plate: v.plate, brand: v.brand, model: v.model,
+          imei: v.device?.imei ?? null, clientName: v.associate?.name ?? 'Cliente Demonstração',
+          address: `Rua Fictícia, ${100 + k} - ${bairro}`, lat, lng, value: 80 + (k % 3) * 20,
+          description: 'Ordem de serviço de demonstração',
+        },
+      });
+    }
+  }
+
+  // TAGs ativas: clientes com TAG no "SGA" simulado e posição da TAG.
+  const tags = [
+    ['Lucas Andrade (Demo)', 'Fiat Mobi', -22.9095, -43.1745, '9'],
+    ['Mariana Borges (Demo)', 'VW Gol', -22.9301, -43.2402, '9'],
+    ['Nelson Prado (Demo)', 'Chevrolet Spin', -22.8873, -43.2851, '8'],
+    ['Olívia Rangel (Demo)', 'Hyundai Creta', -23.0071, -43.3311, '9'],
+    ['Pedro Lacerda (Demo)', 'Toyota Yaris', -22.9012, -43.1092, '8'],
+  ];
+  for (const [k, [nome, carro, lat, lng, adesao]] of tags.entries()) {
+    const placa = veiculoDoSgaSimulado(600 + k).placa;
+    const codigo = `HNVTAG${k + 1}`;
+    const serial = `DEMOTAG${String(k + 1).padStart(6, '0')}`;
+    const sga = await prisma.sgaVehicle.findFirst({ where: { tenantId: T, hinovaVehicleCode: codigo } });
+    if (!sga) {
+      await prisma.sgaVehicle.create({
+        data: {
+          tenantId: T, hinovaVehicleCode: codigo, plate: placa, associateName: nome, associateCode: `ASST${k + 1}`,
+          cpf: veiculoDoSgaSimulado(700 + k).cpf, brandModel: carro, situationCode: '1', situationLabel: 'ATIVO',
+          adhesionCode: adesao, vehicleType: 'CAR', contractDate: dias(30 + k * 11), syncedAt: new Date(),
+        },
+      });
+    }
+    await prisma.rdvTag.upsert({
+      where: { tenantId_tagIdentifier: { tenantId: T, tagIdentifier: serial } },
+      create: { tenantId: T, tagIdentifier: serial, plate: placa, tagModel: 'TAG BLE', lastLat: lat, lastLng: lng, seenAt: dias(k * 0.05), source: 'DEMO' },
+      update: { lastLat: lat, lastLng: lng, seenAt: dias(k * 0.05) },
+    });
+    if ((await prisma.tagPosition.count({ where: { tenantId: T, serialNumber: serial } })) === 0) {
+      for (let p = 0; p < 6; p++) {
+        await prisma.tagPosition.create({
+          data: { tenantId: T, serialNumber: serial, plate: placa, latitude: lat + p * 0.0012, longitude: lng - p * 0.0009, accuracyM: 15, seenAt: dias(p * 0.2 + k * 0.01), source: 'DEMO' },
+        });
+      }
+    }
+  }
+
+  // Manutenção preventiva: planos em dia, próximos e vencidos.
+  if ((await prisma.maintenancePlan.count({ where: { tenantId: T } })) === 0) {
+    const planos = [['OIL_CHANGE', 'Troca de óleo', 10000, 6, 'UPCOMING'], ['TIRES', 'Rodízio de pneus', 10000, 12, 'DUE'], ['BRAKES', 'Pastilhas de freio', 20000, 12, 'OVERDUE'], ['ALIGNMENT', 'Alinhamento', 10000, 6, null]];
+    for (let k = 0; k < 8; k++) {
+      const [type, name, km, meses, sev] = planos[k % planos.length];
+      await prisma.maintenancePlan.create({
+        data: { tenantId: T, vehicleId: veiculosCompletos[k].id, type, name, intervalKm: km, intervalMonths: meses, lastDoneAt: dias(60 + k * 25), lastDoneKm: 20000 + k * 3500, severity: sev },
+      });
+    }
+  }
+
+  // Rota inteligente: uma rota montada para um técnico com 3 paradas.
+  if ((await prisma.installationRoute.count({ where: { tenantId: T } })) === 0) {
+    const pend = await prisma.installationPending.findMany({ where: { tenantId: T }, take: 3, orderBy: { contractDate: 'asc' } });
+    const rota = await prisma.installationRoute.create({ data: { tenantId: T, technicianId: tecnicos[0].id, status: 'PENDING' } });
+    for (const [k, p] of pend.entries()) {
+      await prisma.routeStop.create({
+        data: {
+          routeId: rota.id, order: k + 1, hinovaVehicleCode: p.hinovaVehicleCode, plate: p.plate, pendingType: p.pendingType,
+          associateName: p.associateName, brandModel: p.brandModel, neighborhood: p.neighborhood, city: p.city, lat: p.lat, lng: p.lng,
+        },
+      });
+    }
+  }
+  console.log('telas extras: consultores, financeiro, agenda, TAGs, manutenção e rota prontos');
 }
 
 main()
