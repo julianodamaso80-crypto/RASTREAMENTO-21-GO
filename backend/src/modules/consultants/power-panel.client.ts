@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { UsuarioPower } from './consultants.mapper';
@@ -61,6 +62,7 @@ export class PowerPanelClient {
   }
 
   async listarUsuarios(page: number, size: number): Promise<PaginaPower> {
+    if (emDemo()) return { content: [], totalElements: 0, totalPages: 0 };
     try {
       return await this.chamarLista(await this.obterToken(), page, size);
     } catch (erro) {

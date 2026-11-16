@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 import type { AlertSeverity, AlertType } from '.prisma/client';
@@ -66,6 +67,7 @@ export class EmailService {
   }
 
   async sendPasswordReset(args: SendPasswordResetArgs): Promise<void> {
+    if (emDemo()) return;
     const { to, name, resetUrl, expiresInMinutes } = args;
     const subject = 'Redefinição de senha - Rastreamento 21GO';
     const html = this.passwordResetTemplate(name, resetUrl, expiresInMinutes);
@@ -104,6 +106,7 @@ export class EmailService {
   }
 
   async sendAlertNotification(args: SendAlertNotificationArgs): Promise<void> {
+    if (emDemo()) return;
     const { to, alert } = args;
     if (!to.length) return;
 

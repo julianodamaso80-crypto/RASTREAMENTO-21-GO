@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -67,6 +68,8 @@ export class WhatsappService {
     codigo: string,
     minutosValidade: number,
   ): Promise<EnvioResultado> {
+    // Demonstração: a mensagem "sai" sem ir para a Meta nem para a Evolution.
+    if (emDemo()) return { enviado: true };
     const numero = WhatsappService.normalizarNumero(telefone);
     if (!numero) {
       return { enviado: false, motivo: 'telefone inválido' };

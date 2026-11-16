@@ -16,6 +16,13 @@ export class TenantGuard implements CanActivate {
       return true; // Rotas públicas
     }
 
+    // Empresa de demonstração nunca sai de si mesma, nem com x-tenant-id.
+    if (user.isDemo) {
+      if (!user.tenantId) throw new ForbiddenException('Usuário sem tenant associada');
+      request.tenantId = user.tenantId;
+      return true;
+    }
+
     // SUPER_ADMIN pode usar header x-tenant-id para agir em nome de outra tenant
     if (user.role === Role.SUPER_ADMIN) {
       const headerTenantId = request.headers['x-tenant-id'];

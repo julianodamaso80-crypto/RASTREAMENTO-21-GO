@@ -1,3 +1,5 @@
+import { DemoInterceptor } from './common/demo/demo.interceptor';
+import { DemoModule } from './common/demo/demo-tenants.service';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
@@ -135,6 +137,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     MapModule,
     SearchModule,
     FinancialModule,
+    DemoModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
@@ -143,6 +146,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     { provide: APP_GUARD, useClass: RouteAccessGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: DemoInterceptor },
   ],
 })
 export class AppModule {}

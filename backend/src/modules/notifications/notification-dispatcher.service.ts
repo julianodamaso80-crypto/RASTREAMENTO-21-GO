@@ -94,6 +94,8 @@ export class NotificationDispatcher {
     const users = await this.prisma.user.findMany({
       where: {
         tenantId,
+        // Demonstração: o alerta aparece no sino e no painel, e-mail não sai.
+        tenant: { isDemo: false },
         active: true,
         deletedAt: null,
         role: { in: roles },

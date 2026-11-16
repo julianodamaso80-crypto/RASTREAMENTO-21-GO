@@ -49,7 +49,8 @@ export class BoletosSyncService {
     }
 
     const associados = await this.prisma.associate.findMany({
-      where: { deletedAt: null, lastLoginAt: { not: null } },
+      // Associado fictício da demonstração não tem boleto no CRM de verdade.
+      where: { deletedAt: null, lastLoginAt: { not: null }, tenant: { isDemo: false } },
       select: { id: true, tenantId: true, cpf: true },
     });
 

@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -34,6 +35,7 @@ export class CrmBoletosClient {
    * decide o que fazer com `null`, mas nunca é "apagar tudo".
    */
   async buscarPorCpf(cpf: string): Promise<ResultadoCrm | null> {
+    if (emDemo()) return null;
     const base = this.config.get<string>('crm.baseUrl');
     const token = this.config.get<string>('crm.token');
     if (!base || !token) return null;
@@ -65,6 +67,7 @@ export class CrmBoletosClient {
    * corpo — por isso quem prova é o conteúdo, não o status (medido no CRM, 07/08/2026).
    */
   async baixarPdf(url: string): Promise<Buffer | null> {
+    if (emDemo()) return null;
     try {
       // ~3,4 MB por boleto a 400 kbps ≈ 68s; 60s cortava o cenário ruim que precisa cobrir.
       const r = await fetch(url, { signal: AbortSignal.timeout(120_000) });

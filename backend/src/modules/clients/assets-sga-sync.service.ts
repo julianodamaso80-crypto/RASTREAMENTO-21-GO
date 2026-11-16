@@ -34,7 +34,8 @@ export class AssetsSgaSyncService {
   @Cron('0 0 4 * * *', { timeZone: 'America/Sao_Paulo' })
   async scheduledSync(): Promise<void> {
     const tenants = await this.prisma.tenant.findMany({
-      where: { active: true, deletedAt: null },
+      // A demonstração nunca consulta o SGA real (as placas dela são fictícias).
+      where: { active: true, deletedAt: null, isDemo: false },
       select: { id: true },
     });
     for (const t of tenants) {

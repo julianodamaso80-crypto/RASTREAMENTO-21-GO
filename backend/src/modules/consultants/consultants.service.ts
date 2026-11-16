@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
@@ -71,12 +72,15 @@ export class ConsultantsService implements OnModuleInit {
 
   /** Dispara a coleta em background e volta na hora (o Cloudflare corta request longo). */
   iniciarSincronizacao(tenantId: string): { alreadyRunning: boolean } {
+    // Demonstração: nunca copia a lista real do Power para dentro da demo.
+    if (emDemo()) return { alreadyRunning: false };
     if (this.status.syncing) return { alreadyRunning: true };
     void this.sincronizar(tenantId).catch(() => undefined);
     return { alreadyRunning: false };
   }
 
   syncStatus(): SyncStatus {
+    if (emDemo()) return { syncing: false, lastSyncAt: null, lastError: null, lastTotal: null };
     return this.status;
   }
 

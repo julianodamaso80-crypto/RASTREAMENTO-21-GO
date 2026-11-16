@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -99,6 +100,7 @@ export class PushService {
     corpo: string,
     data: { rota: string },
   ): Promise<boolean> {
+    if (emDemo()) return true;
     const aparelhos = await this.prisma.associatePushDevice.findMany({
       where: { associateId, tenantId },
       select: { expoToken: true },

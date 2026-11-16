@@ -1,6 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
+import { emDemo, idFalsoTraccar } from '../../common/demo/demo-context';
+
+/** Prefixo dos rastreadores simulados da empresa de demonstração. */
+export const PREFIXO_DEVICE_DEMO = 'DEMOTRK';
 
 const TRACCAR_URL_MAX_BYTES = 8_000;
 
@@ -144,6 +148,9 @@ export class TraccarService implements OnModuleInit {
   }
 
   async getDevice(id: number): Promise<TraccarDevice> {
+    if (emDemo() && !(id > 0)) {
+      return { id, name: 'Rastreador (demonstração)', uniqueId: '', status: 'offline' } as TraccarDevice;
+    }
     return this.withRetry(async () => {
       const { data } = await this.client.get(`/devices?id=${id}`);
       return data[0];
@@ -160,6 +167,10 @@ export class TraccarService implements OnModuleInit {
    * Ver P2.4 do plano.
    */
   async getDeviceByUniqueId(uniqueId: string): Promise<TraccarDevice | null> {
+    // Demonstração só enxerga os próprios rastreadores simulados: um IMEI real
+    // digitado no estoque da demo NUNCA alcança o aparelho de verdade (senão
+    // daria para ver e até bloquear um carro de cliente).
+    if (emDemo() && !uniqueId?.startsWith(PREFIXO_DEVICE_DEMO)) return null;
     return this.withRetry(async () => {
       try {
         const { data } = await this.client.get<TraccarDevice[]>('/devices', {
@@ -181,6 +192,9 @@ export class TraccarService implements OnModuleInit {
   }
 
   async createDevice(name: string, uniqueId: string): Promise<TraccarDevice> {
+    if (emDemo()) {
+      return { id: idFalsoTraccar(), name, uniqueId, status: 'offline' } as TraccarDevice;
+    }
     return this.withRetry(async () => {
       const { data } = await this.client.post('/devices', {
         name,
@@ -194,6 +208,7 @@ export class TraccarService implements OnModuleInit {
     id: number,
     payload: Partial<TraccarDevice>,
   ): Promise<TraccarDevice> {
+    if (emDemo()) return { id, ...payload } as TraccarDevice;
     return this.withRetry(async () => {
       const { data } = await this.client.put(`/devices/${id}`, {
         id,
@@ -204,6 +219,7 @@ export class TraccarService implements OnModuleInit {
   }
 
   async deleteDevice(id: number): Promise<void> {
+    if (emDemo()) return;
     return this.withRetry(async () => {
       await this.client.delete(`/devices/${id}`);
     });
@@ -216,6 +232,7 @@ export class TraccarService implements OnModuleInit {
     from?: string,
     to?: string,
   ): Promise<TraccarPosition[]> {
+    if (emDemo() && !(deviceId && deviceId > 0)) return [];
     const buscar = () =>
       this.withRetry(async () => {
         const params: Record<string, string | number> = {};
@@ -328,6 +345,7 @@ export class TraccarService implements OnModuleInit {
     from: string,
     to: string,
   ): Promise<TraccarReportSummary[]> {
+    if (emDemo()) deviceIds = deviceIds.filter((id) => id > 0);
     if (deviceIds.length === 0) return [];
     const params = new URLSearchParams();
     for (const id of deviceIds) params.append('deviceId', String(id));
@@ -366,6 +384,8 @@ export class TraccarService implements OnModuleInit {
     type: string,
     attributes?: Record<string, unknown>,
   ): Promise<unknown> {
+    // Demonstração: o comando "sai" e o rastreador "responde", sem tocar o Traccar.
+    if (emDemo()) return { id: 0, deviceId, type, attributes: attributes || {} };
     return this.withRetry(async () => {
       const { data } = await this.client.post('/commands/send', {
         deviceId,
@@ -385,6 +405,7 @@ export class TraccarService implements OnModuleInit {
     deviceId: number,
     type: string,
   ): Promise<{ enviado: boolean }> {
+    if (emDemo()) return { enviado: true };
     return this.withRetry(async () => {
       const { status } = await this.client.post('/commands/send', {
         deviceId,
@@ -407,6 +428,10 @@ export class TraccarService implements OnModuleInit {
     prazoMs = 10_000,
     intervaloMs = 1_500,
   ): Promise<string | null> {
+    if (emDemo()) {
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+      return 'Success! (demonstração)';
+    }
     const limite = Date.now() + prazoMs;
     while (Date.now() < limite) {
       await new Promise((resolve) => setTimeout(resolve, intervaloMs));
@@ -450,6 +475,7 @@ export class TraccarService implements OnModuleInit {
     password: string,
     name: string,
   ): Promise<TraccarUser> {
+    if (emDemo()) return { id: idFalsoTraccar(), name, email } as unknown as TraccarUser;
     return this.withRetry(async () => {
       const { data } = await this.client.post('/users', {
         name,
@@ -463,6 +489,7 @@ export class TraccarService implements OnModuleInit {
   // === Geofences ===
 
   async createGeofence(name: string, area: string): Promise<TraccarGeofence> {
+    if (emDemo()) return { id: idFalsoTraccar(), name, area } as TraccarGeofence;
     return this.withRetry(async () => {
       const { data } = await this.client.post('/geofences', { name, area });
       return data;
@@ -474,6 +501,7 @@ export class TraccarService implements OnModuleInit {
     name: string,
     area: string,
   ): Promise<TraccarGeofence> {
+    if (emDemo()) return { id, name, area } as TraccarGeofence;
     return this.withRetry(async () => {
       const { data } = await this.client.put(`/geofences/${id}`, {
         id,
@@ -485,6 +513,7 @@ export class TraccarService implements OnModuleInit {
   }
 
   async deleteGeofence(id: number): Promise<void> {
+    if (emDemo()) return;
     return this.withRetry(async () => {
       await this.client.delete(`/geofences/${id}`);
     });
@@ -494,6 +523,7 @@ export class TraccarService implements OnModuleInit {
     deviceId: number,
     geofenceId: number,
   ): Promise<void> {
+    if (emDemo()) return;
     return this.withRetry(async () => {
       await this.client.post('/permissions', { deviceId, geofenceId });
     });
@@ -505,6 +535,7 @@ export class TraccarService implements OnModuleInit {
    * que o Traccar registrou sozinho.
    */
   async linkDeviceToSessionUser(deviceId: number): Promise<void> {
+    if (emDemo()) return;
     return this.withRetry(async () => {
       if (!this.sessionUserId) await this.createSession();
       if (!this.sessionUserId) {
@@ -521,6 +552,7 @@ export class TraccarService implements OnModuleInit {
     deviceId: number,
     geofenceId: number,
   ): Promise<void> {
+    if (emDemo()) return;
     return this.withRetry(async () => {
       await this.client.delete('/permissions', {
         data: { deviceId, geofenceId },

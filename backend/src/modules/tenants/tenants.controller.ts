@@ -1,3 +1,4 @@
+import { emDemo, tenantDaDemo } from '../../common/demo/demo-context';
 import {
   Controller,
   Get,
@@ -9,6 +10,7 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Role } from '.prisma/client';
@@ -30,12 +32,18 @@ export class TenantsController {
   @Get()
   @ApiOperation({ summary: 'Lista todas as tenants (SUPER_ADMIN)' })
   async findAll(@Query() query: PaginationQueryDto) {
+    // Demonstração não enxerga as outras empresas, nem pelo nome.
+    if (emDemo()) {
+      const propria = await this.tenantsService.findOne(tenantDaDemo()!);
+      return { data: [propria], meta: { total: 1, page: 1, perPage: query.perPage } };
+    }
     return this.tenantsService.findAll(query);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhes de uma tenant' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
+    this.somenteAPropriaNaDemo(id);
     return this.tenantsService.findOne(id);
   }
 
@@ -51,6 +59,7 @@ export class TenantsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTenantDto,
   ) {
+    this.somenteAPropriaNaDemo(id);
     return this.tenantsService.update(id, dto);
   }
 
@@ -58,5 +67,11 @@ export class TenantsController {
   @ApiOperation({ summary: 'Desativar tenant' })
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.tenantsService.remove(id);
+  }
+
+  private somenteAPropriaNaDemo(id: string): void {
+    if (emDemo() && id !== tenantDaDemo()) {
+      throw new NotFoundException('Tenant não encontrada');
+    }
   }
 }

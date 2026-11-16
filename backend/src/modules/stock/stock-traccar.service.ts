@@ -185,7 +185,9 @@ export class StockTraccarService {
   async ensurePending(tenantId?: string, limite = 500): Promise<number> {
     const pendentes = await this.prisma.stockItem.findMany({
       where: {
-        ...(tenantId ? { tenantId } : {}),
+        // Pela importação (com tenant) roda no contexto da requisição, e na demo
+        // o Traccar é simulado. Pelo cron (sem tenant) a demo fica de fora.
+        ...(tenantId ? { tenantId } : { tenant: { isDemo: false } }),
         deletedAt: null,
         associatedAt: null,
         traccarDeviceId: null,
@@ -237,7 +239,13 @@ export class StockTraccarService {
       const [itens, snapshot] = await Promise.all([
         this.prisma.stockItem.findMany({
           // TAG não fala com o Traccar: fora do destrava de ignição.
-          where: { deletedAt: null, associatedAt: null, kind: 'RASTREADOR' },
+          where: {
+            deletedAt: null,
+            associatedAt: null,
+            kind: 'RASTREADOR',
+            // IMEI digitado no estoque da demo nunca mexe num aparelho real.
+            tenant: { isDemo: false },
+          },
           select: { imei: true },
         }),
         this.snapshot(),
@@ -338,7 +346,8 @@ export class StockTraccarService {
         select: { imei: true },
       }),
       this.prisma.tenant.findMany({
-        where: { deletedAt: null },
+        // A empresa de demonstração não conta: senão a 21Go perderia a adoção.
+        where: { deletedAt: null, isDemo: false },
         select: { id: true },
         take: 2,
       }),

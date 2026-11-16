@@ -51,6 +51,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         tenantId: true,
         active: true,
         allowedRoutes: true,
+        tenant: { select: { isDemo: true } },
       },
     });
 
@@ -58,6 +59,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Usuário não encontrado ou inativo');
     }
 
-    return user;
+    const { tenant, ...resto } = user;
+    return { ...resto, isDemo: tenant?.isDemo === true };
   }
 }

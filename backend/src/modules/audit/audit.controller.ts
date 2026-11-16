@@ -1,3 +1,4 @@
+import { emDemo, tenantDaDemo } from '../../common/demo/demo-context';
 import {
   Controller,
   Get,
@@ -70,7 +71,9 @@ export class AuditController {
 
     // ADMIN é sempre escopado ao próprio tenant — ignora tenantIdQuery.
     // SUPER_ADMIN pode filtrar por tenantId específico ou ver tudo.
-    if (req.user.role === Role.SUPER_ADMIN) {
+    if (emDemo()) {
+      where.tenantId = req.tenantId;
+    } else if (req.user.role === Role.SUPER_ADMIN) {
       if (tenantIdQuery) where.tenantId = tenantIdQuery;
     } else if (req.user.role === Role.ADMIN) {
       where.tenantId = req.tenantId;

@@ -49,6 +49,8 @@ export class TraccarReconcileService {
           deletedAt: null,
           traccarDeviceId: null,
           vehicleId: { not: null },
+          // Empresa de demonstração nunca ganha device de verdade no Traccar.
+          tenant: { isDemo: false },
           status: {
             in: TraccarReconcileService.STATUS_ATIVO as never[],
           },

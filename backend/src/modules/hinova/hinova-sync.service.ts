@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
@@ -20,6 +21,9 @@ export class HinovaSyncService {
   ) {}
 
   getStatus(): SyncStatusDto {
+    if (emDemo()) {
+      return { lastSync: null, nextSync: null, lastResult: null, isRunning: false };
+    }
     const interval =
       this.configService.get<number>('hinova.syncInterval') || 21600000;
     const nextSync = this.lastSyncTime
@@ -54,6 +58,10 @@ export class HinovaSyncService {
   }
 
   async sync(tenantId: string): Promise<SyncResultDto> {
+    if (emDemo()) {
+      const agora = new Date().toISOString();
+      return { created: 0, updated: 0, skipped: 0, errors: 0, duration: '1s', startedAt: agora, finishedAt: agora };
+    }
     if (this.isRunning) {
       this.logger.warn('Sync já em execução, ignorando...');
       return (

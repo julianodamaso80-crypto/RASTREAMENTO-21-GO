@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -66,6 +67,7 @@ export class AvisoRastreadorService {
   constructor(private config: ConfigService) {}
 
   async avisarInstalado(aviso: AvisoInstalacao): Promise<boolean> {
+    if (emDemo()) return true;
     const token = this.config.get<string>('whatsappDisparo.token');
     const phoneNumberId = this.config.get<string>('whatsappDisparo.phoneNumberId');
     const template = this.config.get<string>('whatsappDisparo.templateInstalado');

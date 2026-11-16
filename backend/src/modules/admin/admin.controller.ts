@@ -1,3 +1,4 @@
+import { emDemo, tenantDaDemo } from '../../common/demo/demo-context';
 import {
   BadRequestException,
   Controller,
@@ -59,7 +60,8 @@ export class AdminController {
     @Req() req: AuthenticatedRequest,
   ) {
     const model = this.resolveModel(entity);
-    const tenantId = tenantIdQuery ?? req.tenantId;
+    // Demonstração só enxerga a lixeira da própria empresa.
+    const tenantId = emDemo() ? req.tenantId : (tenantIdQuery ?? req.tenantId);
 
     const where: Record<string, unknown> = { deletedAt: { not: null } };
     if (entity !== 'tenant' && tenantId) {
@@ -93,7 +95,11 @@ export class AdminController {
         findFirst: (args: unknown) => Promise<unknown>;
       }
     ).findFirst({
-      where: { id, deletedAt: { not: null } },
+      where: {
+        id,
+        deletedAt: { not: null },
+        ...(emDemo() ? { tenantId: tenantDaDemo() } : {}),
+      },
     });
 
     if (!target) {

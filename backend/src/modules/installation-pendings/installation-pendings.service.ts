@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { filtroBusca } from '../../common/search/termo-busca';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -166,6 +167,9 @@ export class InstallationPendingsService implements OnModuleInit {
     last: SyncOutcome | null;
     lastError: string | null;
   } {
+    if (emDemo()) {
+      return { syncing: false, startedAt: null, elapsedSeconds: null, last: null, lastError: null };
+    }
     return {
       syncing: this.syncing,
       startedAt: this.syncStartedAt?.toISOString() ?? null,
@@ -392,6 +396,8 @@ export class InstallationPendingsService implements OnModuleInit {
    * Quem chama acompanha por getSyncStatus().
    */
   startSync(tenantId: string): { started: boolean; alreadyRunning: boolean } {
+    // Demonstração: nunca varre o SGA real nem grava pendência real na demo.
+    if (emDemo()) return { started: true, alreadyRunning: false };
     if (this.syncing) return { started: false, alreadyRunning: true };
 
     void this.sync(tenantId).catch((erro) => {

@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import { Injectable, Logger } from '@nestjs/common';
 import type {
   IHinovaClient,
@@ -198,6 +199,8 @@ export class HinovaMockService implements IHinovaClient {
   }
 
   private simulateError(): void {
+    // Na empresa de demonstração o "SGA" nunca falha de propósito.
+    if (emDemo()) return;
     if (Math.random() < 0.05) {
       throw new Error('Hinova API mock error: simulação de falha');
     }
