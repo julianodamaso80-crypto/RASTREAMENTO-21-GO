@@ -254,6 +254,10 @@ async function main() {
     }
   }
 
+  // O painel exige WhatsApp confirmado de todo usuário. Na demo ele nasce
+  // "confirmado" SEM número: nenhum código de recuperação sai para ninguém.
+  await prisma.user.updateMany({ where: { tenantId: T }, data: { phoneVerifiedAt: new Date(), phone: null } });
+
   console.log('pronto. login:', EMAIL);
 }
 
