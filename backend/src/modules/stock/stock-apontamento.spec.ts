@@ -90,7 +90,8 @@ function servico(opcoes: {
         .mockResolvedValue(
           (opcoes.tentativas ?? []).map((createdAt) => ({ deviceId: 'dev-1', createdAt })),
         ),
-      create: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockResolvedValue({ id: 'sms-1' }),
+      update: jest.fn().mockResolvedValue({}),
     },
   };
   const traccar = {
@@ -137,10 +138,18 @@ describe('StockApontamentoService.rodar', () => {
         deviceId: 'dev-1',
         tenantId: 'tenant-1',
         type: 'SET_SERVER_IP',
-        status: 'SENT',
+        status: 'PENDING',
         sentBy: 'apontamento-automatico',
       }),
     });
+    expect(prisma.smsCommand.update).toHaveBeenCalledWith({
+      where: { id: 'sms-1' },
+      data: expect.objectContaining({ status: 'SENT' }),
+    });
+    // Gravar antes de enviar: banco fora do ar não pode virar SMS em dobro.
+    expect(prisma.smsCommand.create.mock.invocationCallOrder[0]).toBeLessThan(
+      enviar.mock.invocationCallOrder[0],
+    );
   });
 
   it('só procura instalado sem nenhuma conexão, de empresa real, dos últimos 10 dias', async () => {
@@ -185,9 +194,18 @@ describe('StockApontamentoService.rodar', () => {
     });
     const r = await svc.rodar(AGORA);
     expect(r.falhas).toBe(1);
-    expect(prisma.smsCommand.create).toHaveBeenCalledWith({
+    expect(prisma.smsCommand.update).toHaveBeenCalledWith({
+      where: { id: 'sms-1' },
       data: expect.objectContaining({ status: 'FAILED' }),
     });
+  });
+
+  it('não envia se não conseguiu registrar a tentativa', async () => {
+    const { svc, prisma, enviar } = servico({});
+    prisma.smsCommand.create.mockRejectedValue(new Error('banco fora'));
+    const r = await svc.rodar(AGORA);
+    expect(enviar).not.toHaveBeenCalled();
+    expect(r.enviados).toBe(0);
   });
 
   it('fica desligado sem a chave APONTAMENTO_AUTO ou sem token', async () => {

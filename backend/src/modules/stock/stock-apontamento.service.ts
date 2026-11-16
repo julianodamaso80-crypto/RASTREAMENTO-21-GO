@@ -117,26 +117,43 @@ export class StockApontamentoService {
         resumo.semNumero++;
         continue;
       }
-      // `lastConnection` só é gravado pra quem está no mapa do tempo real;
-      // quem decide se o aparelho já falou é o servidor GPS.
-      const noTraccar = await this.traccar.getDeviceByUniqueId(device.imei);
-      if (noTraccar?.lastUpdate) continue;
+      try {
+        // `lastConnection` só é gravado pra quem está no mapa do tempo real;
+        // quem decide se o aparelho já falou é o servidor GPS.
+        const noTraccar = await this.traccar.getDeviceByUniqueId(device.imei);
+        if (noTraccar?.lastUpdate) continue;
 
-      const { ok, detalhe } = await this.enviar(token, numero, comando);
-      await this.prisma.smsCommand.create({
-        data: {
-          deviceId: device.id,
-          tenantId: device.tenantId,
-          command: comando,
-          type: 'SET_SERVER_IP',
-          status: ok ? 'SENT' : 'FAILED',
-          sentAt: ok ? agora : null,
-          response: detalhe,
-          sentBy: REMETENTE,
-        },
-      });
-      if (ok) resumo.enviados++;
-      else resumo.falhas++;
+        // A tentativa é gravada ANTES do envio: se o banco falhar depois de o
+        // SMS sair, ela ficaria sem registro e seria cobrada de novo em 5 min.
+        const registro = await this.prisma.smsCommand.create({
+          data: {
+            deviceId: device.id,
+            tenantId: device.tenantId,
+            command: comando,
+            type: 'SET_SERVER_IP',
+            status: 'PENDING',
+            sentBy: REMETENTE,
+          },
+        });
+        const { ok, detalhe } = await this.enviar(token, numero, comando);
+        if (ok) resumo.enviados++;
+        else resumo.falhas++;
+        await this.prisma.smsCommand.update({
+          where: { id: registro.id },
+          data: {
+            status: ok ? 'SENT' : 'FAILED',
+            sentAt: ok ? agora : null,
+            response: detalhe,
+          },
+        });
+      } catch (error) {
+        // Um aparelho com problema não pode travar a fila dos outros.
+        this.logger.warn(
+          `Apontamento automático: ${device.imei} falhou (${
+            error instanceof Error ? error.message : error
+          }).`,
+        );
+      }
     }
 
     if (resumo.enviados || resumo.falhas || resumo.semNumero) {
