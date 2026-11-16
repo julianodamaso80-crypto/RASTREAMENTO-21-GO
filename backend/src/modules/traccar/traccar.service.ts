@@ -242,7 +242,24 @@ export class TraccarService implements OnModuleInit {
     from?: string,
     to?: string,
   ): Promise<TraccarPosition[]> {
-    if (emDemo() && !(deviceId && deviceId > 0)) return [];
+    if (emDemo()) {
+      if (deviceId !== undefined && !(deviceId > 0)) return [];
+      if (!deviceId) {
+        // Frota inteira na demo = só os rastreadores simulados. A lista real
+        // vem do cache compartilhado e é FILTRADA aqui, nunca guardada filtrada.
+        const meus = new Set((await this.getDevices()).map((d) => d.id));
+        const todas = await this.getPositionsSemFiltroDeDemo(undefined, from, to);
+        return todas.filter((p) => meus.has(p.deviceId));
+      }
+    }
+    return this.getPositionsSemFiltroDeDemo(deviceId, from, to);
+  }
+
+  private async getPositionsSemFiltroDeDemo(
+    deviceId?: number,
+    from?: string,
+    to?: string,
+  ): Promise<TraccarPosition[]> {
     const buscar = () =>
       this.withRetry(async () => {
         const params: Record<string, string | number> = {};

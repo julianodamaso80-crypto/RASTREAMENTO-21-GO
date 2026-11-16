@@ -108,9 +108,21 @@ describe('TraccarService na demonstração não toca o Traccar', () => {
     const { s, chamadas } = traccar();
     await rodarComoDemo('t', async () => {
       await expect(s.getPositions(-5)).resolves.toEqual([]);
-      await expect(s.getPositions()).resolves.toEqual([]);
     });
     expect(chamadas.get).not.toHaveBeenCalled();
+  });
+
+  it('posições da frota na demo são só as dos rastreadores simulados', async () => {
+    const { s, chamadas } = traccar();
+    chamadas.get.mockImplementation((async (url: string) =>
+      url.startsWith('/devices')
+        ? { data: [{ id: 1, uniqueId: '869137080340854' }, { id: 2, uniqueId: `${PREFIXO_DEVICE_DEMO}00000001` }] }
+        : { data: [{ deviceId: 1, latitude: -1 }, { deviceId: 2, latitude: -2 }] }) as never);
+    await rodarComoDemo('t', async () => {
+      await expect(s.getPositions()).resolves.toEqual([{ deviceId: 2, latitude: -2 }]);
+    });
+    // e a 21Go, logo depois, continua vendo a frota inteira
+    await expect(s.getPositions()).resolves.toHaveLength(2);
   });
 
   it('fora da demo o comando sai normalmente', async () => {
