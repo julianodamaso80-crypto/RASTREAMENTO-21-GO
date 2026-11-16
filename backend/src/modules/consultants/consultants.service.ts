@@ -240,7 +240,7 @@ export class ConsultantsService implements OnModuleInit {
 
   private async tenantPrincipal(): Promise<string | null> {
     const tenant = await this.prisma.tenant.findFirst({
-      where: { active: true, deletedAt: null },
+      where: { active: true, deletedAt: null, isDemo: false },
       orderBy: { createdAt: 'asc' },
       select: { id: true },
     });

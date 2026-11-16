@@ -138,6 +138,16 @@ export class TraccarService implements OnModuleInit {
    * `all: true` (só admin) lista a frota inteira.
    */
   async getDevices(opts?: { all?: boolean }): Promise<TraccarDevice[]> {
+    // Demonstração enxerga só os próprios rastreadores simulados — nunca o
+    // estado de um aparelho real, nem se o IMEI dele for digitado na demo.
+    if (emDemo()) {
+      const todos = await this.getDevicesSemFiltroDeDemo(opts);
+      return todos.filter((d) => d.uniqueId?.startsWith(PREFIXO_DEVICE_DEMO));
+    }
+    return this.getDevicesSemFiltroDeDemo(opts);
+  }
+
+  private async getDevicesSemFiltroDeDemo(opts?: { all?: boolean }): Promise<TraccarDevice[]> {
     const rota = opts?.all ? '/devices?all=true' : '/devices';
     return this.frotaCompartilhada(rota, () =>
       this.withRetry(async () => {

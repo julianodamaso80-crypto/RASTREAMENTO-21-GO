@@ -211,6 +211,23 @@ export class VehiclesService {
     return this.findOne(id, tenantId);
   }
 
+  /**
+   * O associado ligado ao veículo tem que ser da MESMA empresa: sem isto, um
+   * id de associado de outra empresa no corpo da requisição ficaria gravado e
+   * o `include: { associate }` passaria a mostrar o cadastro alheio.
+   */
+  private async garantirAssociadoDaEmpresa(
+    associateId: string | null | undefined,
+    tenantId: string,
+  ): Promise<void> {
+    if (!associateId) return;
+    const existe = await this.prisma.associate.findFirst({
+      where: { id: associateId, tenantId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!existe) throw new BadRequestException('Associado não encontrado');
+  }
+
   async findOne(id: string, tenantId: string) {
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id, tenantId, deletedAt: null },
@@ -228,6 +245,7 @@ export class VehiclesService {
   }
 
   async create(dto: CreateVehicleDto, tenantId: string) {
+    await this.garantirAssociadoDaEmpresa(dto.associateId, tenantId);
     // Verifica placa duplicada no tenant
     const existing = await this.prisma.vehicle.findFirst({
       where: { plate: dto.plate, tenantId, deletedAt: null },
@@ -294,6 +312,7 @@ export class VehiclesService {
 
   async update(id: string, dto: UpdateVehicleDto, tenantId: string) {
     const vehicle = await this.findOne(id, tenantId);
+    await this.garantirAssociadoDaEmpresa(dto.associateId, tenantId);
 
     const updated = await this.prisma.vehicle.update({
       where: { id: vehicle.id },

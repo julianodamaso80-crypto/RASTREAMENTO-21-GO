@@ -345,7 +345,7 @@ export class InstallationPendingsService implements OnModuleInit {
       if (!motivo) return;
 
       const tenant = await this.prisma.tenant.findFirst({
-        where: { active: true, deletedAt: null },
+        where: { active: true, deletedAt: null, isDemo: false },
         orderBy: { createdAt: 'asc' },
       });
       if (!tenant) return;
@@ -373,7 +373,7 @@ export class InstallationPendingsService implements OnModuleInit {
     if (this.config.get<string>('hinova.pendingsSyncEnabled') === 'false') return;
 
     const tenant = await this.prisma.tenant.findFirst({
-      where: { active: true, deletedAt: null },
+      where: { active: true, deletedAt: null, isDemo: false },
       orderBy: { createdAt: 'asc' },
     });
     if (!tenant) return;

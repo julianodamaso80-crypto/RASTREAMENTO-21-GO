@@ -1,3 +1,4 @@
+import { emDemo } from '../../common/demo/demo-context';
 import type { NivelBateria } from '../clients/bateria-tag';
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
@@ -880,7 +881,9 @@ export class StockTraccarService {
   /** Retrato da frota no Traccar, com cache de 30s. */
   private async snapshot(): Promise<DeviceSnapshot[]> {
     const agora = Date.now();
-    if (this.cache && agora - this.cache.at < StockTraccarService.CACHE_MS) {
+    // O retrato da demo (filtrado) nunca entra nem sai do cache da frota real.
+    const demo = emDemo();
+    if (!demo && this.cache && agora - this.cache.at < StockTraccarService.CACHE_MS) {
       return this.cache.devices;
     }
 
@@ -928,7 +931,7 @@ export class StockTraccarService {
       };
     });
 
-    this.cache = { at: agora, devices: snapshot };
+    if (!demo) this.cache = { at: agora, devices: snapshot };
     return snapshot;
   }
 }

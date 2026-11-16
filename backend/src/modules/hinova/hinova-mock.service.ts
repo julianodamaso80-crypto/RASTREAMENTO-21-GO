@@ -120,23 +120,40 @@ const LAST_NAMES = [
   'Moreira',
 ];
 
+/**
+ * Determinístico: a empresa de demonstração tem veículos cadastrados com estas
+ * mesmas placas e CPFs, e a consulta ao "SGA" tem que encontrá-los depois de
+ * cada reinício do processo.
+ */
 function generatePlate(index: number): string {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const l1 = letters[Math.floor(index / 676) % 26];
   const l2 = letters[Math.floor(index / 26) % 26];
   const l3 = letters[index % 26];
-  const d1 = Math.floor(Math.random() * 10);
-  const l4 = letters[Math.floor(Math.random() * 26)];
-  const d2 = Math.floor(Math.random() * 10);
-  const d3 = Math.floor(Math.random() * 10);
+  const d1 = (index * 7) % 10;
+  const l4 = letters[(index * 11) % 26];
+  const d2 = (index * 3 + 1) % 10;
+  const d3 = (index * 13 + 5) % 10;
   return `${l1}${l2}${l3}${d1}${l4}${d2}${d3}`;
 }
 
-function generateCpf(): string {
-  const digits = Array.from({ length: 11 }, () =>
-    Math.floor(Math.random() * 10),
-  );
-  return digits.join('');
+function generateCpf(index: number): string {
+  const base = Array.from({ length: 9 }, (_, k) => (index * (k + 3) + k * 7 + 1) % 10);
+  const dv = (corpo: number[]) => {
+    const soma = corpo.reduce((t, d, k) => t + d * (corpo.length + 1 - k), 0);
+    const r = (soma * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  // Dígito final propositalmente ERRADO: nunca coincide com o CPF de uma
+  // pessoa de verdade (o login do app procura associado por CPF).
+  const d1 = dv(base);
+  const d2 = (dv([...base, d1]) + 1) % 10;
+  return [...base, d1, d2].join('');
+}
+
+/** Placa e CPF do i-ésimo veículo do SGA simulado (usado pela carga da demo). */
+export function veiculoDoSgaSimulado(i: number): { placa: string; cpf: string } {
+  return { placa: generatePlate(i + 100), cpf: generateCpf(i) };
 }
 
 function generateMockVehicles(): HinovaVehicleDto[] {
@@ -160,8 +177,8 @@ function generateMockVehicles(): HinovaVehicleDto[] {
     return {
       codigoVeiculo: `HNV${String(i + 1).padStart(6, '0')}`,
       placa: generatePlate(i + 100),
-      chassi: `9BG${String(Math.random()).slice(2, 16)}`,
-      renavam: String(Math.floor(10000000000 + Math.random() * 90000000000)),
+      chassi: `9BG${String(1000000000000 + i * 7919).slice(0, 14)}`,
+      renavam: String(10000000000 + i * 104729),
       marca: brand,
       modelo: model,
       cor: COLORS[i % COLORS.length],
@@ -171,7 +188,7 @@ function generateMockVehicles(): HinovaVehicleDto[] {
       associado: {
         codigoAssociado: `ASS${String(i + 1).padStart(6, '0')}`,
         nome: `${FIRST_NAMES[i % FIRST_NAMES.length]} ${LAST_NAMES[i % LAST_NAMES.length]}`,
-        cpf: generateCpf(),
+        cpf: generateCpf(i),
         rg: `${Math.floor(1000000 + Math.random() * 9000000)}`,
         dataNascimento: `${1970 + (i % 30)}-${String((i % 12) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
         telefone: `(62) 9${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -233,6 +250,17 @@ export class HinovaMockService implements IHinovaClient {
     await this.simulateLatency();
     const p = (placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const v = this.vehicles.find((x) => x.placa === p);
+    if (!v && emDemo() && /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(p)) {
+      // Na demonstração toda placa válida "existe" e está ativa, para o
+      // visitante conseguir seguir qualquer fluxo com a placa que inventar.
+      return {
+        encontrado: true,
+        ativo: true,
+        cliente: { nome: 'Cliente Demonstração', cpf: generateCpf(p.charCodeAt(0)) },
+        veiculo: { placa: p, chassi: null, codigoModelo: null, modelo: 'Veículo Demonstração', codigoVeiculo: `DEMO-${p}` },
+        situacao: { codigo: '1', descricao: 'ATIVO', financeira: 'ADIMPLENTE', dataVencimento: null },
+      };
+    }
     if (!v) {
       return {
         encontrado: false,

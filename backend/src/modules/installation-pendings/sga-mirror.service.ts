@@ -72,7 +72,7 @@ export class SgaMirrorService implements OnModuleInit {
       if (jaTem > 0) return;
 
       const tenant = await this.prisma.tenant.findFirst({
-        where: { active: true, deletedAt: null },
+        where: { active: true, deletedAt: null, isDemo: false },
         orderBy: { createdAt: 'asc' },
       });
       if (!tenant) return;

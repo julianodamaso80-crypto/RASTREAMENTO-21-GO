@@ -91,6 +91,19 @@ describe('TraccarService na demonstração não toca o Traccar', () => {
     });
   });
 
+  it('lista de aparelhos na demo só traz os simulados', async () => {
+    const { s, chamadas } = traccar();
+    chamadas.get.mockResolvedValue({
+      data: [
+        { id: 1, uniqueId: '869137080340854' },
+        { id: 2, uniqueId: `${PREFIXO_DEVICE_DEMO}00000001` },
+      ],
+    } as never);
+    await rodarComoDemo('t', async () => {
+      await expect(s.getDevices()).resolves.toEqual([{ id: 2, uniqueId: `${PREFIXO_DEVICE_DEMO}00000001` }]);
+    });
+  });
+
   it('id falso (negativo) nunca vira consulta de posição', async () => {
     const { s, chamadas } = traccar();
     await rodarComoDemo('t', async () => {
@@ -178,6 +191,13 @@ describe('DemoInterceptor', () => {
       await interceptor.intercept(contexto(req), { handle: () => defer(() => of(emDemo())) }),
     );
     expect(visto).toBe(false);
+  });
+
+  it('maiúscula na URL não fura a trava (/TENANTS)', async () => {
+    const req = { user: { id: 'u1', isDemo: true, tenantId: 't-demo' }, method: 'DELETE', path: '/api/v1/TENANTS/abc', url: '/api/v1/TENANTS/abc' };
+    await expect(
+      interceptor.intercept(contexto(req), { handle: () => of(null) }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('recusa criar empresa nova', async () => {

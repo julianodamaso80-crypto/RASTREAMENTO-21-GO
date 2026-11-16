@@ -1,4 +1,4 @@
-import { emDemo, tenantDaDemo } from '../../common/demo/demo-context';
+import { emDemo, tenantDaDemo, MENSAGEM_DEMO } from '../../common/demo/demo-context';
 import {
   Controller,
   Get,
@@ -11,6 +11,7 @@ import {
   UseGuards,
   ParseUUIDPipe,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Role } from '.prisma/client';
@@ -50,6 +51,7 @@ export class TenantsController {
   @Post()
   @ApiOperation({ summary: 'Criar nova tenant' })
   async create(@Body() dto: CreateTenantDto) {
+    if (emDemo()) throw new ForbiddenException(MENSAGEM_DEMO);
     return this.tenantsService.create(dto);
   }
 
@@ -66,6 +68,7 @@ export class TenantsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Desativar tenant' })
   async remove(@Param('id', ParseUUIDPipe) id: string) {
+    if (emDemo()) throw new ForbiddenException(MENSAGEM_DEMO);
     return this.tenantsService.remove(id);
   }
 

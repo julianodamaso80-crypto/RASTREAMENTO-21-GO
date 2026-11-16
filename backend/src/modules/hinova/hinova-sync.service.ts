@@ -48,7 +48,7 @@ export class HinovaSyncService {
     }
 
     const tenant = await this.prisma.tenant.findFirst({
-      where: { active: true },
+      where: { active: true, isDemo: false },
       orderBy: { createdAt: 'asc' },
     });
 

@@ -59,7 +59,10 @@ export class DemoInterceptor implements NestInterceptor {
       req.body.tenantId = tenantId;
     }
 
-    const caminho = (req.path ?? req.url.split('?')[0]).replace(/\/+$/, '');
+    // Express casa rota sem diferenciar maiúscula (/TENANTS == /tenants).
+    const caminho = (req.path ?? req.url.split('?')[0])
+      .replace(/\/+$/, '')
+      .toLowerCase();
     if (rotaProibidaNaDemo(req.method, caminho)) {
       throw new ForbiddenException(MENSAGEM_DEMO);
     }
